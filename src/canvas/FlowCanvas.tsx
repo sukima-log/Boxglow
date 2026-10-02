@@ -86,6 +86,8 @@ export function FlowCanvas({ project, matcher }: Props) {
   const meId = useProjectStore((s) => s.meId);
   const focusBlock = useProjectStore((s) => s.focusBlock);
   const rf = useReactFlow();
+  // 動作確認やスクリーンショット用に、React Flow の instance もコンソールから触れるようにしておく
+  useEffect(() => { (window as unknown as { boxglow?: { rf?: unknown } }).boxglow = { ...((window as unknown as { boxglow?: object }).boxglow ?? {}), rf }; }, [rf]);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
   // 追加したブロックが画面の外にあるときは、そこへ寄せる (拡大率は変えない)

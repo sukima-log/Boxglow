@@ -10,6 +10,8 @@ import { blockSize, TERMINAL_W, terminalHeight } from "./size";
 const GAP_X = 144; // 箱の横の間隔: 線の通路 (縁から 36px x 2 + 束の広がり) が収まる最小に近い値 (8px 単位)
 /** ブロックとブロックの間 (縦) */
 const GAP_Y = 96; // 縦に積んだ箱の間 (線が縁から 36px 離れて 2 本通る)
+/** 1 行の幅の上限。直列の長い鎖はこれを超えたら次の行に折り返す (横 1 列の細長い帯になるのを防ぐ) */
+const MAX_ROW_W = 3000;
 
 /**
  * 1 つの階層を整列する (子の階層は先に整列して大きさを確定させる)
@@ -95,19 +97,26 @@ export function layoutScope(p: Project, scopeId: string): Project {
   const startX = scopeId === ROOT_ID ? TERMINAL_W + GAP_X : CHILD_PADDING.left;
   const startY = scopeId === ROOT_ID ? 40 : childTop(q, scopeId);
   let x = startX;
-  let maxBottom = startY;
+  let rowTop = startY; // 今の行の上端
+  let maxBottom = startY; // 全体の下端
+  let rowBottom = startY; // 今の行の下端
   for (let L = 0; L <= maxLayer; L++) {
     const members = kids.filter((k) => layer.get(k.id) === L).sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+    const colW = Math.max(0, ...members.map((m) => blockSize(q, m.id).width));
+    // 行の幅が上限を超えるなら、次の行の左端から続ける (直列の長い鎖が横 1 列の帯にならないように)
+    if (L > 0 && x + colW > startX + MAX_ROW_W) {
+      x = startX;
+      rowTop = rowBottom + GAP_Y * 2;
+    }
     // 層の中は縦に 1 列に積む (折り返すと折り返した列が線の障害物になり、重なりが増える)
-    let y = startY;
-    let colW = 0;
+    let y = rowTop;
     for (const m of members) {
       const s = blockSize(q, m.id);
       q.blocks[m.id].position = { x, y };
       y += s.height + GAP_Y;
-      colW = Math.max(colW, s.width);
     }
-    maxBottom = Math.max(maxBottom, y - GAP_Y);
+    rowBottom = Math.max(rowBottom, y - GAP_Y);
+    maxBottom = Math.max(maxBottom, rowBottom);
     x += colW + gapAfter(L);
   }
   // 最上位なら入力/出力ノードも両端に置く

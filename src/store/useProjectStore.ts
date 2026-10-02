@@ -10,6 +10,7 @@ import { createProject, defaultTaskParent, fromJSON, resolveAllOverlaps, toJSON 
 import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile, writeLocalFile } from "../lib/localfile";
 import { buildSampleProject } from "../model/sample";
+import exampleText from "../../examples/logic-daw/boxglow.json?raw";
 import type { Project } from "../model/types";
 import { deleteProject, listProjects, loadProject, saveProject, type ProjectMeta } from "../lib/storage";
 
@@ -82,6 +83,8 @@ interface State {
   openProjectObject: (p: Project, ephemeral: boolean) => void;
   importJSON: (text: string) => Promise<void>;
   openSample: () => void;
+  /** 公開用の例 (examples/logic-daw/boxglow.json) を開く (保存しない) */
+  openExample: () => void;
   /** ローカルの boxglow.json を開く (監視と書き戻しを始める) */
   openLocalFile: (handle: FileSystemFileHandle) => Promise<boolean>;
   copyToMine: () => Promise<void>;
@@ -349,6 +352,10 @@ export const useProjectStore = create<State>((set, get) => {
 
   , openSample: () => {
       get().openProjectObject(buildSampleProject(), true); // サンプルも View から (Edit は上の帯で切り替える)
+    }
+  , openExample: () => {
+      // ビルドに同梱した例 (3 階層の Logic DAW の計画)。記事の埋め込みと ?demo=daw で使う
+      get().openProjectObject(fromJSON(exampleText), true);
     }
 
   , copyToMine: async () => {

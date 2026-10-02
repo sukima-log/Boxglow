@@ -1,6 +1,6 @@
 /**
  * 画面全体: 上の帯 / キャンバス (+ 引き出し) / 詳細パネル (選んでいるときだけ) / 下の帯
- * URL の引数: ?demo=1 (サンプルを開く) &readonly=1 (閲覧のみ) &embed=1 (記事内の埋め込み: 帯とパネルを隠す)
+ * URL の引数: ?demo=1 (小さなサンプル) ?demo=daw (公開用の例: Logic DAW の計画) &readonly=1 (閲覧のみ) &embed=1 (記事内の埋め込み: 帯とパネルを隠す)
  *             &theme=dark|light (表示モードの指定)
  *             ?view=article (= demo + embed + readonly。記事内の iframe 用)
  * 埋め込みで同じドメインの記事の中にいるときは、記事側 (親) の表示モード (html の data-theme) に追従する。
@@ -33,6 +33,7 @@ export function App() {
   const redo = useProjectStore((s) => s.redo);
   const setMode = useProjectStore((s) => s.setMode);
   const openSample = useProjectStore((s) => s.openSample);
+  const openExample = useProjectStore((s) => s.openExample);
   const openProject = useProjectStore((s) => s.openProject);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -63,14 +64,16 @@ export function App() {
         /* 別ドメインからの埋め込み: 親は読めない */
       }
     }
-    if (article || params.get("demo") === "1") {
+    if (article || params.get("demo") === "daw") {
+      openExample(); // 記事の埋め込みと ?demo=daw は 3 階層の例
+    } else if (params.get("demo") === "1") {
       openSample();
     } else {
       const m = window.location.hash.match(/p=([\w-]+)/);
       if (m) void openProject(m[1]);
     }
     return () => observer?.disconnect();
-  }, [setMode, openSample, openProject]);
+  }, [setMode, openSample, openExample, openProject]);
 
   // 通知は 3 秒で消す
   useEffect(() => {
@@ -143,7 +146,7 @@ export function App() {
     url.searchParams.delete("embed");
     url.searchParams.delete("readonly");
     url.searchParams.delete("view");
-    url.searchParams.set("demo", "1");
+    url.searchParams.set("demo", "daw"); // 記事から「全画面で開く」は同じ例を開く
     return url.toString();
   }, []);
 

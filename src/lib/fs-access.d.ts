@@ -29,3 +29,6 @@ interface Window {
 
 /** ビルド日時 (vite.config.ts の define) */
 declare const __BUILD__: string;
+
+/** Vite の ?raw 読み込み (例の JSON を文字列で同梱する) */
+declare module "*.json?raw" { const text: string; export default text; }
