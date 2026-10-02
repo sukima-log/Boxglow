@@ -228,6 +228,8 @@ textarea.input { resize: vertical; min-height: 64px; }
   border-style: solid;
   border-color: var(--line);
 }
+/* 展開した箱の文字色は状態に関係なく本文色 (Done / New の塗り用の文字色が残ると、ダークで黒字、ライトで白字になり読めない) */
+.bg-block.expanded.status-white, .bg-block.expanded.status-black, .bg-block.expanded.status-gray { color: var(--text); }
 .bg-block.expanded.depth-1 { border-width: 4px; background-color: var(--nest-odd); }
 .bg-block.expanded.depth-2 { border-width: 3px; background-color: var(--nest-even); }
 .bg-block.expanded.depth-3 { border-width: 2px; background-color: var(--nest-odd); }
