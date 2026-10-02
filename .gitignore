@@ -16,3 +16,4 @@ undefined/
 .env
 .env.*
 tsconfig.tsbuildinfo
+e2e_*.png
