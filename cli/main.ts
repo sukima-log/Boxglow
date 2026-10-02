@@ -3,6 +3,8 @@
  *
  * 使い方 (npx boxglow <command> ...):
  *   init [--name <名前>] [--file <path>]           boxglow.json を作る
+ *   setup-agent [--dir <path>]                     AI が自律的に使えるように設定する: AGENTS.md / CLAUDE.md に手順を追記、
+ *                                                  Claude Code のスキル (.claude/skills/boxglow) と、セッション開始時に status を読むフックを入れる
  *   status [--json]                                全体の状況 (Markdown)
  *   export [--format md|json] [--out <path>]       計画全体を Markdown (または JSON) に書き出す (ロードマップの文書化に)
  *   show <block>                                   ブロックの詳細
@@ -45,7 +47,9 @@
  *       --actor <名前> (既定: 環境変数 BOXGLOW_ACTOR、Claude Code なら claude-code、それ以外は agent)
  * <block> は短い ID (B12)、内部 id、または題名 (完全一致、または 1 つに決まる部分一致)。status に ID が出る
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import AGENTS_SNIPPET from "../docs/AGENTS_SNIPPET.md";
+import SKILL_MD from "../.claude/skills/boxglow/SKILL.md";
 import { CATEGORIES, findCategory } from "../src/model/categories";
 import { projectToMarkdown } from "../src/model/export";
 import { blockSize } from "../src/model/size";
@@ -245,6 +249,46 @@ function main(argv: string[]): void {
     }
     case "show": {
       out(blockReport(p, mustFind(p, rest[0]).id));
+      return;
+    }
+    case "setup-agent": {
+      // AI エージェント側の設定を 1 回で入れる (何度実行しても同じ結果になるよう、印の間だけを書き換える)
+      const root = str(options.dir) ? resolve(str(options.dir)!) : dirname(path);
+      const BEGIN = "<!-- boxglow:begin -->";
+      const END = "<!-- boxglow:end -->";
+      // 同梱の指示書は前置きが付いているので、「---」で挟まれた本文だけを貼る
+      const parts = AGENTS_SNIPPET.split(/^---$/m);
+      const body = (parts.length >= 3 ? parts.slice(1, -1).join("---") : AGENTS_SNIPPET).trim();
+      const block = `${BEGIN}\n${body}\n${END}\n`;
+      const done: string[] = [];
+      for (const name of ["AGENTS.md", "CLAUDE.md"]) {
+        const f = join(root, name);
+        const cur = existsSync(f) ? readFileSync(f, "utf8") : "";
+        let next: string;
+        if (cur.includes(BEGIN) && cur.includes(END)) next = cur.slice(0, cur.indexOf(BEGIN)) + block + cur.slice(cur.indexOf(END) + END.length + 1);
+        else next = (cur ? cur.replace(/\s*$/, "\n\n") : "") + block;
+        if (next !== cur) { writeFileSync(f, next, "utf8"); done.push(name); }
+      }
+      // Claude Code のスキル
+      const skillDir = join(root, ".claude", "skills", "boxglow");
+      mkdirSync(skillDir, { recursive: true });
+      writeFileSync(join(skillDir, "SKILL.md"), SKILL_MD, "utf8");
+      done.push(".claude/skills/boxglow/SKILL.md");
+      // セッション開始時に計画を読むフック (Claude Code の settings.json に追記。他の設定は残す)
+      const settingsPath = join(root, ".claude", "settings.json");
+      let settings: Record<string, unknown> = {};
+      if (existsSync(settingsPath)) { try { settings = JSON.parse(readFileSync(settingsPath, "utf8")) as Record<string, unknown>; } catch { settings = {}; } }
+      const hooks = (settings.hooks ?? {}) as Record<string, unknown[]>;
+      const start = (hooks.SessionStart ?? []) as { hooks?: { type: string; command: string }[] }[];
+      const cmd = "npx boxglow status";
+      if (!start.some((h) => (h.hooks ?? []).some((x) => x.command === cmd))) {
+        start.push({ hooks: [{ type: "command", command: cmd }] });
+        hooks.SessionStart = start;
+        settings.hooks = hooks;
+        writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf8");
+        done.push(".claude/settings.json (SessionStart: npx boxglow status)");
+      }
+      out(`設定しました: ${done.join(", ")}\nAI は作業の始まり・終わり・判断待ちを boxglow.json に記録し、セッションの最初に計画を読みます。人は画面 (boxglow.json を開く) で見て判断してください`);
       return;
     }
     case "project": {

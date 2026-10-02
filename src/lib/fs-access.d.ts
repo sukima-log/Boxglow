@@ -32,3 +32,6 @@ declare const __BUILD__: string;
 
 /** Vite の ?raw 読み込み (例の JSON を文字列で同梱する) */
 declare module "*.json?raw" { const text: string; export default text; }
+
+/** esbuild の text loader (CLI に文書を同梱する) */
+declare module "*.md" { const text: string; export default text; }

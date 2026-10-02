@@ -29,10 +29,11 @@ npx boxglow done "Build it" --artifact "app=src/App.tsx"                    # de
 
 Recommended flow for a new project: the agent reads the brief (README, request) and creates 3-7 top-level boxes with concrete outputs, asks the human to confirm the split (`ask`), and only then decomposes the box it starts (`split`). Decisions keep the candidates that were not chosen; `reopen` lets you change course later without losing the history.
 
-Then paste the snippet in [docs/AGENTS_SNIPPET.md](docs/AGENTS_SNIPPET.md) into your `AGENTS.md` / `CLAUDE.md`, and open `boxglow.json` in the web app (Chrome / Edge: "boxglow.json を開く"). The agent records `start` / `done` / `ask` and the boxes change in front of you.
+Then run `npx boxglow setup-agent` once: it appends the working agreement ([docs/AGENTS_SNIPPET.md](docs/AGENTS_SNIPPET.md)) to your `AGENTS.md` / `CLAUDE.md`, installs a Claude Code skill (`.claude/skills/boxglow`) and a SessionStart hook that runs `npx boxglow status`, so the agent reads the plan at the start of every session. Open `boxglow.json` in the web app (Chrome / Edge: "boxglow.json を開く"): the agent creates and decomposes boxes, records `start` / `done` / `ask` by itself, and the boxes change in front of you.
 
 | Command | What it does |
 |---|---|
+| `setup-agent` | One-time setup for AI agents: AGENTS.md / CLAUDE.md snippet, Claude Code skill, SessionStart hook |
 | `status` | Markdown summary: pending decisions, who is working where, tree with ids, next candidates |
 | `start <block> --note` / `done <block> --artifact name=url` | Record work in progress / completion with deliverables |
 | `split <block> --spec '<json>'` | Decompose a box into child boxes with named inputs / outputs and connections |
