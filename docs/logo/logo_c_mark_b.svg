@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <filter id="g" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="6"/></filter>
+  </defs>
+  <!-- 縦の線 (b の縦棒 = 配線) -->
+  <path d="M34 18 V96" fill="none" stroke="#2f343a" stroke-width="12" stroke-linecap="round"/>
+  <!-- 箱 (b の丸い部分): 光る白い箱 -->
+  <rect x="34" y="52" width="60" height="56" rx="16" fill="#0d8080" opacity="0.6" filter="url(#g)"/>
+  <rect x="34" y="52" width="60" height="56" rx="16" fill="#fbfbfb" stroke="#2f343a" stroke-width="9"/>
+  <!-- 入力 (左の丸) と 出力 (右の丸) -->
+  <circle cx="34" cy="80" r="8" fill="#2f343a"/>
+  <circle cx="94" cy="80" r="8" fill="#0d8080" stroke="#2f343a" stroke-width="4"/>
+</svg>

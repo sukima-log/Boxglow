@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 128" width="520" height="128">
+  <defs>
+    <filter id="g" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="6"/></filter>
+    <pattern id="h" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="7" height="7" fill="#e4e7ea"/><rect width="2.5" height="7" fill="#9aa1a9"/>
+    </pattern>
+  </defs>
+  <rect x="8" y="78" width="42" height="42" rx="10" fill="#2f343a" stroke="#6b7075" stroke-width="5"/>
+  <rect x="43" y="43" width="42" height="42" rx="10" fill="url(#h)" stroke="#2f343a" stroke-width="5"/>
+  <rect x="78" y="8" width="42" height="42" rx="10" fill="#0d8080" opacity="0.7" filter="url(#g)"/>
+  <rect x="78" y="8" width="42" height="42" rx="10" fill="#fbfbfb" stroke="#2f343a" stroke-width="5"/>
+  <text x="150" y="86" font-family="Nunito, 'M PLUS Rounded 1c', 'Segoe UI', sans-serif" font-size="64" font-weight="800" fill="#2f343a" letter-spacing="-1">Boxglow</text>
+</svg>

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <filter id="g" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="6"/></filter>
+    <pattern id="h" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="7" height="7" fill="#e4e7ea"/><rect width="2.5" height="7" fill="#9aa1a9"/>
+    </pattern>
+  </defs>
+  <!-- 黒の箱 (New): 濃い塗り。ダーク背景でも沈まないよう、縁は少し明るい灰 -->
+  <rect x="8" y="78" width="42" height="42" rx="10" fill="#2f343a" stroke="#6b7075" stroke-width="5"/>
+  <!-- 斜線の箱 (In Progress) -->
+  <rect x="43" y="43" width="42" height="42" rx="10" fill="url(#h)" stroke="#2f343a" stroke-width="5"/>
+  <!-- 白の箱 (Done): ティールに光る -->
+  <rect x="78" y="8" width="42" height="42" rx="10" fill="#0d8080" opacity="0.7" filter="url(#g)"/>
+  <rect x="78" y="8" width="42" height="42" rx="10" fill="#fbfbfb" stroke="#2f343a" stroke-width="5"/>
+</svg>

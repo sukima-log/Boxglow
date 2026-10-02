@@ -1,0 +1,72 @@
+{
+  "name": "boxglow",
+  "private": false,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "See at a glance what your AI agents and your team are working on: tasks as input/output boxes that go from BlackBox to WhiteBox. Web app + CLI, one boxglow.json in your repo.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build && npm run build:cli",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b",
+    "build:cli": "esbuild cli/main.ts --bundle --platform=node --format=esm --target=node18 --outfile=bin/boxglow.js --banner:js='#!/usr/bin/env node'",
+    "prepare": "npm run build:cli",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@xyflow/react": "^12.12.0",
+    "idb-keyval": "^6.3.0",
+    "nanoid": "^6.0.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.3",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "esbuild": "^0.28.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  },
+  "license": "MIT",
+  "bin": {
+    "boxglow": "bin/boxglow.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md",
+    "LICENSE",
+    "docs/AGENTS_SNIPPET.md",
+    "examples"
+  ],
+  "keywords": [
+    "task-management",
+    "ai-agents",
+    "claude-code",
+    "codex",
+    "visualization",
+    "project-planning",
+    "roadmap",
+    "git"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sukima-log/Boxglow.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "homepage": "https://github.com/sukima-log/Boxglow#readme",
+  "bugs": {
+    "url": "https://github.com/sukima-log/Boxglow/issues"
+  },
+  "author": "sukima-log"
+}

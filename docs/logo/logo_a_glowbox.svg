@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <filter id="g" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="6"/></filter>
+    <clipPath id="c"><rect x="20" y="20" width="88" height="88" rx="18"/></clipPath>
+  </defs>
+  <!-- 外側の光 (完了の glow) -->
+  <rect x="20" y="20" width="88" height="88" rx="18" fill="#0d8080" opacity="0.55" filter="url(#g)"/>
+  <!-- 箱の本体: 黒 -> 灰 -> 白 の 3 段 (対角線で区切る) -->
+  <g clip-path="url(#c)">
+    <rect x="20" y="20" width="88" height="88" fill="#2f343a"/>
+    <polygon points="20,108 108,20 108,108" fill="#6b7075"/>
+    <polygon points="64,108 108,64 108,108" fill="#fbfbfb"/>
+  </g>
+  <rect x="20" y="20" width="88" height="88" rx="18" fill="none" stroke="#2f343a" stroke-width="7"/>
+  <!-- 右下の白い部分から出る出力の線 (成果物) -->
+  <circle cx="108" cy="86" r="7" fill="#0d8080" stroke="#2f343a" stroke-width="4"/>
+</svg>

@@ -1,0 +1,838 @@
+/*
+  Boxglow の見た目
+  配色・余白はブログのテーマ sukima pop の指針 (DESIGN.md) に合わせる:
+    地 (紙 / カード) 70%、主色 (墨 / ティール) 25%、差し色 (オレンジ) 5%。純黒・純白の面は使わない。
+    余白は 8px の倍数。影は外側のカードだけ。
+  状態 (black / gray / white) は色相ではなく「箱の見た目」(塗り・枠線・印) で区別する。
+*/
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+:root {
+  --bg-paper: #eceef0;
+  --bg-card: #fbfbfb;
+  --bg-grid: rgba(13, 128, 128, 0.12);
+  --ink: #3a3f46;
+  --ink-strong: #2f343a;
+  --text: #2f343a;
+  --text-muted: #6b7075;
+  --line: #3a3f46;
+  --line-soft: #c9ced4;
+  --primary: #0d8080;
+  --primary-strong: #006a6a;
+  --primary-soft: #e3f1f0;
+  --primary-soft-2: #cde6e4;
+  --on-primary: #fbfbfb;
+  --accent: #e8875e;
+  --on-accent: #2f343a;
+  --danger: #b3453a;
+  /* 箱の見た目 */
+  --box-black-bg: #3a3f46; /* New = BlackBox: 名前どおり濃い塗り (状態の意味は ○ / ◐ / ● のアイコンが担う) */
+  --box-black-text: #e8eaed;
+  --box-black-border: #6b7075;
+  --status-new: #c8ccd2; /* New の印 (濃い箱の上なので明るい灰) */
+  --box-gray-bg: #e4e7ea;
+  --box-gray-bg-open: #eef0f2; /* 展開中 (中に箱がある) の GrayBox: 斜線なしの地色 */
+  --box-gray-hatch: rgba(58, 63, 70, 0.16);
+  --box-gray-text: #2f343a;
+  --box-white-bg: #fbfbfb; /* Done = WhiteBox: 名前どおり紙色 */
+  --box-white-text: #2f343a;
+  --box-white-glow: rgba(13, 128, 128, 0.35);
+  --nest-odd: #f6f7f9; /* 展開した箱の地色 (奇数の深さ) */
+  --nest-even: #e9ecef; /* 展開した箱の地色 (偶数の深さ) */
+  --shadow-card: 4px 4px 0 var(--line);
+  --font-head: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", sans-serif;
+  --font-body: "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", Meiryo, system-ui, sans-serif;
+}
+
+:root[data-theme="dark"] {
+  --bg-paper: #1a1d21;
+  --bg-card: #23272c;
+  --bg-grid: rgba(63, 181, 181, 0.12);
+  --ink: #4a5058;
+  --ink-strong: #e8eaed;
+  --text: #e8eaed;
+  --text-muted: #a3a9b1;
+  --line: #4a5058;
+  --line-soft: #3a4047;
+  --primary: #3fb5b5;
+  --primary-strong: #74d3d3;
+  --primary-soft: #1f3536;
+  --primary-soft-2: #24494a;
+  --on-primary: #15181b;
+  --accent: #e8875e;
+  --on-accent: #15181b;
+  --danger: #e07a6e;
+  --box-black-bg: #0f1114;
+  --box-black-text: #c8ccd2;
+  --box-black-border: #5b626b;
+  --status-new: #9aa1a9;
+  --box-gray-bg: #2c3136;
+  --box-gray-bg-open: #23272b;
+  --box-gray-hatch: rgba(232, 234, 237, 0.12);
+  --box-gray-text: #e8eaed;
+  --box-white-bg: #e8eaed;
+  --box-white-text: #1a1d21;
+  --box-white-glow: rgba(232, 234, 237, 0.45);
+  --nest-odd: #1c2024;
+  --nest-even: #262b30;
+  --shadow-card: 4px 4px 0 #0f1114;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg-paper);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+}
+
+h1, h2, h3, .font-head {
+  font-family: var(--font-head);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+/* フォームの部品は周りのフォント・色を継承する。@layer base に入れる
+   (レイヤーの外に置くと、レイヤー内の .btn-primary などの色指定より常に優先されてしまう) */
+@layer base {
+  button, input, select, textarea {
+    font: inherit;
+    color: inherit;
+  }
+}
+
+/* ---------- 共通部品 (Tailwind のユーティリティで上書きできるよう components レイヤーに置く) ---------- */
+@layer components {
+
+.card {
+  background: var(--bg-card);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-card);
+  color: var(--text);
+  cursor: pointer;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+.btn:hover { box-shadow: 2px 2px 0 var(--line); transform: translate(-1px, -1px); }
+.btn:active { box-shadow: none; transform: none; }
+.btn:disabled { opacity: 0.4; cursor: default; box-shadow: none; transform: none; }
+.btn.btn-primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary-strong); }
+.btn.btn-accent { background: var(--accent); color: var(--on-accent); border-color: var(--line); }
+.btn.btn-ghost { border-color: transparent; background: transparent; }
+.btn.btn-ghost:hover { background: var(--primary-soft); box-shadow: none; transform: none; }
+.btn.btn-sm { padding: 3px 8px; font-size: 12px; border-radius: 8px; }
+.btn.btn-danger { color: var(--danger); }
+
+.input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 2px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--bg-card);
+  outline: none;
+}
+.input:focus { border-color: var(--primary); }
+textarea.input { resize: vertical; min-height: 64px; }
+
+.label {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 2px solid var(--line-soft);
+  background: var(--bg-card);
+  font-size: 12px;
+  cursor: pointer;
+}
+.chip[data-on="true"] { border-color: var(--primary); background: var(--primary-soft); }
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 2px solid var(--bg-card);
+  color: #fbfbfb;
+  font-size: 11px;
+  font-weight: 700;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+}
+
+}
+
+/* ---------- ブロック (箱) ---------- */
+
+.bg-block {
+  position: relative;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--box-white-bg);
+  color: var(--box-white-text);
+  transition: background-color 0.4s ease, color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+  box-sizing: border-box;
+}
+.bg-block.selected { box-shadow: 0 0 0 3px var(--primary); }
+.bg-block.dimmed { opacity: 0.3; }
+
+/* BlackBox: 濃い塗り + 破線の枠 + 「?」 */
+.bg-block.status-black {
+  background: var(--box-black-bg);
+  color: var(--box-black-text);
+  border-style: dashed;
+  border-color: var(--box-black-border);
+}
+/* GrayBox: 斜線の塗り + 進捗バー */
+.bg-block.status-gray {
+  background-color: var(--box-gray-bg);
+  background-image: repeating-linear-gradient(135deg, transparent 0 8px, var(--box-gray-hatch) 8px 10px);
+  color: var(--box-gray-text);
+}
+/* 展開中 (中に箱が見えている) の GrayBox は斜線を消して地色だけにする。
+   中の GrayBox も斜線だと、親子が一体化して境目が見えなくなるため */
+.bg-block.status-black .bg-block__port.ready { color: #8fe0e0; }
+/* 展開した箱 (中に箱がある) は「枠」として描く: 状態の塗りは付けず、階層ごとに地色を交互に、浅いほど太い枠線。
+   線 (細いティール / 薄い灰) と見分けられるよう、枠線は墨色で太く */
+.bg-block.expanded {
+  background-image: none;
+  color: var(--text);
+  border-style: solid;
+  border-color: var(--line);
+}
+.bg-block.expanded.depth-1 { border-width: 4px; background-color: var(--nest-odd); }
+.bg-block.expanded.depth-2 { border-width: 3px; background-color: var(--nest-even); }
+.bg-block.expanded.depth-3 { border-width: 2px; background-color: var(--nest-odd); }
+.bg-block.expanded.depth-4 { border-width: 2px; background-color: var(--nest-even); }
+/* 展開した箱の題名の行は帯にして、枠の一部だと分かるように */
+.bg-block.expanded > .bg-block__head, .bg-block.expanded > .bg-block__meta { background: rgba(58, 63, 70, 0.06); }
+:root[data-theme="dark"] .bg-block.expanded > .bg-block__head, :root[data-theme="dark"] .bg-block.expanded > .bg-block__meta { background: rgba(232, 234, 237, 0.06); }
+.bg-block.expanded > .bg-block__meta { border-bottom: 2px solid var(--line); }
+/* 展開した箱の中の線は、枠線より細く薄い色のまま (線と枠を混同しないため) */
+/* WhiteBox (Done): 薄いティールの塗り + 題名の前に ✓。常時は光らせない (完了した瞬間だけ光る) */
+.bg-block.status-white {
+  background: var(--box-white-bg);
+  color: var(--box-white-text);
+}
+.bg-block.status-white.selected { box-shadow: 0 0 0 3px var(--primary); }
+.bg-block.just-glowed { animation: glow 1.2s ease-out; }
+@keyframes glow {
+  0% { box-shadow: 0 0 0 0 var(--box-white-glow); }
+  40% { box-shadow: 0 0 0 10px transparent, 0 0 36px 10px var(--box-white-glow); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.bg-block__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 6px 10px 0 12px;
+  box-sizing: border-box;
+}
+/* 題名の下の情報の行 */
+.bg-block__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px 0 12px;
+  box-sizing: border-box;
+  border-bottom: 2px solid transparent;
+}
+.bg-block.expanded > .bg-block__meta { border-bottom-color: var(--line-soft); }
+.bg-block.status-black.expanded > .bg-block__meta { border-bottom-color: var(--box-black-border); }
+.bg-block__key { margin-left: auto; font-size: 10px; opacity: 0.55; letter-spacing: 0.04em; font-family: ui-monospace, monospace; }
+.bg-block__due { font-size: 10px; padding: 1px 6px; border-radius: 999px; border: 1.5px solid currentColor; opacity: 0.8; }
+.bg-block__due.overdue { background: var(--danger); color: #fbfbfb; border-color: var(--danger); opacity: 1; }
+.bg-block__glyph {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: 2px solid currentColor;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+}
+.bg-block__title {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: 14px;
+  line-height: 18px;
+  white-space: normal;
+  word-break: auto-phrase;
+  overflow-wrap: anywhere;
+}
+.bg-block__badge {
+  flex: none;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1.5px solid currentColor;
+  opacity: 0.8;
+}
+.bg-block__toggle {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1.5px solid currentColor;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.8;
+}
+.bg-block__toggle:hover { opacity: 1; background: rgba(127, 127, 127, 0.15); }
+
+.bg-block__ports {
+  display: grid;
+  grid-template-columns: auto auto;
+  justify-content: space-between;
+  gap: 0 16px;
+  padding: 0 10px 0 12px;
+}
+.bg-block__port {
+  height: 26px;
+  line-height: 26px;
+  font-size: 11px;
+  opacity: 0.85;
+  white-space: nowrap;
+}
+.bg-block__port.out { text-align: right; }
+.bg-block__port.optional { opacity: 0.8; }
+.bg-block__port .opt { font-size: 9px; margin-left: 3px; opacity: 0.7; }
+.bg-block__port.promoted { font-style: italic; opacity: 0.75; }
+
+/* 展開中のポート名は箱の外側に出す (中は子ブロックの場所) */
+.bg-block__port-outside {
+  position: absolute;
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--bg-card);
+  border: 1.5px solid var(--line-soft);
+  color: var(--text);
+  white-space: nowrap;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.bg-block__port-outside.left { right: calc(100% + 10px); }
+.bg-block__port-outside.right { left: calc(100% + 10px); }
+.bg-block.expanded .bg-block__port-outside { opacity: 0; transition: opacity 0.15s ease; }
+.bg-block.expanded.selected .bg-block__port-outside, .bg-block.expanded:hover .bg-block__port-outside { opacity: 1; }
+
+.bg-block__progress {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 6px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line-soft); /* 溝をはっきり見せる (線と見分けるため) */
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+}
+.bg-block__progress > span {
+  display: block;
+  height: 100%;
+  background: var(--text); /* 墨色: 線 (ティール / 灰) と色を分け、箱の中の部品だと分かるように */
+  transition: width 0.4s ease;
+}
+
+.bg-block__avatars { display: inline-flex; flex: none; }
+.bg-block__avatars .avatar { margin-left: -6px; width: 20px; height: 20px; font-size: 10px; }
+.bg-block__avatars .avatar:first-child { margin-left: 0; }
+
+/* プロジェクトの箱 (最上位の包み): 太い実線、紙色、斜線なし */
+.bg-block.kind-project {
+  background: var(--bg-paper);
+  background-image: none;
+  border: 3px solid var(--line);
+  border-style: solid;
+  color: var(--text);
+  box-shadow: var(--shadow-card);
+}
+.bg-block.kind-project.selected { box-shadow: 0 0 0 3px var(--primary), var(--shadow-card); }
+.bg-block.kind-project > .bg-block__head { background: var(--bg-card); border-radius: 9px 9px 0 0; }
+.bg-block.kind-project > .bg-block__meta { background: var(--bg-card); border-bottom-color: var(--line); }
+.bg-block__tag {
+  flex: none;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+/* カテゴリ: 上辺の色の帯 + 題名の左の札 (記号ではなく文字で)
+   帯は疑似要素で描く (box-shadow だと選択・完了の光・担当の帯などの box-shadow に上書きされて消えるため) */
+.bg-block.has-cat::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 5px;
+  background: var(--cat);
+  border-radius: 9px 9px 0 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.bg-block.has-cat.status-black::before { border-radius: 8px 8px 0 0; }
+.bg-block__cat {
+  flex: none;
+  font-size: 10px;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--cat);
+  color: #fbfbfb;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+/* パネルや引き出しでカテゴリを選ぶ札 */
+.cat-chip { --cat: var(--line); }
+.cat-chip[data-on="true"] { background: var(--cat); color: #fbfbfb; border-color: var(--cat); }
+.cat-chip__dot { width: 10px; height: 10px; border-radius: 3px; background: var(--cat); flex: none; }
+.bg-block__cat.neutral, .cat-chip.neutral[data-on="true"] { background: transparent; color: inherit; border: 1.5px solid currentColor; }
+.bg-block__cat.neutral { padding: 1.5px 5px; }
+.cat-chip.neutral .cat-chip__dot { background: transparent; border: 1.5px solid var(--cat); }
+.cat-chip[data-on="true"] .cat-chip__dot { background: #fbfbfb; }
+/* 状態アイコン: ○ (New, 灰の破線) / ◐ (In Progress, ティール) / ● ✓ (Done, ティール) */
+.status-icon { flex: none; }
+.status-icon.new circle { stroke: var(--status-new); }
+.status-icon.progress circle { stroke: var(--primary); }
+.status-icon.progress path { fill: var(--primary); }
+.status-icon.done circle { fill: var(--primary); }
+.bg-block__tpl {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 9px;
+  padding: 0 4px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  opacity: 0.7;
+  vertical-align: middle;
+}
+
+/* 箱の情報の行の文字チップ */
+.meta-chip { flex: none; font-size: 10px; line-height: 1; padding: 3px 7px; border-radius: 999px; border: 1.5px solid currentColor; opacity: 0.85; white-space: nowrap; }
+.meta-chip.muted { opacity: 0.55; border-style: dashed; }
+.meta-chip.status-white { background: var(--primary); color: var(--on-primary); border-color: var(--primary); opacity: 1; }
+.meta-chip.status-gray { border-color: var(--primary); color: var(--primary-strong); background: rgba(13, 128, 128, 0.08); }
+.meta-chip.status-black { border-style: dashed; }
+.meta-chip.activity { background: var(--primary); color: var(--on-primary); border-color: var(--primary); opacity: 1; font-weight: 700; }
+.meta-chip.activity.needs_decision { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.meta-chip.activity.blocked, .meta-chip.activity.waiting_review { background: var(--line-soft); color: var(--text); border-color: var(--line-soft); }
+.meta-chip.issue { border-style: solid; text-decoration: none; color: var(--text); background: var(--bg-card); }
+.meta-chip.issue:hover { border-color: var(--primary); color: var(--primary-strong); }
+.meta-chip.ready { border-color: var(--primary); color: var(--primary-strong); opacity: 1; font-weight: 700; }
+.meta-chip.overdue { background: var(--danger); color: #fbfbfb; border-color: var(--danger); opacity: 1; }
+
+/* 自分の担当: 左にティールの帯 */
+.bg-block.mine { box-shadow: inset 5px 0 0 var(--primary); }
+.bg-block.mine.status-white { box-shadow: inset 5px 0 0 var(--primary), 0 0 18px 2px var(--box-white-glow); }
+.bg-block.mine.selected { box-shadow: inset 5px 0 0 var(--primary), 0 0 0 3px var(--primary); }
+/* 未担当: 点線の空アバター */
+.avatar.avatar-none { background: transparent; border: 2px dashed currentColor; color: inherit; opacity: 0.55; text-shadow: none; }
+/* 用意できた入力 */
+.bg-block__port.ready { color: var(--primary-strong); opacity: 1; font-weight: 700; }
+
+
+/* 活動の印 (AI や人が今ここで何をしているか) */
+.bg-block__activity {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 6px 2px 2px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: 700;
+}
+.bg-block__activity.needs_decision { background: var(--accent); color: var(--on-accent); }
+.bg-block__activity.blocked, .bg-block__activity.waiting_review { background: var(--line-soft); color: var(--text); }
+.bg-block__actor {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--ink-strong);
+  font-size: 10px;
+  font-weight: 800;
+}
+:root[data-theme="dark"] .bg-block__actor { background: rgba(0, 0, 0, 0.45); color: #e8eaed; }
+/* 作業中は枠がゆっくり脈打つ */
+.bg-block.activity-working { animation: pulse-working 2.2s ease-in-out infinite; }
+@keyframes pulse-working {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(13, 128, 128, 0.0); }
+  50% { box-shadow: 0 0 0 6px rgba(13, 128, 128, 0.25); }
+}
+.bg-block.activity-working.selected { animation: none; }
+/* 判断待ちは差し色の枠 */
+.bg-block.activity-needs_decision { border-color: var(--accent); border-style: solid; }
+
+/* ---------- ハンドル (ポートの丸) ---------- */
+
+.react-flow__handle {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--line);
+  background: var(--bg-card);
+  border-radius: 999px;
+}
+/* つかめる範囲は見た目より広く (28px) */
+.react-flow__handle::before { content: ""; position: absolute; inset: -9px; border-radius: 999px; }
+.react-flow__handle:hover { transform: translate(-50%, -50%) scale(1.35); }
+.react-flow__handle-right:hover { transform: translate(50%, -50%) scale(1.35); }
+.react-flow__handle.port-out { background: var(--primary); border-color: var(--primary-strong); }
+/* 内側用のハンドルは境界の丸と同じ位置に重ね、見えなくする (丸は 1 つに見える。向きはハンドルの種類で決まる) */
+.react-flow__handle.port-inner { width: 12px; height: 12px; opacity: 0; }
+
+.react-flow__handle.port-promoted { border-style: dashed; }
+.react-flow__handle-left { left: -7px; }
+.react-flow__handle-right { right: -7px; }
+
+
+/* ---------- 入力ノード / 出力ノード (最上位) ---------- */
+
+.bg-terminal {
+  position: relative;
+  width: 200px;
+  border: 3px solid var(--line);
+  border-radius: 14px;
+  background: var(--primary-soft);
+  color: var(--text);
+  box-shadow: var(--shadow-card);
+  box-sizing: border-box;
+}
+.bg-terminal.selected { box-shadow: 0 0 0 3px var(--primary), var(--shadow-card); }
+.bg-terminal__head {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  font-family: var(--font-head);
+  font-weight: 800;
+  border-bottom: 2px solid var(--line-soft);
+}
+.bg-terminal__row {
+  position: relative;
+  height: 26px;
+  line-height: 26px;
+  padding: 0 14px;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bg-terminal__row.promoted { font-style: italic; opacity: 0.75; }
+.bg-terminal__empty { padding: 8px 14px 10px; font-size: 12px; color: var(--text-muted); }
+
+/* タイムライン */
+.tl-row { display: grid; grid-template-columns: 76px 24px 1fr; gap: 6px; align-items: start; padding: 4px 0; border-top: 1px solid var(--line-soft); font-size: 12px; }
+.tl-row:first-child { border-top: 0; }
+.tl-time { color: var(--text-muted); white-space: nowrap; }
+.tl-actor { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 18px; border-radius: 999px; background: var(--primary-soft-2); font-size: 10px; font-weight: 800; }
+.decision-card { border: 2px solid var(--accent); border-radius: 10px; padding: 8px; background: var(--bg-card); }
+.summary-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 2px solid var(--line-soft); background: var(--bg-card); font-size: 12px; cursor: pointer; }
+.summary-chip[data-on="true"] { border-color: var(--primary); background: var(--primary-soft); }
+.summary-chip, .save-chip { white-space: nowrap; flex: none; }
+/* 保存状態の札 (常に表示)。未保存は目立たせる */
+.save-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 2px solid var(--line-soft); font-size: 12px; color: var(--text-muted); }
+.save-chip.unsaved { border-color: var(--accent); color: var(--text); }
+.save-chip__file { font-weight: 700; color: var(--text); max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+/* 細い幅: 札の文字を省き数だけ、ファイル名と検索を縮める */
+@media (max-width: 900px) {
+  .summary-chip__txt { display: none; }
+  .save-chip__file { display: none; }
+  .search-box { width: 120px; }
+}
+.app-top header { min-width: 0; } /* overflow: hidden にするとメニューや検索の候補が切れる */
+.summary-chip .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--primary); animation: pulse-dot 1.6s ease-in-out infinite; }
+.summary-chip .dot.decision { background: var(--accent); animation: none; }
+@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ---------- React Flow の色 ---------- */
+
+.react-flow { background: var(--bg-paper); }
+/* 線は 2 種類だけ: 要素が確定している線 (太いティール) と、まだの線 (灰色)。太さはズームに関係なく画面上で一定 */
+/* 線は 2 種類だけ。未確定 = 細い薄い灰色、確定 (成果物あり) = 太いティール。
+   遠目では色相より「太さ」と「明るさ」の差で見分けるので、太さ 2 倍・明度も離す */
+.react-flow__edge-path { stroke: #a9afb6; stroke-width: 2px; opacity: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; }
+:root[data-theme="dark"] .react-flow__edge-path { stroke: #6b737c; }
+.react-flow__edge.edge-ready .react-flow__edge-path { stroke: var(--primary); stroke-width: 4px; }
+
+/* 選択・ホバー: 色は変えず、太さと縁取りだけ */
+.react-flow__edge-halo { fill: none; stroke: currentColor; stroke-opacity: 0.22; stroke-width: 12px; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; color: #7a8088; }
+.react-flow__edge.edge-ready .react-flow__edge-halo { color: var(--primary); }
+.react-flow__edge.edge-hot .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path { stroke-width: 5px; }
+/* 選んだ線: 一目で分かるように、アクセント色 (橙) の太い線 + 広い光 + 流れる破線。他の線は薄くなる
+   edge-net = 選んだ線と親の縁を越えてつながっている線 (出力から最終的な入力まで同じ強調) */
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge.edge-net .react-flow__edge-path,
+.react-flow__edge:focus .react-flow__edge-path {
+  stroke: var(--accent) !important;
+  stroke-width: 6px;
+  stroke-dasharray: 14 10;
+  animation: edge-flow 0.8s linear infinite;
+  opacity: 1 !important;
+}
+.react-flow__edge.selected .react-flow__edge-halo, .react-flow__edge.edge-net .react-flow__edge-halo { color: var(--accent); stroke-opacity: 0.35; stroke-width: 22px; }
+.react-flow__edge.selected, .react-flow__edge.edge-net { z-index: 1000 !important; }
+.react-flow__edge.edge-net .react-flow__edge-path { opacity: 1 !important; }
+@keyframes edge-flow { to { stroke-dashoffset: -24; } }
+@media (prefers-reduced-motion: reduce) { .react-flow__edge.selected .react-flow__edge-path { animation: none; } }
+/* 箱を選んでいるとき、関係ない線は少し薄く (色はそのまま) */
+.react-flow__edge.edge-dim .react-flow__edge-path { opacity: 0.45; }
+.react-flow__edge.edge-dim .react-flow__edge-halo { display: none; }
+.react-flow__connection-path { stroke: var(--primary); stroke-width: 2px; }
+.react-flow__controls { box-shadow: none; border: 2px solid var(--line); border-radius: 10px; overflow: hidden; }
+.react-flow__controls-button { background: var(--bg-card); border-bottom: 1px solid var(--line-soft); fill: var(--text); }
+.react-flow__controls-button:hover { background: var(--primary-soft); }
+.react-flow__controls-button svg { fill: var(--text); }
+.react-flow__minimap { border: 2px solid var(--line); border-radius: 10px; background: var(--bg-card); }
+.react-flow__attribution { background: transparent; color: var(--text-muted); font-size: 10px; }
+.react-flow__node.selected .bg-terminal,
+.react-flow__node:focus { outline: none; }
+
+/* ---------- レイアウト ---------- */
+
+.app-grid {
+  display: grid;
+  grid-template-rows: 60px 1fr 36px; /* 上の帯は要素の上下に 8px 以上の余白が要る (DESIGN.md の 8px 単位) */
+  grid-template-columns: 1fr 320px;
+  height: 100%;
+}
+.app-grid.no-right { grid-template-columns: 1fr 0; }
+.app-grid.embed { grid-template-rows: 0 1fr 36px; grid-template-columns: 1fr 0; }
+.panel {
+  overflow: auto;
+  background: var(--bg-card);
+  border-right: 2px solid var(--line);
+  min-width: 0;
+}
+.panel.right { border-right: 0; border-left: 2px solid var(--line); }
+.panel.hidden-panel { display: none; }
+/* 置き場所を明示する (パネルを display:none にすると自動配置がずれ、キャンバスが幅 0 の列に入ってしまうため) */
+.app-grid > .app-top { grid-row: 1; grid-column: 1 / -1; position: relative; z-index: 30; }
+.app-grid > .app-main { grid-row: 2; grid-column: 1; }
+.app-grid > .panel.right { grid-row: 2; grid-column: 2; }
+.app-grid > .app-footer { grid-row: 3; grid-column: 1 / -1; white-space: nowrap; overflow: hidden; }
+
+@media (max-width: 900px) {
+  .app-grid, .app-grid.no-right { grid-template-columns: 1fr 0; }
+  .panel.right { position: fixed; top: 60px; bottom: 36px; right: 0; width: min(320px, 92vw); z-index: 20; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.25); }
+}
+
+/* 引き出し (階層・絞り込み・メンバー): キャンバスの左に重ねる */
+.drawer {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  bottom: 8px;
+  width: 280px;
+  padding: 12px;
+  overflow: auto;
+  z-index: 15;
+  box-shadow: var(--shadow-card);
+}
+@media (max-width: 900px) { .drawer { width: min(280px, 90vw); } }
+
+/* 状態の切り替え (3 つ並びのボタン) */
+.seg { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border: 2px solid var(--line-soft); border-radius: 10px; overflow: hidden; }
+.seg__btn { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 2px; background: var(--bg-card); border: 0; border-right: 2px solid var(--line-soft); cursor: pointer; font-size: 11px; color: var(--text-muted); }
+.seg__btn:last-child { border-right: 0; }
+.seg__btn[data-on="true"] { background: var(--primary-soft); color: var(--text); }
+.seg__btn:disabled { cursor: default; }
+.seg__btn .tree-glyph { width: 24px; height: 24px; font-size: 13px; line-height: 20px; border-radius: 6px; }
+
+/* 担当のアバター (押して切り替え) */
+.avatar-btn { cursor: pointer; opacity: 0.35; border-color: transparent; }
+.avatar-btn[data-on="true"] { opacity: 1; border-color: var(--line); }
+.avatar-btn:disabled { cursor: default; }
+
+/* 詳細パネルの区画: 見出し + 区切り線で項目の切れ目をはっきりさせる */
+.sec { padding-top: 12px; border-top: 2px solid var(--line-soft); display: flex; flex-direction: column; gap: 8px; }
+.sec:first-of-type { border-top: 0; padding-top: 0; }
+.sec > .sec__head { display: flex; align-items: center; justify-content: space-between; min-height: 22px; }
+.sec > .sec__head .label { color: var(--text); font-weight: 800; letter-spacing: 0.1em; }
+.search-box { width: 200px; padding: 4px 10px; border-radius: 999px; background: var(--bg-paper); }
+.search-box:focus { background: var(--bg-card); }
+
+/* Edit / View の切替 */
+.mode-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px; border-radius: 999px; border: 2px solid var(--line); background: var(--bg-card); cursor: pointer; font-size: 12px; font-weight: 800; }
+.mode-toggle__knob { width: 16px; height: 16px; border-radius: 999px; background: var(--line-soft); transition: background 0.15s ease; }
+.mode-toggle[data-on="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary-strong); }
+.mode-toggle[data-on="true"] .mode-toggle__knob { background: var(--primary); }
+/* ドラッグ中に落とせる箱 */
+.bg-block.drop-target { box-shadow: 0 0 0 4px var(--accent); }
+
+/* 枠の薄い入力欄 (ポート名など、一覧の中で使う) */
+.input-plain { border-color: transparent; background: transparent; padding: 4px 6px; }
+/* 日付: ブラウザのカレンダー (showPicker) を開く。標準の暦アイコンは見えにくいので隠し、横のボタンで開く */
+.date-field { display: inline-flex; align-items: center; gap: 2px; flex: 1; min-width: 0; }
+.date-field input[type="date"] { flex: 1; min-width: 0; cursor: pointer; }
+.date-field input[type="date"]::-webkit-calendar-picker-indicator { display: none; }
+.date-field__btn {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 7px; border: 2px solid var(--line-soft); background: var(--bg-card); color: var(--text); cursor: pointer;
+}
+.date-field__btn:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.date-field__btn:disabled { opacity: 0.4; cursor: default; }
+.input-plain:hover:not(:disabled) { border-color: var(--line-soft); }
+.input-plain:focus { border-color: var(--primary); background: var(--bg-card); }
+/* 入出力の 1 行 = カード (行どうしの区切りをはっきりさせる) */
+.port-card { border: 2px solid var(--line-soft); border-radius: 10px; background: var(--bg-paper); padding: 4px 6px 4px 6px; margin-top: 8px; }
+.port-card .input-plain { background: transparent; }
+.io-mark { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 5px; margin-right: 6px; font-size: 12px; font-weight: 800; background: var(--primary-soft-2); color: var(--primary-strong); }
+.io-mark.out { background: var(--primary); color: var(--on-primary); }
+
+.help-table td { padding: 3px 6px; vertical-align: top; font-size: 13px; }
+.help-table td:first-child { color: var(--text-muted); white-space: nowrap; }
+.btn-ghost[data-on="true"] { background: var(--primary-soft); }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 52px;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: var(--ink-strong);
+  color: var(--bg-paper);
+  border: 2px solid var(--line);
+  z-index: 50;
+  max-width: 90vw;
+}
+:root[data-theme="dark"] .toast { background: var(--primary-soft-2); color: var(--text); }
+
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.tree-row:hover { background: var(--primary-soft); }
+.tree-row[data-selected="true"] { background: var(--primary-soft-2); }
+.tree-glyph {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 2px solid var(--line);
+  font-size: 10px;
+  line-height: 12px;
+  text-align: center;
+  font-weight: 800;
+}
+.tree-glyph.black { background: var(--box-black-bg); color: var(--box-black-text); border-style: dashed; }
+.tree-glyph.gray { background: var(--box-gray-bg); background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--box-gray-hatch) 3px 4px); }
+.tree-glyph.white { background: var(--box-white-bg); color: var(--box-white-text); }
+
+.status-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border: 2px solid var(--line-soft);
+  border-radius: 10px;
+  background: var(--bg-card);
+  cursor: pointer;
+  font-size: 11px;
+}
+.status-btn[data-on="true"] { border-color: var(--primary); background: var(--primary-soft); }
+.status-btn .tree-glyph { width: 28px; height: 28px; font-size: 15px; line-height: 24px; border-radius: 7px; }
+
+.progress-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--line-soft);
+  overflow: hidden;
+  border: 1.5px solid var(--line);
+}
+.progress-bar > span { display: block; height: 100%; background: var(--primary); transition: width 0.4s ease; }
+
+.kbd {
+  font-size: 11px;
+  padding: 1px 5px;
+  border: 1px solid var(--line-soft);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--bg-paper);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 29, 33, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+  padding: 16px;
+}
+.modal {
+  width: min(720px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: var(--shadow-card);
+}
+
+/* 進捗スライダーなどの標準部品の色をテーマに合わせる */
+input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
+
+/* 線の見た目のパスはクリックを拾わない (当たり判定は別の透明な線。丸からのドラッグを邪魔しないため) */
+.react-flow__edge-path { pointer-events: none; }

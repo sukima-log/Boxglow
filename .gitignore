@@ -1,0 +1,18 @@
+# 依存と生成物
+node_modules
+dist
+bin/
+*.local
+.DS_Store
+*:Zone.Identifier
+
+# この開発自身の計画 (dogfooding)。公開対象外: 例は examples/ にある
+/boxglow.json
+/docs/ROADMAP.md
+
+# 一時ファイル
+undefined/
+*.png.tmp
+.env
+.env.*
+tsconfig.tsbuildinfo

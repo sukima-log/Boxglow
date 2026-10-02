@@ -1,0 +1,2091 @@
+{
+  "schemaVersion": 5,
+  "id": "VPz4u01GOK",
+  "name": "Logic DAW",
+  "description": "",
+  "createdAt": "2026-10-02T20:55:33.507Z",
+  "visibility": "private",
+  "members": [],
+  "blocks": {
+    "root": {
+      "id": "root",
+      "parentId": null,
+      "title": "Logic DAW",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "37cF2kZMCS": {
+      "id": "37cF2kZMCS",
+      "key": "B1",
+      "kind": "project",
+      "parentId": "root",
+      "title": "Logic DAW",
+      "description": "",
+      "status": "gray",
+      "assigneeIds": [],
+      "position": {
+        "x": 344,
+        "y": 40
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "HOkkoF9KO-": {
+      "id": "HOkkoF9KO-",
+      "key": "B2",
+      "parentId": "37cF2kZMCS",
+      "title": "企画と要件",
+      "description": "Ref クロックと論理回路ブロックで音の出るタイミングを組み立てて遊ぶ、ブラウザで動く小さな DAW。何を作るかと作らないかを決める",
+      "status": "white",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": [],
+      "category": "study"
+    },
+    "i-CJ39V40B": {
+      "id": "i-CJ39V40B",
+      "key": "B3",
+      "parentId": "HOkkoF9KO-",
+      "title": "遊び方を決める",
+      "description": "クロック → 分周器 → AND/OR/カウンタ → トリガ → 音源、という遊びの流れを 1 枚の絵にする",
+      "status": "white",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "1xTyMWh0hC": {
+      "id": "1xTyMWh0hC",
+      "key": "B4",
+      "parentId": "HOkkoF9KO-",
+      "title": "対象ブラウザと性能目標",
+      "description": "Chrome / Firefox / Safari。タイミングのジッタ 2ms 以内、ブロック 64 個まで",
+      "status": "white",
+      "assigneeIds": [],
+      "position": {
+        "x": 634.1999999999999,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "2BCEvCkGXl": {
+      "id": "2BCEvCkGXl",
+      "key": "B5",
+      "parentId": "HOkkoF9KO-",
+      "title": "用語と画面の骨子",
+      "description": "Ref クロック、tick、分周比、ゲート、トリガの定義と、画面の 3 領域 (ラック・結線・トランスポート)",
+      "status": "white",
+      "assigneeIds": [],
+      "position": {
+        "x": 1166.5499999999997,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "omTx6VUTec": {
+      "id": "omTx6VUTec",
+      "key": "B6",
+      "parentId": "37cF2kZMCS",
+      "title": "コアの設計",
+      "description": "ハードウェア論理設計の考え方 (同期回路、分周、エッジ検出) を音のタイミング制御に写す",
+      "status": "gray",
+      "assigneeIds": [],
+      "position": {
+        "x": 1949.5499999999995,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": [],
+      "category": "design",
+      "dueDate": "2026-10-20"
+    },
+    "HEQYTuOzN9": {
+      "id": "HEQYTuOzN9",
+      "key": "B7",
+      "parentId": "omTx6VUTec",
+      "title": "Ref クロックとタイミングモデル",
+      "description": "固定 Hz の Ref クロックを N 分周して tick を作る。BPM は分周比で表す。lookahead スケジューリングで Web Audio の時刻に写す",
+      "status": "white",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": [
+        {
+          "id": "4E48Rxm9cC",
+          "question": "クロックの基準はどちらにしますか?",
+          "options": [
+            "BPM を基準にして tick を割る",
+            "固定 Hz の Ref クロックを N 分周する (BPM は分周比で表す)",
+            "両方を切り替えられるようにする"
+          ],
+          "askedBy": "claude-code",
+          "askedAt": "2026-10-02T20:55:34.456Z",
+          "answer": "固定 Hz の Ref クロックを N 分周する (BPM は分周比で表す)",
+          "answeredBy": "human",
+          "answeredAt": "2026-10-02T20:55:34.491Z"
+        }
+      ]
+    },
+    "0fQgmCbOu7": {
+      "id": "0fQgmCbOu7",
+      "key": "B8",
+      "parentId": "omTx6VUTec",
+      "title": "ブロックの種類と結線ルール",
+      "description": "分周器 / カウンタ / AND / OR / NOT / エッジ検出 / ゲート / トリガ。入力は 1 本、出力は分岐可。組み合わせループは禁止 (同期素子を挟む)",
+      "status": "gray",
+      "assigneeIds": [],
+      "position": {
+        "x": 766.1999999999998,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": {
+        "actor": "claude-code",
+        "state": "working",
+        "note": "エッジ検出とカウンタの状態の持ち方を書いている",
+        "since": "2026-10-02T20:55:34.566Z"
+      },
+      "decisions": []
+    },
+    "R2R1-4uMX7": {
+      "id": "R2R1-4uMX7",
+      "key": "B9",
+      "parentId": "omTx6VUTec",
+      "title": "音源とミキサの設計",
+      "description": "トリガで鳴るオシレータとサンプル再生、ゲイン、簡単なエフェクト。Web Audio のノード構成",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 1442.0999999999995,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": {
+        "actor": "claude-code",
+        "state": "needs_decision",
+        "note": "サンプル音源は最初から入れますか?",
+        "since": "2026-10-02T20:55:34.606Z"
+      },
+      "decisions": [
+        {
+          "id": "ULsEm4CfxX",
+          "question": "サンプル音源は最初から入れますか?",
+          "options": [
+            "オシレータだけで始める",
+            "ドラムのサンプル 4 種を同梱する"
+          ],
+          "askedBy": "claude-code",
+          "askedAt": "2026-10-02T20:55:34.606Z"
+        }
+      ]
+    },
+    "FAv3jC6_E1": {
+      "id": "FAv3jC6_E1",
+      "key": "B10",
+      "parentId": "omTx6VUTec",
+      "title": "パッチのデータ形式",
+      "description": "ブロック・結線・パラメータを JSON (patch.json) に保存。Git で差分が読める形",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 2083.3499999999995,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "6jo0TZADeZ": {
+      "id": "6jo0TZADeZ",
+      "key": "B11",
+      "parentId": "37cF2kZMCS",
+      "title": "エンジンの実装",
+      "description": "画面に依存しない純粋な部分。クロック・評価器・音源・パッチの読み書き",
+      "status": "gray",
+      "assigneeIds": [],
+      "position": {
+        "x": 4689.299999999998,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": [],
+      "category": "build",
+      "dueDate": "2026-11-10",
+      "estimateHours": 40
+    },
+    "y5Gt0aezAB": {
+      "id": "y5Gt0aezAB",
+      "key": "B12",
+      "parentId": "6jo0TZADeZ",
+      "title": "クロックとスケジューラ",
+      "description": "Ref クロックの分周と lookahead (100ms 先まで) のイベント予約。AudioContext.currentTime に合わせる",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "GeX_aFt1VI": {
+      "id": "GeX_aFt1VI",
+      "key": "B13",
+      "parentId": "6jo0TZADeZ",
+      "title": "論理ブロックの評価器",
+      "description": "tick ごとにブロックを同期評価する。エッジ検出とカウンタの状態を持つ",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 685.3499999999998,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "z5s3n_aatH": {
+      "id": "z5s3n_aatH",
+      "key": "B14",
+      "parentId": "6jo0TZADeZ",
+      "title": "音源とミキサ",
+      "description": "トリガを受けて鳴らす。オシレータ 3 種とサンプル、ゲイン、ディレイ",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 1283.6999999999996,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "yNEcHkEHpc": {
+      "id": "yNEcHkEHpc",
+      "key": "B15",
+      "parentId": "6jo0TZADeZ",
+      "title": "パッチの保存と読み込み",
+      "description": "patch.json の読み書きと検証。壊れたファイルの扱い",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 1835.8499999999995,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "OrspcLXy3j": {
+      "id": "OrspcLXy3j",
+      "key": "B16",
+      "parentId": "37cF2kZMCS",
+      "title": "画面の実装",
+      "description": "ラック (ブロックの配置と結線)、トランスポート、パラメータ編集",
+      "status": "gray",
+      "assigneeIds": [],
+      "position": {
+        "x": 7155.149999999998,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": [],
+      "category": "ui"
+    },
+    "au-pndRAQm": {
+      "id": "au-pndRAQm",
+      "key": "B17",
+      "parentId": "OrspcLXy3j",
+      "title": "ブロックの配置と結線",
+      "description": "ブロックをラックに置き、出力から入力へドラッグで結線。ループは拒否",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "j-XRYwLrlQ": {
+      "id": "j-XRYwLrlQ",
+      "key": "B18",
+      "parentId": "OrspcLXy3j",
+      "title": "トランスポートとクロック表示",
+      "description": "再生 / 停止、Ref クロックの Hz、分周比、現在の tick を表示",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 662.2499999999998,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "ZdiZVOjgt0": {
+      "id": "ZdiZVOjgt0",
+      "key": "B19",
+      "parentId": "OrspcLXy3j",
+      "title": "パラメータの編集パネル",
+      "description": "選んだブロックの分周比・しきい値・音色を編集",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 1275.4499999999996,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "-3GHutEb6w": {
+      "id": "-3GHutEb6w",
+      "key": "B20",
+      "parentId": "OrspcLXy3j",
+      "title": "プリセットのパッチ",
+      "description": "最初に開いたときに鳴る 3 つのパッチ (4 つ打ち、ポリリズム、ランダム風)",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 1921.6499999999992,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "pAjwxfYm-V": {
+      "id": "pAjwxfYm-V",
+      "key": "B21",
+      "parentId": "37cF2kZMCS",
+      "title": "検証",
+      "description": "タイミング精度とブラウザ差を実測し、遊んで直す",
+      "status": "gray",
+      "assigneeIds": [],
+      "position": {
+        "x": 9698.549999999996,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": [],
+      "category": "verify"
+    },
+    "jyv5ElYcUF": {
+      "id": "jyv5ElYcUF",
+      "key": "B22",
+      "parentId": "pAjwxfYm-V",
+      "title": "タイミング精度の計測",
+      "description": "1 分間のトリガ時刻を記録してジッタを測る (目標 2ms 以内)",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "CEvexkLhoM": {
+      "id": "CEvexkLhoM",
+      "key": "B23",
+      "parentId": "pAjwxfYm-V",
+      "title": "ブラウザ間の確認",
+      "description": "Chrome / Firefox / Safari で同じパッチが同じ音で鳴るか",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 650.6999999999998,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "nYpIKEgYEH": {
+      "id": "nYpIKEgYEH",
+      "key": "B24",
+      "parentId": "pAjwxfYm-V",
+      "title": "遊んでみて直す",
+      "description": "3 人に 10 分遊んでもらい、詰まった所を直す",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 1179.7499999999995,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "S4YMLH17f1": {
+      "id": "S4YMLH17f1",
+      "key": "B25",
+      "parentId": "37cF2kZMCS",
+      "title": "公開",
+      "description": "静的ホスティングに置いて、紹介ページと一緒に公開",
+      "status": "gray",
+      "assigneeIds": [],
+      "position": {
+        "x": 11541.299999999996,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": [],
+      "category": "ops",
+      "dueDate": "2026-12-01"
+    },
+    "jh4PEYWh4k": {
+      "id": "jh4PEYWh4k",
+      "key": "B26",
+      "parentId": "S4YMLH17f1",
+      "title": "ビルドと配信先",
+      "description": "vite build して GitHub Pages に置く",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "X02uDGVsMu": {
+      "id": "X02uDGVsMu",
+      "key": "B27",
+      "parentId": "S4YMLH17f1",
+      "title": "紹介ページ",
+      "description": "README とデモ GIF、遊び方 3 ステップ",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 576.4499999999998,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "3QTWHJd84u": {
+      "id": "3QTWHJd84u",
+      "key": "B28",
+      "parentId": "S4YMLH17f1",
+      "title": "公開と告知",
+      "description": "タグ v1.0.0 を打ち、ブログと SNS で告知",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 960.4499999999998,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    }
+  },
+  "ports": {
+    "dMafovpKsK": {
+      "id": "dMafovpKsK",
+      "blockId": "root",
+      "direction": "out",
+      "name": "公開された Logic DAW (URL)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "nmGQezXUzL": {
+      "id": "nmGQezXUzL",
+      "blockId": "37cF2kZMCS",
+      "direction": "out",
+      "name": "公開された Logic DAW (URL)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "_fq6pR9oXK": {
+      "id": "_fq6pR9oXK",
+      "blockId": "HOkkoF9KO-",
+      "direction": "out",
+      "name": "要件一覧 (docs/requirements.md)",
+      "description": "",
+      "required": true,
+      "artifacts": [
+        {
+          "id": "aRwXvfVMPo",
+          "title": "要件一覧",
+          "url": "",
+          "kind": "file",
+          "note": "",
+          "path": "docs/requirements.md"
+        }
+      ]
+    },
+    "wMjV6j3iBo": {
+      "id": "wMjV6j3iBo",
+      "blockId": "HOkkoF9KO-",
+      "direction": "in",
+      "name": "企画メモ (何で遊びたいか)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "S6kNWn5j1I": {
+      "id": "S6kNWn5j1I",
+      "blockId": "37cF2kZMCS",
+      "direction": "in",
+      "name": "企画メモ (何で遊びたいか)",
+      "description": "",
+      "required": true,
+      "artifacts": [],
+      "promotedFrom": "wMjV6j3iBo"
+    },
+    "kCBzi4AWiY": {
+      "id": "kCBzi4AWiY",
+      "blockId": "root",
+      "direction": "in",
+      "name": "企画メモ (何で遊びたいか)",
+      "description": "",
+      "required": true,
+      "artifacts": [],
+      "promotedFrom": "S6kNWn5j1I"
+    },
+    "SJGUmvg3DS": {
+      "id": "SJGUmvg3DS",
+      "blockId": "i-CJ39V40B",
+      "direction": "out",
+      "name": "遊び方の絵 (docs/play.png)",
+      "description": "",
+      "required": true,
+      "artifacts": [
+        {
+          "id": "orBjVIpGAk",
+          "title": "遊び方の絵",
+          "url": "",
+          "kind": "file",
+          "note": "",
+          "path": "docs/play.png"
+        }
+      ]
+    },
+    "lBhwHJGDri": {
+      "id": "lBhwHJGDri",
+      "blockId": "i-CJ39V40B",
+      "direction": "in",
+      "name": "企画メモ (何で遊びたいか)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "qjnySzVoRc": {
+      "id": "qjnySzVoRc",
+      "blockId": "1xTyMWh0hC",
+      "direction": "out",
+      "name": "性能目標 (docs/targets.md)",
+      "description": "",
+      "required": true,
+      "artifacts": [
+        {
+          "id": "h_7HsvZMSQ",
+          "title": "性能目標",
+          "url": "",
+          "kind": "file",
+          "note": "",
+          "path": "docs/targets.md"
+        }
+      ]
+    },
+    "t7Aeeix0ea": {
+      "id": "t7Aeeix0ea",
+      "blockId": "1xTyMWh0hC",
+      "direction": "in",
+      "name": "遊び方の絵 (docs/play.png)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "LiKHOK8Dnq": {
+      "id": "LiKHOK8Dnq",
+      "blockId": "2BCEvCkGXl",
+      "direction": "out",
+      "name": "要件一覧 (docs/requirements.md)",
+      "description": "",
+      "required": true,
+      "artifacts": [
+        {
+          "id": "ntNHF9wLDf",
+          "title": "要件一覧",
+          "url": "",
+          "kind": "file",
+          "note": "",
+          "path": "docs/requirements.md"
+        }
+      ]
+    },
+    "WjjpELm72a": {
+      "id": "WjjpELm72a",
+      "blockId": "2BCEvCkGXl",
+      "direction": "in",
+      "name": "性能目標 (docs/targets.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "-DAjpSTt06": {
+      "id": "-DAjpSTt06",
+      "blockId": "omTx6VUTec",
+      "direction": "out",
+      "name": "設計書 (docs/design.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "DGMmrFzRes": {
+      "id": "DGMmrFzRes",
+      "blockId": "omTx6VUTec",
+      "direction": "in",
+      "name": "要件一覧 (docs/requirements.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "KNb5Y7LCEn": {
+      "id": "KNb5Y7LCEn",
+      "blockId": "omTx6VUTec",
+      "direction": "in",
+      "name": "論理回路の基礎知識 (教科書・資料)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "eUqCBDKbug": {
+      "id": "eUqCBDKbug",
+      "blockId": "37cF2kZMCS",
+      "direction": "in",
+      "name": "論理回路の基礎知識 (教科書・資料)",
+      "description": "",
+      "required": true,
+      "artifacts": [],
+      "promotedFrom": "KNb5Y7LCEn"
+    },
+    "WC3jZ2fiyF": {
+      "id": "WC3jZ2fiyF",
+      "blockId": "root",
+      "direction": "in",
+      "name": "論理回路の基礎知識 (教科書・資料)",
+      "description": "",
+      "required": true,
+      "artifacts": [],
+      "promotedFrom": "eUqCBDKbug"
+    },
+    "os5nxlIkVT": {
+      "id": "os5nxlIkVT",
+      "blockId": "omTx6VUTec",
+      "direction": "in",
+      "name": "Web Audio API の仕様",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "O76IJ41LbG": {
+      "id": "O76IJ41LbG",
+      "blockId": "37cF2kZMCS",
+      "direction": "in",
+      "name": "Web Audio API の仕様",
+      "description": "",
+      "required": true,
+      "artifacts": [],
+      "promotedFrom": "os5nxlIkVT"
+    },
+    "BFT_1ucGtT": {
+      "id": "BFT_1ucGtT",
+      "blockId": "root",
+      "direction": "in",
+      "name": "Web Audio API の仕様",
+      "description": "",
+      "required": true,
+      "artifacts": [],
+      "promotedFrom": "O76IJ41LbG"
+    },
+    "o1EdCxSm5g": {
+      "id": "o1EdCxSm5g",
+      "blockId": "HEQYTuOzN9",
+      "direction": "out",
+      "name": "タイミングモデル (docs/design.md#clock)",
+      "description": "",
+      "required": true,
+      "artifacts": [
+        {
+          "id": "7nMtq0FiNb",
+          "title": "タイミングモデル",
+          "url": "",
+          "kind": "file",
+          "note": "",
+          "path": "docs/design.md"
+        }
+      ]
+    },
+    "-CX1j2eX0W": {
+      "id": "-CX1j2eX0W",
+      "blockId": "HEQYTuOzN9",
+      "direction": "in",
+      "name": "要件一覧 (docs/requirements.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "UVZez4pAzh": {
+      "id": "UVZez4pAzh",
+      "blockId": "HEQYTuOzN9",
+      "direction": "in",
+      "name": "論理回路の基礎知識 (教科書・資料)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "RPNp0Rho0D": {
+      "id": "RPNp0Rho0D",
+      "blockId": "0fQgmCbOu7",
+      "direction": "out",
+      "name": "ブロック仕様 (docs/design.md#blocks)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "F8LZKd8YyV": {
+      "id": "F8LZKd8YyV",
+      "blockId": "0fQgmCbOu7",
+      "direction": "in",
+      "name": "タイミングモデル (docs/design.md#clock)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "moOetgQC2v": {
+      "id": "moOetgQC2v",
+      "blockId": "R2R1-4uMX7",
+      "direction": "out",
+      "name": "音源の設計 (docs/design.md#audio)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "YRoHNlYwoc": {
+      "id": "YRoHNlYwoc",
+      "blockId": "R2R1-4uMX7",
+      "direction": "in",
+      "name": "ブロック仕様 (docs/design.md#blocks)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "e8GmoiHrRh": {
+      "id": "e8GmoiHrRh",
+      "blockId": "R2R1-4uMX7",
+      "direction": "in",
+      "name": "Web Audio API の仕様",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "jtK1SJ4TZX": {
+      "id": "jtK1SJ4TZX",
+      "blockId": "FAv3jC6_E1",
+      "direction": "out",
+      "name": "設計書 (docs/design.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "yQmc30ia-0": {
+      "id": "yQmc30ia-0",
+      "blockId": "FAv3jC6_E1",
+      "direction": "in",
+      "name": "音源の設計 (docs/design.md#audio)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "EgpnSbSKsZ": {
+      "id": "EgpnSbSKsZ",
+      "blockId": "6jo0TZADeZ",
+      "direction": "out",
+      "name": "動くエンジン (src/engine/)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "149sLXG-gk": {
+      "id": "149sLXG-gk",
+      "blockId": "6jo0TZADeZ",
+      "direction": "in",
+      "name": "設計書 (docs/design.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "zGM3lFw5NS": {
+      "id": "zGM3lFw5NS",
+      "blockId": "y5Gt0aezAB",
+      "direction": "out",
+      "name": "スケジューラ (src/engine/clock.ts)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "sBmnQZtCeD": {
+      "id": "sBmnQZtCeD",
+      "blockId": "y5Gt0aezAB",
+      "direction": "in",
+      "name": "設計書 (docs/design.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "AD2bm3nVzu": {
+      "id": "AD2bm3nVzu",
+      "blockId": "GeX_aFt1VI",
+      "direction": "out",
+      "name": "評価器 (src/engine/logic.ts)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "IUIvmcbltK": {
+      "id": "IUIvmcbltK",
+      "blockId": "GeX_aFt1VI",
+      "direction": "in",
+      "name": "スケジューラ (src/engine/clock.ts)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "DgMFkQhyzB": {
+      "id": "DgMFkQhyzB",
+      "blockId": "z5s3n_aatH",
+      "direction": "out",
+      "name": "音源 (src/engine/audio.ts)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "S6-wIp2bIP": {
+      "id": "S6-wIp2bIP",
+      "blockId": "z5s3n_aatH",
+      "direction": "in",
+      "name": "評価器 (src/engine/logic.ts)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "UaJaHcIBiF": {
+      "id": "UaJaHcIBiF",
+      "blockId": "yNEcHkEHpc",
+      "direction": "out",
+      "name": "動くエンジン (src/engine/)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "zDZ6EJm1um": {
+      "id": "zDZ6EJm1um",
+      "blockId": "yNEcHkEHpc",
+      "direction": "in",
+      "name": "音源 (src/engine/audio.ts)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "X2OapLIDRq": {
+      "id": "X2OapLIDRq",
+      "blockId": "OrspcLXy3j",
+      "direction": "out",
+      "name": "動く画面 (src/ui/)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "k2YVW_KRaU": {
+      "id": "k2YVW_KRaU",
+      "blockId": "OrspcLXy3j",
+      "direction": "in",
+      "name": "設計書 (docs/design.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "Pialy2ZAR7": {
+      "id": "Pialy2ZAR7",
+      "blockId": "OrspcLXy3j",
+      "direction": "in",
+      "name": "動くエンジン (src/engine/)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "HcznbWck-6": {
+      "id": "HcznbWck-6",
+      "blockId": "au-pndRAQm",
+      "direction": "out",
+      "name": "ラック画面 (src/ui/Rack.tsx)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "CKfVUBMehB": {
+      "id": "CKfVUBMehB",
+      "blockId": "au-pndRAQm",
+      "direction": "in",
+      "name": "設計書 (docs/design.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "M6hELTF6PU": {
+      "id": "M6hELTF6PU",
+      "blockId": "au-pndRAQm",
+      "direction": "in",
+      "name": "動くエンジン (src/engine/)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "hI9VkaV7kd": {
+      "id": "hI9VkaV7kd",
+      "blockId": "j-XRYwLrlQ",
+      "direction": "out",
+      "name": "トランスポート (src/ui/Transport.tsx)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "_Q6QQPOUAx": {
+      "id": "_Q6QQPOUAx",
+      "blockId": "j-XRYwLrlQ",
+      "direction": "in",
+      "name": "ラック画面 (src/ui/Rack.tsx)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "AAKF7TbNnu": {
+      "id": "AAKF7TbNnu",
+      "blockId": "ZdiZVOjgt0",
+      "direction": "out",
+      "name": "編集パネル (src/ui/Inspector.tsx)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "vMnRKLpGTM": {
+      "id": "vMnRKLpGTM",
+      "blockId": "ZdiZVOjgt0",
+      "direction": "in",
+      "name": "トランスポート (src/ui/Transport.tsx)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "4vxCt5wLNn": {
+      "id": "4vxCt5wLNn",
+      "blockId": "-3GHutEb6w",
+      "direction": "out",
+      "name": "動く画面 (src/ui/)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "NjVVGYED23": {
+      "id": "NjVVGYED23",
+      "blockId": "-3GHutEb6w",
+      "direction": "in",
+      "name": "編集パネル (src/ui/Inspector.tsx)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "9lmLTkZ1Fg": {
+      "id": "9lmLTkZ1Fg",
+      "blockId": "pAjwxfYm-V",
+      "direction": "out",
+      "name": "テスト結果 (docs/test-report.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "DMwoA3DT-s": {
+      "id": "DMwoA3DT-s",
+      "blockId": "pAjwxfYm-V",
+      "direction": "in",
+      "name": "動くエンジン (src/engine/)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "tVqBpXaXpW": {
+      "id": "tVqBpXaXpW",
+      "blockId": "pAjwxfYm-V",
+      "direction": "in",
+      "name": "動く画面 (src/ui/)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "rXOQiK7wxs": {
+      "id": "rXOQiK7wxs",
+      "blockId": "jyv5ElYcUF",
+      "direction": "out",
+      "name": "計測結果 (docs/jitter.csv)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "xkhG-Acwfw": {
+      "id": "xkhG-Acwfw",
+      "blockId": "jyv5ElYcUF",
+      "direction": "in",
+      "name": "動くエンジン (src/engine/)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "qWWI31JfNO": {
+      "id": "qWWI31JfNO",
+      "blockId": "CEvexkLhoM",
+      "direction": "out",
+      "name": "確認表 (docs/browsers.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "RsvJg5uelx": {
+      "id": "RsvJg5uelx",
+      "blockId": "CEvexkLhoM",
+      "direction": "in",
+      "name": "動く画面 (src/ui/)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "9268MIYofn": {
+      "id": "9268MIYofn",
+      "blockId": "CEvexkLhoM",
+      "direction": "in",
+      "name": "計測結果 (docs/jitter.csv)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "cIIAb12WC1": {
+      "id": "cIIAb12WC1",
+      "blockId": "nYpIKEgYEH",
+      "direction": "out",
+      "name": "テスト結果 (docs/test-report.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "4Xr7HKH-6p": {
+      "id": "4Xr7HKH-6p",
+      "blockId": "nYpIKEgYEH",
+      "direction": "in",
+      "name": "確認表 (docs/browsers.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "2e4b5aWOih": {
+      "id": "2e4b5aWOih",
+      "blockId": "S4YMLH17f1",
+      "direction": "out",
+      "name": "公開された Logic DAW (URL)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "gZ8ZjCVU_v": {
+      "id": "gZ8ZjCVU_v",
+      "blockId": "S4YMLH17f1",
+      "direction": "in",
+      "name": "テスト結果 (docs/test-report.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "2-ROoo0cDO": {
+      "id": "2-ROoo0cDO",
+      "blockId": "S4YMLH17f1",
+      "direction": "in",
+      "name": "動く画面 (src/ui/)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "aZ8b8SURfq": {
+      "id": "aZ8b8SURfq",
+      "blockId": "jh4PEYWh4k",
+      "direction": "out",
+      "name": "配信 URL",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "caszwqxydf": {
+      "id": "caszwqxydf",
+      "blockId": "jh4PEYWh4k",
+      "direction": "in",
+      "name": "テスト結果 (docs/test-report.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "r4t_BOvV6E": {
+      "id": "r4t_BOvV6E",
+      "blockId": "jh4PEYWh4k",
+      "direction": "in",
+      "name": "動く画面 (src/ui/)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "_hAhv1kqrh": {
+      "id": "_hAhv1kqrh",
+      "blockId": "X02uDGVsMu",
+      "direction": "out",
+      "name": "README.md とデモ GIF",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "aRgwJDTVev": {
+      "id": "aRgwJDTVev",
+      "blockId": "X02uDGVsMu",
+      "direction": "in",
+      "name": "配信 URL",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "1qdz8-iRxx": {
+      "id": "1qdz8-iRxx",
+      "blockId": "3QTWHJd84u",
+      "direction": "out",
+      "name": "公開された Logic DAW (URL)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "jZSK0jMj3p": {
+      "id": "jZSK0jMj3p",
+      "blockId": "3QTWHJd84u",
+      "direction": "in",
+      "name": "README.md とデモ GIF",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    }
+  },
+  "edges": {
+    "XldSAWcLJq": {
+      "id": "XldSAWcLJq",
+      "from": {
+        "portId": "nmGQezXUzL",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "dMafovpKsK",
+        "side": "inner"
+      },
+      "kind": "up",
+      "auto": false
+    },
+    "cXpGpsIuNE": {
+      "id": "cXpGpsIuNE",
+      "from": {
+        "portId": "S6kNWn5j1I",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "wMjV6j3iBo",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": true
+    },
+    "q7SNlOuVC4": {
+      "id": "q7SNlOuVC4",
+      "from": {
+        "portId": "kCBzi4AWiY",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "S6kNWn5j1I",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": true
+    },
+    "yFobMTkv9_": {
+      "id": "yFobMTkv9_",
+      "from": {
+        "portId": "wMjV6j3iBo",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "lBhwHJGDri",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "HIwJgu_2Rd": {
+      "id": "HIwJgu_2Rd",
+      "from": {
+        "portId": "SJGUmvg3DS",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "t7Aeeix0ea",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "ppTqNtpg_l": {
+      "id": "ppTqNtpg_l",
+      "from": {
+        "portId": "qjnySzVoRc",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "WjjpELm72a",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "P2VaOmwfBz": {
+      "id": "P2VaOmwfBz",
+      "from": {
+        "portId": "LiKHOK8Dnq",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "_fq6pR9oXK",
+        "side": "inner"
+      },
+      "kind": "up",
+      "auto": false
+    },
+    "-qPCvWKtKr": {
+      "id": "-qPCvWKtKr",
+      "from": {
+        "portId": "eUqCBDKbug",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "KNb5Y7LCEn",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": true
+    },
+    "PmtuDzALAW": {
+      "id": "PmtuDzALAW",
+      "from": {
+        "portId": "WC3jZ2fiyF",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "eUqCBDKbug",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": true
+    },
+    "KWD8-UGDUS": {
+      "id": "KWD8-UGDUS",
+      "from": {
+        "portId": "O76IJ41LbG",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "os5nxlIkVT",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": true
+    },
+    "yFQ_5uHVoj": {
+      "id": "yFQ_5uHVoj",
+      "from": {
+        "portId": "BFT_1ucGtT",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "O76IJ41LbG",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": true
+    },
+    "6UNpLUuFGt": {
+      "id": "6UNpLUuFGt",
+      "from": {
+        "portId": "DGMmrFzRes",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "-CX1j2eX0W",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "UWwHLzby9o": {
+      "id": "UWwHLzby9o",
+      "from": {
+        "portId": "KNb5Y7LCEn",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "UVZez4pAzh",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "mAn4kVIx_l": {
+      "id": "mAn4kVIx_l",
+      "from": {
+        "portId": "os5nxlIkVT",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "e8GmoiHrRh",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "ckM4aGJHTq": {
+      "id": "ckM4aGJHTq",
+      "from": {
+        "portId": "o1EdCxSm5g",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "F8LZKd8YyV",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "YS3_PDYkgL": {
+      "id": "YS3_PDYkgL",
+      "from": {
+        "portId": "RPNp0Rho0D",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "YRoHNlYwoc",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "dX3DAkINJN": {
+      "id": "dX3DAkINJN",
+      "from": {
+        "portId": "moOetgQC2v",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "yQmc30ia-0",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "XEEmVeD2Yx": {
+      "id": "XEEmVeD2Yx",
+      "from": {
+        "portId": "jtK1SJ4TZX",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "-DAjpSTt06",
+        "side": "inner"
+      },
+      "kind": "up",
+      "auto": false
+    },
+    "sLuIo3V176": {
+      "id": "sLuIo3V176",
+      "from": {
+        "portId": "149sLXG-gk",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "sBmnQZtCeD",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "Nwzu26WG1Y": {
+      "id": "Nwzu26WG1Y",
+      "from": {
+        "portId": "zGM3lFw5NS",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "IUIvmcbltK",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "osFDKdLrcG": {
+      "id": "osFDKdLrcG",
+      "from": {
+        "portId": "AD2bm3nVzu",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "S6-wIp2bIP",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "cWegrJFmg9": {
+      "id": "cWegrJFmg9",
+      "from": {
+        "portId": "DgMFkQhyzB",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "zDZ6EJm1um",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "N0-LoeeH7Z": {
+      "id": "N0-LoeeH7Z",
+      "from": {
+        "portId": "UaJaHcIBiF",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "EgpnSbSKsZ",
+        "side": "inner"
+      },
+      "kind": "up",
+      "auto": false
+    },
+    "A_IY3zvXds": {
+      "id": "A_IY3zvXds",
+      "from": {
+        "portId": "k2YVW_KRaU",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "CKfVUBMehB",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "btfob78g3p": {
+      "id": "btfob78g3p",
+      "from": {
+        "portId": "Pialy2ZAR7",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "M6hELTF6PU",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "yCgoQr_A2o": {
+      "id": "yCgoQr_A2o",
+      "from": {
+        "portId": "HcznbWck-6",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "_Q6QQPOUAx",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "w1fX7-H7-L": {
+      "id": "w1fX7-H7-L",
+      "from": {
+        "portId": "hI9VkaV7kd",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "vMnRKLpGTM",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "BU7zK3lPqE": {
+      "id": "BU7zK3lPqE",
+      "from": {
+        "portId": "AAKF7TbNnu",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "NjVVGYED23",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "ioidrpQHx4": {
+      "id": "ioidrpQHx4",
+      "from": {
+        "portId": "4vxCt5wLNn",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "X2OapLIDRq",
+        "side": "inner"
+      },
+      "kind": "up",
+      "auto": false
+    },
+    "gGShyi_4v5": {
+      "id": "gGShyi_4v5",
+      "from": {
+        "portId": "DMwoA3DT-s",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "xkhG-Acwfw",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "UW9byvxX0I": {
+      "id": "UW9byvxX0I",
+      "from": {
+        "portId": "tVqBpXaXpW",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "RsvJg5uelx",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "nS5alB6J6v": {
+      "id": "nS5alB6J6v",
+      "from": {
+        "portId": "rXOQiK7wxs",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "9268MIYofn",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "ETPH12XC5E": {
+      "id": "ETPH12XC5E",
+      "from": {
+        "portId": "qWWI31JfNO",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "4Xr7HKH-6p",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "ja5_QdifxT": {
+      "id": "ja5_QdifxT",
+      "from": {
+        "portId": "cIIAb12WC1",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "9lmLTkZ1Fg",
+        "side": "inner"
+      },
+      "kind": "up",
+      "auto": false
+    },
+    "qlNdvFUxYD": {
+      "id": "qlNdvFUxYD",
+      "from": {
+        "portId": "gZ8ZjCVU_v",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "caszwqxydf",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "3SoQk9fy7p": {
+      "id": "3SoQk9fy7p",
+      "from": {
+        "portId": "2-ROoo0cDO",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "r4t_BOvV6E",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "w-fHTIMOn2": {
+      "id": "w-fHTIMOn2",
+      "from": {
+        "portId": "aZ8b8SURfq",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "aRgwJDTVev",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "Z0M6eYrl5J": {
+      "id": "Z0M6eYrl5J",
+      "from": {
+        "portId": "_hAhv1kqrh",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "jZSK0jMj3p",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "Bx81FNqqR8": {
+      "id": "Bx81FNqqR8",
+      "from": {
+        "portId": "1qdz8-iRxx",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "2e4b5aWOih",
+        "side": "inner"
+      },
+      "kind": "up",
+      "auto": false
+    },
+    "peWh7vLVS0": {
+      "id": "peWh7vLVS0",
+      "from": {
+        "portId": "_fq6pR9oXK",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "DGMmrFzRes",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "pZ2SjooTZD": {
+      "id": "pZ2SjooTZD",
+      "from": {
+        "portId": "-DAjpSTt06",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "149sLXG-gk",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "cn-LMmJm8x": {
+      "id": "cn-LMmJm8x",
+      "from": {
+        "portId": "-DAjpSTt06",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "k2YVW_KRaU",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "22EJQvIlKV": {
+      "id": "22EJQvIlKV",
+      "from": {
+        "portId": "EgpnSbSKsZ",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "Pialy2ZAR7",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "uHFKDQVAmF": {
+      "id": "uHFKDQVAmF",
+      "from": {
+        "portId": "EgpnSbSKsZ",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "DMwoA3DT-s",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "LAWD1Khdsa": {
+      "id": "LAWD1Khdsa",
+      "from": {
+        "portId": "X2OapLIDRq",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "tVqBpXaXpW",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "3tmJ2vkSwt": {
+      "id": "3tmJ2vkSwt",
+      "from": {
+        "portId": "X2OapLIDRq",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "2-ROoo0cDO",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "GFD-Rf5Ql3": {
+      "id": "GFD-Rf5Ql3",
+      "from": {
+        "portId": "9lmLTkZ1Fg",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "gZ8ZjCVU_v",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "v-cNGEqLco": {
+      "id": "v-cNGEqLco",
+      "from": {
+        "portId": "2e4b5aWOih",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "nmGQezXUzL",
+        "side": "inner"
+      },
+      "kind": "up",
+      "auto": false
+    }
+  },
+  "terminals": {
+    "in": {
+      "x": 0,
+      "y": 243
+    },
+    "out": {
+      "x": 13532.149999999996,
+      "y": 269
+    }
+  },
+  "log": [
+    {
+      "id": "hptsqLNgWF",
+      "at": "2026-10-02T20:55:33.561Z",
+      "actor": "claude-code",
+      "kind": "added",
+      "blockId": "HOkkoF9KO-",
+      "message": "「企画と要件」を追加"
+    },
+    {
+      "id": "FHxsUQeFXt",
+      "at": "2026-10-02T20:55:33.593Z",
+      "actor": "claude-code",
+      "kind": "split",
+      "blockId": "HOkkoF9KO-",
+      "message": "「企画と要件」を 3 個に分解: 遊び方を決める, 対象ブラウザと性能目標, 用語と画面の骨子"
+    },
+    {
+      "id": "Q-EeTaVhZs",
+      "at": "2026-10-02T20:55:33.619Z",
+      "actor": "claude-code",
+      "kind": "added",
+      "blockId": "omTx6VUTec",
+      "message": "「コアの設計」を追加"
+    },
+    {
+      "id": "V9ImRxWW2N",
+      "at": "2026-10-02T20:55:33.655Z",
+      "actor": "claude-code",
+      "kind": "split",
+      "blockId": "omTx6VUTec",
+      "message": "「コアの設計」を 4 個に分解: Ref クロックとタイミングモデル, ブロックの種類と結線ルール, 音源とミキサの設計, パッチのデータ形式"
+    },
+    {
+      "id": "03ZSrSPEwC",
+      "at": "2026-10-02T20:55:33.687Z",
+      "actor": "claude-code",
+      "kind": "added",
+      "blockId": "6jo0TZADeZ",
+      "message": "「エンジンの実装」を追加"
+    },
+    {
+      "id": "EbXGuaQzd5",
+      "at": "2026-10-02T20:55:33.726Z",
+      "actor": "claude-code",
+      "kind": "split",
+      "blockId": "6jo0TZADeZ",
+      "message": "「エンジンの実装」を 4 個に分解: クロックとスケジューラ, 論理ブロックの評価器, 音源とミキサ, パッチの保存と読み込み"
+    },
+    {
+      "id": "ddzUpJKlLy",
+      "at": "2026-10-02T20:55:33.759Z",
+      "actor": "claude-code",
+      "kind": "added",
+      "blockId": "OrspcLXy3j",
+      "message": "「画面の実装」を追加"
+    },
+    {
+      "id": "eJ-rnQJ9TQ",
+      "at": "2026-10-02T20:55:33.805Z",
+      "actor": "claude-code",
+      "kind": "split",
+      "blockId": "OrspcLXy3j",
+      "message": "「画面の実装」を 4 個に分解: ブロックの配置と結線, トランスポートとクロック表示, パラメータの編集パネル, プリセットのパッチ"
+    },
+    {
+      "id": "i7xIlHXFIK",
+      "at": "2026-10-02T20:55:33.838Z",
+      "actor": "claude-code",
+      "kind": "added",
+      "blockId": "pAjwxfYm-V",
+      "message": "「検証」を追加"
+    },
+    {
+      "id": "v6dBnRMiaY",
+      "at": "2026-10-02T20:55:33.882Z",
+      "actor": "claude-code",
+      "kind": "split",
+      "blockId": "pAjwxfYm-V",
+      "message": "「検証」を 3 個に分解: タイミング精度の計測, ブラウザ間の確認, 遊んでみて直す"
+    },
+    {
+      "id": "oqA_M82uFi",
+      "at": "2026-10-02T20:55:33.916Z",
+      "actor": "claude-code",
+      "kind": "added",
+      "blockId": "S4YMLH17f1",
+      "message": "「公開」を追加"
+    },
+    {
+      "id": "_YdH8ajxQf",
+      "at": "2026-10-02T20:55:33.965Z",
+      "actor": "claude-code",
+      "kind": "split",
+      "blockId": "S4YMLH17f1",
+      "message": "「公開」を 3 個に分解: ビルドと配信先, 紹介ページ, 公開と告知"
+    },
+    {
+      "id": "qpFasVbt5W",
+      "at": "2026-10-02T20:55:34.317Z",
+      "actor": "claude-code",
+      "kind": "done",
+      "blockId": "i-CJ39V40B",
+      "message": "「遊び方を決める」完了 (遊び方の絵): クロック → 分周 → AND → トリガ → 音源 の 1 枚絵"
+    },
+    {
+      "id": "PfdU87Vr4O",
+      "at": "2026-10-02T20:55:34.351Z",
+      "actor": "claude-code",
+      "kind": "done",
+      "blockId": "1xTyMWh0hC",
+      "message": "「対象ブラウザと性能目標」完了 (性能目標)"
+    },
+    {
+      "id": "n66ONuzx9x",
+      "at": "2026-10-02T20:55:34.386Z",
+      "actor": "claude-code",
+      "kind": "done",
+      "blockId": "2BCEvCkGXl",
+      "message": "「用語と画面の骨子」完了 (要件一覧)"
+    },
+    {
+      "id": "4krWBeQWOv",
+      "at": "2026-10-02T20:55:34.422Z",
+      "actor": "claude-code",
+      "kind": "done",
+      "blockId": "HOkkoF9KO-",
+      "message": "「企画と要件」完了 (要件一覧)"
+    },
+    {
+      "id": "hA-Lpgnbzj",
+      "at": "2026-10-02T20:55:34.457Z",
+      "actor": "claude-code",
+      "kind": "asked",
+      "blockId": "HEQYTuOzN9",
+      "message": "「Ref クロックとタイミングモデル」で判断待ち: クロックの基準はどちらにしますか?"
+    },
+    {
+      "id": "tPoMcnt9Nw",
+      "at": "2026-10-02T20:55:34.493Z",
+      "actor": "human",
+      "kind": "answered",
+      "blockId": "HEQYTuOzN9",
+      "message": "「Ref クロックとタイミングモデル」の判断: クロックの基準はどちらにしますか? → 固定 Hz の Ref クロックを N 分周する (BPM は分周比で表す)"
+    },
+    {
+      "id": "8VVsKY-A1U",
+      "at": "2026-10-02T20:55:34.530Z",
+      "actor": "claude-code",
+      "kind": "done",
+      "blockId": "HEQYTuOzN9",
+      "message": "「Ref クロックとタイミングモデル」完了 (タイミングモデル): 48 kHz を基準に 2 のべき乗と 3 の倍数で分周。lookahead 100ms"
+    },
+    {
+      "id": "IQ7_ztq7UW",
+      "at": "2026-10-02T20:55:34.567Z",
+      "actor": "claude-code",
+      "kind": "started",
+      "blockId": "0fQgmCbOu7",
+      "message": "「ブロックの種類と結線ルール」開始: エッジ検出とカウンタの状態の持ち方を書いている"
+    },
+    {
+      "id": "HR26KOYdp0",
+      "at": "2026-10-02T20:55:34.606Z",
+      "actor": "claude-code",
+      "kind": "asked",
+      "blockId": "R2R1-4uMX7",
+      "message": "「音源とミキサの設計」で判断待ち: サンプル音源は最初から入れますか?"
+    },
+    {
+      "id": "RakI6813t9",
+      "at": "2026-10-02T20:55:34.646Z",
+      "actor": "claude-code",
+      "kind": "note",
+      "blockId": "omTx6VUTec",
+      "message": "「コアの設計」期日 2026-10-20"
+    },
+    {
+      "id": "4O5j1VTeln",
+      "at": "2026-10-02T20:55:34.680Z",
+      "actor": "claude-code",
+      "kind": "note",
+      "blockId": "6jo0TZADeZ",
+      "message": "「エンジンの実装」期日 2026-11-10, 見積 40h"
+    },
+    {
+      "id": "-JU6UmvGGf",
+      "at": "2026-10-02T20:55:34.716Z",
+      "actor": "claude-code",
+      "kind": "note",
+      "blockId": "S4YMLH17f1",
+      "message": "「公開」期日 2026-12-01"
+    }
+  ],
+  "agents": {
+    "claude-code": {
+      "lastSeen": "2026-10-02T20:55:34.716Z"
+    },
+    "human": {
+      "lastSeen": "2026-10-02T20:55:34.493Z"
+    }
+  },
+  "nextKey": 29,
+  "inputGroups": []
+}

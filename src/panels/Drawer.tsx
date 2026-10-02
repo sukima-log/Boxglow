@@ -1,0 +1,245 @@
+/**
+ * 引き出し (☰ で開く): 階層ツリー、絞り込み、メンバー
+ * 既定は閉じていて、キャンバスの左に重ねて出す。
+ */
+import { useEffect, useState } from "react";
+import { addMember, childrenOf, instantiateTemplate, kindOf, parseTemplate, removeMember } from "../model/graph";
+import type { BlockTemplate } from "../model/types";
+import { deleteTemplate, listTemplates, saveTemplate } from "../lib/templates";
+import { downloadText, pickTextFile, safeFilename } from "../lib/download";
+import { ROOT_ID, type BlockStatus, type Project } from "../model/types";
+import { parentForNewBlock, useProjectStore } from "../store/useProjectStore";
+import { CATEGORIES } from "../model/categories";
+import { STATUS_LABEL } from "../model/status";
+
+/** メンバーのアバター色の候補 (テーマの色から) */
+export const MEMBER_COLORS = ["#0d8080", "#e8875e", "#3aa85a", "#6b7075", "#2f6fb3", "#a0522d"];
+
+/** 状態の印 */
+export const GLYPH: Record<BlockStatus, string> = { black: "?", gray: "~", white: "✓" };
+
+export interface Filter {
+  statuses: Set<BlockStatus>;
+  memberId: string | null;
+  /** 未担当の箱だけ */
+  unassigned: boolean;
+  /** このカテゴリの箱だけ (null なら絞らない) */
+  category: string | null;
+}
+
+/** 何も絞っていないフィルタ */
+export const EMPTY_FILTER: Filter = { statuses: new Set(["black", "gray", "white"]), memberId: null, unassigned: false, category: null };
+
+/** ブロックがフィルタに合うか */
+export function matchesFilter(p: Project, blockId: string, f: Filter): boolean {
+  const b = p.blocks[blockId];
+  if (!b) return false;
+  if (!f.statuses.has(b.status)) return false;
+  if (f.memberId && !b.assigneeIds.includes(f.memberId)) return false;
+  if (f.unassigned && (b.assigneeIds.length > 0 || kindOf(b) === "project")) return false;
+  if (f.category && b.category !== f.category) return false;
+  return true;
+}
+
+/** フィルタが何も絞っていない状態か */
+export const isFilterEmpty = (f: Filter): boolean => f.statuses.size === 3 && f.memberId === null && !f.unassigned && f.category === null;
+
+function TreeRows({ project, parentId, depth, selectedId, onSelect, onToggle }: {
+  project: Project;
+  parentId: string;
+  depth: number;
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  onToggle: (id: string) => void;
+}) {
+  const kids = childrenOf(project, parentId).sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
+  return (
+    <>
+      {kids.map((b) => {
+        const hasKids = childrenOf(project, b.id).length > 0;
+        return (
+          <div key={b.id}>
+            <div className="tree-row" data-selected={selectedId === b.id} style={{ paddingLeft: 8 + depth * 14 }} onClick={() => onSelect(b.id)} title={b.title}>
+              {hasKids ? (
+                <button className="btn btn-ghost btn-sm" style={{ padding: "0 4px" }} onClick={(e) => { e.stopPropagation(); onToggle(b.id); }} title={b.collapsed ? "展開" : "畳む"}>
+                  {b.collapsed ? "▸" : "▾"}
+                </button>
+              ) : (
+                <span style={{ width: 20, display: "inline-block" }} />
+              )}
+              <span className={`tree-glyph ${b.status}`}>{GLYPH[b.status]}</span>
+              <span className="truncate">{b.title}</span>
+            </div>
+            {hasKids && !b.collapsed && (
+              <TreeRows project={project} parentId={b.id} depth={depth + 1} selectedId={selectedId} onSelect={onSelect} onToggle={onToggle} />
+            )}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+export function Drawer({ project, filter, onFilter, onClose }: { project: Project; filter: Filter; onFilter: (f: Filter) => void; onClose: () => void }) {
+  const readonly = useProjectStore((s) => s.readonly);
+  const selection = useProjectStore((s) => s.selection);
+  const select = useProjectStore((s) => s.select);
+  const apply = useProjectStore((s) => s.apply);
+  const toggleCollapsed = useProjectStore((s) => s.toggleCollapsed);
+  const [name, setName] = useState("");
+  const [color, setColor] = useState(MEMBER_COLORS[0]);
+  const focusBlock = useProjectStore((s) => s.focusBlock);
+  const setToast = useProjectStore((s) => s.setToast);
+  const meId = useProjectStore((s) => s.meId);
+  const setMe = useProjectStore((s) => s.setMe);
+  const [templates, setTemplates] = useState<BlockTemplate[]>([]);
+  useEffect(() => {
+    void listTemplates().then(setTemplates);
+  }, []);
+  const refreshTemplates = () => void listTemplates().then(setTemplates);
+
+  /** テンプレートを、選んでいる箱の中 (タスクなら隣) に挿入する */
+  const insertTemplate = (tpl: BlockTemplate) => {
+    const parentId = parentForNewBlock(project, selection);
+    apply((p) => {
+      const r = instantiateTemplate(p, parentId, tpl, "human");
+      setTimeout(() => { select({ blockId: r.blockId }); focusBlock(r.blockId); }, 0);
+      return r.project;
+    });
+  };
+  const importTemplateFile = async () => {
+    const text = await pickTextFile(".json,application/json");
+    if (!text) return;
+    try {
+      await saveTemplate(parseTemplate(text));
+      refreshTemplates();
+      setToast("テンプレートをライブラリに追加しました");
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const toggleStatus = (s: BlockStatus) => {
+    const next = new Set(filter.statuses);
+    if (next.has(s)) next.delete(s);
+    else next.add(s);
+    if (next.size === 0) return; // 全部外すと何も見えなくなるので止める
+    onFilter({ ...filter, statuses: next });
+  };
+
+  const addM = () => {
+    if (!name.trim()) return;
+    apply((p) => addMember(p, name.trim(), color).project);
+    setName("");
+    setColor(MEMBER_COLORS[(MEMBER_COLORS.indexOf(color) + 1) % MEMBER_COLORS.length]);
+  };
+
+  const [tab, setTab] = useState<"tree" | "filter" | "members" | "parts">("tree");
+  const tabs: { id: typeof tab; label: string; hint: string }[] = [
+    { id: "tree", label: "Tree", hint: "箱の一覧 (押すと選ぶ)" }
+  , { id: "filter", label: "Filter", hint: "状態や担当で箱を絞る" }
+  , { id: "members", label: "Members", hint: "担当にする人を登録。自分を決める" }
+  , { id: "parts", label: "Parts", hint: "他のプロジェクトでも使い回す箱" }
+  ];
+
+  return (
+    <div className="drawer card">
+      <div className="flex items-center gap-1 mb-2">
+        <div className="seg flex-1" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+          {tabs.map((x) => (
+            <button key={x.id} className="seg__btn" data-on={tab === x.id} onClick={() => setTab(x.id)} title={x.hint} style={{ padding: "6px 2px", fontSize: 12 }}>{x.label}</button>
+          ))}
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={onClose} title="Close">×</button>
+      </div>
+      <div className="text-[11px] mb-2" style={{ color: "var(--text-muted)" }}>{tabs.find((x) => x.id === tab)?.hint}</div>
+
+      {tab === "tree" && (childrenOf(project, ROOT_ID).length === 0 ? (
+        <div className="text-[12px] px-2" style={{ color: "var(--text-muted)" }}>No blocks yet</div>
+      ) : (
+        <TreeRows
+          project={project}
+          parentId={ROOT_ID}
+          depth={0}
+          selectedId={selection.blockId}
+          onSelect={(id) => select({ blockId: id })}
+          onToggle={(id) => toggleCollapsed(id)}
+        />
+      ))}
+
+      {tab === "filter" && (
+      <div className="flex flex-wrap gap-1">
+        {(["black", "gray", "white"] as BlockStatus[]).map((s) => (
+          <button key={s} className="chip" data-on={filter.statuses.has(s)} onClick={() => toggleStatus(s)}>
+            <span className={`tree-glyph ${s}`} style={{ width: 12, height: 12, fontSize: 8, lineHeight: "8px" }}>{GLYPH[s]}</span>
+            {STATUS_LABEL[s]}
+          </button>
+        ))}
+        {meId && (
+          <button className="chip" data-on={filter.memberId === meId} onClick={() => onFilter({ ...filter, memberId: filter.memberId === meId ? null : meId, unassigned: false })} title="自分の担当だけ">Mine</button>
+        )}
+        <button className="chip" data-on={filter.unassigned} onClick={() => onFilter({ ...filter, unassigned: !filter.unassigned, memberId: null })} title="担当がいない箱だけ">未担当</button>
+        {project.members.filter((m) => m.id !== meId).map((m) => (
+          <button key={m.id} className="chip" data-on={filter.memberId === m.id} onClick={() => onFilter({ ...filter, memberId: filter.memberId === m.id ? null : m.id, unassigned: false })} title={`${m.name} の担当だけ`}>
+            <span className="avatar" style={{ background: m.color, width: 16, height: 16, fontSize: 9 }}>{m.name.slice(0, 1)}</span>
+            {m.name}
+          </button>
+        ))}
+        <div className="label mt-3">Category</div>
+        <div className="flex flex-wrap gap-1">
+          {CATEGORIES.map((c) => (
+            <button key={c.key} className={`chip cat-chip${c.neutral ? " neutral" : ""}`} data-on={filter.category === c.key} style={{ "--cat": c.color } as React.CSSProperties}
+              onClick={() => onFilter({ ...filter, category: filter.category === c.key ? null : c.key })} title={`${c.label} の箱だけ`}>
+              <span className="cat-chip__dot" />{c.label}
+            </button>
+          ))}
+        </div>
+        {!isFilterEmpty(filter) && <button className="chip mt-3" onClick={() => onFilter({ ...EMPTY_FILTER, statuses: new Set(EMPTY_FILTER.statuses) })}>Clear</button>}
+      </div>
+      )}
+
+      {tab === "parts" && (<>
+      <div className="text-[11px] mb-1" style={{ color: "var(--text-muted)" }}>
+        挿入先: {(() => { const pid = parentForNewBlock(project, selection); const b = project.blocks[pid]; return b ? (kindOf(b) === "project" ? b.title : `${b.title} の隣`) : "最上位"; })()}
+      </div>
+      <div className="flex flex-col gap-1">
+        {templates.length === 0 && <div className="text-[12px] px-1" style={{ color: "var(--text-muted)" }}>箱を選び、右の「⋯」から「Save as Part」すると、ここに並びます。</div>}
+        {templates.map((tpl) => (
+          <div key={tpl.id} className="flex items-center gap-1 text-[13px] px-1">
+            <span className="truncate" title={`${tpl.description || tpl.name} (v${tpl.version}${tpl.tags.length ? ", " + tpl.tags.join(", ") : ""})`}>{tpl.name}</span>
+            <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>v{tpl.version}</span>
+            <span className="ml-auto flex gap-0.5">
+              {!readonly && <button className="btn btn-ghost btn-sm" title="挿入" onClick={() => insertTemplate(tpl)}>Insert</button>}
+              <button className="btn btn-ghost btn-sm" title="JSON で保存 (他のリポジトリや人と共有)" onClick={() => downloadText(`${safeFilename(tpl.name)}.boxglow-block.json`, JSON.stringify(tpl, null, 2), "application/json")}>↓</button>
+              <button className="btn btn-ghost btn-sm" title="ライブラリから消す" onClick={() => { if (confirm(`テンプレート「${tpl.name}」を消しますか?`)) void deleteTemplate(tpl.id).then(refreshTemplates); }}>×</button>
+            </span>
+          </div>
+        ))}
+        <button className="btn btn-ghost btn-sm self-start" onClick={importTemplateFile}>Import</button>
+      </div>
+      </>)}
+
+      {tab === "members" && (<>
+      <div className="flex flex-col gap-1">
+        {project.members.map((m) => (
+          <div key={m.id} className="flex items-center gap-2 text-[13px] px-1">
+            <span className="avatar" style={{ background: m.color }}>{m.name.slice(0, 1)}</span>
+            <span className="truncate">{m.name}</span>
+            <button className="chip ml-auto" data-on={meId === m.id} onClick={() => setMe(meId === m.id ? null : m.id)} title="このブラウザでは自分として扱う (自分の担当の箱に帯が付く)">{meId === m.id ? "Me" : "Set as me"}</button>
+            {!readonly && <button className="btn btn-ghost btn-sm" title="外す" onClick={() => apply((p) => removeMember(p, m.id))}>×</button>}
+          </div>
+        ))}
+      </div>
+      {!readonly && (
+        <div className="flex items-center gap-1 mt-2">
+          <span className="avatar flex-none" style={{ background: color, cursor: "pointer" }} title="色を変える" onClick={() => setColor(MEMBER_COLORS[(MEMBER_COLORS.indexOf(color) + 1) % MEMBER_COLORS.length])}>
+            {name.slice(0, 1) || "+"}
+          </span>
+          <input className="input" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addM()} />
+          <button className="btn btn-sm" onClick={addM} disabled={!name.trim()}>Add</button>
+        </div>
+      )}
+      </>)}
+    </div>
+  );
+}

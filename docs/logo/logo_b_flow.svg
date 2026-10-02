@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <filter id="g" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+    <pattern id="h" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" fill="#e4e7ea"/><rect width="2" height="6" fill="#aab0b6"/>
+    </pattern>
+  </defs>
+  <!-- 線 (左下から右上へ上がっていく) -->
+  <path d="M30 98 H52 V64 H76 V30 H98" fill="none" stroke="#0d8080" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- 黒の箱 -->
+  <rect x="12" y="80" width="36" height="36" rx="8" fill="#2f343a" stroke="#2f343a" stroke-width="5"/>
+  <!-- 灰 (斜線) の箱 -->
+  <rect x="46" y="46" width="36" height="36" rx="8" fill="url(#h)" stroke="#2f343a" stroke-width="5"/>
+  <!-- 白の箱 (光る) -->
+  <rect x="80" y="12" width="36" height="36" rx="8" fill="#0d8080" opacity="0.6" filter="url(#g)"/>
+  <rect x="80" y="12" width="36" height="36" rx="8" fill="#fbfbfb" stroke="#2f343a" stroke-width="5"/>
+</svg>
