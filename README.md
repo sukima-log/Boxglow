@@ -160,6 +160,8 @@ URL parameters: `?demo=1` (sample), `&readonly=1`, `&embed=1`, `&theme=dark|ligh
 
 The web app is hosted on Cloudflare Pages (`npm run deploy:pages` builds with `VITE_BASE=/` into `dist-pages/` and uploads it). Any static host works: `vite build` with `VITE_BASE` set to the path you serve from (the default `/apps/boxglow/` is the author's blog mirror).
 
+Browser checks live in `e2e/` (`npm run e2e`): wires never crossing boxes on every tab of the example plans (also with squeezed positions), tab switching time, double-click / selection / decision flows, the English UI and the VS Code webview mode. They need Playwright from outside this repository (`PLAYWRIGHT=<path>`; see `e2e/run.sh`) and are not part of CI; the unit and property tests (`npm test`) are.
+
 ## Layout
 
 | Path | Role |

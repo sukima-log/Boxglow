@@ -9,6 +9,7 @@
     "build": "tsc -b && vite build && npm run build:cli",
     "preview": "vite preview",
     "test": "vitest run",
+    "e2e": "bash e2e/run.sh",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "build:cli": "esbuild cli/main.ts --bundle --loader:.md=text --platform=node --format=esm --target=node18 --external:@modelcontextprotocol/sdk --external:zod --outfile=bin/boxglow.js --banner:js='#!/usr/bin/env node'",
