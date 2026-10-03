@@ -842,3 +842,12 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 
 /* 線の見た目のパスはクリックを拾わない (当たり判定は別の透明な線。丸からのドラッグを邪魔しないため) */
 .react-flow__edge-path { pointer-events: none; }
+
+/* 選んだ箱: 選んだ線と同じ約束 (橙の太い輪 + 広い光)。状態や担当の影より優先する */
+.bg-block.selected, .bg-terminal.selected, .react-flow__node.selected .bg-terminal {
+  box-shadow: 0 0 0 4px var(--accent), 0 0 0 16px rgba(232, 135, 94, 0.28) !important;
+}
+.bg-block.mine.selected { box-shadow: inset 5px 0 0 var(--primary), 0 0 0 4px var(--accent), 0 0 0 16px rgba(232, 135, 94, 0.28) !important; }
+.bg-block.kind-project.selected { box-shadow: 0 0 0 4px var(--accent), 0 0 0 16px rgba(232, 135, 94, 0.28), var(--shadow-card) !important; }
+.bg-block.selected > .bg-block__head > .bg-block__title { color: var(--accent-strong, #b5581a); }
+:root[data-theme="dark"] .bg-block.selected > .bg-block__head > .bg-block__title { color: var(--accent); }
