@@ -1865,24 +1865,33 @@ export function issueKeyOf(url: string): string {
  * Output: 線 id の集合 (自分を含む)
  */
 export function wireNet(p: Project, edgeId: string): Set<string> {
-  const out = new Set<string>();
-  const queue = [edgeId];
+  // 選んだ線から、上流は上流へだけ、下流は下流へだけたどる (向きを折り返さない)。
+  // 折り返すと「同じ境界のポートから枝分かれした兄弟の線」まで全部入ってしまい、見にくい
+  const out = new Set<string>([edgeId]);
   const edges = Object.values(p.edges);
-  while (queue.length > 0) {
-    const id = queue.pop()!;
-    if (out.has(id)) continue;
-    const e = p.edges[id];
-    if (!e) continue;
-    out.add(id);
+  const start = p.edges[edgeId];
+  if (!start) return out;
+  // 上流へ: 出す側のポートの反対の面に入ってくる線をたどる
+  const up = [start];
+  while (up.length > 0) {
+    const e = up.pop()!;
     const fp = p.ports[e.from.portId];
-    const tp = p.ports[e.to.portId];
-    if (!fp || !tp) continue;
-    // 前へ: 出す側のポートの反対の面に入ってくる線
+    if (!fp) continue;
     const backSide: "inner" | "outer" = e.from.side === "outer" ? "inner" : "outer";
-    for (const x of edges) if (x.to.portId === fp.id && x.to.side === backSide) queue.push(x.id);
-    // 先へ: 受ける側のポートの反対の面から出ていく線
+    for (const x of edges) {
+      if (x.to.portId === fp.id && x.to.side === backSide && !out.has(x.id)) { out.add(x.id); up.push(x); }
+    }
+  }
+  // 下流へ: 受ける側のポートの反対の面から出ていく線をたどる (境界を越えた先で分かれる線は、その先の続きなので含める)
+  const down = [start];
+  while (down.length > 0) {
+    const e = down.pop()!;
+    const tp = p.ports[e.to.portId];
+    if (!tp) continue;
     const nextSide: "inner" | "outer" = e.to.side === "outer" ? "inner" : "outer";
-    for (const x of edges) if (x.from.portId === tp.id && x.from.side === nextSide) queue.push(x.id);
+    for (const x of edges) {
+      if (x.from.portId === tp.id && x.from.side === nextSide && !out.has(x.id)) { out.add(x.id); down.push(x); }
+    }
   }
   return out;
 }

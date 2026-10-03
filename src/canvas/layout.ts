@@ -80,8 +80,8 @@ export type BlockRFNode = RFNode<BlockNodeData, "block">;
 export type TerminalRFNode = RFNode<TerminalNodeData, "terminal">;
 export type AnyRFNode = BlockRFNode | TerminalRFNode;
 
-/** 未確定の線の色 (index.css の --wire と同じ。矢印の色は CSS 変数が使えないので値で持つ) */
-const WIRE_COLOR = "#5a9a9a";
+/** 未確定の線の色 (紫。index.css の --wire と同じ。矢印の色は CSS 変数が使えないので値で持つ) */
+const WIRE_COLOR = "#8a80d8";
 
 /** タブで開いた大項目の入力ノード / 出力ノードの id */
 export const SCOPE_IN = "scope-in";

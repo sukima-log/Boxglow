@@ -3,7 +3,8 @@
 ## Unreleased
 
 - Fewer wire crossings: routes are chosen with a penalty for crossing other wires (two passes), and wires sharing a channel are ordered by where they come from and go to (U-turns outermost, nested by span). Boxglow's own plan went from 426 to 185 crossings across its screens.
-- Wires are always teal (thin muted teal when not ready, thick teal when ready) while box borders stay neutral gray, so a zoomed-in fragment still tells wires from borders in both themes.
+- Wire colours: ready wires are thick teal, not-ready wires are thin purple, box borders stay neutral gray, so both "ready vs not" and "wire vs border" are visible even in a zoomed-in fragment.
+- Selecting a wire highlights only that wire and its continuation across box boundaries (upstream and downstream), not the sibling wires branching from the same port.
 - A wire never reaches a port by cutting through its own box from the far side (this happened when the return lane was at the port's height). Wires that go back to a box on the left no longer cut through a box sitting right below (or above) their start: the vertical channels of a backward wire are now chosen from all free gaps, not only right next to the ports.
 - Web app moved to Cloudflare Pages: https://boxglow.pages.dev/ (`npm run deploy:pages`). The blog mirror at sukimalog.com stays for a while.
 - "All" now shows only the major boxes (children of project boxes), always collapsed; what is inside a major box is seen on its own tab (double-click a major box, or press its arrow, to open the tab). Layout, `boxglow layout` and Auto Layout treat major boxes as collapsed, so the overview stays compact. Dropping a box onto a collapsed major box moves it inside.
