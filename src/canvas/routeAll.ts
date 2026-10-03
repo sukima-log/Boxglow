@@ -37,6 +37,8 @@ export function routeAll(nodes: NodeRect[], edges: EdgeSpec[]): Map<string, Poin
   const paths = new Map<string, Point[]>();
   const scopeOf = new Map<string, string>();
   const obstaclesOf = new Map<string, Rect[]>();
+  // 線ごとの経路探索の材料 (2 回目の探索でも使う)
+  const setup = new Map<string, { obstacles: Rect[]; ends: Rect[]; bounds: Rect | null }>();
   for (const e of edges) {
     const sNode = byId.get(e.source);
     const tNode = byId.get(e.target);
@@ -47,12 +49,32 @@ export function routeAll(nodes: NodeRect[], edges: EdgeSpec[]): Map<string, Poin
     const ends = [sNode, tNode].filter((n) => n && n.id !== parentSide && n.rect.width > 0).map((n) => n!.rect);
     const scopeNode = scope ? byId.get(scope) : undefined;
     const bounds = scopeNode && scopeNode.rect.width > 0 ? scopeNode.rect : null;
-    paths.set(e.id, routeEdge(e.s, e.t, obstacles, 0, ends, bounds));
+    setup.set(e.id, { obstacles, ends, bounds });
     if (!obstaclesOf.has(scope)) {
       // ずらすときに避ける箱: その階層の全部の箱 (端点の箱も含む) と、親の箱の内側の縁
       const all = nodes.filter((r) => r.parentId === scope && r.rect.width > 0).map((r) => r.rect);
       if (bounds) all.push(...wallsOf(bounds)); // 親の縁は、縁の外側に置いた壁として表す
       obstaclesOf.set(scope, all);
+    }
+  }
+  // 同じ階層のほかの線 (自分を除く) の経路。交差の少ない候補を選ぶために渡す
+  const othersOf = (e: EdgeSpec): Point[][] => {
+    const scope = scopeOf.get(e.id);
+    const out: Point[][] = [];
+    for (const o of edges) {
+      if (o.id === e.id || scopeOf.get(o.id) !== scope) continue;
+      const p = paths.get(o.id);
+      if (p) out.push(p);
+    }
+    return out;
+  };
+  // 1 回目: 先に決まった線との交差を避けながら順に決める。2 回目: 全部の線が決まった状態で、それぞれを選び直す
+  // (後から決まった線に横切られた線が、別の通路に逃げられる)
+  for (let pass = 0; pass < 2; pass++) {
+    for (const e of edges) {
+      const st = setup.get(e.id)!;
+      const others = othersOf(e);
+      paths.set(e.id, routeEdge(e.s, e.t, st.obstacles, 0, st.ends, st.bounds, others));
     }
   }
   // 広げた結果、束に入っていなかった別の線の真上に乗ることがあるので、数回繰り返して収束させる
@@ -139,10 +161,26 @@ function separateHorizontals(paths: Map<string, Point[]>, scopeOf: Map<string, s
       const ids = [...new Set(group.map((g) => g.edgeId))];
       if (ids.length < 2) continue;
       const baseY = group.reduce((acc, g) => acc + g.y, 0) / group.length;
-      // 左から来る線を上に、右へ行く線を下に (交差を減らす): 線分の中心 x で並べる
+      // 交差を減らす並べ方 (縦線分と同じ考え方): 前後の縦線分が「両方とも上へ伸びる」線は束の上端、「両方とも下へ」は下端、
+      // Z 型は真ん中。U 型どうしは横の範囲が短い方を内側に、Z 型どうしは「左から来る線を上に」(中心 x が左のものを上に)
       const order = ids
-        .map((id) => ({ id, mid: group.filter((g) => g.edgeId === id).reduce((acc, g) => acc + (g.x0 + g.x1) / 2, 0) }))
-        .sort((p, q) => p.mid - q.mid)
+        .map((id) => {
+          const mine = group.filter((g) => g.edgeId === id);
+          const path = paths.get(id)!;
+          let side = 0;
+          let midX = 0;
+          let span = 0;
+          for (const g of mine) {
+            const before = path[g.idx - 1];
+            const after = path[g.idx + 2];
+            if (before) side += before.y < g.y ? -1 : 1;
+            if (after) side += after.y < g.y ? -1 : 1;
+            midX += (g.x0 + g.x1) / 2;
+            span += g.x1 - g.x0;
+          }
+          return { id, side, midX: midX / Math.max(1, mine.length), span };
+        })
+        .sort((p, q) => p.side - q.side || (p.side < 0 ? p.span - q.span : p.side > 0 ? q.span - p.span : p.midX - q.midX))
         .map((o) => o.id);
       let lo = -Infinity;
       let hi = Infinity;
@@ -249,10 +287,28 @@ function separateVerticals(paths: Map<string, Point[]>, scopeOf: Map<string, str
       const ids = [...new Set(group.map((g) => g.edgeId))];
       if (ids.length < 2) continue;
       const baseX = group.reduce((acc, g) => acc + g.x, 0) / group.length;
-      // 上から来る線を左に、下へ行く線を右に (交差を減らす): 線分の中心 y で並べる
+      // 交差を減らす並べ方: 縦線分の前後の横線分が「両方とも左へ伸びる」線 (左へ戻る U 型) は束の左端、
+      // 「両方とも右へ伸びる」線 (右へ戻る U 型) は右端、片方ずつ (Z 型) は真ん中。
+      // U 型どうしは入れ子になるので、縦の範囲が短い方を内側 (左へ戻る線は左、右へ戻る線は右) に。
+      // Z 型どうしは「上から来る線を左に」(線分の中心 y が上のものを左に)
       const order = ids
-        .map((id) => ({ id, mid: group.filter((g) => g.edgeId === id).reduce((acc, g) => acc + (g.y0 + g.y1) / 2, 0) }))
-        .sort((p, q) => p.mid - q.mid)
+        .map((id) => {
+          const mine = group.filter((g) => g.edgeId === id);
+          const path = paths.get(id)!;
+          let side = 0;
+          let midY = 0;
+          let span = 0;
+          for (const g of mine) {
+            const before = path[g.idx - 1];
+            const after = path[g.idx + 2];
+            if (before) side += before.x < g.x ? -1 : 1;
+            if (after) side += after.x < g.x ? -1 : 1;
+            midY += (g.y0 + g.y1) / 2;
+            span += g.y1 - g.y0;
+          }
+          return { id, side, midY: midY / Math.max(1, mine.length), span };
+        })
+        .sort((p, q) => p.side - q.side || (p.side < 0 ? p.span - q.span : p.side > 0 ? q.span - p.span : p.midY - q.midY))
         .map((o) => o.id);
       // 束全体が置ける範囲: 各線分の空き範囲の共通部分 (箱から MARGIN 以上離れる)
       let lo = -Infinity;

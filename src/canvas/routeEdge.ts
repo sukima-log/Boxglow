@@ -34,6 +34,36 @@ const BEND_PENALTY = 40;
 const NEAR_PENALTY = 1500;
 /** 出入りの線分が自分の箱を貫いているとみなす内側の幅 (ポートの丸は縁の上にあり、数 px は箱にかかる) */
 const END_INSET = 8;
+/** ほかの線と交差する 1 回の罰 (箱に近づくより軽く、曲がり・少しの遠回りより重い。交差は読みにくさの元) */
+const WIRE_CROSS_PENALTY = 600;
+
+/** 2 本の線分 (水平と垂直) が互いの内側で交差するか (端で触れるだけは数えない) */
+function segmentsCross(a0: Point, a1: Point, b0: Point, b1: Point): boolean {
+  const aH = Math.abs(a0.y - a1.y) < 0.5;
+  const bH = Math.abs(b0.y - b1.y) < 0.5;
+  if (aH === bH) return false; // 平行 (重なりは後で束としてずらす)
+  const [h0, h1, v0, v1] = aH ? [a0, a1, b0, b1] : [b0, b1, a0, a1];
+  const hx0 = Math.min(h0.x, h1.x);
+  const hx1 = Math.max(h0.x, h1.x);
+  const vy0 = Math.min(v0.y, v1.y);
+  const vy1 = Math.max(v0.y, v1.y);
+  return v0.x > hx0 + 1 && v0.x < hx1 - 1 && h0.y > vy0 + 1 && h0.y < vy1 - 1;
+}
+
+/**
+ * 経路がほかの線と交差する回数
+ * Input : path, others = ほかの線の折れ線
+ * Output: 交差の回数
+ */
+function wireCrossings(path: Point[], others: Point[][]): number {
+  let n = 0;
+  for (let i = 1; i < path.length; i++) {
+    for (const o of others) {
+      for (let j = 1; j < o.length; j++) if (segmentsCross(path[i - 1], path[i], o[j - 1], o[j])) n++;
+    }
+  }
+  return n;
+}
 
 /** 線分が矩形から余白 (箱は MARGIN、壁は WALL_MARGIN) 以内を通るか */
 function segmentNear(a: Point, b: Point, r: Rect): boolean {
@@ -144,7 +174,7 @@ function freeCenters(lo: number, hi: number, intervals: [number, number][]): num
  * Input : s = 出す側のハンドル位置, t = 受ける側のハンドル位置, obstacles = 避ける箱, lane = 同じ箱に集まる線をずらす量 (px)
  * Output: 折れ線の頂点 (s から t まで)
  */
-export function routeEdge(s: Point, t: Point, obstacles: Rect[], lane = 0, ends: Rect[] = [], bounds: Rect | null = null): Point[] {
+export function routeEdge(s: Point, t: Point, obstacles: Rect[], lane = 0, ends: Rect[] = [], bounds: Rect | null = null, others: Point[][] = []): Point[] {
   // 出入りの直線: 近いときは短くする (受ける側が右にあるのに「戻る線」扱いにならないように)
   const dx = t.x - s.x;
   const stub = dx > 0 ? Math.max(4, Math.min(STUB, dx / 2 - 2)) : STUB;
@@ -205,8 +235,8 @@ export function routeEdge(s: Point, t: Point, obstacles: Rect[], lane = 0, ends:
     const xRight = Math.max(x1, ...all.map((o) => o.x + o.width + MARGIN)) + 40;
     const xLeft = Math.min(x2, ...all.map((o) => o.x - MARGIN)) - 40;
     const nearest = (xs: number[], ref: number, n: number): number[] => [...new Set(xs)].sort((a, b) => Math.abs(a - ref) - Math.abs(b - ref)).slice(0, n);
-    const dropXs = nearest([x1, ...freeCenters(x1, xRight, xIntervals).filter((x) => x >= x1)], x1, 12);
-    const riseXs = nearest([x2, ...freeCenters(xLeft, x2, xIntervals).filter((x) => x <= x2)], x2, 12);
+    const dropXs = nearest([x1, ...freeCenters(x1, xRight, xIntervals).filter((x) => x >= x1)], x1, 8);
+    const riseXs = nearest([x2, ...freeCenters(xLeft, x2, xIntervals).filter((x) => x <= x2)], x2, 8);
     for (const yl of lanes) {
       for (const xd of dropXs) {
         for (const xr of riseXs) {
@@ -222,6 +252,8 @@ export function routeEdge(s: Point, t: Point, obstacles: Rect[], lane = 0, ends:
   for (const c of candidates) {
     const path = simplify(c);
     let k = cost(path, obstacles, ends, walls);
+    // ほかの線との交差 (同じ階層で先に決まった線)。箱を貫く・近づくより軽いが、遠回りより重い
+    if (others.length > 0) k += wireCrossings(path, others) * WIRE_CROSS_PENALTY;
     // 親の箱の外に出る線分には罰 (中の線が外へ出て戻らないように)
     if (bounds) {
       for (let i = 1; i < path.length; i++) {
