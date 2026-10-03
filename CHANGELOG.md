@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Published `boxglow@0.1.0` to npm (2026-10-03): `npx boxglow` works without a checkout. Runtime dependencies are only the MCP SDK and zod; the web app is shipped prebuilt in `dist/`.
 - `boxglow mcp`: MCP server (stdio) exposing the CLI as tools; `setup-agent` registers it in `.mcp.json`.
 - `boxglow serve`: local server for any browser (Firefox / Safari): bundled web app + `/api/project` read/write + SSE live reload (`?serve=1`).
 - The web build now uses relative asset paths, so the same `dist/` works when served from the npm package, the blog mirror and Cloudflare Pages.
