@@ -13,13 +13,12 @@ import { BlockNode } from "./BlockNode";
 import { TerminalNode } from "./TerminalNode";
 import { RoutedEdge } from "./RoutedEdge";
 import { buildEdges, buildNodes, parseHandle, SCOPE_IN, SCOPE_OUT, type AnyRFNode } from "./layout";
-import { FrameNode } from "./FrameNode";
 import { routeAll, type EdgeSpec, type NodeRect } from "./routeAll";
 
 /** 全体表示の設定: 大きな計画でも収まるよう最小ズームを下げる (fitView の既定は 0.5 で、大きい図は左右が切れる) */
 const FIT_OPTIONS = { padding: 0.15, minZoom: 0.05, maxZoom: 1 };
 
-const nodeTypes = { block: BlockNode, terminal: TerminalNode, frame: FrameNode };
+const nodeTypes = { block: BlockNode, terminal: TerminalNode };
 
 /** ノードの絶対位置・大きさと、ハンドルの中心位置を 1 つの文字列にする (経路計算の入力) */
 const selectGeometry = (s: ReactFlowState): string => {
@@ -28,8 +27,8 @@ const selectGeometry = (s: ReactFlowState): string => {
     if (n.hidden) continue;
     const internal = s.nodeLookup.get(n.id);
     const abs = internal?.internals.positionAbsolute ?? n.position;
-    const w = n.type === "frame" ? 0 : internal?.measured.width ?? n.width ?? 0; // 見えない枠は障害物にも壁にもしない
-    const h = n.type === "frame" ? 0 : internal?.measured.height ?? n.height ?? 0;
+    const w = internal?.measured.width ?? n.width ?? 0;
+    const h = internal?.measured.height ?? n.height ?? 0;
     lines.push(`N\t${n.id}\t${n.parentId ?? ""}\t${Math.round(abs.x)}\t${Math.round(abs.y)}\t${Math.round(w)}\t${Math.round(h)}`);
     const hb = internal?.internals.handleBounds;
     for (const hd of [...(hb?.source ?? []), ...(hb?.target ?? [])]) {

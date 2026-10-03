@@ -6,10 +6,10 @@
  */
 import { MarkerType, type Edge as RFEdge, type Node as RFNode } from "@xyflow/react";
 import { ROOT_ID, type Block, type Edge, type Endpoint, type Project } from "../model/types";
-import { CHILD_PADDING, wireNet, inputGroupsOf, isEdgeReady, isHiddenByCollapse, majorBlocks, portsOf, rootInputsOf } from "../model/graph";
+import { wireNet, inputGroupsOf, isEdgeReady, isHiddenByCollapse, majorBlocks, portsOf, rootInputsOf } from "../model/graph";
 
 export { BLOCK_W, HEADER_H, ROW_H, PAD_BOTTOM, EXPANDED_MIN_W, EXPANDED_PAD, TERMINAL_W, isExpanded, blockSize, terminalHeight, type Size } from "../model/size";
-import { blockSize, isExpanded, terminalHeight, TERMINAL_W, HEADER_H, ROW_H, PAD_BOTTOM, EXPANDED_PAD } from "../model/size";
+import { blockSize, isExpanded, terminalHeight, TERMINAL_W, HEADER_H, ROW_H, PAD_BOTTOM } from "../model/size";
 
 /** 既定の入力ノードの高さ (グループに入っていない入力だけ) */
 function terminalHeightDefault(p: Project): number {
@@ -76,18 +76,16 @@ function depthOf(p: Project, blockId: string): number {
 export type BlockNodeData = { blockId: string; dimmed: boolean; mine: boolean; headerH: number; dropTarget?: boolean; major?: boolean };
 /** 入力/出力ノード。scopeId があれば最上位ではなく、タブで開いた大項目の箱の入力/出力を表す */
 export type TerminalNodeData = { which: "in" | "out"; groupId?: string; scopeId?: string };
-/** 見えない枠 (タブで開いた大項目の箱。中の箱の座標の基準にするためだけに置く) */
-export type FrameNodeData = { blockId: string };
 export type BlockRFNode = RFNode<BlockNodeData, "block">;
 export type TerminalRFNode = RFNode<TerminalNodeData, "terminal">;
-export type FrameRFNode = RFNode<FrameNodeData, "frame">;
-export type AnyRFNode = BlockRFNode | TerminalRFNode | FrameRFNode;
+export type AnyRFNode = BlockRFNode | TerminalRFNode;
 
 /** タブで開いた大項目の入力ノード / 出力ノードの id */
 export const SCOPE_IN = "scope-in";
 export const SCOPE_OUT = "scope-out";
-/** 大項目の入力/出力ノードと中の箱との横の間隔 (自動整列の GAP_X と同じ 144px になるように、左右の内側の余白を差し引く) */
+/** 開いている箱と、その入力/出力ノードとの横の間隔 (自動整列の GAP_X と同じ 144px) と、箱の上端からの縦の位置 */
 const SCOPE_TERMINAL_GAP = 144;
+const SCOPE_TERMINAL_TOP = 40;
 
 /**
  * 箱が範囲 (scope の箱とその中) に入っているか
@@ -150,18 +148,24 @@ export function buildNodes(
 ): AnyRFNode[] {
   const nodes: AnyRFNode[] = [];
   const scope = opts.scope && p.blocks[opts.scope] ? opts.scope : null;
-  // 大項目のタブ: その箱の中だけを出す。範囲の箱そのものは「見えない枠」(中の箱の座標の基準) にして、
-  // 箱の入力・出力は All のときの入力ノード / 出力ノードと同じ形で左右に置く (何が入って何が出るかが分かるように)。
-  // 枠は絶対座標の位置に置く (線の経路計算は React Flow の絶対座標を使うので、All のときと同じ座標系に保つ)
+  // 開いている箱 (タブ / パンくず): その箱を All のプロジェクトの箱と同じ「上の階層の箱」として描き、中に直下の箱を置く。
+  // 箱の入力・出力は All のときの入力ノード / 出力ノードと同じ形で箱の外 (左右) に置き、箱の外側の面のポートへ線でつなぐ。
+  // 箱は絶対座標の位置に置く (線の経路計算は React Flow の絶対座標を使うので、All のときと同じ座標系に保つ)
   if (scope) {
     const scopeSize = blockSize(p, scope);
+    const scopeAbs = absolutePosition(p, scope);
+    const sb = p.blocks[scope];
     nodes.push({
       id: scope
-    , type: "frame"
-    , position: absolutePosition(p, scope)
-    , data: { blockId: scope }
+    , type: "block"
+    , position: scopeAbs
+    , data: { blockId: scope, dimmed: false, mine: !!opts.meId && sb.assigneeIds.includes(opts.meId), headerH: scopeSize.headerH, major: false }
+    , width: scopeSize.width
+    , height: scopeSize.height
+    , selected: opts.selectedBlockId === scope
+      // 開いている箱そのものは動かせない (位置が親の座標系ではなく絶対座標になっているため)
     , draggable: false
-    , selectable: false
+    , selectable: true
     , zIndex: 0
     });
     const nIn = portsOf(p, scope, "in").length;
@@ -169,9 +173,8 @@ export function buildNodes(
     nodes.push({
       id: SCOPE_IN
     , type: "terminal"
-    , parentId: scope
-      // 中の箱は CHILD_PADDING.left (120px) から始まるので、その左に間隔ぶん離して置く
-    , position: { x: CHILD_PADDING.left - SCOPE_TERMINAL_GAP - TERMINAL_W, y: CHILD_PADDING.top }
+      // 箱の左に間隔ぶん離して置く (最上位のノード。箱の中ではない)
+    , position: { x: scopeAbs.x - SCOPE_TERMINAL_GAP - TERMINAL_W, y: scopeAbs.y + SCOPE_TERMINAL_TOP }
     , data: { which: "in", scopeId: scope }
     , width: TERMINAL_W
     , height: HEADER_H + Math.max(nIn, 1) * ROW_H + PAD_BOTTOM
@@ -182,9 +185,7 @@ export function buildNodes(
     nodes.push({
       id: SCOPE_OUT
     , type: "terminal"
-    , parentId: scope
-      // 中の箱の右端は幅 - EXPANDED_PAD なので、その右に間隔ぶん離して置く
-    , position: { x: scopeSize.width - EXPANDED_PAD + SCOPE_TERMINAL_GAP, y: CHILD_PADDING.top }
+    , position: { x: scopeAbs.x + scopeSize.width + SCOPE_TERMINAL_GAP, y: scopeAbs.y + SCOPE_TERMINAL_TOP }
     , data: { which: "out", scopeId: scope }
     , width: TERMINAL_W
     , height: HEADER_H + Math.max(nOut, 1) * ROW_H + PAD_BOTTOM
@@ -287,14 +288,9 @@ export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; se
     const fp = p.ports[e.from.portId];
     const tp = p.ports[e.to.portId];
     if (!fp || !tp) continue;
-    let source = nodeIdOfPort(p, fp.id);
-    let target = nodeIdOfPort(p, tp.id);
+    const source = nodeIdOfPort(p, fp.id);
+    const target = nodeIdOfPort(p, tp.id);
     if (!source || !target) continue;
-    // 大項目のタブでは、範囲の箱の内側の面のポートは入力ノード / 出力ノードに付く (ハンドル id は同じ "…:inner")
-    if (scope) {
-      if (fp.blockId === scope) source = fp.direction === "in" ? SCOPE_IN : SCOPE_OUT;
-      if (tp.blockId === scope) target = tp.direction === "in" ? SCOPE_IN : SCOPE_OUT;
-    }
     // 端点が見えるか: ブロックが畳まれた祖先の中にある / inner 面なのに箱が畳まれている
     const endpointVisible = (ep: Endpoint): boolean => {
       const port = p.ports[ep.portId];
@@ -302,7 +298,7 @@ export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; se
       if (scope) {
         // 大項目のタブ: 範囲の外の箱 (入力・出力ノードも含む) につながる線は出さない
         if (port.blockId === ROOT_ID || !isInSubtree(p, scope, port.blockId)) return false;
-        // 範囲の箱の外側の面は見えない (外へ出ていく線なので)。内側の面は入力/出力ノードとして常に見える
+        // 開いている箱の外側の面の線 (兄弟や親との線) は出さない。代わりに入力/出力ノードとの線を下で合成する。内側の面は常に見える
         if (port.blockId === scope) return ep.side === "inner";
         if (hiddenIn(p, port.blockId, scope)) return false;
         if (ep.side === "inner" && !isExpanded(p, port.blockId)) return false;
@@ -346,6 +342,41 @@ export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; se
     , labelBgStyle: { fill: "var(--bg-card)", stroke: "var(--line-soft)", strokeWidth: 1 }
     , zIndex: edgeZ
     });
+  }
+  // 開いている箱の入力/出力ノードと、箱の外側の面のポートとをつなぐ線 (ファイルには無い、画面だけの線)
+  if (scope) {
+    const hot = (e: RFEdge): RFEdge => (opts.selectedBlockId && opts.selectedBlockId !== scope ? { ...e, className: `${e.className ?? ""} edge-dim`.trim() } : e);
+    for (const port of portsOf(p, scope, "in")) {
+      // 用意できているか: 外から来る線のどれかが用意できている、またはポートに成果物がある
+      const feeders = Object.values(p.edges).filter((e) => e.to.portId === port.id && e.to.side === "outer");
+      const ready = port.artifacts.length > 0 || feeders.some((e) => isEdgeReady(p, e));
+      edges.push(hot({
+        id: `scope-in:${port.id}`
+      , type: "routed"
+      , markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: ready ? "#0d8080" : "#a9afb6" }
+      , source: SCOPE_IN
+      , sourceHandle: handleId("in", port.id, "inner")
+      , target: scope
+      , targetHandle: handleId("in", port.id, "outer")
+      , selectable: false
+      , className: ready ? "edge-ready" : undefined
+      , zIndex: 1
+      }));
+    }
+    for (const port of portsOf(p, scope, "out")) {
+      const ready = port.artifacts.length > 0 || p.blocks[scope].status === "white";
+      edges.push(hot({
+        id: `scope-out:${port.id}`
+      , type: "routed"
+      , source: scope
+      , sourceHandle: handleId("out", port.id, "outer")
+      , target: SCOPE_OUT
+      , targetHandle: handleId("out", port.id, "inner")
+      , selectable: false
+      , className: ready ? "edge-ready" : undefined
+      , zIndex: 1
+      }));
+    }
   }
   return edges;
 }
