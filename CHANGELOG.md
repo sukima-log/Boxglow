@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Activity panel: one item at a time. Tabs with counts (Decisions / Answered / Working / Next / Log) replace the single mixed list; the panel opens on the first tab that needs you. Working rows show the full title and note instead of cutting them off.
 - When the browser refuses to open a picked file (for example a file under `\\wsl.localhost\...`, which Chrome blocks as a protected location), the Home dialog now says so and points to `npx boxglow serve --open` instead of silently doing nothing.
 
 ## 0.3.0 (2026-10-03)

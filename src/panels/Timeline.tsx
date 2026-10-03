@@ -117,6 +117,9 @@ function BlockRef({ project, blockId, onJump }: { project: Project; blockId: str
   );
 }
 
+/** Activity のタブ (一度に 1 項目だけ見せる。混ざって見えると、どれが判断待ちでどれが作業中か分かりにくい) */
+type ActivityTab = "decisions" | "answered" | "working" | "next" | "log";
+
 export function Timeline({ project }: { project: Project }) {
   useLang(); // 言語が変わったら描き直す
   const select = useProjectStore((s) => s.select);
@@ -127,17 +130,43 @@ export function Timeline({ project }: { project: Project }) {
     focusBlock(blockId);
   };
   const log = [...project.log].reverse().slice(0, 100);
+  const active = [...s.working, ...s.blocked.map((b) => ({ ...b, since: project.blocks[b.block.id].activity?.since ?? "" }))];
+  // タブと件数。最初に開くのは「人の対応が要る順」で中身のある最初のタブ (判断待ち → 回答済み → 作業中 → 次の候補 → ログ)
+  const tabs: { id: ActivityTab; label: string; count: number | null; help: string }[] = [
+    { id: "decisions", label: "Decisions", count: s.decisions.length, help: t("判断待ち: あなたの回答で AI が進めます") }
+  , { id: "answered", label: "Answered", count: s.answered.length, help: t("回答済み: AI がまだ読んでいない回答 (読まれるまで残り、編集できます)") }
+  , { id: "working", label: "Working", count: active.length, help: t("作業中・詰まり・確認待ちの箱") }
+  , { id: "next", label: "Next", count: s.next.length, help: t("未着手で、次に着手できる箱") }
+  , { id: "log", label: "Log", count: null, help: t("最近の記録 (新しい順)") }
+  ];
+  const firstFilled = tabs.find((x) => (x.count ?? 0) > 0)?.id ?? "log";
+  // 利用者が選んだタブ (null = まだ選んでいない → 中身のある最初のタブ)。選んだ後は、中身が空になっても勝手に移らない
+  // (答えた直後にタブが切り替わると、今どこを見ていたか見失う。件数の変化で行き先が分かる)
+  const [picked, setPicked] = useState<ActivityTab | null>(null);
+  const tab = picked ?? firstFilled;
+  const empty = (text: string) => <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{text}</div>;
   return (
-    <div className="flex flex-col gap-4 p-3">
+    <div className="flex flex-col gap-3 p-3">
       <div className="flex items-center gap-1 mb-0">
         <span className="label flex-1">Activity</span>
         <button className="btn btn-ghost btn-sm" onClick={() => select({})} title={t("閉じる (Esc)")}>×</button>
       </div>
-      <div className="text-[13px]">Done {s.white} / {s.total} · {t("作業中")} {s.working.length} · {t("判断待ち")} {s.decisions.length}{s.answered.length > 0 ? ` · ${t("回答済み")} ${s.answered.length}` : ""}{s.blocked.length > 0 ? ` · ${t("詰まり")} ${s.blocked.length}` : ""}</div>
+      <div className="text-[13px]">Done {s.white} / {s.total}</div>
 
-      {s.decisions.length > 0 && (
+      {/* タブ: 項目ごとに開く。件数を添えて、どこに何件あるかを切り替える前に分かるようにする */}
+      <div className="seg" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
+        {tabs.map((x) => (
+          <button key={x.id} className="seg__btn" data-on={tab === x.id} onClick={() => setPicked(x.id)} style={{ padding: "6px 2px", fontSize: 12 }} title={x.help}>
+            {x.label}
+            {x.count !== null && <span style={{ display: "block", fontSize: 10, opacity: x.count > 0 ? 1 : 0.5, color: x.count > 0 && (x.id === "decisions" || x.id === "answered") ? "var(--accent)" : undefined, fontWeight: x.count > 0 ? 700 : 400 }}>{x.count}</span>}
+          </button>
+        ))}
+      </div>
+
+      {tab === "decisions" && (
         <section className="flex flex-col gap-2">
-          <span className="label">{t("Decisions (あなたの回答で AI が進めます)")}</span>
+          <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("あなたの回答で AI が進めます")}</span>
+          {s.decisions.length === 0 && empty(s.answered.length > 0 ? t("判断待ちはありません。答えたものは Answered にあります") : t("判断待ちはありません"))}
           {s.decisions.map(({ block, decision }) => (
             <div key={decision.id} className="flex flex-col gap-1">
               {/* どの箱の判断かを見出しで示す: B 番号・階層のパス・題名・箱へ飛ぶボタン */}
@@ -148,10 +177,11 @@ export function Timeline({ project }: { project: Project }) {
         </section>
       )}
 
-      {s.answered.length > 0 && (
+      {tab === "answered" && (
         <section className="flex flex-col gap-2">
           {/* 答えた直後に一覧から消えると「どの箱の何に答えたか」を見失う。AI が引き取る (ack) までここに残し、編集もできる */}
-          <span className="label">{t("Answered (AI がまだ読んでいない回答。読まれるまでここに残ります)")}</span>
+          <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("AI がまだ読んでいない回答。読まれるまでここに残ります")}</span>
+          {s.answered.length === 0 && empty(t("AI が未確認の回答はありません"))}
           {s.answered.map(({ block, decision }) => (
             <div key={decision.id} className="flex flex-col gap-1">
               <BlockRef project={project} blockId={block.id} onJump={jump} />
@@ -161,10 +191,10 @@ export function Timeline({ project }: { project: Project }) {
         </section>
       )}
 
-      {(s.working.length > 0 || s.blocked.length > 0) && (
+      {tab === "working" && (
         <section className="flex flex-col gap-1">
-          <span className="label">Working</span>
-          {[...s.working, ...s.blocked.map((b) => ({ ...b, since: project.blocks[b.block.id].activity?.since ?? "" }))].map((w) => {
+          {active.length === 0 && empty(t("作業中の箱はありません"))}
+          {active.map((w) => {
             // 「全体のどこで、何のために」: 箱の位置 (大項目 › 中項目) と、この作業が出すもの (出力の名前)
             const where = ancestorsOf(project, w.block.id).filter((a) => a.id !== ROOT_ID && kindOf(a) !== "project").reverse().map((a) => a.title).join(" › ");
             const outs = portsOf(project, w.block.id, "out").map((q) => q.name).join(", ");
@@ -172,35 +202,43 @@ export function Timeline({ project }: { project: Project }) {
               <button key={w.block.id} className="tree-row text-left flex-wrap" onClick={() => jump(w.block.id)}>
                 <span className="tl-actor">{actorLabel(w.actor)}</span>
                 <span className="dec-key">{w.block.key}</span>
-                <span className="truncate"><b>{w.block.title}</b> {t(ACTIVITY_LABEL[project.blocks[w.block.id].activity!.state])} {w.note}</span>
+                <span className="meta-chip">{t(ACTIVITY_LABEL[project.blocks[w.block.id].activity!.state])}</span>
                 <span className="ml-auto text-[11px] flex-none" style={{ color: "var(--text-muted)" }}>{w.since ? agoText(w.since) : ""}</span>
-                <span className="basis-full text-[11px] truncate" style={{ color: "var(--text-muted)", paddingLeft: 4 }}>{where ? `${where} › ` : ""}{outs ? t("出力: {outs}", { outs }) : ""}</span>
+                {/* 題名とメモは省略しない (何の作業で、何を待っているのかが切れると意味が取れない) */}
+                <span className="basis-full font-bold" style={{ whiteSpace: "normal" }}>{w.block.title}</span>
+                {w.note && <span className="basis-full text-[12px]" style={{ whiteSpace: "normal" }}>{w.note}</span>}
+                <span className="basis-full text-[11px]" style={{ color: "var(--text-muted)", whiteSpace: "normal" }}>{where ? `${where} › ` : ""}{outs ? t("出力: {outs}", { outs }) : ""}</span>
               </button>
             );
           })}
         </section>
       )}
 
-      {s.next.length > 0 && (
+      {tab === "next" && (
         <section className="flex flex-col gap-1">
-          <span className="label">{t("Next (未着手)")}</span>
-          <div className="flex flex-wrap gap-1">
-            {s.next.slice(0, 8).map((b) => <button key={b.id} className="chip" onClick={() => jump(b.id)}>{b.title}</button>)}
-          </div>
+          <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("未着手の箱 (着手できるものから)")}</span>
+          {s.next.length === 0 && empty(t("未着手の箱はありません"))}
+          {s.next.slice(0, 30).map((b) => (
+            <button key={b.id} className="tree-row text-left" onClick={() => jump(b.id)}>
+              <span className="dec-key">{b.key}</span>
+              <span className="truncate">{b.title}</span>
+            </button>
+          ))}
         </section>
       )}
 
-      <section>
-        <span className="label">Log</span>
-        {log.length === 0 && <div className="text-[12px] mt-1" style={{ color: "var(--text-muted)" }}>{t("まだありません。CLI や画面の操作で記録されます。")}</div>}
-        {log.map((e) => (
-          <div key={e.id} className="tl-row" style={{ cursor: e.blockId ? "pointer" : "default" }} onClick={() => e.blockId && project.blocks[e.blockId] && jump(e.blockId)}>
-            <span className="tl-time">{shortTime(e.at)}</span>
-            <span className="tl-actor" title={e.actor}>{actorLabel(e.actor)}</span>
-            <span>{e.message}</span>
-          </div>
-        ))}
-      </section>
+      {tab === "log" && (
+        <section>
+          {log.length === 0 && <div className="text-[12px] mt-1" style={{ color: "var(--text-muted)" }}>{t("まだありません。CLI や画面の操作で記録されます。")}</div>}
+          {log.map((e) => (
+            <div key={e.id} className="tl-row" style={{ cursor: e.blockId ? "pointer" : "default" }} onClick={() => e.blockId && project.blocks[e.blockId] && jump(e.blockId)}>
+              <span className="tl-time">{shortTime(e.at)}</span>
+              <span className="tl-actor" title={e.actor}>{actorLabel(e.actor)}</span>
+              <span>{e.message}</span>
+            </div>
+          ))}
+        </section>
+      )}
     </div>
   );
 }

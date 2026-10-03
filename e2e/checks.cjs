@@ -84,13 +84,23 @@ function squeezed(file) {
     await page.evaluate(() => window.boxglow.store.getState().select({ timeline: true }));
     await page.waitForTimeout(400);
     await page.locator("aside.right textarea").first().fill("Email magic link で進める");
-    await page.locator("aside.right button", { hasText: "Answer" }).first().click();
+    await page.locator("aside.right").getByRole("button", { name: "Answer", exact: true }).first().click(); // タブの「Answered」と区別する
     await page.waitForTimeout(600);
     const after = await page.locator("aside.right").innerText();
     const dec = await page.evaluate((id) => { const d = window.boxglow.store.getState().project.blocks[id].decisions[0]; return { answer: d.answer, by: d.answeredBy, acked: !!d.ackedAt }; }, signIn);
     check("答えた直後も一覧に残り、どの箱の何への回答か分かる (AI 未確認)", /answered/i.test(after) && after.includes("Sign-in") && after.includes("Email magic link で進める") && after.includes("AI 未確認"), "");
     check("人の回答は AI が引き取るまで未確認のまま", dec.answer === "Email magic link で進める" && dec.by === "human" && !dec.acked, JSON.stringify(dec));
     check("帯に回答済みが出る", (await page.locator(".summary-chip").innerText()).includes("回答済み"));
+    // Activity は項目ごとのタブ: 件数つきの 5 つのタブがあり、押した項目だけが出る
+    const tabLabels = (await page.locator("aside.right .seg__btn").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim());
+    check("Activity: 項目ごとのタブ (件数つき) が並ぶ", tabLabels.length === 5 && tabLabels[0].startsWith("Decisions") && tabLabels[1] === "Answered 1" && tabLabels[2] === "Working 1", JSON.stringify(tabLabels));
+    await page.locator("aside.right .seg__btn", { hasText: "Working" }).click();
+    await page.waitForTimeout(300);
+    const working = await page.locator("aside.right").innerText();
+    check("Activity: Working を開くと作業中の箱だけが出る", working.includes("Full-text search") && !working.includes("Email magic link で進める"), "");
+    await page.locator("aside.right .seg__btn", { hasText: "Log" }).click();
+    await page.waitForTimeout(300);
+    check("Activity: Log を開くと記録が出る", (await page.locator("aside.right .tl-row").count()) > 5);
 
     // 線を選んだままタブを移る: All で大項目どうしの線を選び、行き先の箱をダブルクリック
     await switchTab(page, null);
