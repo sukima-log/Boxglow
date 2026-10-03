@@ -84,8 +84,10 @@ export function routeAll(nodes: NodeRect[], edges: EdgeSpec[], opts: { separate?
   // 広げた結果、束に入っていなかった別の線の真上に乗ることがあるので、数回繰り返して収束させる
   // (間隔どおりに並んだ束は再び同じ位置に広がるだけなので、繰り返しても崩れない)
   if (opts.separate === false) return paths; // 検査用: 束を広げる前の経路
+  // 同じ出力 (同じハンドル位置) から出る線は、出た直後の縦線分を 1 本の幹に重ねる
+  const sourceKeyOf = new Map(edges.map((e) => [e.id, `${e.source}|${e.s.x},${e.s.y}`]));
   for (let pass = 0; pass < 4; pass++) {
-    separateVerticals(paths, scopeOf, obstaclesOf);
+    separateVerticals(paths, scopeOf, obstaclesOf, sourceKeyOf);
     separateHorizontals(paths, scopeOf, obstaclesOf);
   }
   return paths;
@@ -263,13 +265,15 @@ interface VSeg {
   x: number;
   y0: number;
   y1: number;
+  /** 束の中で「1 本」として数える単位。普通は線の id。同じ出力から出た直後の縦線分 (幹) は出力ごとに同じ値にして重ねる */
+  bus: string;
 }
 
 /**
  * 同じ階層で、同じ通路 (x が近い) にあり、縦の範囲が重なる線分を見つけて横にずらす
  * 同じ線の中の縦線分はずらしても形が保たれる (隣の横線分の端点が一緒に動く)
  */
-function separateVerticals(paths: Map<string, Point[]>, scopeOf: Map<string, string>, obstaclesOf: Map<string, Rect[]>): void {
+function separateVerticals(paths: Map<string, Point[]>, scopeOf: Map<string, string>, obstaclesOf: Map<string, Rect[]>, sourceKeyOf: Map<string, string>): void {
   // 階層ごとに縦の線分を集める
   const byScope = new Map<string, VSeg[]>();
   for (const [edgeId, path] of paths) {
@@ -280,8 +284,11 @@ function separateVerticals(paths: Map<string, Point[]>, scopeOf: Map<string, str
       if (Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) >= 2) {
         // 出入りの最初と最後の線分 (ハンドルに付く) は動かさない
         if (i === 0 || i + 1 === path.length - 1) continue;
+        // 同じ出力から出た直後の縦線分 (幹) は 1 本に重ねる: 同じ信号が 8 本に分かれて 6px 間隔で並ぶと潰れて読めない。
+        // 幹を 1 本にし、それぞれの通路 (横線分) へ分岐する所で初めて分かれる (回路図のバスと同じ読み方)
+        const bus = i === 1 ? `src:${sourceKeyOf.get(edgeId) ?? edgeId}` : edgeId;
         const list = byScope.get(scope) ?? [];
-        list.push({ edgeId, idx: i, x: a.x, y0: Math.min(a.y, b.y), y1: Math.max(a.y, b.y) });
+        list.push({ edgeId, idx: i, x: a.x, y0: Math.min(a.y, b.y), y1: Math.max(a.y, b.y), bus });
         byScope.set(scope, list);
       }
     }
@@ -295,7 +302,7 @@ function separateVerticals(paths: Map<string, Point[]>, scopeOf: Map<string, str
     for (let i = 0; i < segs.length; i++) {
       for (let j = i + 1; j < segs.length; j++) {
         if (segs[j].x - segs[i].x > NEAR) break;
-        if (segs[i].edgeId === segs[j].edgeId) continue;
+        if (segs[i].bus === segs[j].bus) continue; // 同じ線 (または同じ幹) の線分どうしは広げない
         const overlap = Math.min(segs[i].y1, segs[j].y1) - Math.max(segs[i].y0, segs[j].y0);
         if (overlap > 0) parent[find(j)] = find(i);
       }
@@ -309,9 +316,16 @@ function separateVerticals(paths: Map<string, Point[]>, scopeOf: Map<string, str
     }
     for (const group of groups.values()) {
       if (group.length < 2) continue;
-      // 同じ線の線分が複数あれば 1 つにまとめて数える
-      const ids = [...new Set(group.map((g) => g.edgeId))];
-      if (ids.length < 2) continue;
+      // 同じ線 (または同じ幹) の線分が複数あれば 1 つにまとめて数える
+      const ids = [...new Set(group.map((g) => g.bus))];
+      if (ids.length < 2) {
+        // 幹だけの束: 全部を同じ x にそろえる (経路探索で別の x になっていても重ねる)
+        if (ids.length === 1 && ids[0].startsWith("src:")) {
+          const x = group.reduce((acc, g) => acc + g.x, 0) / group.length;
+          for (const g of group) { const path = paths.get(g.edgeId)!; path[g.idx] = { ...path[g.idx], x }; path[g.idx + 1] = { ...path[g.idx + 1], x }; }
+        }
+        continue;
+      }
       const baseX = group.reduce((acc, g) => acc + g.x, 0) / group.length;
       // 交差を減らす並べ方: 縦線分の前後の横線分が「両方とも左へ伸びる」線 (左へ戻る U 型) は束の左端、
       // 「両方とも右へ伸びる」線 (右へ戻る U 型) は右端、片方ずつ (Z 型) は真ん中。
@@ -319,12 +333,12 @@ function separateVerticals(paths: Map<string, Point[]>, scopeOf: Map<string, str
       // Z 型どうしは「上から来る線を左に」(線分の中心 y が上のものを左に)
       const order = ids
         .map((id) => {
-          const mine = group.filter((g) => g.edgeId === id);
-          const path = paths.get(id)!;
+          const mine = group.filter((g) => g.bus === id);
           let side = 0;
           let midY = 0;
           let span = 0;
           for (const g of mine) {
+            const path = paths.get(g.edgeId)!;
             const before = path[g.idx - 1];
             const after = path[g.idx + 2];
             if (before) side += before.x < g.x ? -1 : 1;
@@ -356,9 +370,9 @@ function separateVerticals(paths: Map<string, Point[]>, scopeOf: Map<string, str
       order.forEach((id, k) => {
         // 範囲の外には出さない (束が範囲より広いときは端で重なる。箱の縁に乗るよりまし)
         const x = Math.max(lo, Math.min(hi, center + (k - (order.length - 1) / 2) * sep));
-        const path = paths.get(id)!;
         for (const g of group) {
-          if (g.edgeId !== id) continue;
+          if (g.bus !== id) continue;
+          const path = paths.get(g.edgeId)!;
           // 線分ごとの空き範囲でも抑える (横線分と同じ理由)
           const [ol, oh] = ownRange.get(g)!;
           const xx = oh < ol ? g.x : Math.max(ol, Math.min(oh, x));
