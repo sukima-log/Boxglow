@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Canvas tabs: "All" shows the whole plan; one tab per major box (children of project boxes) shows only that subtree, fitted to the screen. The active tab is remembered per project in the browser. `+ Block` / `N` with nothing selected adds into the open tab's box.
+- Canvas tabs (at the bottom of the canvas, like sheets): "All" shows the whole plan; one tab per major box (children of project boxes) shows only that subtree, fitted to the screen, with the box's own inputs and outputs shown as Inputs / Outputs nodes on the left and right. The active tab is remembered per project in the browser. `+ Block` / `N` with nothing selected adds into the open tab's box.
 - Resizable side panels: drag the border of the details panel (right) and the drawer (left). Widths are remembered in the browser.
 
 ## 0.1.0 (2026-10-03)

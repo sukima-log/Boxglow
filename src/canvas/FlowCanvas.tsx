@@ -1,23 +1,7 @@
 /**
  * キャンバス: React Flow にプロジェクトを描き、ドラッグ・結線・選択を store に反映する
  */
-import {
-  Background
-, BackgroundVariant
-, Controls
-, MiniMap
-, ReactFlow
-, useNodesState
-, useReactFlow
-, useStore
-, type ReactFlowState
-, type Connection
-, type Edge as RFEdge
-, type NodeChange
-, type NodeMouseHandler
-, type OnConnectEnd
-, type OnNodeDrag
-} from "@xyflow/react";
+import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, useNodesState, useReactFlow, useStore, type ReactFlowState, type Connection, type Edge as RFEdge, type NodeChange, type NodeMouseHandler, type OnConnectEnd, type OnNodeDrag } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { connect, connectToBlock, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, validateConnection } from "../model/graph";
 import { blockSize, isExpanded } from "../model/size";
@@ -27,13 +11,14 @@ import { useProjectStore } from "../store/useProjectStore";
 import { BlockNode } from "./BlockNode";
 import { TerminalNode } from "./TerminalNode";
 import { RoutedEdge } from "./RoutedEdge";
-import { buildEdges, buildNodes, parseHandle, type AnyRFNode } from "./layout";
+import { buildEdges, buildNodes, parseHandle, SCOPE_IN, SCOPE_OUT, type AnyRFNode } from "./layout";
+import { FrameNode } from "./FrameNode";
 import { routeAll, type EdgeSpec, type NodeRect } from "./routeAll";
 
 /** 全体表示の設定: 大きな計画でも収まるよう最小ズームを下げる (fitView の既定は 0.5 で、大きい図は左右が切れる) */
 const FIT_OPTIONS = { padding: 0.15, minZoom: 0.05, maxZoom: 1 };
 
-const nodeTypes = { block: BlockNode, terminal: TerminalNode };
+const nodeTypes = { block: BlockNode, terminal: TerminalNode, frame: FrameNode };
 
 /** ノードの絶対位置・大きさと、ハンドルの中心位置を 1 つの文字列にする (経路計算の入力) */
 const selectGeometry = (s: ReactFlowState): string => {
@@ -42,8 +27,8 @@ const selectGeometry = (s: ReactFlowState): string => {
     if (n.hidden) continue;
     const internal = s.nodeLookup.get(n.id);
     const abs = internal?.internals.positionAbsolute ?? n.position;
-    const w = internal?.measured.width ?? n.width ?? 0;
-    const h = internal?.measured.height ?? n.height ?? 0;
+    const w = n.type === "frame" ? 0 : internal?.measured.width ?? n.width ?? 0; // 見えない枠は障害物にも壁にもしない
+    const h = n.type === "frame" ? 0 : internal?.measured.height ?? n.height ?? 0;
     lines.push(`N\t${n.id}\t${n.parentId ?? ""}\t${Math.round(abs.x)}\t${Math.round(abs.y)}\t${Math.round(w)}\t${Math.round(h)}`);
     const hb = internal?.internals.handleBounds;
     for (const hd of [...(hb?.source ?? []), ...(hb?.target ?? [])]) {
@@ -88,13 +73,7 @@ export function FlowCanvas({ project, matcher }: Props) {
   const viewScope = useProjectStore((s) => s.viewScope);
   const rf = useReactFlow();
 
-  // タブ (表示範囲) を切り替えたら、その範囲が収まるように全体表示する (ノードが作り直された後に)
-  const scopeMounted = useRef(false);
-  useEffect(() => {
-    if (!scopeMounted.current) { scopeMounted.current = true; return; } // 最初は fitView 属性に任せる
-    const t = setTimeout(() => void rf.fitView({ ...FIT_OPTIONS, duration: 250 }), 80);
-    return () => clearTimeout(t);
-  }, [viewScope, rf]);
+
   // 動作確認やスクリーンショット用に、React Flow の instance もコンソールから触れるようにしておく
   useEffect(() => { (window as unknown as { boxglow?: { rf?: unknown } }).boxglow = { ...((window as unknown as { boxglow?: object }).boxglow ?? {}), rf }; }, [rf]);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
@@ -127,6 +106,24 @@ export function FlowCanvas({ project, matcher }: Props) {
   useEffect(() => {
     setNodes((ns) => ns.map((n) => (n.type === "block" ? { ...n, data: { ...n.data, dropTarget: n.id === dropTarget } } : n)));
   }, [dropTarget, setNodes]);
+
+  // タブ (表示範囲) を切り替えたら、その範囲が収まるように全体表示する。
+  // ノードが作り直されて大きさが測られる (nodesInitialized) のを待ってから fitView する (早すぎると古い大きさで計算して外れる)
+  const scopeMounted = useRef(false);
+  const pendingFit = useRef(false);
+  useEffect(() => {
+    if (!scopeMounted.current) { scopeMounted.current = true; return; } // 最初は fitView 属性に任せる
+    pendingFit.current = true;
+  }, [viewScope]);
+  useEffect(() => {
+    if (!pendingFit.current) return;
+    // 見えているノードが全部測られてから (大きさの変化も nodes の更新として届くので、この効果が再び走る)
+    const ready = rf.getNodes().every((n) => n.hidden || (n.measured?.width ?? 0) > 0);
+    if (!ready) return;
+    pendingFit.current = false;
+    const t = setTimeout(() => void rf.fitView({ ...FIT_OPTIONS, duration: 250 }), 30);
+    return () => clearTimeout(t);
+  }, [nodes, rf]);
 
   // 箱にマウスを乗せたら、つながる線を強調する
   const [hovered, setHovered] = useState<string | null>(null);
@@ -166,6 +163,8 @@ export function FlowCanvas({ project, matcher }: Props) {
           if (ch.id === "root-in") select({ terminal: "in" });
           else if (ch.id.startsWith("root-in:")) select({ terminal: "in", terminalGroup: ch.id.slice(8) });
           else if (ch.id === "root-out") select({ terminal: "out" });
+          // 大項目の入力/出力ノードを選んだら、その大項目の箱を選ぶ (右のパネルで入出力を直せる)
+          else if (ch.id === SCOPE_IN || ch.id === SCOPE_OUT) { const sc = useProjectStore.getState().viewScope; if (sc) select({ blockId: sc }); }
           else select({ blockId: ch.id });
           // 右の詳細パネルが開いてキャンバスが狭まり、選んだノードが隠れることがあるので、見えなければ寄せる
           focusBlock(ch.id);

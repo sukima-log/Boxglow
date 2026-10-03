@@ -196,14 +196,6 @@ export function App() {
       </div>
 
       <main className="app-main relative min-w-0 min-h-0">
-        {showTabs && (
-          <div className="canvas-tabs" role="tablist">
-            <button className="canvas-tab" role="tab" data-on={scopeOk === null} onClick={() => setViewScope(null)} title="すべての箱を俯瞰する">All</button>
-            {majors.map((b) => (
-              <button key={b.id} className="canvas-tab" role="tab" data-on={scopeOk === b.id} onClick={() => setViewScope(b.id)} title={`${b.title} の中だけを見る`}>{b.title}</button>
-            ))}
-          </div>
-        )}
         <div className="canvas-wrap">
           {project && (
             <ReactFlowProvider>
@@ -223,6 +215,14 @@ export function App() {
             <span className="absolute top-2 left-2 z-10 font-head text-[14px] px-2 py-1 rounded-lg" style={{ background: "var(--bg-card)", border: "2px solid var(--line)" }}>Boxglow</span>
           )}
         </div>
+        {showTabs && (
+          <div className="canvas-tabs" role="tablist">
+            <button className="canvas-tab" role="tab" data-on={scopeOk === null} onClick={() => setViewScope(null)} title="すべての箱を俯瞰する">All</button>
+            {majors.map((b) => (
+              <button key={b.id} className="canvas-tab" role="tab" data-on={scopeOk === b.id} onClick={() => setViewScope(b.id)} title={`${b.title} の中だけを見る`}>{b.title}</button>
+            ))}
+          </div>
+        )}
         {!project && !embed && <HomeDialog />}
         {helpOpen && (
           <div className="modal-backdrop" onClick={() => setHelpOpen(false)}>
