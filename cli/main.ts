@@ -17,6 +17,7 @@
  *   move <block> --parent <block|project>            箱を別の親の中へ移す (線は間の箱のポートを経由してつながったまま)
  *   port <block|project> [--in <名前>]... [--out <名前>]... [--rename <旧名>=<新名>]   既存の箱に入力 / 出力を足す、名前を変える (project = 最初のプロジェクトの箱)
  *   disconnect <題名.出力名> <題名.入力名>          線を外す
+ *   remove <block> [--force]                          箱を消す (中に箱があるときは --force。線も外れる。元に戻せないので Git で管理していること)
  *   connect <題名.出力名> <題名.入力名>             結線 (親子は自動で内側の面を使う。最終成果物へは project.<出力名>。題名にドットがあってもよい)
  *   start <block> [--note <何をするか>]            作業開始 (作業中になる)
  *   done <block> [--artifact <題名>=<URL またはパス>]... [--output <出力名>] [--note]   完了 (成果物を付けて white)
@@ -68,7 +69,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed } from "../src/model/graph";
+import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock } from "../src/model/graph";
 import type { Artifact } from "../src/model/types";
 import { blockToPrompt } from "../src/model/export";
 import { blockReport, logReport, statusReport } from "../src/model/report";
@@ -484,6 +485,16 @@ function main(argv: string[]): void {
       if (added.length === 0) throw new Error("--in <名前> / --out <名前> / --rename <旧名>=<新名> のいずれかを指定してください");
       save(path, p);
       out(`ポート: ${p.blocks[blockId]?.title ?? "project"}: ${added.join(", ")}`);
+      return;
+    }
+    case "remove": {
+      const b = mustFind(p, rest[0]);
+      if (b.kind === "project") throw new Error("プロジェクトの箱は消せません (中の箱を全部消すか、ファイルごと作り直してください)");
+      const kids = Object.values(p.blocks).filter((x) => x.parentId === b.id).length;
+      if (kids > 0 && !options.force) throw new Error(`「${b.title}」の中に ${kids} 個の箱があります。まとめて消すなら --force を付けてください`);
+      const q = removeBlock(p, b.id);
+      save(path, q);
+      out(`削除: 「${b.title}」` + (kids > 0 ? ` と中の ${kids} 個の箱` : "") + " (つながっていた線も外しました)");
       return;
     }
     case "disconnect": {

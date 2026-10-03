@@ -36,6 +36,6 @@ description: Boxglow (boxglow.json) で計画と進捗を人間と共有する�
 - 同時に作業中にする箱は 1〜2 個まで
 - 成果物 (artifact) は後から人が開けるもの (コミット、PR、ファイルのパス) にする
 - 出力は具体的な成果物の名前にする (ファイル・PR・URL・テスト結果)。抽象的な名前 (機能一式、所見) は避ける
-- 箱は必ず「入力 → 出力」でつなぐ。足りない入出力は `port`、外すのは `disconnect`。文書化は `export --out docs/ROADMAP.md`
+- 箱は必ず「入力 → 出力」でつなぐ。足りない入出力は `port`、外すのは `disconnect`、箱そのものを消すのは `remove`。文書化は `export --out docs/ROADMAP.md`
 - 箱を add するときは仕事の種類を `--category` で付ける (design 設計 / build 実装 / verify 検証 / evaluate 評価 / study 検討 / research 調査 / ui デザイン / improve 改善 / fix 課題解決 / docs 文書 / ops 運用 / other その他)。画面では色の帯と札になる
 - boxglow.json がまだ無ければ `npx boxglow init --name "<プロジェクト名>"` で作り、最終成果物と最上位の箱を `add` で置く
