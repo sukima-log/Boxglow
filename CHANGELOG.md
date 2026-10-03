@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-10-03)
+
+Highlights: tabs per major box with Inputs / Outputs, wires that never cross boxes (verified on random layouts), English UI, MCP server, `boxglow serve`, VS Code extension, Cloudflare Pages hosting, much faster editing and tab switching. Details:
 
 - Wires leaving the same output share one trunk: the vertical run right after the port is drawn once and the wires split off where each turns into its own lane (like a bus in a schematic). Before, eight wires from one output were packed 6 px apart in a narrow channel and looked like a solid band.
 - Wires never cross boxes, now verified on random layouts: a property test routes 300 random plans (6-20 boxes, tight 24 px and normal 96 px spacing, up to 24 wires each) and asserts no wire passes through any box. Three causes found and fixed: (1) crossing a box cost the same as leaving the parent box, so a box right at the parent's edge could prefer to cut through its target - box crossing is now 100x heavier and the exit / entry stubs stay inside the parent; (2) the exit / entry stub (40 px) ran into a box sitting right next to the port - it now shortens to the gap; (3) spreading bundled wires could push one wire into its own box - each segment is now clamped to its own free range. When every fixed-shape candidate still crosses something, a grid shortest-path (Dijkstra over box edges with 36 / 12 / 2 px margins) finds a clean route.
