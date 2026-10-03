@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boxglow Cloud waitlist</title>
+<link rel="icon" href="/favicon.svg">
+<style>
+  :root { --bg: #eceef0; --card: #fbfbfb; --text: #2f343a; --muted: #6b7075; --line: #3a3f46; --primary: #0d8080; --accent: #e8875e; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1a1d21; --card: #23272c; --text: #e8eaed; --muted: #a3a9b1; --line: #4a5058; --primary: #3fb5b5; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--bg); color: var(--text); font-family: "Hiragino Sans", "Noto Sans JP", "Yu Gothic UI", Meiryo, system-ui, sans-serif; font-size: 16px; line-height: 1.75; }
+  .card { width: 100%; max-width: 560px; background: var(--card); border: 3px solid var(--line); border-radius: 16px; padding: 24px; box-shadow: 6px 6px 0 rgba(0,0,0,0.12); }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  h1 small { display: block; font-size: 13px; color: var(--muted); font-weight: normal; }
+  p { margin: 8px 0; }
+  .muted { color: var(--muted); font-size: 13px; }
+  label { display: block; font-weight: 700; margin-top: 16px; font-size: 14px; }
+  input[type=email], textarea { width: 100%; margin-top: 4px; padding: 10px 12px; border: 2px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text); font: inherit; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+  .chips label { margin: 0; font-weight: normal; font-size: 13px; display: inline-flex; gap: 6px; align-items: center; padding: 6px 10px; border: 2px solid var(--line); border-radius: 999px; cursor: pointer; }
+  .chips input { margin: 0; }
+  button { margin-top: 20px; width: 100%; padding: 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--primary); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .hp { position: absolute; left: -9999px; }
+  .done { display: none; }
+  a { color: var(--primary); }
+  .links { margin-top: 16px; font-size: 13px; }
+</style>
+</head>
+<body>
+<main class="card">
+  <h1>Boxglow Cloud の案内を受け取る<small>Boxglow Cloud waitlist (sync, share links, team workspaces, Slack / JIRA, hosted MCP, self-host)</small></h1>
+  <p>Boxglow のアプリと CLI は <a href="https://github.com/sukima-log/Boxglow">MIT ライセンスで無料</a>のままです。クラウド同期・共有リンク・チーム・外部ツール連携・自社サーバ版は有料で準備中で、提供を始めるときに 1 通だけメールでお知らせします。</p>
+  <p class="muted">Boxglow stays free (MIT). The cloud features are in preparation; leave your email and we will send one message when they open. No newsletter.</p>
+  <form id="f">
+    <label for="email">メールアドレス / Email</label>
+    <input id="email" name="email" type="email" required autocomplete="email" placeholder="you@example.com">
+    <label>興味のある機能 / Interested in</label>
+    <div class="chips">
+      <label><input type="checkbox" name="want" value="sync"> 同期 Sync</label>
+      <label><input type="checkbox" name="want" value="share"> 共有リンク Share</label>
+      <label><input type="checkbox" name="want" value="team"> チーム Team</label>
+      <label><input type="checkbox" name="want" value="connect"> Slack / JIRA Connect</label>
+      <label><input type="checkbox" name="want" value="agent"> ホスト型 MCP Agent</label>
+      <label><input type="checkbox" name="want" value="selfhost"> 自社サーバ Self-host</label>
+    </div>
+    <label for="note">ひとこと (任意) / Note</label>
+    <textarea id="note" name="note" rows="3" maxlength="500" placeholder="どんな場面で使いたいか、困っていることなど"></textarea>
+    <input class="hp" name="hp" tabindex="-1" autocomplete="off">
+    <button id="btn" type="submit">登録する / Join the waitlist</button>
+    <p class="muted" id="msg"></p>
+  </form>
+  <p class="done" id="done">登録しました。提供を始めるときにお知らせします。ありがとうございます。<br>Thanks, you are on the list.</p>
+  <p class="links"><a href="/">Boxglow を開く</a> · <a href="https://github.com/sukima-log/Boxglow/blob/main/docs/MONETIZATION.md">無料と有料の線引き / Free vs paid</a></p>
+</main>
+<script>
+  // 送信: JSON で /api/waitlist へ。成功したらフォームを隠してお礼を出す
+  const f = document.getElementById("f"), btn = document.getElementById("btn"), msg = document.getElementById("msg");
+  f.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    btn.disabled = true; msg.textContent = "送信中...";
+    const fd = new FormData(f);
+    const body = { email: fd.get("email"), note: fd.get("note"), want: fd.getAll("want"), hp: fd.get("hp") };
+    try {
+      const r = await fetch("/api/waitlist", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || r.statusText);
+      f.style.display = "none"; document.getElementById("done").style.display = "block";
+    } catch (e) {
+      msg.textContent = "送れませんでした: " + e.message; btn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

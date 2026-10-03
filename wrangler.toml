@@ -1,0 +1,10 @@
+# Cloudflare Pages の設定 (Web アプリの配信先 https://boxglow.pages.dev/)
+# 配信: npm run deploy:pages (VITE_BASE=/ で dist-pages/ にビルドして直接アップロード)
+# functions/ は Pages Functions (待ちリストの受付 /api/waitlist)。KV は待ちリストの保存先
+name = "boxglow"
+pages_build_output_dir = "dist-pages"
+compatibility_date = "2026-10-01"
+
+[[kv_namespaces]]
+binding = "WAITLIST"
+id = "97b6903cae4c42169e0a1429232f6737"

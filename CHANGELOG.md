@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Free / paid line written down (README "Free and paid", docs/MONETIZATION.md) and a waitlist for Boxglow Cloud at /waitlist/ (Cloudflare Pages Function + KV; stores the email only).
 - CLI: `boxglow remove <block> [--force]` deletes a box (with its children when forced); project boxes cannot be removed.
 - Arrowheads are drawn by Boxglow itself and follow the wire's colour in both themes (amber = not ready, green = ready, orange = selected); before, ready arrowheads stayed dark teal in dark mode and looked like a third state.
 - Answering a decision: the answer box is multi-line (Enter / Shift+Enter insert a line break), sent only with the Answer button or Ctrl+Enter, and an answered decision can be edited afterwards (Edit / Save) without losing the record.

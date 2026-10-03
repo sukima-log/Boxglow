@@ -15,7 +15,9 @@
     "prepare": "npm run build:cli",
     "prepublishOnly": "npm run build",
     "build:pages": "tsc -b && VITE_BASE=/ vite build --outDir dist-pages && npm run build:cli",
-    "deploy:pages": "npm run build:pages && npx --yes wrangler@4 pages deploy dist-pages --project-name=boxglow --commit-dirty=true"
+    "deploy:pages": "npm run build:pages && npx --yes wrangler@4 pages deploy dist-pages --project-name=boxglow --commit-dirty=true",
+    "waitlist:list": "npx --yes wrangler@4 kv key list --binding WAITLIST --prefix email: --remote",
+    "waitlist:get": "npx --yes wrangler@4 kv key get --binding WAITLIST --remote"
   },
   "dependencies": {
     "@xyflow/react": "^12.12.0",
