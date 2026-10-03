@@ -6,9 +6,12 @@ import { answerDecision, editDecisionAnswer, summarize, candidatesOf, reopenDeci
 import { actorLabel, ACTIVITY_LABEL, agoText, shortTime } from "../model/report";
 import { ROOT_ID, type Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
+// 言語切り替え: 日本語の文は t() で包み、英語の辞書 (src/i18n/en/parts.ts) で引く
+import { t, useLang } from "../i18n";
 
 /** 判断に答える小さなカード (ブロックの詳細とタイムラインで共用) */
 export function DecisionCard({ project, blockId, decisionId }: { project: Project; blockId: string; decisionId: string }) {
+  useLang(); // 言語が変わったら描き直す
   const readonly = useProjectStore((s) => s.readonly);
   const apply = useProjectStore((s) => s.apply);
   const [text, setText] = useState("");
@@ -30,7 +33,7 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
   const submitKey = (ev: React.KeyboardEvent, go: () => void) => { if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); go(); } };
   return (
     <div className="flex flex-col gap-2 pl-2" style={{ borderLeft: "3px solid var(--accent)" }}>
-      <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{actorLabel(d.askedBy)} からの質問 ({agoText(d.askedAt)})</div>
+      <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("{actor} からの質問 ({ago})", { actor: actorLabel(d.askedBy), ago: agoText(d.askedAt) })}</div>
       <div className="text-[13px] font-bold">{d.question}</div>
       {/* 判断材料: 質問だけで判断できるように、前提・比較・影響をここに出す */}
       {d.context && <div className="text-[12px] whitespace-pre-wrap" style={{ color: "var(--text-muted)", background: "var(--bg-paper)", border: "1px solid var(--line-soft)", borderRadius: 8, padding: "6px 8px" }}>{d.context}</div>}
@@ -41,28 +44,29 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
               <textarea className="input" rows={3} value={editing} onChange={(e) => setEditing(e.target.value)} onKeyDown={(e) => submitKey(e, saveEdit)} autoFocus />
               <div className="flex gap-1 justify-end">
                 <button className="btn btn-ghost btn-sm" onClick={() => setEditing(null)}>Cancel</button>
-                <button className="btn btn-primary btn-sm" disabled={!editing.trim()} onClick={saveEdit} title="Ctrl+Enter でも保存">Save</button>
+                <button className="btn btn-primary btn-sm" disabled={!editing.trim()} onClick={saveEdit} title={t("Ctrl+Enter でも保存")}>Save</button>
               </div>
             </div>
           ) : (
-            <div className="whitespace-pre-wrap">選んだ: <b>{d.answer}</b> <span style={{ color: "var(--text-muted)" }}>({d.answeredBy})</span></div>
+            <div className="whitespace-pre-wrap">{t("選んだ:")} <b>{d.answer}</b> <span style={{ color: "var(--text-muted)" }}>({d.answeredBy})</span></div>
           )}
           {/* 選ばなかった候補も残す (方針転換のときに戻れるように) */}
           {candidatesOf(d).rejected.length > 0 && (
             <div className="flex flex-wrap items-center gap-1 text-[12px]" style={{ color: "var(--text-muted)" }}>
-              残した候補:
+              {t("残した候補:")}
               {candidatesOf(d).rejected.map((o) => <span key={o} className="meta-chip muted" style={{ fontSize: 11 }}>{o}</span>)}
             </div>
           )}
           {(d.history ?? []).length > 0 && (
             <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>
-              以前の答え: {d.history!.map((h) => `${h.answer} (${h.by}${h.note ? "、" + h.note : ""})`).join(" → ")}
+              {/* 答えの履歴: 「答え (誰、理由)」を → でつなぐ。読点は言語で変わるので理由付きの形も辞書で引く */}
+              {t("以前の答え:")} {d.history!.map((h) => h.note ? t("{answer} ({by}、{note})", { answer: h.answer, by: h.by, note: h.note }) : `${h.answer} (${h.by})`).join(" → ")}
             </div>
           )}
           {!readonly && editing === null && (
             <div className="flex gap-1">
-              <button className="btn btn-ghost btn-sm" onClick={() => setEditing(d.answer ?? "")} title="答えの文面を直す (書き間違いや補足。選び直しではない)">Edit</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => { const note = prompt("やり直す理由 (任意)") ?? ""; apply((p) => reopenDecision(p, blockId, decisionId, "human", note)); }} title="方針転換: 答えを履歴に残して、候補から選び直す">やり直す</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditing(d.answer ?? "")} title={t("答えの文面を直す (書き間違いや補足。選び直しではない)")}>Edit</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => { const note = prompt(t("やり直す理由 (任意)")) ?? ""; apply((p) => reopenDecision(p, blockId, decisionId, "human", note)); }} title={t("方針転換: 答えを履歴に残して、候補から選び直す")}>{t("やり直す")}</button>
             </div>
           )}
         </div>
@@ -74,9 +78,9 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
             </div>
           )}
           <div className="flex flex-col gap-1">
-            <textarea className="input" rows={3} placeholder={d.options.length > 0 ? "または自由に書く (複数行可)" : "回答を書く (複数行可)"} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => submitKey(e, () => answer(text))} />
+            <textarea className="input" rows={3} placeholder={d.options.length > 0 ? t("または自由に書く (複数行可)") : t("回答を書く (複数行可)")} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => submitKey(e, () => answer(text))} />
             <div className="flex items-center gap-2 justify-end">
-              <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>Enter は改行。送るのはボタンか Ctrl+Enter</span>
+              <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{t("Enter は改行。送るのはボタンか Ctrl+Enter")}</span>
               <button className="btn btn-primary btn-sm" disabled={!text.trim()} onClick={() => answer(text)}>Answer</button>
             </div>
           </div>
@@ -91,22 +95,24 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
  * Input : blockId, onJump = 押したときに箱を選んで画面を寄せる
  */
 function BlockRef({ project, blockId, onJump }: { project: Project; blockId: string; onJump: (id: string) => void }) {
+  useLang(); // 言語が変わったら描き直す
   const b = project.blocks[blockId];
   if (!b) return null;
   const path = ancestorsOf(project, blockId).filter((a) => a.id !== ROOT_ID).reverse().map((a) => a.title).join(" › ");
   return (
-    <div className="dec-head" role="button" tabIndex={0} onClick={() => onJump(blockId)} onKeyDown={(e) => e.key === "Enter" && onJump(blockId)} title="この箱を画面で選ぶ">
+    <div className="dec-head" role="button" tabIndex={0} onClick={() => onJump(blockId)} onKeyDown={(e) => e.key === "Enter" && onJump(blockId)} title={t("この箱を画面で選ぶ")}>
       <span className="dec-key">{b.key}</span>
       <div className="min-w-0 flex-1">
         {path && <div className="text-[11px] truncate" style={{ color: "var(--text-muted)" }}>{path}</div>}
         <div className="text-[13px] font-bold truncate">{b.title}</div>
       </div>
-      <span className="btn btn-sm flex-none">箱へ →</span>
+      <span className="btn btn-sm flex-none">{t("箱へ →")}</span>
     </div>
   );
 }
 
 export function Timeline({ project }: { project: Project }) {
+  useLang(); // 言語が変わったら描き直す
   const select = useProjectStore((s) => s.select);
   const focusBlock = useProjectStore((s) => s.focusBlock);
   const s = summarize(project);
@@ -119,13 +125,13 @@ export function Timeline({ project }: { project: Project }) {
     <div className="flex flex-col gap-4 p-3">
       <div className="flex items-center gap-1 mb-0">
         <span className="label flex-1">Activity</span>
-        <button className="btn btn-ghost btn-sm" onClick={() => select({})} title="閉じる (Esc)">×</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => select({})} title={t("閉じる (Esc)")}>×</button>
       </div>
-      <div className="text-[13px]">Done {s.white} / {s.total} · 作業中 {s.working.length} · 判断待ち {s.decisions.length}{s.blocked.length > 0 ? ` · 詰まり ${s.blocked.length}` : ""}</div>
+      <div className="text-[13px]">Done {s.white} / {s.total} · {t("作業中")} {s.working.length} · {t("判断待ち")} {s.decisions.length}{s.blocked.length > 0 ? ` · ${t("詰まり")} ${s.blocked.length}` : ""}</div>
 
       {s.decisions.length > 0 && (
         <section className="flex flex-col gap-2">
-          <span className="label">Decisions (あなたの回答で AI が進めます)</span>
+          <span className="label">{t("Decisions (あなたの回答で AI が進めます)")}</span>
           {s.decisions.map(({ block, decision }) => (
             <div key={decision.id} className="flex flex-col gap-1">
               {/* どの箱の判断かを見出しで示す: B 番号・階層のパス・題名・箱へ飛ぶボタン */}
@@ -147,9 +153,9 @@ export function Timeline({ project }: { project: Project }) {
               <button key={w.block.id} className="tree-row text-left flex-wrap" onClick={() => jump(w.block.id)}>
                 <span className="tl-actor">{actorLabel(w.actor)}</span>
                 <span className="dec-key">{w.block.key}</span>
-                <span className="truncate"><b>{w.block.title}</b> {ACTIVITY_LABEL[project.blocks[w.block.id].activity!.state]} {w.note}</span>
+                <span className="truncate"><b>{w.block.title}</b> {t(ACTIVITY_LABEL[project.blocks[w.block.id].activity!.state])} {w.note}</span>
                 <span className="ml-auto text-[11px] flex-none" style={{ color: "var(--text-muted)" }}>{w.since ? agoText(w.since) : ""}</span>
-                <span className="basis-full text-[11px] truncate" style={{ color: "var(--text-muted)", paddingLeft: 4 }}>{where ? `${where} › ` : ""}{outs ? `出力: ${outs}` : ""}</span>
+                <span className="basis-full text-[11px] truncate" style={{ color: "var(--text-muted)", paddingLeft: 4 }}>{where ? `${where} › ` : ""}{outs ? t("出力: {outs}", { outs }) : ""}</span>
               </button>
             );
           })}
@@ -158,7 +164,7 @@ export function Timeline({ project }: { project: Project }) {
 
       {s.next.length > 0 && (
         <section className="flex flex-col gap-1">
-          <span className="label">Next (未着手)</span>
+          <span className="label">{t("Next (未着手)")}</span>
           <div className="flex flex-wrap gap-1">
             {s.next.slice(0, 8).map((b) => <button key={b.id} className="chip" onClick={() => jump(b.id)}>{b.title}</button>)}
           </div>
@@ -167,7 +173,7 @@ export function Timeline({ project }: { project: Project }) {
 
       <section>
         <span className="label">Log</span>
-        {log.length === 0 && <div className="text-[12px] mt-1" style={{ color: "var(--text-muted)" }}>まだありません。CLI や画面の操作で記録されます。</div>}
+        {log.length === 0 && <div className="text-[12px] mt-1" style={{ color: "var(--text-muted)" }}>{t("まだありません。CLI や画面の操作で記録されます。")}</div>}
         {log.map((e) => (
           <div key={e.id} className="tl-row" style={{ cursor: e.blockId ? "pointer" : "default" }} onClick={() => e.blockId && project.blocks[e.blockId] && jump(e.blockId)}>
             <span className="tl-time">{shortTime(e.at)}</span>

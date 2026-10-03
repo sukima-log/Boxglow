@@ -1,0 +1,72 @@
+/** 英語の辞書 (inspector)。キー = ソースの日本語の文 */
+export const inspector: Record<string, string> = {
+  // パネル共通
+  "閉じる (Esc)": "Close (Esc)"
+  // プロジェクト設定
+, "ゴール (何を達成したいか)": "Goal (what to achieve)"
+, "完了 {white} / {total}": "Done {white} / {total}"
+  // 入力ノード / グループ
+, "グループの名前 (例: PCIe 仕様書)": "Group name (e.g. PCIe spec)"
+, "このグループを JSON に書き出す (他のプロジェクトで読み込める)": "Export this group as JSON (can be imported into another project)"
+, "グループを消す (入力は Inputs に戻る)": "Delete this group (its inputs go back to Inputs)"
+, "グループ「{name}」を消しますか? (入力は Inputs に戻ります)": "Delete group \"{name}\"? (Its inputs go back to Inputs)"
+, "説明 (任意。例: PCI-SIG の仕様書一式)": "Description (optional, e.g. PCI-SIG spec set)"
+, "ここには、下の階層で供給元が決まっていない入力が自動で上がります。各入力はグループに移せます。": "Inputs with no source in the levels below are raised here automatically. Each input can be moved into a group."
+, "他のプロジェクトで書き出したグループを読み込む": "Import a group exported from another project"
+, "仕様書などを種類ごとに分けるときは、グループを作って入力を入れます (例: PCIe 仕様書、DDR 仕様書)。": "To sort specs and the like by kind, create a group and put inputs in it (e.g. PCIe spec, DDR spec)."
+  // ブロック: 見出し・メニュー
+, "「{title}」と下の階層のブロックを削除します。よろしいですか?": "Delete \"{title}\" and all blocks below it?"
+, "AI に渡すテキストをコピーしました": "Copied the text for the AI"
+, "部品の札 (例: 画像処理, 認証。カンマ区切り。省略可)": "Tags for the part (e.g. image processing, auth; comma-separated; optional)"
+, "「{name}」を部品として保存しました (☰ の「部品」から挿入)": "Saved \"{name}\" as a part (insert it from Parts in ☰)"
+, "短い ID (押すとコピー。検索や CLI で使えます)": "Short ID (click to copy; works in search and the CLI)"
+, "ID {key} をコピーしました": "Copied ID {key}"
+, "Title (何を作るか)": "Title (what to make)"
+  // ブロック: タブの説明
+, "状態・進捗・活動・判断": "Status, progress, activity, decisions"
+, "入力と出力 (成果物)": "Inputs and outputs (deliverables)"
+, "担当": "Owner"
+, "開始日・期日・時間": "Start, due date, hours"
+, "AI に渡す・メモ・資料": "AI hand-off, notes, links"
+  // ブロック: 状態と進捗
+, "下の階層が全部完了し、出力に成果物が付いています": "Everything below is done and the output has its deliverable"
+, "完了にできます → Done": "Ready to mark → Done"
+, "必須の入力はそろっています (着手できます)": "All required inputs are in (ready to start)"
+, "必須の入力待ち: {names}": "Waiting for required inputs: {names}"
+, "パスや URL (例: ../mg-core、github.com/you/repo)": "Path or URL (e.g. ../mg-core, github.com/you/repo)"
+, "複数のリポジトリをまたぐときは、boxglow.json を上のフォルダに 1 つ置き、各リポジトリの AI には環境変数 BOXGLOW_FILE でその場所を教えます": "For several repositories, keep one boxglow.json in the parent folder and point each repository's AI to it with the BOXGLOW_FILE environment variable"
+, "進捗 (ドラッグで入力)": "Progress (drag to set)"
+, "手入力をやめて、下の階層から自動で計算する": "Stop manual entry and compute from the levels below"
+, "下の階層の完了数": "Done count in the levels below"
+, "活動の印を消す": "Clear the activity mark"
+, "判断の記録 ({n})": "Decision history ({n})"
+  // ブロック: 担当
+, "{name} (自分)": "{name} (me)"
+, "外す": "Remove"
+, "未担当": "Unassigned"
+, "自分を担当にする": "Assign to me"
+, "名前を打って Enter で登録": "Type a name and press Enter to add"
+, "名前で検索して Enter で割り当て": "Search by name and press Enter to assign"
+, "見つかりません。Enter で「{name}」を登録して割り当て": "No match. Press Enter to add \"{name}\" and assign"
+  // ブロック: 期日と時間
+, "開始": "Start"
+, "期日": "Due"
+, "見積": "Est."
+, "実績": "Actual"
+, "期日を {d} 日過ぎています": "{d} days past due"
+, "期日は今日です": "Due today"
+, "期日まであと {d} 日": "{d} days until due"
+  // ブロック: 課題・AI・メモ
+, "JIRA / Redmine / GitHub Issue の URL": "JIRA / Redmine / GitHub Issue URL"
+, "開く: {key}": "Open: {key}"
+, "この箱の入出力と位置づけを Markdown にしてコピーして AI に渡す": "Copy this box's inputs, outputs and context as Markdown for an AI"
+, "手順を提案してもらう (コピー)": "Ask for a plan (copy)"
+, "分解案を JSON でもらう (コピー)": "Ask for a breakdown as JSON (copy)"
+, "入出力の抜けを指摘してもらう (コピー)": "Ask for missing inputs/outputs (copy)"
+, "メモ (入力から出力をどう作るか)": "Notes (how to turn inputs into outputs)"
+  // 線
+, "{title} のタブでこの線の続きを見る": "Follow this wire in the {title} tab"
+, "All でこの線を見る": "View this wire in All"
+, "「{name}」": " \"{name}\""
+, "自動の線。手動でつなぐと置き換わります。": "Automatic wire. Connecting manually replaces it."
+};

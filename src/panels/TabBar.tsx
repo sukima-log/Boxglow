@@ -9,11 +9,13 @@ import { useEffect, useRef, useState } from "react";
 import { computeProgress } from "../model/graph";
 import type { Block, Project } from "../model/types";
 import { StatusIcon } from "../canvas/BlockNode";
+import { t, useLang } from "../i18n";
 
 /** ◀ ▶ で 1 回に送る幅 (px) */
 const STEP = 240;
 
 export function TabBar({ project, majors, scope, onSelect, marked }: { project: Project; majors: Block[]; scope: string | null; onSelect: (id: string | null) => void; marked?: Set<string | null> }) {
+  useLang(); // 言語が変わったら描き直す
   const strip = useRef<HTMLDivElement>(null);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
@@ -58,14 +60,14 @@ export function TabBar({ project, majors, scope, onSelect, marked }: { project: 
   return (
     <div className="canvas-tabs" role="tablist">
       <div className="tab-nav">
-        <button className="tab-nav-btn tab-list-btn" data-on={listOpen} onClick={() => setListOpen((v) => !v)} title="タブの一覧 (押して選ぶ)">≡</button>
-        <button className="tab-nav-btn" disabled={!canLeft} onClick={() => scrollBy(-STEP)} title="左へ">◀</button>
-        <button className="tab-nav-btn" disabled={!canRight} onClick={() => scrollBy(STEP)} title="右へ">▶</button>
+        <button className="tab-nav-btn tab-list-btn" data-on={listOpen} onClick={() => setListOpen((v) => !v)} title={t("タブの一覧 (押して選ぶ)")}>≡</button>
+        <button className="tab-nav-btn" disabled={!canLeft} onClick={() => scrollBy(-STEP)} title={t("左へ")}>◀</button>
+        <button className="tab-nav-btn" disabled={!canRight} onClick={() => scrollBy(STEP)} title={t("右へ")}>▶</button>
       </div>
       <div className="tab-strip" ref={strip} onScroll={updateArrows}>
-        <button className="canvas-tab" role="tab" data-on={scope === null} data-marked={marked?.has(null) || undefined} onClick={() => pick(null)} title="大項目の一覧を俯瞰する (中はそれぞれのタブで)">All</button>
+        <button className="canvas-tab" role="tab" data-on={scope === null} data-marked={marked?.has(null) || undefined} onClick={() => pick(null)} title={t("大項目の一覧を俯瞰する (中はそれぞれのタブで)")}>All</button>
         {majors.map((b) => (
-          <button key={b.id} className="canvas-tab" role="tab" data-on={scope === b.id} data-marked={marked?.has(b.id) || undefined} onClick={() => pick(b.id)} title={marked?.has(b.id) ? `${b.title} (選んだ線の続きがある)` : `${b.title} の中を見る`}>
+          <button key={b.id} className="canvas-tab" role="tab" data-on={scope === b.id} data-marked={marked?.has(b.id) || undefined} onClick={() => pick(b.id)} title={marked?.has(b.id) ? t("{title} (選んだ線の続きがある)", { title: b.title }) : t("{title} の中を見る", { title: b.title })}>
             <StatusIcon status={b.status} />
             <span className="truncate">{b.title}</span>
           </button>

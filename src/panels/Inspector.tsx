@@ -2,6 +2,7 @@
  * 詳細パネル: 選んでいるものに応じて中身を切り替える
  *   ブロック / 線 / 入力ノード / 最終成果物ノード / プロジェクト設定
  * 何も選んでいなければ何も出さない (App 側でパネルごと隠す)
+ * 文言は日本語で書き t() で包む (英語は src/i18n/en/inspector.ts の辞書で引く)
  */
 import { useEffect, useMemo, useState } from "react";
 import { addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, disconnect, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, missingRequiredInputs, removeBlock, setCategory, setProgress, setSchedule, updateBlock, wireNetTabs } from "../model/graph";
@@ -16,16 +17,18 @@ import { ArtifactsEditor, DateField, DebouncedText, PortsEditor } from "./parts"
 import { GLYPH, MEMBER_COLORS } from "./Drawer";
 import { CATEGORIES } from "../model/categories";
 import { STATUS_HELP, STATUS_LABEL } from "../model/status";
+import { t, useLang } from "../i18n";
 
 
 /** パネルの見出し行 (題名 + 閉じる) */
 function PanelHead({ title, children }: { title: string; children?: React.ReactNode }) {
+  useLang(); // 言語が変わったら描き直す
   const select = useProjectStore((s) => s.select);
   return (
     <div className="flex items-center gap-1 mb-2">
       <span className="label truncate flex-1" title={title}>{title}</span>
       {children}
-      <button className="btn btn-ghost btn-sm" onClick={() => select({})} title="閉じる (Esc)">×</button>
+      <button className="btn btn-ghost btn-sm" onClick={() => select({})} title={t("閉じる (Esc)")}>×</button>
     </div>
   );
 }
@@ -42,6 +45,7 @@ export function Inspector({ project, onOpenDrawer }: { project: Project; onOpenD
 
 /** プロジェクト設定 (上のプロジェクト名を押したとき) */
 function ProjectInspector({ project }: { project: Project }) {
+  useLang(); // 言語が変わったら描き直す
   const readonly = useProjectStore((s) => s.readonly);
   const apply = useProjectStore((s) => s.apply);
   const prog = computeProgress(project, ROOT_ID);
@@ -50,11 +54,11 @@ function ProjectInspector({ project }: { project: Project }) {
       <PanelHead title="Project" />
       <input className="input font-head text-[16px]" value={project.name} disabled={readonly}
         onChange={(e) => apply((p) => ({ ...structuredClone(p), name: e.target.value }))} />
-      <DebouncedText multiline className="input" placeholder="ゴール (何を達成したいか)" value={project.description} disabled={readonly}
+      <DebouncedText multiline className="input" placeholder={t("ゴール (何を達成したいか)")} value={project.description} disabled={readonly}
         onCommit={(v) => apply((p) => ({ ...structuredClone(p), description: v }))} />
       <div>
         <div className="progress-bar"><span style={{ width: `${Math.round(prog.ratio * 100)}%` }} /></div>
-        <div className="text-[12px] mt-1" style={{ color: "var(--text-muted)" }}>完了 {prog.white} / {prog.total}</div>
+        <div className="text-[12px] mt-1" style={{ color: "var(--text-muted)" }}>{t("完了 {white} / {total}", { white: prog.white, total: prog.total })}</div>
       </div>
     </div>
   );
@@ -62,6 +66,7 @@ function ProjectInspector({ project }: { project: Project }) {
 
 /** 入力ノード (既定 / グループ) / 最終成果物ノード */
 function TerminalInspector({ project, which, groupId }: { project: Project; which: "in" | "out"; groupId: string | null }) {
+  useLang(); // 言語が変わったら描き直す
   const readonly = useProjectStore((s) => s.readonly);
   const apply = useProjectStore((s) => s.apply);
   const select = useProjectStore((s) => s.select);
@@ -71,7 +76,7 @@ function TerminalInspector({ project, which, groupId }: { project: Project; whic
   const title = which === "out" ? "Project Outputs" : group ? `Input Group` : "Project Inputs";
 
   const addGroup = () => {
-    const name = prompt("グループの名前 (例: PCIe 仕様書)");
+    const name = prompt(t("グループの名前 (例: PCIe 仕様書)"));
     if (!name?.trim()) return;
     apply((p) => { const r = addInputGroup(p, name.trim()); setTimeout(() => select({ terminal: "in", terminalGroup: r.groupId }), 0); return r.project; });
   };
@@ -92,23 +97,23 @@ function TerminalInspector({ project, which, groupId }: { project: Project; whic
         <section className="sec">
           <div className="sec__head"><span className="label">Group</span>
             <span className="flex gap-1">
-              <button className="btn btn-ghost btn-sm" title="このグループを JSON に書き出す (他のプロジェクトで読み込める)" onClick={() => downloadText(`${safeFilename(group.name)}.boxglow-inputs.json`, exportInputGroup(project, group.id), "application/json")}>Export</button>
-              {!readonly && <button className="btn btn-ghost btn-sm btn-danger" title="グループを消す (入力は Inputs に戻る)" onClick={() => { if (confirm(`グループ「${group.name}」を消しますか? (入力は Inputs に戻ります)`)) { select({ terminal: "in" }); apply((p) => removeInputGroup(p, group.id)); } }}>Delete</button>}
+              <button className="btn btn-ghost btn-sm" title={t("このグループを JSON に書き出す (他のプロジェクトで読み込める)")} onClick={() => downloadText(`${safeFilename(group.name)}.boxglow-inputs.json`, exportInputGroup(project, group.id), "application/json")}>Export</button>
+              {!readonly && <button className="btn btn-ghost btn-sm btn-danger" title={t("グループを消す (入力は Inputs に戻る)")} onClick={() => { if (confirm(t("グループ「{name}」を消しますか? (入力は Inputs に戻ります)", { name: group.name }))) { select({ terminal: "in" }); apply((p) => removeInputGroup(p, group.id)); } }}>Delete</button>}
             </span>
           </div>
           <input className="input font-head text-[15px]" value={group.name} disabled={readonly} placeholder="Group name" onChange={(e) => apply((p) => updateInputGroup(p, group.id, { name: e.target.value }))} />
-          <input className="input" value={group.description} disabled={readonly} placeholder="説明 (任意。例: PCI-SIG の仕様書一式)" onChange={(e) => apply((p) => updateInputGroup(p, group.id, { description: e.target.value }))} />
+          <input className="input" value={group.description} disabled={readonly} placeholder={t("説明 (任意。例: PCI-SIG の仕様書一式)")} onChange={(e) => apply((p) => updateInputGroup(p, group.id, { description: e.target.value }))} />
         </section>
       )}
       <PortsEditor project={project} blockId={ROOT_ID} direction={which} readonly={readonly} title={which === "in" ? "Inputs" : "Outputs"} allowAdd={which === "out" || !!group} groupId={which === "in" ? (group ? group.id : null) : undefined} />
       {which === "in" && !group && (
         <>
-          <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>ここには、下の階層で供給元が決まっていない入力が自動で上がります。各入力はグループに移せます。</div>
+          <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("ここには、下の階層で供給元が決まっていない入力が自動で上がります。各入力はグループに移せます。")}</div>
           <section className="sec">
             <div className="sec__head"><span className="label">Groups</span>
-              {!readonly && <span className="flex gap-1"><button className="btn btn-ghost btn-sm" onClick={addGroup}>+ Group</button><button className="btn btn-ghost btn-sm" onClick={importGroup} title="他のプロジェクトで書き出したグループを読み込む">Import</button></span>}
+              {!readonly && <span className="flex gap-1"><button className="btn btn-ghost btn-sm" onClick={addGroup}>+ Group</button><button className="btn btn-ghost btn-sm" onClick={importGroup} title={t("他のプロジェクトで書き出したグループを読み込む")}>Import</button></span>}
             </div>
-            {groups.length === 0 && <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>仕様書などを種類ごとに分けるときは、グループを作って入力を入れます (例: PCIe 仕様書、DDR 仕様書)。</div>}
+            {groups.length === 0 && <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("仕様書などを種類ごとに分けるときは、グループを作って入力を入れます (例: PCIe 仕様書、DDR 仕様書)。")}</div>}
             {groups.map((g) => (
               <button key={g.id} className="tree-row text-left" onClick={() => select({ terminal: "in", terminalGroup: g.id })}>
                 <span className="truncate">{g.name}</span>
@@ -124,6 +129,7 @@ function TerminalInspector({ project, which, groupId }: { project: Project; whic
 
 /** ブロック */
 function BlockInspector({ project, blockId }: { project: Project; blockId: string; onOpenDrawer: () => void }) {
+  useLang(); // 言語が変わったら描き直す
   const readonly = useProjectStore((s) => s.readonly);
   const apply = useProjectStore((s) => s.apply);
   const select = useProjectStore((s) => s.select);
@@ -163,22 +169,31 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       return updateBlock(p, blockId, { assigneeIds: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
     });
   const remove = () => {
-    if (kids.length > 0 && !confirm(`「${b.title}」と下の階層のブロックを削除します。よろしいですか?`)) return;
+    if (kids.length > 0 && !confirm(t("「{title}」と下の階層のブロックを削除します。よろしいですか?", { title: b.title }))) return;
     select({});
     apply((p) => removeBlock(p, blockId));
   };
   const copyPrompt = async (ask: "plan" | "decompose" | "review") => {
     setAiOpen(false);
     const text = blockToPrompt(project, blockId, ask);
-    if (await copyText(text)) setToast("AI に渡すテキストをコピーしました");
+    if (await copyText(text)) setToast(t("AI に渡すテキストをコピーしました"));
     else setShowPrompt(ask);
   };
   const saveAsTemplate = async () => {
     setMenu(false);
-    const tags = prompt("部品の札 (例: 画像処理, 認証。カンマ区切り。省略可)") ?? "";
+    const tags = prompt(t("部品の札 (例: 画像処理, 認証。カンマ区切り。省略可)")) ?? "";
     const tpl = extractTemplate(project, blockId, { tags: tags.split(/[,、]/).map((s) => s.trim()).filter(Boolean) });
     await saveTemplate(tpl);
-    setToast(`「${tpl.name}」を部品として保存しました (☰ の「部品」から挿入)`);
+    setToast(t("「{name}」を部品として保存しました (☰ の「部品」から挿入)", { name: tpl.name }));
+  };
+
+  // タブの説明 (title)。キーは内部の id なので包まず、文言だけ t() で引く
+  const TAB_HELP: Record<typeof tab, string> = {
+    status: t("状態・進捗・活動・判断")
+  , io: t("入力と出力 (成果物)")
+  , owner: t("担当")
+  , dates: t("開始日・期日・時間")
+  , more: t("AI に渡す・メモ・資料")
   };
 
   return (
@@ -187,7 +202,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         <span className="label truncate flex-1" title={chain.map((a) => (a.id === ROOT_ID ? "" : a.title)).filter(Boolean).join(" › ")}>
           {isProject ? "Project" : chain.map((a) => (a.id === ROOT_ID ? "" : a.title)).filter(Boolean).join(" › ") || "Top"}
         </span>
-        <button className="chip" style={{ fontFamily: "ui-monospace, monospace" }} title="短い ID (押すとコピー。検索や CLI で使えます)" onClick={async () => { if (await copyText(b.key ?? "")) setToast(`ID ${b.key} をコピーしました`); }}>{b.key}</button>
+        <button className="chip" style={{ fontFamily: "ui-monospace, monospace" }} title={t("短い ID (押すとコピー。検索や CLI で使えます)")} onClick={async () => { if (await copyText(b.key ?? "")) setToast(t("ID {key} をコピーしました", { key: b.key ?? "" })); }}>{b.key}</button>
         {!readonly && (
           <div className="relative">
             <button className="btn btn-ghost btn-sm" onClick={() => setMenu(!menu)} title="More">⋯</button>
@@ -201,17 +216,17 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
             )}
           </div>
         )}
-        <button className="btn btn-ghost btn-sm" onClick={() => select({})} title="閉じる (Esc)">×</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => select({})} title={t("閉じる (Esc)")}>×</button>
       </div>
 
-      <DebouncedText className="input font-head text-[16px]" value={b.title} disabled={readonly} placeholder="Title (何を作るか)"
+      <DebouncedText className="input font-head text-[16px]" value={b.title} disabled={readonly} placeholder={t("Title (何を作るか)")}
         onCommit={(v) => apply((p) => updateBlock(p, blockId, { title: v }))} />
 
       {/* タブ: 一度に 1 項目だけ見せる */}
       <div className="seg" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
         {([["status", "Status"], ["io", "I/O"], ["owner", "Owner"], ["dates", "Dates"], ["more", "More"]] as const).map(([id, label]) => (
           <button key={id} className="seg__btn" data-on={tab === id} onClick={() => setTab(id)} style={{ padding: "6px 2px", fontSize: 12 }}
-            title={id === "status" ? "状態・進捗・活動・判断" : id === "io" ? "入力と出力 (成果物)" : id === "owner" ? "担当" : id === "dates" ? "開始日・期日・時間" : "AI に渡す・メモ・資料"}>
+            title={TAB_HELP[id]}>
             {label}
             {id === "status" && pending.length > 0 && <span className="dot decision" style={{ marginLeft: 4, display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "var(--accent)" }} />}
             {id === "io" && <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.7 }}>{portsOf(project, blockId, "in").length}/{portsOf(project, blockId, "out").length}</span>}
@@ -225,54 +240,54 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         <div className="sec__head"><span className="label">Status</span></div>
         <div className="seg">
           {(["black", "gray", "white"] as BlockStatus[]).map((s) => (
-            <button key={s} className="seg__btn" data-on={b.status === s} disabled={readonly} onClick={() => setStatus(s)} title={STATUS_HELP[s]}>
+            <button key={s} className="seg__btn" data-on={b.status === s} disabled={readonly} onClick={() => setStatus(s)} title={t(STATUS_HELP[s])}>
               <span className={`tree-glyph ${s}`}>{GLYPH[s]}</span>
               <span>{STATUS_LABEL[s]}</span>
             </button>
           ))}
         </div>
         {suggest && !readonly && (
-          <button className="btn btn-primary btn-sm w-full" onClick={() => setStatus("white")} title="下の階層が全部完了し、出力に成果物が付いています">完了にできます → Done</button>
+          <button className="btn btn-primary btn-sm w-full" onClick={() => setStatus("white")} title={t("下の階層が全部完了し、出力に成果物が付いています")}>{t("完了にできます → Done")}</button>
         )}
         {/* 必須の入力の状況 (I/O タブの 必須 / 任意 がここと箱の Ready に効く) */}
         {b.status !== "white" && kindOf(b) !== "project" && portsOf(project, blockId, "in").length > 0 && (() => {
           const missing = missingRequiredInputs(project, blockId);
           return missing.length === 0
-            ? <div className="text-[12px]" style={{ color: "var(--primary-strong)" }}>必須の入力はそろっています (着手できます)</div>
-            : <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>必須の入力待ち: {missing.map((q) => q.name).join(", ")}</div>;
+            ? <div className="text-[12px]" style={{ color: "var(--primary-strong)" }}>{t("必須の入力はそろっています (着手できます)")}</div>
+            : <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("必須の入力待ち: {names}", { names: missing.map((q) => q.name).join(", ") })}</div>;
         })()}
         {/* プロジェクトの箱: 対応するリポジトリ (複数リポジトリを 1 つのファイルで管理するときの目印) */}
         {isProject && (
           <>
             <div className="sec__head mt-2"><span className="label">Repository</span></div>
-            <input className="input" placeholder="パスや URL (例: ../mg-core、github.com/you/repo)" value={b.repo ?? ""} disabled={readonly}
+            <input className="input" placeholder={t("パスや URL (例: ../mg-core、github.com/you/repo)")} value={b.repo ?? ""} disabled={readonly}
               onChange={(e) => apply((p) => updateBlock(p, blockId, { repo: e.target.value }), { history: false })}
               onBlur={(e) => apply((p) => updateBlock(p, blockId, { repo: e.target.value.trim() || undefined }))} />
-            <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>複数のリポジトリをまたぐときは、boxglow.json を上のフォルダに 1 つ置き、各リポジトリの AI には環境変数 BOXGLOW_FILE でその場所を教えます</div>
+            <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{t("複数のリポジトリをまたぐときは、boxglow.json を上のフォルダに 1 つ置き、各リポジトリの AI には環境変数 BOXGLOW_FILE でその場所を教えます")}</div>
           </>
         )}
-        {/* カテゴリ: 何の種類の仕事か (色の帯と札で箱に出る)。もう一度押すと外す */}
+        {/* カテゴリ: 何の種類の仕事か (色の帯と札で箱に出る)。もう一度押すと外す。札の訳は common.ts */}
         <div className="sec__head mt-2"><span className="label">Category</span></div>
         <div className="flex flex-wrap gap-1">
           {CATEGORIES.map((c) => (
             <button key={c.key} className={`chip cat-chip${c.neutral ? " neutral" : ""}`} data-on={b.category === c.key} disabled={readonly}
               style={{ "--cat": c.color } as React.CSSProperties}
               onClick={() => apply((p) => setCategory(p, blockId, b.category === c.key ? null : c.key))}
-              title={`${c.label} (${c.en})`}>
-              <span className="cat-chip__dot" />{c.label}
+              title={`${t(c.label)} (${c.en})`}>
+              <span className="cat-chip__dot" />{t(c.label)}
             </button>
           ))}
         </div>
         {b.status !== "white" && (
           <div className="flex items-center gap-2 text-[12px]" style={{ color: "var(--text-muted)" }}>
-            <input type="range" min={0} max={100} step={5} value={percent} disabled={readonly} className="flex-1" title="進捗 (ドラッグで入力)"
+            <input type="range" min={0} max={100} step={5} value={percent} disabled={readonly} className="flex-1" title={t("進捗 (ドラッグで入力)")}
               onChange={(e) => apply((p) => setProgress(p, blockId, Number(e.target.value), "human"), { history: false })}
               onMouseUp={(e) => apply((p) => setProgress(p, blockId, Number((e.target as HTMLInputElement).value), "human"))} />
             <span style={{ minWidth: 36, textAlign: "right" }}>{percent}%</span>
             {typeof b.progress === "number" ? (
-              <button className="btn btn-ghost btn-sm" title="手入力をやめて、下の階層から自動で計算する" onClick={() => apply((p) => setProgress(p, blockId, null, "human"))}>Auto</button>
+              <button className="btn btn-ghost btn-sm" title={t("手入力をやめて、下の階層から自動で計算する")} onClick={() => apply((p) => setProgress(p, blockId, null, "human"))}>Auto</button>
             ) : kids.length > 0 ? (
-              <span title="下の階層の完了数">{prog.white}/{prog.total}</span>
+              <span title={t("下の階層の完了数")}>{prog.white}/{prog.total}</span>
             ) : null}
           </div>
         )}
@@ -280,9 +295,9 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           <div className="flex flex-col gap-1 pl-2" style={{ borderLeft: `3px solid ${b.activity.state === "needs_decision" ? "var(--accent)" : "var(--primary)"}` }}>
             <div className="flex items-center gap-2 text-[12px]">
               <span className="tl-actor">{actorLabel(b.activity.actor)}</span>
-              <b>{ACTIVITY_LABEL[b.activity.state]}</b>
+              <b>{t(ACTIVITY_LABEL[b.activity.state])}</b>
               <span style={{ color: "var(--text-muted)" }}>{agoText(b.activity.since)}</span>
-              {!readonly && <button className="btn btn-ghost btn-sm ml-auto" title="活動の印を消す" onClick={() => apply((p) => clearActivity(p, blockId))}>×</button>}
+              {!readonly && <button className="btn btn-ghost btn-sm ml-auto" title={t("活動の印を消す")} onClick={() => apply((p) => clearActivity(p, blockId))}>×</button>}
             </div>
             {b.activity.note && b.activity.state !== "needs_decision" && <div className="text-[13px]">{b.activity.note}</div>}
           </div>
@@ -291,7 +306,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         {/* 回答済みの判断も残す: 選んだもの・残した候補・以前の答えが見え、やり直せる */}
         {b.decisions.filter((d) => d.answer !== undefined).length > 0 && (
           <details className="text-[12px]">
-            <summary style={{ cursor: "pointer", color: "var(--text-muted)" }}>判断の記録 ({b.decisions.filter((d) => d.answer !== undefined).length})</summary>
+            <summary style={{ cursor: "pointer", color: "var(--text-muted)" }}>{t("判断の記録 ({n})", { n: b.decisions.filter((d) => d.answer !== undefined).length })}</summary>
             <div className="flex flex-col gap-3 mt-2">
               {b.decisions.filter((d) => d.answer !== undefined).map((d) => <DecisionCard key={d.id} project={project} blockId={blockId} decisionId={d.id} />)}
             </div>
@@ -309,19 +324,19 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
             const m = project.members.find((x) => x.id === id);
             if (!m) return null;
             return (
-              <span key={id} className="chip" data-on={m.id === meId} style={{ cursor: "default" }} title={m.id === meId ? `${m.name} (自分)` : m.name}>
+              <span key={id} className="chip" data-on={m.id === meId} style={{ cursor: "default" }} title={m.id === meId ? t("{name} (自分)", { name: m.name }) : m.name}>
                 <span className="avatar" style={{ background: m.color, width: 16, height: 16, fontSize: 9 }}>{m.name.slice(0, 1)}</span>
                 {m.name}
-                {!readonly && <button className="btn btn-ghost btn-sm" style={{ padding: "0 2px" }} title="外す" onClick={() => toggleAssignee(m.id)}>×</button>}
+                {!readonly && <button className="btn btn-ghost btn-sm" style={{ padding: "0 2px" }} title={t("外す")} onClick={() => toggleAssignee(m.id)}>×</button>}
               </span>
             );
           })}
-          {b.assigneeIds.length === 0 && <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>未担当</span>}
-          {!readonly && meId && !b.assigneeIds.includes(meId) && <button className="btn btn-ghost btn-sm" onClick={() => toggleAssignee(meId)} title="自分を担当にする">Me</button>}
+          {b.assigneeIds.length === 0 && <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("未担当")}</span>}
+          {!readonly && meId && !b.assigneeIds.includes(meId) && <button className="btn btn-ghost btn-sm" onClick={() => toggleAssignee(meId)} title={t("自分を担当にする")}>Me</button>}
         </div>
         {!readonly && (
           <div className="relative">
-            <input className="input" placeholder={project.members.length === 0 ? "名前を打って Enter で登録" : "名前で検索して Enter で割り当て"} value={ownerQuery}
+            <input className="input" placeholder={project.members.length === 0 ? t("名前を打って Enter で登録") : t("名前で検索して Enter で割り当て")} value={ownerQuery}
               onChange={(e) => setOwnerQuery(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Escape") { setOwnerQuery(""); return; }
@@ -342,7 +357,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
                     <span className="avatar" style={{ background: m.color, width: 16, height: 16, fontSize: 9, marginRight: 6 }}>{m.name.slice(0, 1)}</span>{m.name}
                   </button>
                 ))}
-                {ownerHits.length === 0 && <div className="text-[12px] p-1" style={{ color: "var(--text-muted)" }}>見つかりません。Enter で「{ownerQuery.trim()}」を登録して割り当て</div>}
+                {ownerHits.length === 0 && <div className="text-[12px] p-1" style={{ color: "var(--text-muted)" }}>{t("見つかりません。Enter で「{name}」を登録して割り当て", { name: ownerQuery.trim() })}</div>}
               </div>
             )}
           </div>
@@ -355,16 +370,16 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       <section className="sec">
         <div className="sec__head"><span className="label">Schedule</span></div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[12px]">
-          <label className="flex items-center gap-2 col-span-2"><span style={{ color: "var(--text-muted)", minWidth: 32 }}>開始</span>
+          <label className="flex items-center gap-2 col-span-2"><span style={{ color: "var(--text-muted)", minWidth: 32 }}>{t("開始")}</span>
             <DateField value={b.startDate ?? ""} disabled={readonly} onChange={(v) => apply((p) => setSchedule(p, blockId, { startDate: v || null }, "human"))} /></label>
-          <label className="flex items-center gap-2 col-span-2"><span style={{ color: isOverdue(b) ? "var(--danger)" : "var(--text-muted)", minWidth: 32 }}>期日</span>
+          <label className="flex items-center gap-2 col-span-2"><span style={{ color: isOverdue(b) ? "var(--danger)" : "var(--text-muted)", minWidth: 32 }}>{t("期日")}</span>
             <DateField value={b.dueDate ?? ""} disabled={readonly} danger={isOverdue(b)} onChange={(v) => apply((p) => setSchedule(p, blockId, { dueDate: v || null }, "human"))} /></label>
-          <label className="flex items-center gap-2"><span style={{ color: "var(--text-muted)", minWidth: 32 }}>見積</span>
+          <label className="flex items-center gap-2"><span style={{ color: "var(--text-muted)", minWidth: 32 }}>{t("見積")}</span>
             <input type="number" min={0} step={0.5} className="input input-plain" placeholder="h" value={b.estimateHours ?? ""} disabled={readonly} onChange={(e) => apply((p) => setSchedule(p, blockId, { estimateHours: e.target.value === "" ? null : Number(e.target.value) }, "human"))} /><span style={{ color: "var(--text-muted)" }}>h</span></label>
-          <label className="flex items-center gap-2"><span style={{ color: "var(--text-muted)", minWidth: 32 }}>実績</span>
+          <label className="flex items-center gap-2"><span style={{ color: "var(--text-muted)", minWidth: 32 }}>{t("実績")}</span>
             <input type="number" min={0} step={0.5} className="input input-plain" placeholder="h" value={b.actualHours ?? ""} disabled={readonly} onChange={(e) => apply((p) => setSchedule(p, blockId, { actualHours: e.target.value === "" ? null : Number(e.target.value) }, "human"))} /><span style={{ color: "var(--text-muted)" }}>h</span></label>
         </div>
-        {b.dueDate && b.status !== "white" && (() => { const d = daysToDue(b); return d === null ? null : <div className="text-[12px]" style={{ color: d < 0 ? "var(--danger)" : "var(--text-muted)" }}>{d < 0 ? `期日を ${-d} 日過ぎています` : d === 0 ? "期日は今日です" : `期日まであと ${d} 日`}</div>; })()}
+        {b.dueDate && b.status !== "white" && (() => { const d = daysToDue(b); return d === null ? null : <div className="text-[12px]" style={{ color: d < 0 ? "var(--danger)" : "var(--text-muted)" }}>{d < 0 ? t("期日を {d} 日過ぎています", { d: -d }) : d === 0 ? t("期日は今日です") : t("期日まであと {d} 日", { d })}</div>; })()}
       </section>
       )}
 
@@ -379,20 +394,20 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       <section className="sec">
         <div className="sec__head"><span className="label">Issue</span></div>
         {/* 外部の課題 (JIRA / Redmine / GitHub Issue) の URL。箱にはキー (PROJ-123, #45) の札が出て、押すと開く */}
-        <input className="input" placeholder="JIRA / Redmine / GitHub Issue の URL" value={b.issue ?? ""} disabled={readonly}
+        <input className="input" placeholder={t("JIRA / Redmine / GitHub Issue の URL")} value={b.issue ?? ""} disabled={readonly}
           onChange={(e) => apply((p) => updateBlock(p, blockId, { issue: e.target.value }), { history: false })}
           onBlur={(e) => apply((p) => updateBlock(p, blockId, { issue: e.target.value.trim() || undefined }))} />
-        {b.issue && <a className="text-[12px] underline" href={b.issue} target="_blank" rel="noreferrer" style={{ color: "var(--primary-strong)" }}>開く: {issueKeyOf(b.issue)}</a>}
+        {b.issue && <a className="text-[12px] underline" href={b.issue} target="_blank" rel="noreferrer" style={{ color: "var(--primary-strong)" }}>{t("開く: {key}", { key: issueKeyOf(b.issue) })}</a>}
       </section>
       <section className="sec">
         <div className="sec__head"><span className="label">AI</span>
-        <button className="btn btn-sm" data-on={aiOpen} onClick={() => setAiOpen(!aiOpen)} title="この箱の入出力と位置づけを Markdown にしてコピーして AI に渡す">Copy for AI {aiOpen ? "▴" : "▾"}</button>
+        <button className="btn btn-sm" data-on={aiOpen} onClick={() => setAiOpen(!aiOpen)} title={t("この箱の入出力と位置づけを Markdown にしてコピーして AI に渡す")}>Copy for AI {aiOpen ? "▴" : "▾"}</button>
         </div>
       {aiOpen && (
         <div className="flex flex-col pl-2" style={{ borderLeft: "3px solid var(--line-soft)" }}>
-          <button className="btn btn-ghost btn-sm justify-start" onClick={() => copyPrompt("plan")}>手順を提案してもらう (コピー)</button>
-          <button className="btn btn-ghost btn-sm justify-start" onClick={() => copyPrompt("decompose")}>分解案を JSON でもらう (コピー)</button>
-          <button className="btn btn-ghost btn-sm justify-start" onClick={() => copyPrompt("review")}>入出力の抜けを指摘してもらう (コピー)</button>
+          <button className="btn btn-ghost btn-sm justify-start" onClick={() => copyPrompt("plan")}>{t("手順を提案してもらう (コピー)")}</button>
+          <button className="btn btn-ghost btn-sm justify-start" onClick={() => copyPrompt("decompose")}>{t("分解案を JSON でもらう (コピー)")}</button>
+          <button className="btn btn-ghost btn-sm justify-start" onClick={() => copyPrompt("review")}>{t("入出力の抜けを指摘してもらう (コピー)")}</button>
         </div>
       )}
       {showPrompt && (
@@ -409,7 +424,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           <button className="btn btn-ghost btn-sm" onClick={() => setMore(!more)}>{more ? "▴" : "▾"}</button></div>
         {more && (
           <div className="flex flex-col gap-2">
-            <DebouncedText multiline className="input" placeholder="メモ (入力から出力をどう作るか)" value={b.description} disabled={readonly}
+            <DebouncedText multiline className="input" placeholder={t("メモ (入力から出力をどう作るか)")} value={b.description} disabled={readonly}
               onCommit={(v) => apply((p) => updateBlock(p, blockId, { description: v }))} />
             <ArtifactsEditor artifacts={b.artifacts} readonly={readonly} addLabel="Link" onChange={(next) => apply((p) => updateBlock(p, blockId, { artifacts: next }))} />
           </div>
@@ -422,6 +437,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
 
 /** 線が通るタブ (境界を越えた先の続きも含む)。押すとそのタブへ移る (線は選んだまま) */
 function WireTabs({ project, edgeId }: { project: Project; edgeId: string }) {
+  useLang(); // 言語が変わったら描き直す
   const viewScope = useProjectStore((s) => s.viewScope);
   const setViewScope = useProjectStore((s) => s.setViewScope);
   const tabs = useMemo(() => wireNetTabs(project, edgeId), [project, edgeId]);
@@ -430,9 +446,10 @@ function WireTabs({ project, edgeId }: { project: Project; edgeId: string }) {
     <div className="flex flex-col gap-1">
       <div className="text-[11px] font-bold" style={{ color: "var(--text-muted)" }}>Tabs</div>
       <div className="flex flex-wrap gap-1">
-        {tabs.map((t) => (
-          <button key={t ?? "all"} className="chip" data-on={viewScope === t} onClick={() => setViewScope(t)} title={t ? `${project.blocks[t]?.title ?? ""} のタブでこの線の続きを見る` : "All でこの線を見る"}>
-            {t ? project.blocks[t]?.title ?? "?" : "All"}
+        {/* ループ変数は翻訳関数 t と名前が衝突しないよう tabId にしている */}
+        {tabs.map((tabId) => (
+          <button key={tabId ?? "all"} className="chip" data-on={viewScope === tabId} onClick={() => setViewScope(tabId)} title={tabId ? t("{title} のタブでこの線の続きを見る", { title: project.blocks[tabId]?.title ?? "" }) : t("All でこの線を見る")}>
+            {tabId ? project.blocks[tabId]?.title ?? "?" : "All"}
           </button>
         ))}
       </div>
@@ -442,24 +459,27 @@ function WireTabs({ project, edgeId }: { project: Project; edgeId: string }) {
 
 /** 線 */
 function EdgeInspector({ project, edgeId }: { project: Project; edgeId: string }) {
+  useLang(); // 言語が変わったら描き直す
   const readonly = useProjectStore((s) => s.readonly);
   const apply = useProjectStore((s) => s.apply);
   const select = useProjectStore((s) => s.select);
   const e = project.edges[edgeId];
   const fp = project.ports[e.from.portId];
   const tp = project.ports[e.to.portId];
-  const name = (blockId: string) => (blockId === ROOT_ID ? "プロジェクト" : project.blocks[blockId]?.title ?? "?");
+  // ルートは「プロジェクト」(訳は common.ts)
+  const name = (blockId: string) => (blockId === ROOT_ID ? t("プロジェクト") : project.blocks[blockId]?.title ?? "?");
   return (
     <div className="flex flex-col gap-3 p-3">
       <PanelHead title="Wire" />
       <div className="text-[13px]">
-        <div><b>{name(fp.blockId)}</b>「{fp.name}」</div>
+        {/* 入出力の名前を囲む「」は英語では引用符にする */}
+        <div><b>{name(fp.blockId)}</b>{t("「{name}」", { name: fp.name })}</div>
         <div className="my-1" style={{ color: "var(--text-muted)" }}>↓</div>
-        <div><b>{name(tp.blockId)}</b>「{tp.name}」</div>
+        <div><b>{name(tp.blockId)}</b>{t("「{name}」", { name: tp.name })}</div>
       </div>
       <WireTabs project={project} edgeId={edgeId} />
       {e.auto ? (
-        <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>自動の線。手動でつなぐと置き換わります。</div>
+        <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("自動の線。手動でつなぐと置き換わります。")}</div>
       ) : (
         !readonly && <button className="btn btn-sm self-start" onClick={() => { select({}); apply((p) => disconnect(p, edgeId)); }}>Disconnect</button>
       )}

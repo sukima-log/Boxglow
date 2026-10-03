@@ -14,6 +14,7 @@ import { buildSampleProject } from "../model/sample";
 import exampleText from "../../examples/logic-daw/boxglow.json?raw";
 import type { Project } from "../model/types";
 import { deleteProject, listProjects, loadProject, saveProject, type ProjectMeta } from "../lib/storage";
+import { t } from "../i18n"; // 画面に出す文言 (toast など) の言語切替
 
 /** 履歴に積む上限 */
 const HISTORY_LIMIT = 100;
@@ -154,7 +155,7 @@ const serveApi = (path: string): string => new URL(path, document.baseURI).toStr
 async function writeToServer(text: string): Promise<void> {
   serveLastText = text;
   const r = await fetch(serveApi("api/project"), { method: "PUT", headers: { "content-type": "application/json" }, body: text });
-  if (!r.ok) throw new Error(`サーバに書けません (${r.status})`);
+  if (!r.ok) throw new Error(t("サーバに書けません ({status})", { status: r.status }));
 }
 /** ファイルの監視間隔 (ms) */
 const WATCH_INTERVAL = 1500;
@@ -183,7 +184,7 @@ export const useProjectStore = create<State>((set, get) => {
         } else if (get().source === "file" && fileHandle) {
           // 最初の保存のときに書き込み権限を求める (開くときは読み取りだけ)
           if (!(await ensurePermission(fileHandle, "readwrite"))) {
-            set({ saveState: "unsaved", toast: "ファイルへの書き込みが許可されていません (Save を押すともう一度確認します)" });
+            set({ saveState: "unsaved", toast: t("ファイルへの書き込みが許可されていません (Save を押すともう一度確認します)") });
             return;
           }
           // ローカルファイルへ書き戻す (書いた後の更新時刻を覚えて、自分の書き込みを外部の変更と間違えない)
@@ -195,7 +196,7 @@ export const useProjectStore = create<State>((set, get) => {
           void get().refreshList();
         }
       } catch (e) {
-        set({ saveState: "unsaved", toast: `保存に失敗しました: ${String(e)}` });
+        set({ saveState: "unsaved", toast: t("保存に失敗しました: {error}", { error: String(e) }) });
       }
     }, SAVE_DELAY);
   };
@@ -256,7 +257,7 @@ export const useProjectStore = create<State>((set, get) => {
             vscodeLastText = toJSON(get().project!) + "\n";
             vscodeApi.postMessage({ type: "save", text: vscodeLastText });
           } else if (get().source === "file" && fileHandle) {
-            if (!(await ensurePermission(fileHandle, "readwrite"))) { set({ saveState: "unsaved", toast: "ファイルへの書き込みが許可されていません" }); return; }
+            if (!(await ensurePermission(fileHandle, "readwrite"))) { set({ saveState: "unsaved", toast: t("ファイルへの書き込みが許可されていません") }); return; }
             fileLastModified = await writeLocalFile(fileHandle, toJSON(get().project!) + "\n");
           } else {
             await saveProject(get().project!);
@@ -264,7 +265,7 @@ export const useProjectStore = create<State>((set, get) => {
           }
           set({ saveState: "saved" });
         } catch (e) {
-          set({ saveState: "unsaved", toast: `保存に失敗しました: ${e instanceof Error ? e.message : String(e)}` });
+          set({ saveState: "unsaved", toast: t("保存に失敗しました: {error}", { error: e instanceof Error ? e.message : String(e) }) });
         }
       })();
     }
@@ -381,7 +382,7 @@ export const useProjectStore = create<State>((set, get) => {
   , refreshList: async () => set({ projects: await listProjects() })
 
   , newProject: async (name) => {
-      const p = createProject(name || "無題のプロジェクト");
+      const p = createProject(name || t("無題のプロジェクト"));
       await saveProject(p);
       get().openProjectObject(p, false);
       get().setEditMode(true);
@@ -403,7 +404,7 @@ export const useProjectStore = create<State>((set, get) => {
 
   , openLocalFile: async (handle) => {
       if (!(await ensurePermission(handle, "read"))) {
-        set({ toast: "ファイルの読み書きが許可されませんでした" });
+        set({ toast: t("ファイルの読み書きが許可されませんでした") });
         return false;
       }
       let text: string;
@@ -412,7 +413,7 @@ export const useProjectStore = create<State>((set, get) => {
         text = r.text;
         fileLastModified = r.lastModified;
       } catch (e) {
-        set({ toast: `ファイルを読めません: ${String(e)}` });
+        set({ toast: t("ファイルを読めません: {error}", { error: String(e) }) });
         return false;
       }
       let p: Project;
@@ -456,7 +457,7 @@ export const useProjectStore = create<State>((set, get) => {
         text = await r.text();
         name = decodeURIComponent(r.headers.get("x-boxglow-file") ?? name);
       } catch (e) {
-        set({ toast: `サーバから読めません (npx boxglow serve が動いていますか): ${String(e)}` });
+        set({ toast: t("サーバから読めません (npx boxglow serve が動いていますか): {error}", { error: String(e) }) });
         return false;
       }
       let p: Project;
@@ -531,7 +532,7 @@ export const useProjectStore = create<State>((set, get) => {
       await saveProject(p);
       get().openProjectObject(p, false);
       await get().refreshList();
-      set({ toast: `「${p.name}」を読み込みました` });
+      set({ toast: t("「{name}」を読み込みました", { name: p.name }) });
     }
 
   , openSample: () => {
@@ -547,11 +548,11 @@ export const useProjectStore = create<State>((set, get) => {
       if (!project) return;
       const p = structuredClone(project);
       p.id = crypto.randomUUID().slice(0, 10);
-      p.name = `${p.name} (複製)`;
+      p.name = t("{name} (複製)", { name: p.name });
       await saveProject(p);
       get().openProjectObject(p, false);
       await get().refreshList();
-      set({ toast: "自分のプロジェクトとして保存しました" });
+      set({ toast: t("自分のプロジェクトとして保存しました") });
     }
 
   , deleteProject: async (id) => {

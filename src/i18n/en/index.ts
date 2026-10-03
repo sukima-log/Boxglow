@@ -1,0 +1,11 @@
+/**
+ * 英語の辞書: 「日本語の文 → 英語」。画面の部位ごとのファイルを 1 つにまとめる
+ * 書き方: キーはソースに書いた日本語の文と完全に同じ。{name} は値の差し込み位置 (英語側にも同じ名前で残す)
+ */
+import { common } from "./common";
+import { inspector } from "./inspector";
+import { parts } from "./parts";
+import { canvas } from "./canvas";
+import { app } from "./app";
+
+export const en: Record<string, string> = { ...common, ...inspector, ...parts, ...canvas, ...app };

@@ -8,8 +8,10 @@ import { inputGroupsOf, portsOf, rootInputsOf } from "../model/graph";
 import { ROOT_ID } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
 import { handleId, rowY, type TerminalRFNode } from "./layout";
+import { t, useLang } from "../i18n";
 
 export const TerminalNode = memo(function TerminalNode({ data, selected, height }: NodeProps<TerminalRFNode>) {
+  useLang(); // 言語が変わったら文言を描き直す
   const which = data.which;
   const groupId = data.groupId ?? null;
   const scopeId = data.scopeId ?? null; // タブで開いた大項目の箱の入出力を表すとき
@@ -27,9 +29,9 @@ export const TerminalNode = memo(function TerminalNode({ data, selected, height 
       <div className="bg-terminal__head">
         <span className="truncate" title={groupName ?? undefined}>{which === "in" ? (groupName ?? "Inputs") : "Outputs"}</span>
       </div>
-      {ports.length === 0 && <div className="bg-terminal__empty">{which === "in" ? (scopeId ? "No inputs" : groupId ? "空のグループ (右のパネルで入力を入れる)" : "供給元のない入力がここに上がります") : "No outputs"}</div>}
+      {ports.length === 0 && <div className="bg-terminal__empty">{which === "in" ? (scopeId ? "No inputs" : groupId ? t("空のグループ (右のパネルで入力を入れる)") : t("供給元のない入力がここに上がります")) : "No outputs"}</div>}
       {ports.map((q) => (
-        <div key={q.id} className={`bg-terminal__row ${q.promoted ? "promoted" : ""}`} title={q.promoted ? "下の階層の未接続の入力 (自動)" : q.name}>
+        <div key={q.id} className={`bg-terminal__row ${q.promoted ? "promoted" : ""}`} title={q.promoted ? t("下の階層の未接続の入力 (自動)") : q.name}>
           {q.hasArtifact ? "● " : ""}{q.name}
         </div>
       ))}

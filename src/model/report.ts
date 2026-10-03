@@ -4,6 +4,7 @@
 import { categoryOf } from "./categories";
 import { ROOT_ID, type Block, type Project } from "./types";
 import { candidatesOf, issueKeyOf, missingRequiredInputs, childrenOf, computeProgress, effectiveDescription, effectiveProgress, incomingEdges, isOverdue, outgoingEdges, pendingDecisions, portsOf, summarize } from "./graph";
+import { t } from "../i18n/core";
 
 /** 状態の記号 (チェックリスト風) */
 const MARK: Record<Block["status"], string> = { black: "[ ]", gray: "[~]", white: "[x]" };
@@ -27,7 +28,7 @@ export function actorName(actor: string): string {
   if (a.startsWith("gemini")) return "Gemini";
   if (a.startsWith("copilot")) return "Copilot";
   if (a.startsWith("human:")) return actor.slice(6) || "人";
-  if (a === "human") return "人";
+  if (a === "human") return t("人");
   return actor;
 }
 
@@ -37,16 +38,18 @@ export const ACTIVITY_LABEL = { working: "作業中", blocked: "詰まり", need
 /** 経過時間を短く ("5 分", "2 時間", "3 日") */
 export function ago(iso: string, now = Date.now()): string {
   const sec = Math.max(0, (now - new Date(iso).getTime()) / 1000);
-  if (sec < 60) return "今";
-  if (sec < 3600) return `${Math.floor(sec / 60)} 分`;
-  if (sec < 86400) return `${Math.floor(sec / 3600)} 時間`;
-  return `${Math.floor(sec / 86400)} 日`;
+  // 画面の言語に合わせる (CLI では常に日本語)
+  if (sec < 60) return t("今");
+  if (sec < 3600) return t("{n} 分", { n: Math.floor(sec / 60) });
+  if (sec < 86400) return t("{n} 時間", { n: Math.floor(sec / 3600) });
+  return t("{n} 日", { n: Math.floor(sec / 86400) });
 }
 
 /** 「5 分前から」「今」のような文言 */
 export function agoText(iso: string): string {
-  const a = ago(iso);
-  return a === "今" ? "たった今" : `${a}前から`;
+  const sec = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+  if (sec < 60) return t("たった今");
+  return t("{ago}前から", { ago: ago(iso) });
 }
 
 /** ISO 日時をローカルの "MM-DD HH:mm" にする */

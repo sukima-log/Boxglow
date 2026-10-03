@@ -7,6 +7,8 @@ import { addPort, createArtifact, inputGroupsOf, isInputNameLocked, portsOf, rem
 import type { Artifact, Project } from "../model/types";
 import { ROOT_ID } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
+// 言語切り替え: 日本語の文は t() で包み、英語の辞書 (src/i18n/en/parts.ts) で引く
+import { t, useLang } from "../i18n";
 
 /** 成果物 (URL / メモ) の一覧。「+ Add」を押したときだけ入力欄が出る */
 export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add" }: {
@@ -15,6 +17,7 @@ export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add
   readonly: boolean;
   addLabel?: string;
 }) {
+  useLang(); // 言語が変わったら描き直す
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
@@ -35,8 +38,8 @@ export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add
           ) : (
             <span className="truncate" title={a.kind === "git" ? `${a.path} @ ${(a.commit ?? "").slice(0, 7)}` : undefined}>{a.title}</span>
           )}
-          {a.kind === "git" && a.state === "moved" && <span className="chip" style={{ cursor: "default", fontSize: 10, padding: "0 5px", borderColor: "var(--accent)" }} title="ファイルの移動を検出し、パスを付け替えました">moved</span>}
-          {a.kind === "git" && a.state === "missing" && <span className="chip" style={{ cursor: "default", fontSize: 10, padding: "0 5px", borderColor: "var(--danger)", color: "var(--danger)" }} title="現在のリポジトリに見つかりません (コミットからは取り出せます)">missing</span>}
+          {a.kind === "git" && a.state === "moved" && <span className="chip" style={{ cursor: "default", fontSize: 10, padding: "0 5px", borderColor: "var(--accent)" }} title={t("ファイルの移動を検出し、パスを付け替えました")}>moved</span>}
+          {a.kind === "git" && a.state === "missing" && <span className="chip" style={{ cursor: "default", fontSize: 10, padding: "0 5px", borderColor: "var(--danger)", color: "var(--danger)" }} title={t("現在のリポジトリに見つかりません (コミットからは取り出せます)")}>missing</span>}
           {!readonly && <button className="btn btn-ghost btn-sm ml-auto" title="Remove" onClick={() => onChange(artifacts.filter((x) => x.id !== a.id))}>×</button>}
         </div>
       ))}
@@ -45,8 +48,8 @@ export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add
       )}
       {!readonly && adding && (
         <div className="flex flex-col gap-1">
-          <input className="input" autoFocus placeholder="名前 (例: 設計書 v1, PR #12)" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); if (e.key === "Escape") setAdding(false); }} />
-          <input className="input" placeholder="URL (任意)" value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); if (e.key === "Escape") setAdding(false); }} />
+          <input className="input" autoFocus placeholder={t("名前 (例: 設計書 v1, PR #12)")} value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); if (e.key === "Escape") setAdding(false); }} />
+          <input className="input" placeholder={t("URL (任意)")} value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); if (e.key === "Escape") setAdding(false); }} />
           <div className="flex gap-1">
             <button className="btn btn-primary btn-sm" onClick={add} disabled={!title.trim()}>Add</button>
             <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancel</button>
@@ -72,6 +75,7 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
   /** 最上位の入力をグループで絞る (undefined = 絞らない, null = 既定の入力ノード) */
   groupId?: string | null;
 }) {
+  useLang(); // 言語が変わったら描き直す
   const apply = useProjectStore((s) => s.apply);
   const ports = blockId === ROOT_ID && direction === "in" && groupId !== undefined ? rootInputsOf(project, groupId) : portsOf(project, blockId, direction);
   const groups = blockId === ROOT_ID && direction === "in" ? inputGroupsOf(project) : [];
@@ -83,8 +87,8 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
       <div className="sec__head">
         <span className="label"><span className={`io-mark ${direction}`} aria-hidden="true">{direction === "in" ? "→" : "→"}</span>{title}</span>
         {!readonly && allowAdd && (
-          <button className="btn btn-sm" title={direction === "in" ? "入力を追加" : "出力を追加"}
-            onClick={() => apply((p) => { const r = addPort(p, { blockId, direction, name: direction === "in" ? "新しい入力" : "新しい出力" }); return groupId ? setInputGroup(r.project, r.portId, groupId) : r.project; })}>＋ {direction === "in" ? "入力を追加" : "出力を追加"}</button>
+          <button className="btn btn-sm" title={direction === "in" ? t("入力を追加") : t("出力を追加")}
+            onClick={() => apply((p) => { const r = addPort(p, { blockId, direction, name: direction === "in" ? t("新しい入力") : t("新しい出力") }); return groupId ? setInputGroup(r.project, r.portId, groupId) : r.project; })}>＋ {direction === "in" ? t("入力を追加") : t("出力を追加")}</button>
         )}
       </div>
       {ports.length === 0 && <div className="text-[12px] px-1" style={{ color: "var(--text-muted)" }}>None</div>}
@@ -97,32 +101,32 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
             <div className="flex items-center gap-1">
               {direction === "in" && isInputNameLocked(project, q.id) ? (
                 // 供給元のある入力: 名前は供給元の出力名で決まる (ここでは変えられない。変えるなら供給元の出力で)
-                <span className="input input-plain font-bold truncate" style={{ cursor: "default" }} title={`入力の名前は供給元 (${srcOwner ?? "?"}) の出力名です。変えるなら供給元の出力で`}>{q.name}</span>
+                <span className="input input-plain font-bold truncate" style={{ cursor: "default" }} title={t("入力の名前は供給元 ({owner}) の出力名です。変えるなら供給元の出力で", { owner: srcOwner ?? "?" })}>{q.name}</span>
               ) : (
-                <DebouncedText className="input input-plain font-bold" value={q.name} disabled={readonly} title={q.promotedFrom ? "下の階層の未接続の入力 (自動)。元の入力をつなぐと消えます" : direction === "in" ? "まだ供給元の無い入力。つなぐと供給元の出力名になります" : undefined}
+                <DebouncedText className="input input-plain font-bold" value={q.name} disabled={readonly} title={q.promotedFrom ? t("下の階層の未接続の入力 (自動)。元の入力をつなぐと消えます") : direction === "in" ? t("まだ供給元の無い入力。つなぐと供給元の出力名になります") : undefined}
                   style={q.promotedFrom ? { fontStyle: "italic", opacity: 0.75 } : undefined}
                   onCommit={(v) => apply((p) => updatePort(p, q.id, { name: v }))} />
               )}
-              {direction === "in" && !q.promotedFrom && !q.required && <span className="meta-chip muted" title="任意: 無くても着手できます">任意</span>}
+              {direction === "in" && !q.promotedFrom && !q.required && <span className="meta-chip muted" title={t("任意: 無くても着手できます")}>{t("任意")}</span>}
               {groups.length > 0 && !readonly && (
-                <select className="input input-plain" style={{ width: 110, fontSize: 11 }} value={q.groupId ?? ""} title="入力グループ" onChange={(e) => apply((p) => setInputGroup(p, q.id, e.target.value || null))}>
+                <select className="input input-plain" style={{ width: 110, fontSize: 11 }} value={q.groupId ?? ""} title={t("入力グループ")} onChange={(e) => apply((p) => setInputGroup(p, q.id, e.target.value || null))}>
                   <option value="">Inputs</option>
                   {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
               )}
-              <button className="btn btn-ghost btn-sm" onClick={() => setOpen(open === q.id ? null : q.id)} title="形式・制約などの設定">{open === q.id ? "▴" : "▾"}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setOpen(open === q.id ? null : q.id)} title={t("形式・制約などの設定")}>{open === q.id ? "▴" : "▾"}</button>
               {canRemove(!!q.promotedFrom) && <button className="btn btn-ghost btn-sm" title="Remove" onClick={() => apply((p) => removePort(p, q.id))}>×</button>}
             </div>
             {/* 成果物 (主役): 名前の直下に並べる */}
             <div className="pl-1 pb-1">
               {src ? (
                 <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>
-                  from {srcOwner}「{src.name}」{src.artifacts.length > 0 ? ` (${src.artifacts.map((a) => a.title).join(", ")})` : ""}
+                  {t("from {owner}「{name}」", { owner: srcOwner ?? "?", name: src.name })}{src.artifacts.length > 0 ? ` (${src.artifacts.map((a) => a.title).join(", ")})` : ""}
                 </div>
               ) : (
                 <>
-                  <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{direction === "in" ? "入力物 (この入力の実体)" : "成果物 (この出力の実体)"}</div>
-                  <ArtifactsEditor artifacts={q.artifacts} readonly={readonly} addLabel={direction === "in" ? "入力物を追加" : "成果物を追加"}
+                  <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{direction === "in" ? t("入力物 (この入力の実体)") : t("成果物 (この出力の実体)")}</div>
+                  <ArtifactsEditor artifacts={q.artifacts} readonly={readonly} addLabel={direction === "in" ? t("入力物を追加") : t("成果物を追加")}
                     onChange={(next) => apply((p) => updatePort(p, q.id, { artifacts: next }))} />
                 </>
               )}
@@ -131,19 +135,19 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
             {open === q.id && (
               <div className="flex flex-col gap-1 pl-2 pb-2">
                 {src ? (
-                  <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>形式・制約は供給元「{src.name}」の出力で書きます{src.description ? `: ${src.description}` : ""}</div>
+                  <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("形式・制約は供給元「{name}」の出力で書きます", { name: src.name })}{src.description ? `: ${src.description}` : ""}</div>
                 ) : (
-                  <DebouncedText className="input" placeholder="形式・制約 (任意。例: Markdown、PNG 1920x1080、API は OpenAPI 3)" value={q.description} disabled={readonly}
+                  <DebouncedText className="input" placeholder={t("形式・制約 (任意。例: Markdown、PNG 1920x1080、API は OpenAPI 3)")} value={q.description} disabled={readonly}
                     onCommit={(v) => apply((p) => updatePort(p, q.id, { description: v }))} />
                 )}
                 {direction === "in" && !q.promotedFrom && (
                   <div className="flex items-center gap-2 text-[12px]">
                     {/* 必須 / 任意: 必須の入力がそろうと箱に Ready が出る。任意は無くても着手できる */}
                     <div className="seg" style={{ width: "auto" }}>
-                      <button className="seg__btn" data-on={q.required} disabled={readonly} onClick={() => apply((p) => updatePort(p, q.id, { required: true }))} title="必須: この入力がそろうまで着手できない (箱の Ready に効く)">必須</button>
-                      <button className="seg__btn" data-on={!q.required} disabled={readonly} onClick={() => apply((p) => updatePort(p, q.id, { required: false }))} title="任意: 無くても着手できる">任意</button>
+                      <button className="seg__btn" data-on={q.required} disabled={readonly} onClick={() => apply((p) => updatePort(p, q.id, { required: true }))} title={t("必須: この入力がそろうまで着手できない (箱の Ready に効く)")}>{t("必須")}</button>
+                      <button className="seg__btn" data-on={!q.required} disabled={readonly} onClick={() => apply((p) => updatePort(p, q.id, { required: false }))} title={t("任意: 無くても着手できる")}>{t("任意")}</button>
                     </div>
-                    <span style={{ color: "var(--text-muted)" }}>{q.required ? "そろうまで着手できない" : "無くても着手できる"}</span>
+                    <span style={{ color: "var(--text-muted)" }}>{q.required ? t("そろうまで着手できない") : t("無くても着手できる")}</span>
                   </div>
                 )}
               </div>
@@ -167,6 +171,7 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
  * Output: 幅 10px の透明な縦の帯 (ホバー / ドラッグ中は線が出る)
  */
 export function ResizeHandle({ side, width, min, max, onWidth, style }: { side: "left" | "right"; width: number; min: number; max: number; onWidth: (w: number) => void; style?: React.CSSProperties }) {
+  useLang(); // 言語が変わったら描き直す
   const [active, setActive] = useState(false);
   const onPointerDown = (ev: React.PointerEvent<HTMLDivElement>) => {
     ev.preventDefault();
@@ -191,7 +196,7 @@ export function ResizeHandle({ side, width, min, max, onWidth, style }: { side: 
     el.addEventListener("pointerup", up);
     el.addEventListener("pointercancel", up);
   };
-  return <div className={`resize-handle ${side}`} data-active={active} style={style} onPointerDown={onPointerDown} title="ドラッグで幅を変える" />;
+  return <div className={`resize-handle ${side}`} data-active={active} style={style} onPointerDown={onPointerDown} title={t("ドラッグで幅を変える")} />;
 }
 
 /**
@@ -233,6 +238,7 @@ export function DebouncedText({ value, onCommit, multiline = false, delay = 400,
 }
 
 export function DateField({ value, onChange, disabled, danger }: { value: string; onChange: (v: string) => void; disabled?: boolean; danger?: boolean }) {
+  useLang(); // 言語が変わったら描き直す
   const ref = useRef<HTMLInputElement>(null);
   // showPicker は Chrome / Edge / Firefox 101+ にある。無いブラウザでは欄にフォーカスするだけ
   const open = () => {
@@ -250,7 +256,7 @@ export function DateField({ value, onChange, disabled, danger }: { value: string
         style={danger ? { color: "var(--danger)" } : undefined}
         onClick={open}
         onChange={(e) => onChange(e.target.value)} />
-      <button type="button" className="date-field__btn" disabled={disabled} onClick={open} title="カレンダーから選ぶ" aria-label="カレンダーから選ぶ">
+      <button type="button" className="date-field__btn" disabled={disabled} onClick={open} title={t("カレンダーから選ぶ")} aria-label={t("カレンダーから選ぶ")}>
         {/* 暦のアイコン (SVG): 上に綴じ輪、下にマス目 */}
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
           <rect x="2" y="3.5" width="12" height="10.5" rx="2" />

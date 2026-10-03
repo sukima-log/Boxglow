@@ -11,6 +11,8 @@ import { ROOT_ID, type BlockStatus, type Project } from "../model/types";
 import { parentForNewBlock, useProjectStore } from "../store/useProjectStore";
 import { CATEGORIES } from "../model/categories";
 import { STATUS_LABEL } from "../model/status";
+// 言語切り替え: 日本語の文は t() で包み、英語の辞書 (src/i18n/en/parts.ts) で引く
+import { t, useLang } from "../i18n";
 
 /** メンバーのアバター色の候補 (テーマの色から) */
 export const MEMBER_COLORS = ["#0d8080", "#e8875e", "#3aa85a", "#6b7075", "#2f6fb3", "#a0522d"];
@@ -54,6 +56,7 @@ function TreeRows({ project, parentId, depth, selectedId, onSelect, closed, onTo
   closed: Set<string>;
   onToggle: (id: string) => void;
 }) {
+  useLang(); // 言語が変わったら描き直す
   const kids = childrenOf(project, parentId).sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
   return (
     <>
@@ -64,7 +67,7 @@ function TreeRows({ project, parentId, depth, selectedId, onSelect, closed, onTo
           <div key={b.id}>
             <div className="tree-row" data-selected={selectedId === b.id} style={{ paddingLeft: 8 + depth * 14 }} onClick={() => onSelect(b.id)} title={b.title}>
               {hasKids ? (
-                <button className="btn btn-ghost btn-sm" style={{ padding: "0 4px" }} onClick={(e) => { e.stopPropagation(); onToggle(b.id); }} title={isClosed ? "開く" : "閉じる"}>
+                <button className="btn btn-ghost btn-sm" style={{ padding: "0 4px" }} onClick={(e) => { e.stopPropagation(); onToggle(b.id); }} title={isClosed ? t("開く") : t("閉じる")}>
                   {isClosed ? "▸" : "▾"}
                 </button>
               ) : (
@@ -84,6 +87,7 @@ function TreeRows({ project, parentId, depth, selectedId, onSelect, closed, onTo
 }
 
 export function Drawer({ project, filter, onFilter, onClose, width }: { project: Project; filter: Filter; onFilter: (f: Filter) => void; onClose: () => void; width: number }) {
+  useLang(); // 言語が変わったら描き直す
   const readonly = useProjectStore((s) => s.readonly);
   const selection = useProjectStore((s) => s.selection);
   const select = useProjectStore((s) => s.select);
@@ -118,7 +122,7 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
     try {
       await saveTemplate(parseTemplate(text));
       refreshTemplates();
-      setToast("テンプレートをライブラリに追加しました");
+      setToast(t("テンプレートをライブラリに追加しました"));
     } catch (e) {
       setToast(e instanceof Error ? e.message : String(e));
     }
@@ -141,10 +145,10 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
 
   const [tab, setTab] = useState<"tree" | "filter" | "members" | "parts">("tree");
   const tabs: { id: typeof tab; label: string; hint: string }[] = [
-    { id: "tree", label: "Tree", hint: "箱の一覧 (押すと選ぶ)" }
-  , { id: "filter", label: "Filter", hint: "状態や担当で箱を絞る" }
-  , { id: "members", label: "Members", hint: "担当にする人を登録。自分を決める" }
-  , { id: "parts", label: "Parts", hint: "他のプロジェクトでも使い回す箱" }
+    { id: "tree", label: "Tree", hint: t("箱の一覧 (押すと選ぶ)") }
+  , { id: "filter", label: "Filter", hint: t("状態や担当で箱を絞る") }
+  , { id: "members", label: "Members", hint: t("担当にする人を登録。自分を決める") }
+  , { id: "parts", label: "Parts", hint: t("他のプロジェクトでも使い回す箱") }
   ];
 
   return (
@@ -182,11 +186,11 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
           </button>
         ))}
         {meId && (
-          <button className="chip" data-on={filter.memberId === meId} onClick={() => onFilter({ ...filter, memberId: filter.memberId === meId ? null : meId, unassigned: false })} title="自分の担当だけ">Mine</button>
+          <button className="chip" data-on={filter.memberId === meId} onClick={() => onFilter({ ...filter, memberId: filter.memberId === meId ? null : meId, unassigned: false })} title={t("自分の担当だけ")}>Mine</button>
         )}
-        <button className="chip" data-on={filter.unassigned} onClick={() => onFilter({ ...filter, unassigned: !filter.unassigned, memberId: null })} title="担当がいない箱だけ">未担当</button>
+        <button className="chip" data-on={filter.unassigned} onClick={() => onFilter({ ...filter, unassigned: !filter.unassigned, memberId: null })} title={t("担当がいない箱だけ")}>{t("未担当")}</button>
         {project.members.filter((m) => m.id !== meId).map((m) => (
-          <button key={m.id} className="chip" data-on={filter.memberId === m.id} onClick={() => onFilter({ ...filter, memberId: filter.memberId === m.id ? null : m.id, unassigned: false })} title={`${m.name} の担当だけ`}>
+          <button key={m.id} className="chip" data-on={filter.memberId === m.id} onClick={() => onFilter({ ...filter, memberId: filter.memberId === m.id ? null : m.id, unassigned: false })} title={t("{name} の担当だけ", { name: m.name })}>
             <span className="avatar" style={{ background: m.color, width: 16, height: 16, fontSize: 9 }}>{m.name.slice(0, 1)}</span>
             {m.name}
           </button>
@@ -195,8 +199,8 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
         <div className="flex flex-wrap gap-1">
           {CATEGORIES.map((c) => (
             <button key={c.key} className={`chip cat-chip${c.neutral ? " neutral" : ""}`} data-on={filter.category === c.key} style={{ "--cat": c.color } as React.CSSProperties}
-              onClick={() => onFilter({ ...filter, category: filter.category === c.key ? null : c.key })} title={`${c.label} の箱だけ`}>
-              <span className="cat-chip__dot" />{c.label}
+              onClick={() => onFilter({ ...filter, category: filter.category === c.key ? null : c.key })} title={t("{label} の箱だけ", { label: t(c.label) })}>
+              <span className="cat-chip__dot" />{t(c.label)}
             </button>
           ))}
         </div>
@@ -206,18 +210,19 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
 
       {tab === "parts" && (<>
       <div className="text-[11px] mb-1" style={{ color: "var(--text-muted)" }}>
-        挿入先: {(() => { const pid = parentForNewBlock(project, selection, useProjectStore.getState().viewScope); const b = project.blocks[pid]; return b ? (kindOf(b) === "project" ? b.title : `${b.title} の隣`) : "最上位"; })()}
+        {/* 挿入先の表示: プロジェクトならその中、タスクならその隣、選んでいなければ最上位 */}
+        {t("挿入先: {target}", { target: (() => { const pid = parentForNewBlock(project, selection, useProjectStore.getState().viewScope); const b = project.blocks[pid]; return b ? (kindOf(b) === "project" ? b.title : t("{title} の隣", { title: b.title })) : t("最上位"); })() })}
       </div>
       <div className="flex flex-col gap-1">
-        {templates.length === 0 && <div className="text-[12px] px-1" style={{ color: "var(--text-muted)" }}>箱を選び、右の「⋯」から「Save as Part」すると、ここに並びます。</div>}
+        {templates.length === 0 && <div className="text-[12px] px-1" style={{ color: "var(--text-muted)" }}>{t("箱を選び、右の「⋯」から「Save as Part」すると、ここに並びます。")}</div>}
         {templates.map((tpl) => (
           <div key={tpl.id} className="flex items-center gap-1 text-[13px] px-1">
             <span className="truncate" title={`${tpl.description || tpl.name} (v${tpl.version}${tpl.tags.length ? ", " + tpl.tags.join(", ") : ""})`}>{tpl.name}</span>
             <span className="text-[10px]" style={{ color: "var(--text-muted)" }}>v{tpl.version}</span>
             <span className="ml-auto flex gap-0.5">
-              {!readonly && <button className="btn btn-ghost btn-sm" title="挿入" onClick={() => insertTemplate(tpl)}>Insert</button>}
-              <button className="btn btn-ghost btn-sm" title="JSON で保存 (他のリポジトリや人と共有)" onClick={() => downloadText(`${safeFilename(tpl.name)}.boxglow-block.json`, JSON.stringify(tpl, null, 2), "application/json")}>↓</button>
-              <button className="btn btn-ghost btn-sm" title="ライブラリから消す" onClick={() => { if (confirm(`テンプレート「${tpl.name}」を消しますか?`)) void deleteTemplate(tpl.id).then(refreshTemplates); }}>×</button>
+              {!readonly && <button className="btn btn-ghost btn-sm" title={t("挿入")} onClick={() => insertTemplate(tpl)}>Insert</button>}
+              <button className="btn btn-ghost btn-sm" title={t("JSON で保存 (他のリポジトリや人と共有)")} onClick={() => downloadText(`${safeFilename(tpl.name)}.boxglow-block.json`, JSON.stringify(tpl, null, 2), "application/json")}>↓</button>
+              <button className="btn btn-ghost btn-sm" title={t("ライブラリから消す")} onClick={() => { if (confirm(t("テンプレート「{name}」を消しますか?", { name: tpl.name }))) void deleteTemplate(tpl.id).then(refreshTemplates); }}>×</button>
             </span>
           </div>
         ))}
@@ -231,14 +236,14 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
           <div key={m.id} className="flex items-center gap-2 text-[13px] px-1">
             <span className="avatar" style={{ background: m.color }}>{m.name.slice(0, 1)}</span>
             <span className="truncate">{m.name}</span>
-            <button className="chip ml-auto" data-on={meId === m.id} onClick={() => setMe(meId === m.id ? null : m.id)} title="このブラウザでは自分として扱う (自分の担当の箱に帯が付く)">{meId === m.id ? "Me" : "Set as me"}</button>
-            {!readonly && <button className="btn btn-ghost btn-sm" title="外す" onClick={() => apply((p) => removeMember(p, m.id))}>×</button>}
+            <button className="chip ml-auto" data-on={meId === m.id} onClick={() => setMe(meId === m.id ? null : m.id)} title={t("このブラウザでは自分として扱う (自分の担当の箱に帯が付く)")}>{meId === m.id ? "Me" : "Set as me"}</button>
+            {!readonly && <button className="btn btn-ghost btn-sm" title={t("外す")} onClick={() => apply((p) => removeMember(p, m.id))}>×</button>}
           </div>
         ))}
       </div>
       {!readonly && (
         <div className="flex items-center gap-1 mt-2">
-          <span className="avatar flex-none" style={{ background: color, cursor: "pointer" }} title="色を変える" onClick={() => setColor(MEMBER_COLORS[(MEMBER_COLORS.indexOf(color) + 1) % MEMBER_COLORS.length])}>
+          <span className="avatar flex-none" style={{ background: color, cursor: "pointer" }} title={t("色を変える")} onClick={() => setColor(MEMBER_COLORS[(MEMBER_COLORS.indexOf(color) + 1) % MEMBER_COLORS.length])}>
             {name.slice(0, 1) || "+"}
           </span>
           <input className="input" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addM()} />

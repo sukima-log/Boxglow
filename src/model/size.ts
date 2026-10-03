@@ -4,6 +4,7 @@
 import type { Project } from "./types";
 import { missingRequiredInputs, childrenOf, portsOf } from "./graph";
 import { ROOT_ID } from "./types";
+import { t } from "../i18n/core";
 
 /** 畳んだブロックの幅 */
 export const BLOCK_W = 240;
@@ -57,11 +58,11 @@ export function metaRowWidth(opts: { assigneeText: string; unassigned: boolean; 
   let w = 12 + 10;
   if (!opts.isProject) w += chip("In Progress"); // 状態の札は一番長い文言で見積もる
   if (opts.assigneeText) w += chip(opts.assigneeText);
-  else if (opts.unassigned) w += chip("未担当");
+  else if (opts.unassigned) w += chip(t("未担当"));
   if (opts.hasPercent) w += chip("100%");
   if (opts.activityText) w += chip(opts.activityText);
   if (opts.hasReady) w += chip("Ready");
-  if (opts.hasDue) w += chip("期日 10/15");
+  if (opts.hasDue) w += chip(t("期日 {date}", { date: "10/15" })); // BlockNode と同じ文言で見積もる
   w += opts.keyLen * 7 + 8;
   return w;
 }
@@ -90,7 +91,8 @@ export function blockSize(p: Project, blockId: string): Size {
   const titleLines = wantTitle > BLOCK_MAX_W ? Math.min(3, Math.ceil(titleW / (BLOCK_MAX_W - titleExtras))) : 1;
   // 情報の行: 状態・担当・進捗・活動・期日・ID
   const actorText = (actor: string) => { const a = actor.toLowerCase(); return a.startsWith("claude") ? "Claude Code" : a.startsWith("codex") ? "Codex" : a.startsWith("human:") ? actor.slice(6) : actor; };
-  const stateText: Record<string, string> = { working: "作業中", blocked: "詰まり", needs_decision: "判断待ち", waiting_review: "確認待ち" };
+  // 活動の札の文言 (BlockNode と同じキーを t() で引き、英語のときは英語の幅で見積もる)
+  const stateText: Record<string, string> = { working: t("作業中"), blocked: t("詰まり"), needs_decision: t("判断待ち"), waiting_review: t("確認待ち") };
   const metaW = metaRowWidth({
     assigneeText: "" // 担当は箱に出さない
   , unassigned: false
@@ -104,7 +106,7 @@ export function blockSize(p: Project, blockId: string): Size {
   const headWidth = Math.min(BLOCK_MAX_W, Math.max(BLOCK_W, wantTitle, metaW));
   const headerH = TITLE_H + (titleLines - 1) * TITLE_LINE_H + META_H;
   // 入出力の名前が省略されない幅 (左右の列 + 真ん中の隙間)
-  const inW = Math.max(0, ...insP.map((q) => textWidth(q.name, 11) + (q.name ? 14 : 0) + (q.required ? 0 : textWidth("(任意)", 9) + 4)));
+  const inW = Math.max(0, ...insP.map((q) => textWidth(q.name, 11) + (q.name ? 14 : 0) + (q.required ? 0 : textWidth(t("(任意)"), 9) + 4)));
   const outW = Math.max(0, ...outsP.map((q) => textWidth(q.name, 11)));
   const portsWidth = 12 + inW + 24 + outW + 10;
   const width = Math.max(BLOCK_W, headWidth, Math.min(BLOCK_MAX_W + 120, portsWidth));

@@ -3,6 +3,7 @@
  * URL の引数: ?demo=1 (小さなサンプル) ?demo=daw (公開用の例: Logic DAW の計画) &readonly=1 (閲覧のみ) &embed=1 (記事内の埋め込み: 帯とパネルを隠す)
  *             ?serve=1 (npx boxglow serve が配信する手元の boxglow.json を API で開く)
  *             &theme=dark|light (表示モードの指定)
+ *             &lang=en|ja (画面の文言の言語。判定は i18n/index.ts)
  *             ?view=article (= demo + embed + readonly。記事内の iframe 用)
  * 埋め込みで同じドメインの記事の中にいるときは、記事側 (親) の表示モード (html の data-theme) に追従する。
  * URL のハッシュ: #p=<id> (開いているプロジェクト)
@@ -15,6 +16,7 @@ import { ROOT_ID } from "./model/types";
 import { majorBlocks, parentForNewBlock, useProjectStore, useShownProject } from "./store/useProjectStore";
 import { scopePath, wireNetTabs } from "./model/graph";
 import { ResizeHandle } from "./panels/parts";
+import { t, useLang } from "./i18n";
 
 /**
  * ブラウザに記憶したパネルの幅を読む
@@ -46,6 +48,7 @@ import { TopBar } from "./panels/TopBar";
 import { TabBar } from "./panels/TabBar";
 
 export function App() {
+  useLang(); // 言語が変わったら描き直す
   const project = useProjectStore((s) => s.project);
   const shown = useShownProject(); // View モードの畳む / 展開を反映した描画用
   const embed = useProjectStore((s) => s.embed);
@@ -153,7 +156,7 @@ export function App() {
         } else if (sel.blockId) {
           const b = p.blocks[sel.blockId];
           const kids = Object.values(p.blocks).filter((x) => x.parentId === sel.blockId).length;
-          if (b && (kids === 0 || confirm(`「${b.title}」と下の階層のブロックを削除します。よろしいですか?`))) {
+          if (b && (kids === 0 || confirm(t("「{title}」と下の階層のブロックを削除します。よろしいですか?", { title: b.title })))) {
             select({});
             apply((q) => removeBlock(q, sel.blockId!));
           }
@@ -162,7 +165,7 @@ export function App() {
         if (readonly) return;
         const parentId = parentForNewBlock(p, sel, useProjectStore.getState().viewScope);
         apply((q) => {
-          const r = addBlock(q, { parentId, title: "新しいブロック" });
+          const r = addBlock(q, { parentId, title: t("新しいブロック") });
           const q2 = structuredClone(r.project);
           if (q2.blocks[parentId]) q2.blocks[parentId].collapsed = false;
           setTimeout(() => { select({ blockId: r.blockId }); focusBlock(r.blockId); }, 0);
@@ -228,19 +231,19 @@ export function App() {
             <div className="scope-path" style={{ left: drawerOpen && !embed ? 8 + drawerW + 8 : 8 }}>
               {path.length > 0 && (
                 <>
-                  <button className="scope-crumb" onClick={() => setViewScope(null)} title="大項目の一覧へ">All</button>
+                  <button className="scope-crumb" onClick={() => setViewScope(null)} title={t("大項目の一覧へ")}>All</button>
                   {path.map((b, i) => (
                     <span key={b.id} className="contents">
                       <span className="scope-sep">›</span>
                       {i === path.length - 1
                         ? <span className="scope-crumb current" title={b.title}>{b.title}</span>
-                        : <button className="scope-crumb" onClick={() => setViewScope(b.id)} title={`${b.title} へ戻る`}>{b.title}</button>}
+                        : <button className="scope-crumb" onClick={() => setViewScope(b.id)} title={t("{title} へ戻る", { title: b.title })}>{b.title}</button>}
                     </span>
                   ))}
                 </>
               )}
               {!embed && !isFilterEmpty(filter) && (
-                <button className="chip" data-on="true" onClick={() => setFilter({ ...EMPTY_FILTER, statuses: new Set(EMPTY_FILTER.statuses) })} title="絞り込みを解除">Filtered ×</button>
+                <button className="chip" data-on="true" onClick={() => setFilter({ ...EMPTY_FILTER, statuses: new Set(EMPTY_FILTER.statuses) })} title={t("絞り込みを解除")}>Filtered ×</button>
               )}
             </div>
           )}
@@ -258,17 +261,17 @@ export function App() {
             <div className="card modal p-5 flex flex-col gap-2" style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>
               <div className="font-head text-[16px]">Help</div>
               <table className="help-table"><tbody>
-                <tr><td>ブロックを置く</td><td><span className="kbd">N</span> または「+ Block」(選んだ箱の中に)</td></tr>
-                <tr><td>Edit / View</td><td>上の切替。Edit のときだけドラッグで移動・結線・階層移動と Del が効く</td></tr>
-                <tr><td>結線</td><td>丸から相手の丸、または相手の箱へドラッグ (近くで離せばつながる)</td></tr>
-                <tr><td>階層を移す</td><td>箱をドラッグして別の箱の中に落とす</td></tr>
-                <tr><td>下の階層を畳む / 展開</td><td>ブロックをダブルクリック</td></tr>
-                <tr><td>削除</td><td><span className="kbd">Del</span></td></tr>
-                <tr><td>元に戻す / やり直す</td><td><span className="kbd">Ctrl+Z</span> / <span className="kbd">Ctrl+Y</span></td></tr>
-                <tr><td>選択を解除</td><td><span className="kbd">Esc</span></td></tr>
+                <tr><td>{t("ブロックを置く")}</td><td><span className="kbd">N</span> {t("または「+ Block」(選んだ箱の中に)")}</td></tr>
+                <tr><td>Edit / View</td><td>{t("上の切替。Edit のときだけドラッグで移動・結線・階層移動と Del が効く")}</td></tr>
+                <tr><td>{t("結線")}</td><td>{t("丸から相手の丸、または相手の箱へドラッグ (近くで離せばつながる)")}</td></tr>
+                <tr><td>{t("階層を移す")}</td><td>{t("箱をドラッグして別の箱の中に落とす")}</td></tr>
+                <tr><td>{t("下の階層を畳む / 展開")}</td><td>{t("ブロックをダブルクリック")}</td></tr>
+                <tr><td>{t("削除")}</td><td><span className="kbd">Del</span></td></tr>
+                <tr><td>{t("元に戻す / やり直す")}</td><td><span className="kbd">Ctrl+Z</span> / <span className="kbd">Ctrl+Y</span></td></tr>
+                <tr><td>{t("選択を解除")}</td><td><span className="kbd">Esc</span></td></tr>
               </tbody></table>
               <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>
-                箱は「入力から出力を作るタスク」。出力を先に決め、大きな箱は「分解する」で中に箱を置く。供給元の無い入力は左端の入力まで自動で点線が伸びる。
+                {t("箱は「入力から出力を作るタスク」。出力を先に決め、大きな箱は「分解する」で中に箱を置く。供給元の無い入力は左端の入力まで自動で点線が伸びる。")}
               </div>
               <button className="btn btn-sm self-end" onClick={() => setHelpOpen(false)}>Close</button>
             </div>
@@ -286,11 +289,11 @@ export function App() {
           <>
             <span className="font-head">Done {prog.white} / {prog.total} · {prog.percent}%</span>
             <div className="progress-bar" style={{ width: 160 }}><span style={{ width: `${prog.percent}%` }} /></div>
-            {embed && <a className="underline" href={fullUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary-strong)" }}>Boxglow で開く</a>}
+            {embed && <a className="underline" href={fullUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary-strong)" }}>{t("Boxglow で開く")}</a>}
           </>
         )}
         {!project && <span style={{ color: "var(--text-muted)" }}>Boxglow</span>}
-        <span className="ml-auto text-[10px]" style={{ color: "var(--text-muted)" }} title="ビルド日時 (日本時間)。古い場合は再読み込み (Ctrl+F5) してください">build {__BUILD__}</span>
+        <span className="ml-auto text-[10px]" style={{ color: "var(--text-muted)" }} title={t("ビルド日時 (日本時間)。古い場合は再読み込み (Ctrl+F5) してください")}>build {__BUILD__}</span>
       </footer>
 
       {toast && <div className="toast" role="status">{toast}</div>}

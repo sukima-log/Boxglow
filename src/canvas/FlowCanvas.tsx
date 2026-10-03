@@ -14,6 +14,7 @@ import { TerminalNode } from "./TerminalNode";
 import { RoutedEdge } from "./RoutedEdge";
 import { buildEdges, buildNodes, parseHandle, SCOPE_IN, SCOPE_OUT, type AnyRFNode } from "./layout";
 import { routeAll, type EdgeSpec, type NodeRect } from "./routeAll";
+import { useLang } from "../i18n";
 
 /** 全体表示の設定: 大きな計画でも収まるよう最小ズームを下げる (fitView の既定は 0.5 で、大きい図は左右が切れる) */
 const FIT_OPTIONS = { padding: 0.15, minZoom: 0.05, maxZoom: 1 };
@@ -71,7 +72,8 @@ export function FlowCanvas({ project, matcher }: Props) {
   const focusBlock = useProjectStore((s) => s.focusBlock);
   const viewScope = useProjectStore((s) => s.viewScope);
   const rf = useReactFlow();
-
+  // 箱の幅の見積もり (size.ts) は文言の言語に依存するので、言語が変わったらノードを作り直す
+  const lang = useLang();
 
   // 動作確認やスクリーンショット用に、React Flow の instance もコンソールから触れるようにしておく
   useEffect(() => { (window as unknown as { boxglow?: { rf?: unknown } }).boxglow = { ...((window as unknown as { boxglow?: object }).boxglow ?? {}), rf }; }, [rf]);
@@ -97,11 +99,11 @@ export function FlowCanvas({ project, matcher }: Props) {
     return () => clearTimeout(t);
   }, [focus, rf]);
 
-  // ノードはドラッグ中の見た目のために React Flow 側の状態を持ち、project が変わるたびに作り直す
+  // ノードはドラッグ中の見た目のために React Flow 側の状態を持ち、project (と言語) が変わるたびに作り直す
   const [nodes, setNodes, onNodesChangeRaw] = useNodesState<AnyRFNode>([]);
   useEffect(() => {
     setNodes(withIndex(project, () => buildNodes(project, { selectedBlockId: selection.blockId, readonly: !canEdit, matcher: matcher ?? undefined, meId, scope: viewScope })));
-  }, [project, selection.blockId, canEdit, matcher, meId, viewScope, setNodes]);
+  }, [project, selection.blockId, canEdit, matcher, meId, viewScope, setNodes, lang]);
   useEffect(() => {
     setNodes((ns) => ns.map((n) => (n.type === "block" ? { ...n, data: { ...n.data, dropTarget: n.id === dropTarget } } : n)));
   }, [dropTarget, setNodes]);

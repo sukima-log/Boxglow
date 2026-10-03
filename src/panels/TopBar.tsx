@@ -9,8 +9,10 @@ import { ROOT_ID, type Project } from "../model/types";
 import { parentForNewBlock, useProjectStore } from "../store/useProjectStore";
 import { applyTheme, currentTheme, type Theme } from "../lib/theme";
 import { copyText, downloadText, pickTextFile, safeFilename } from "../lib/download";
+import { setLang, t, useLang } from "../i18n";
 
 export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; onToggleDrawer: () => void; onHelp: () => void }) {
+  const lang = useLang(); // 言語が変わったら描き直す (メニューの切替項目の表示にも使う)
   const readonly = useProjectStore((s) => s.readonly);
   const ephemeral = useProjectStore((s) => s.ephemeral);
   const saveState = useProjectStore((s) => s.saveState);
@@ -68,13 +70,13 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
   /** ブロックを足す (選んでいる箱の中。何も選んでいなければ最初のプロジェクトの中) */
   // 最上位にプロジェクトの箱を足す (⋯ メニューの New Project。上の帯のボタンにはしない: 使う頻度が低い)
   const addProject = () => {
-    const name = prompt("追加するプロジェクトの名前 (リポジトリごとに 1 つなど)");
+    const name = prompt(t("追加するプロジェクトの名前 (リポジトリごとに 1 つなど)"));
     if (name?.trim()) apply((p) => { const r = addProjectBlock(p, name.trim()); setTimeout(() => { select({ blockId: r.blockId }); focusBlock(r.blockId); }, 0); return r.project; });
   };
   const addSibling = () => {
     const parentId = parentForNewBlock(project, selection, useProjectStore.getState().viewScope);
     apply((p) => {
-      const r = addBlock(p, { parentId, title: "新しいブロック" });
+      const r = addBlock(p, { parentId, title: t("新しいブロック") });
       const q = structuredClone(r.project);
       if (q.blocks[parentId]) q.blocks[parentId].collapsed = false;
       setTimeout(() => { select({ blockId: r.blockId }); focusBlock(r.blockId); }, 0);
@@ -85,7 +87,7 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
   const exportJSON = () => downloadText(`${safeFilename(project.name)}.boxglow.json`, toJSON(project), "application/json");
   const exportMd = () => downloadText(`${safeFilename(project.name)}.md`, projectToMarkdown(project), "text/markdown");
   const copyMermaid = async () => {
-    setToast((await copyText(scopeToMermaid(project, selection.blockId ?? ROOT_ID))) ? "Mermaid をコピーしました" : "コピーできませんでした");
+    setToast((await copyText(scopeToMermaid(project, selection.blockId ?? ROOT_ID))) ? t("Mermaid をコピーしました") : t("コピーできませんでした"));
   };
   const doImport = async () => {
     const text = await pickTextFile(".json,application/json");
@@ -103,14 +105,14 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
   const saveNow = useProjectStore((s) => s.saveNow);
   // 保存状態: 常に見える札にする (ファイルを開いているときは「どこに保存されるか」と「保存済みか」が分かるように)
   const saveLabel = readonly ? "Read only" : ephemeral ? "Sample (not saved)" : saveState === "saving" ? "Saving…" : saveState === "unsaved" ? "Unsaved" : "Saved";
-  const saveTitle = ephemeral ? "サンプルは保存されません。Save で自分のプロジェクトとして保存" : fileName ? `${fileName} に自動で保存します (変更から 1 秒後)。Save で今すぐ書きます` : "このブラウザに自動で保存します";
+  const saveTitle = ephemeral ? t("サンプルは保存されません。Save で自分のプロジェクトとして保存") : fileName ? t("{file} に自動で保存します (変更から 1 秒後)。Save で今すぐ書きます", { file: fileName }) : t("このブラウザに自動で保存します");
   const sum = summarize(project);
   const busy = sum.working.length + sum.blocked.length;
 
   return (
     <header className="flex items-center gap-3 px-3 h-full" style={{ paddingTop: 9, paddingBottom: 7, borderBottom: "2px solid var(--line)", background: "var(--bg-card)" }}>
-      <button className="btn btn-ghost btn-sm" onClick={onToggleDrawer} title="階層 / 絞り込み / メンバー / 部品">☰</button>
-      <button className="btn btn-ghost btn-sm" onClick={closeProject} title="Home (プロジェクト一覧へ)" aria-label="Home">
+      <button className="btn btn-ghost btn-sm" onClick={onToggleDrawer} title={t("階層 / 絞り込み / メンバー / 部品")}>☰</button>
+      <button className="btn btn-ghost btn-sm" onClick={closeProject} title={t("Home (プロジェクト一覧へ)")} aria-label="Home">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M3 11.5 12 4l9 7.5" />
           <path d="M5.5 10.5V20h13v-9.5" />
@@ -121,24 +123,24 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
         {fileName && <span className="save-chip__file">{fileName}</span>}
         <span>{saveLabel}</span>
       </span>
-      {ephemeral && !readonly && <button className="btn btn-sm" onClick={copyToMine} title="自分のプロジェクトとして保存">Save</button>}
+      {ephemeral && !readonly && <button className="btn btn-sm" onClick={copyToMine} title={t("自分のプロジェクトとして保存")}>Save</button>}
       {!ephemeral && !readonly && <button className="btn btn-sm" onClick={saveNow} disabled={saveState === "saved" || saveState === "saving"} title={saveTitle}>Save</button>}
-      <button className="summary-chip" data-on={selection.timeline} onClick={() => select({ timeline: !selection.timeline })} title="今の状況 (作業中・判断待ち・ログ)">
+      <button className="summary-chip" data-on={selection.timeline} onClick={() => select({ timeline: !selection.timeline })} title={t("今の状況 (作業中・判断待ち・ログ)")}>
         {busy > 0 && <span className="dot" />}
-        {busy > 0 && <span><span className="summary-chip__txt">作業中 </span>{busy}</span>}
+        {busy > 0 && <span><span className="summary-chip__txt">{t("作業中")} </span>{busy}</span>}
         {sum.decisions.length > 0 && <span className="dot decision" />}
-        {sum.decisions.length > 0 && <span><span className="summary-chip__txt">判断待ち </span>{sum.decisions.length}</span>}
+        {sum.decisions.length > 0 && <span><span className="summary-chip__txt">{t("判断待ち")} </span>{sum.decisions.length}</span>}
         {busy === 0 && sum.decisions.length === 0 && <span>Activity</span>}
       </button>
       <div className="ml-auto flex items-center gap-1">
         {!readonly && (
-          <button className="mode-toggle" data-on={editMode} onClick={() => setEditMode(!editMode)} title={editMode ? "Edit モード: ドラッグで移動・結線・階層移動ができます。押すと View (閲覧) に" : "View モード: ドラッグでの編集は効きません。押すと Edit に"}>
+          <button className="mode-toggle" data-on={editMode} onClick={() => setEditMode(!editMode)} title={editMode ? t("Edit モード: ドラッグで移動・結線・階層移動ができます。押すと View (閲覧) に") : t("View モード: ドラッグでの編集は効きません。押すと Edit に")}>
             <span className="mode-toggle__knob" />
             <span>{editMode ? "Edit" : "View"}</span>
           </button>
         )}
         <div className="relative">
-          <input ref={searchRef} className="input search-box" placeholder="Search  ID / 題名" value={query}
+          <input ref={searchRef} className="input search-box" placeholder={t("Search  ID / 題名")} value={query}
             onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); }}
             onFocus={() => setSearchOpen(true)}
             onKeyDown={(e) => { if (e.key === "Enter" && hits[0]) jump(hits[0].id); if (e.key === "Escape") { setSearchOpen(false); setQuery(""); (e.target as HTMLInputElement).blur(); } }}
@@ -154,15 +156,15 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
             </div>
           )}
           {searchOpen && query.trim() && hits.length === 0 && (
-            <div className="card absolute right-0 mt-1 p-2 text-[12px] z-30" style={{ minWidth: 200, color: "var(--text-muted)" }}>見つかりません</div>
+            <div className="card absolute right-0 mt-1 p-2 text-[12px] z-30" style={{ minWidth: 200, color: "var(--text-muted)" }}>{t("見つかりません")}</div>
           )}
         </div>
         {!readonly && (
           <>
-            <button className="btn btn-primary btn-sm" onClick={addSibling} title="ブロックを追加 (N)。箱を選んでいればその中に、選んでいなければプロジェクトの中に">+ Block</button>
-            <button className="btn btn-sm" onClick={() => apply((p) => layoutAll(normalizeCollapsed(p)))} title="Auto Layout: 依存関係で並べ直す (大項目は畳んだ前提)">Auto Layout</button>
-            <button className="btn btn-ghost btn-sm hidden md:inline-flex" onClick={undo} disabled={past === 0} title="元に戻す (Ctrl+Z)">↶</button>
-            <button className="btn btn-ghost btn-sm hidden md:inline-flex" onClick={redo} disabled={future === 0} title="やり直す (Ctrl+Y)">↷</button>
+            <button className="btn btn-primary btn-sm" onClick={addSibling} title={t("ブロックを追加 (N)。箱を選んでいればその中に、選んでいなければプロジェクトの中に")}>+ Block</button>
+            <button className="btn btn-sm" onClick={() => apply((p) => layoutAll(normalizeCollapsed(p)))} title={t("Auto Layout: 依存関係で並べ直す (大項目は畳んだ前提)")}>Auto Layout</button>
+            <button className="btn btn-ghost btn-sm hidden md:inline-flex" onClick={undo} disabled={past === 0} title={t("元に戻す (Ctrl+Z)")}>↶</button>
+            <button className="btn btn-ghost btn-sm hidden md:inline-flex" onClick={redo} disabled={future === 0} title={t("やり直す (Ctrl+Y)")}>↷</button>
           </>
         )}
         <div className="relative">
@@ -170,7 +172,7 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
           {menu && (
             <div className="card absolute right-0 mt-1 p-1 flex flex-col z-30" style={{ minWidth: 220 }}>
               {!readonly && (
-                <button className="btn btn-ghost btn-sm justify-start" onClick={addProject} title="同じファイルにプロジェクトの箱を足す">New Project</button>
+                <button className="btn btn-ghost btn-sm justify-start" onClick={addProject} title={t("同じファイルにプロジェクトの箱を足す")}>New Project</button>
               )}
               {!readonly && <div style={{ borderTop: "1px solid var(--line-soft)", margin: "4px 0" }} />}
               <button className="btn btn-ghost btn-sm justify-start" onClick={exportJSON}>Export JSON</button>
@@ -180,6 +182,9 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
               <div style={{ borderTop: "1px solid var(--line-soft)", margin: "4px 0" }} />
               <button className="btn btn-ghost btn-sm justify-start" onClick={onHelp}>Help</button>
               <button className="btn btn-ghost btn-sm justify-start" onClick={closeProject}>Home</button>
+              <div style={{ borderTop: "1px solid var(--line-soft)", margin: "4px 0" }} />
+              {/* 言語の切替: 今と反対側の言語名を出す (日本語のとき「English」、英語のとき「日本語」) */}
+              <button className="btn btn-ghost btn-sm justify-start" onClick={() => setLang(lang === "en" ? "ja" : "en")} title={t("画面の文言の言語を切り替える")}>{lang === "en" ? "日本語" : "English"}</button>
             </div>
           )}
         </div>

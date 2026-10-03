@@ -11,6 +11,7 @@ import { handleId, isExpanded, type BlockRFNode } from "./layout";
 import { actorName, ACTIVITY_LABEL } from "../model/report";
 import { categoryOf } from "../model/categories";
 import { STATUS_LABEL } from "../model/status";
+import { t, useLang } from "../i18n";
 
 /** 状態の印 */
 export const STATUS_GLYPH: Record<BlockStatus, string> = { black: "?", gray: "~", white: "✓" };
@@ -47,6 +48,7 @@ export function StatusIcon({ status }: { status: BlockStatus }) {
 }
 
 export const BlockNode = memo(function BlockNode({ data, selected, width, height }: NodeProps<BlockRFNode>) {
+  useLang(); // 言語が変わったら文言を描き直す
   const { blockId } = data;
   const headerH = data.headerH ?? 44;
   /** ポート i 行目のハンドルの縦位置 (見出しの高さに追従) */
@@ -93,8 +95,8 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   useEffect(() => {
     if (prevStatus.current !== "white" && view.status === "white") {
       setGlow(true);
-      const t = setTimeout(() => setGlow(false), 1300);
-      return () => clearTimeout(t);
+      const timer = setTimeout(() => setGlow(false), 1300);
+      return () => clearTimeout(timer);
     }
     prevStatus.current = view.status;
   }, [view.status]);
@@ -131,12 +133,12 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     <div className={cls} style={{ width, height, ...(view.category ? ({ "--cat": view.category.color } as React.CSSProperties) : {}) }} onDoubleClick={onDoubleClick}>
       {/* 題名の行: 題名だけ (カテゴリとプロジェクトの札、畳むボタン以外は置かない) */}
       <div className="bg-block__head" style={{ height: headerH - 24 }}>
-        {view.category && <span className={`bg-block__cat${view.category.neutral ? " neutral" : ""}`} title={`カテゴリ: ${view.category.label}`}>{view.category.label}</span>}
+        {view.category && <span className={`bg-block__cat${view.category.neutral ? " neutral" : ""}`} title={t("カテゴリ: {label}", { label: t(view.category.label) })}>{t(view.category.label)}</span>}
         {view.isProject && <span className="bg-block__tag">Project</span>}
         {!view.isProject && <StatusIcon status={view.status} />}
-        <span className="bg-block__title" title={view.fromTemplate ? `${view.title} (部品: ${view.fromTemplate})` : view.title}>{view.title}</span>
+        <span className="bg-block__title" title={view.fromTemplate ? t("{title} (部品: {name})", { title: view.title, name: view.fromTemplate }) : view.title}>{view.title}</span>
         {(view.kids > 0 || data.major) && (
-          <button className="bg-block__toggle nodrag" onClick={toggle} title={data.major ? `この大項目のタブを開く (中の箱 ${view.kids} 個)` : view.collapsed ? "下の階層を展開する" : "下の階層を畳む"}>
+          <button className="bg-block__toggle nodrag" onClick={toggle} title={data.major ? t("この大項目のタブを開く (中の箱 {n} 個)", { n: view.kids }) : view.collapsed ? t("下の階層を展開する") : t("下の階層を畳む")}>
             {data.major || view.collapsed ? "▸" : "▾"}
           </button>
         )}
@@ -144,33 +146,33 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
       {/* 情報の行: 記号ではなく文字で (状態・担当・進捗・活動・期日・ID) */}
       <div className="bg-block__meta">
         {!view.isProject && (
-          <span className={`meta-chip status-${view.status}`} title="状態">{STATUS_LABEL[view.status]}</span>
+          <span className={`meta-chip status-${view.status}`} title={t("状態")}>{STATUS_LABEL[view.status]}</span>
         )}
         {/* 担当は箱には出さない (押して右パネルの Owner で見る)。自分の担当だけ左の帯で分かる */}
         {view.status !== "white" && view.percent > 0 && (
-          <span className="meta-chip" title={view.kids > 0 ? `下の階層の完了 ${view.progressText}` : "進捗"}>{view.percent}%</span>
+          <span className="meta-chip" title={view.kids > 0 ? t("下の階層の完了 {done}", { done: view.progressText }) : t("進捗")}>{view.percent}%</span>
         )}
         {view.activity && (
-          <span className={`meta-chip activity ${view.activity.state}`} title={`${view.activity.actor}: ${ACTIVITY_LABEL[view.activity.state]} ${view.activity.note}`}>
-            {ACTIVITY_LABEL[view.activity.state]} ({actorName(view.activity.actor)})
+          <span className={`meta-chip activity ${view.activity.state}`} title={`${view.activity.actor}: ${t(ACTIVITY_LABEL[view.activity.state])} ${view.activity.note}`}>
+            {t(ACTIVITY_LABEL[view.activity.state])} ({actorName(view.activity.actor)})
           </span>
         )}
         {view.dueDate && view.status !== "white" && (
-          <span className={`meta-chip ${view.overdue ? "overdue" : ""}`} title={`期日 ${view.dueDate}${view.daysLeft !== null ? (view.daysLeft < 0 ? ` (${-view.daysLeft} 日超過)` : ` (あと ${view.daysLeft} 日)`) : ""}`}>
-            期日 {view.dueDate.slice(5).replace("-", "/")}
+          <span className={`meta-chip ${view.overdue ? "overdue" : ""}`} title={view.daysLeft === null ? t("期日 {date}", { date: view.dueDate }) : view.daysLeft < 0 ? t("期日 {date} ({d} 日超過)", { date: view.dueDate, d: -view.daysLeft }) : t("期日 {date} (あと {d} 日)", { date: view.dueDate, d: view.daysLeft })}>
+            {t("期日 {date}", { date: view.dueDate.slice(5).replace("-", "/") })}
           </span>
         )}
-        {view.startable && <span className="meta-chip ready" title="必須の入力がそろっています (着手できます)">Ready</span>}
-        {view.issue && <a className="meta-chip issue nodrag" href={view.issue.url} target="_blank" rel="noreferrer" title={`外部の課題: ${view.issue.url}`} onClick={(e) => e.stopPropagation()}>{view.issue.key}</a>}
-        {view.fromTemplate && <span className="meta-chip muted" title={`部品: ${view.fromTemplate}`}>部品</span>}
-        <span className="bg-block__key" title="ID (検索や CLI で使えます)">{view.key}</span>
+        {view.startable && <span className="meta-chip ready" title={t("必須の入力がそろっています (着手できます)")}>Ready</span>}
+        {view.issue && <a className="meta-chip issue nodrag" href={view.issue.url} target="_blank" rel="noreferrer" title={t("外部の課題: {url}", { url: view.issue.url })} onClick={(e) => e.stopPropagation()}>{view.issue.key}</a>}
+        {view.fromTemplate && <span className="meta-chip muted" title={t("部品: {name}", { name: view.fromTemplate })}>{t("部品")}</span>}
+        <span className="bg-block__key" title={t("ID (検索や CLI で使えます)")}>{view.key}</span>
       </div>
 
       {!view.expanded && (
         <div className="bg-block__ports">
           <div>
             {view.ins.map((q) => (
-              <div key={q.id} className={`bg-block__port in ${q.required ? "" : "optional"} ${q.promoted ? "promoted" : ""} ${q.ready ? "ready" : ""}`} title={q.ready ? `${q.name} (用意できています)` : q.required ? q.name : `${q.name} (任意: 無くても着手できます)`}>{q.ready ? "● " : ""}{q.name}{!q.required && <span className="opt">(任意)</span>}</div>
+              <div key={q.id} className={`bg-block__port in ${q.required ? "" : "optional"} ${q.promoted ? "promoted" : ""} ${q.ready ? "ready" : ""}`} title={q.ready ? t("{name} (用意できています)", { name: q.name }) : q.required ? q.name : t("{name} (任意: 無くても着手できます)", { name: q.name })}>{q.ready ? "● " : ""}{q.name}{!q.required && <span className="opt">{t("(任意)")}</span>}</div>
             ))}
           </div>
           <div>
@@ -182,7 +184,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
       )}
 
       {view.status !== "white" && (view.kids > 0 || view.percent > 0) && (
-        <div className="bg-block__progress" title={view.kids > 0 ? `下の階層の完了 ${view.progressText} (${view.percent}%)` : `進捗 ${view.percent}%`}>
+        <div className="bg-block__progress" title={view.kids > 0 ? t("下の階層の完了 {done} ({percent}%)", { done: view.progressText, percent: view.percent }) : t("進捗 {percent}%", { percent: view.percent })}>
           <span style={{ width: `${view.percent}%` }} />
         </div>
       )}
@@ -207,7 +209,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           position={Position.Right}
           id={handleId("in", q.id, "inner")}
           className="port-inner"
-          title={`${q.name} を中のブロックへ (ここから中の箱の入力へドラッグ)`}
+          title={t("{name} を中のブロックへ (ここから中の箱の入力へドラッグ)", { name: q.name })}
           style={{ top: rowAt(i), zIndex: 2, left: -7, right: "auto", transform: "translate(-50%, -50%)" }}
           isConnectable={!readonly}
         />
@@ -231,7 +233,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           position={Position.Left}
           id={handleId("out", q.id, "inner")}
           className="port-inner"
-          title={`中のブロックの出力を ${q.name} へ`}
+          title={t("中のブロックの出力を {name} へ", { name: q.name })}
           style={{ top: rowAt(i), zIndex: 0, right: -7, left: "auto", transform: "translate(50%, -50%)" }}
           isConnectable={!readonly}
         />
