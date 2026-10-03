@@ -4,7 +4,7 @@
  */
 import { addBlock, addMember, addPort, askDecision, connect, createArtifact, createProject, portsOf, setActivity, setCategory, setProgress, updateBlock, updatePort } from "./graph";
 import { ROOT_ID, type Project } from "./types";
-import { projectBlocks } from "./graph";
+import { normalizeMajors, projectBlocks } from "./graph";
 import { layoutAll } from "./autolayout";
 
 /** サンプルを組み立てて返す */
@@ -118,5 +118,5 @@ export function buildSampleProject(): Project {
   p = askDecision(p, release.blockId, "codex", "公開先はどれにしますか?", ["静的ホスティング", "自前のサーバー"]).project;
 
   // 依存関係で並べ直す (線が読みやすい配置にする)
-  return layoutAll(p);
+  return layoutAll(normalizeMajors(p)); // 大項目は畳んだ前提で並べる (All は大項目までしか出さない)
 }

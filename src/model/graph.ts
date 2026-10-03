@@ -177,6 +177,62 @@ export function defaultTaskParent(p: Project): string {
   return projectBlocks(p)[0]?.id ?? ROOT_ID;
 }
 
+/**
+ * 「大項目」の箱 (プロジェクトの箱の直下。プロジェクトの箱が無ければ最上位の箱)。
+ * All の画面にはこの階層までしか出さず (常に畳む)、中はそれぞれのタブで見る
+ * Input : p
+ * Output: 大項目の箱の配列 (配置の上から、同じ高さなら左から)
+ */
+export function majorBlocks(p: Project): Block[] {
+  const projects = projectBlocks(p);
+  const parents = projects.length > 0 ? projects.map((b) => b.id) : [ROOT_ID];
+  const out: Block[] = [];
+  for (const pid of parents) out.push(...childrenOf(p, pid).filter((b) => kindOf(b) !== "project"));
+  return out.sort((a, b) => (a.position.y - b.position.y) || (a.position.x - b.position.x));
+}
+
+/**
+ * 箱が属する大項目 (自分が大項目ならその id。大項目より上 (プロジェクトの箱・最上位) なら null)
+ * Input : p, blockId
+ * Output: 大項目の id または null
+ */
+export function majorOf(p: Project, blockId: string): string | null {
+  const majors = new Set(majorBlocks(p).map((b) => b.id));
+  let cur: string | null = blockId;
+  while (cur !== null) {
+    if (majors.has(cur)) return cur;
+    cur = p.blocks[cur]?.parentId ?? null;
+  }
+  return null;
+}
+
+/**
+ * 箱が表示範囲 (scope の箱とその中) に入っているか
+ * Input : p, scope = 範囲の箱の id, blockId = 調べる箱 (null なら「入っていない」)
+ * Output: true = 範囲の中 (scope 自身も含む)
+ */
+export function isInScope(p: Project, scope: string, blockId: string | null): boolean {
+  let cur: string | null = blockId;
+  while (cur !== null) {
+    if (cur === scope) return true;
+    cur = p.blocks[cur]?.parentId ?? null;
+  }
+  return false;
+}
+
+/**
+ * 大項目の箱は常に畳んだ状態にそろえる (All の図は大項目までしか出さない前提で並べるため。大きさの計算もこの状態で行う)
+ * Input : p
+ * Output: 大項目の collapsed を true にした複製 (変える物が無ければ p そのもの)
+ */
+export function normalizeMajors(p: Project): Project {
+  const ids = majorBlocks(p).filter((b) => !b.collapsed).map((b) => b.id);
+  if (ids.length === 0) return p;
+  const blocks = { ...p.blocks };
+  for (const id of ids) blocks[id] = { ...blocks[id], collapsed: true };
+  return { ...p, blocks };
+}
+
 /** ブロックの種類 (省略時は task) */
 export const kindOf = (b: Block): BlockKind => b.kind ?? "task";
 

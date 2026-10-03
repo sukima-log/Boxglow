@@ -1,11 +1,12 @@
 /**
  * キャンバス: React Flow にプロジェクトを描き、ドラッグ・結線・選択を store に反映する
  */
-import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, useNodesState, useReactFlow, useStore, type ReactFlowState, type Connection, type Edge as RFEdge, type NodeChange, type NodeMouseHandler, type OnConnectEnd, type OnNodeDrag } from "@xyflow/react";
+import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, useNodesState, useReactFlow, useStore, type ReactFlowState, type Connection, type Edge as RFEdge, type NodeChange, type OnConnectEnd, type OnNodeDrag } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { connect, connectToBlock, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, validateConnection } from "../model/graph";
+import { connect, connectToBlock, isHiddenByCollapse, majorBlocks, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, validateConnection } from "../model/graph";
 import { blockSize, isExpanded } from "../model/size";
 import { ROOT_ID } from "../model/types";
+import { nextFreePosition } from "../model/autolayout";
 import type { Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
 import { BlockNode } from "./BlockNode";
@@ -65,7 +66,6 @@ export function FlowCanvas({ project, matcher }: Props) {
   const selection = useProjectStore((s) => s.selection);
   const select = useProjectStore((s) => s.select);
   const apply = useProjectStore((s) => s.apply);
-  const toggleCollapsed = useProjectStore((s) => s.toggleCollapsed);
   const setToast = useProjectStore((s) => s.setToast);
   const focus = useProjectStore((s) => s.focus);
   const meId = useProjectStore((s) => s.meId);
@@ -192,8 +192,11 @@ export function FlowCanvas({ project, matcher }: Props) {
         for (const b of Object.values(project.blocks)) if (b.parentId === cur) { myDesc.add(b.id); stack.push(b.id); }
       }
       let best: { id: string; depth: number } | null = null;
+      // 落とせる箱: 展開中の箱、または All で畳まれている大項目 (中はタブで見る。落とすとその大項目の中の空いた場所に入る)
+      const majors = new Set(majorBlocks(project).map((b) => b.id));
       for (const b of Object.values(project.blocks)) {
-        if (b.id === ROOT_ID || b.id === nodeId || myDesc.has(b.id) || !isExpanded(project, b.id)) continue;
+        if (b.id === ROOT_ID || b.id === nodeId || myDesc.has(b.id)) continue;
+        if (!isExpanded(project, b.id) && !(majors.has(b.id) && !isHiddenByCollapse(project, b.id))) continue;
         const n = rf.getInternalNode(b.id);
         if (!n) continue;
         const x = n.internals.positionAbsolute.x;
@@ -240,7 +243,10 @@ export function FlowCanvas({ project, matcher }: Props) {
               const me = rf.getInternalNode(n.id);
               const parent = rf.getInternalNode(container);
               if (me && parent) {
-                const rel = { x: me.internals.positionAbsolute.x - parent.internals.positionAbsolute.x, y: me.internals.positionAbsolute.y - parent.internals.positionAbsolute.y };
+                // 畳まれた箱 (All の大項目) に落としたときは中の空いた場所へ。展開中なら落とした位置 (新しい親の座標系) へ
+                const rel = isExpanded(project, container)
+                  ? { x: me.internals.positionAbsolute.x - parent.internals.positionAbsolute.x, y: me.internals.positionAbsolute.y - parent.internals.positionAbsolute.y }
+                  : nextFreePosition(q, container);
                 q = moveBlockToParent(q, n.id, container, rel);
                 q = resolveOverlap(q, n.id, blockSize);
                 continue;
@@ -308,15 +314,6 @@ export function FlowCanvas({ project, matcher }: Props) {
   const onEdgeClick = useCallback((_ev: React.MouseEvent, e: RFEdge) => select({ edgeId: e.id }), [select]);
   const onPaneClick = useCallback(() => select({}), [select]);
 
-  /** ダブルクリックで畳む / 展開する */
-  const onNodeDoubleClick: NodeMouseHandler = useCallback(
-    (_ev, node) => {
-      if (node.type !== "block") return;
-      if (Object.values(project.blocks).every((x) => x.parentId !== node.id)) return; // 子が無ければ畳めない
-      toggleCollapsed(node.id);
-    }
-  , [project, toggleCollapsed]
-  );
 
   return (
     <ReactFlow
@@ -335,13 +332,13 @@ export function FlowCanvas({ project, matcher }: Props) {
       isValidConnection={isValidConnection}
       onEdgeClick={onEdgeClick}
       onPaneClick={onPaneClick}
-      onNodeDoubleClick={onNodeDoubleClick}
       nodesDraggable={canEdit}
       nodesConnectable={canEdit}
       elementsSelectable
       deleteKeyCode={null}
       selectionKeyCode={null}
       multiSelectionKeyCode={null}
+      zoomOnDoubleClick={false} // ダブルクリックは箱の畳む / 展開 (大項目ならタブを開く) に使う。拡大に取られると View で届かない
       fitView
       fitViewOptions={FIT_OPTIONS}
       minZoom={0.05} // 大きな計画 (横 1 万 px など) も全体表示できるように

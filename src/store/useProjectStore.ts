@@ -6,13 +6,13 @@
  */
 import { useMemo } from "react";
 import { create } from "zustand";
-import { childrenOf, createProject, defaultTaskParent, fromJSON, projectBlocks, resolveAllOverlaps, toJSON } from "../model/graph";
+import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeMajors, resolveAllOverlaps, toJSON } from "../model/graph";
+export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile, writeLocalFile } from "../lib/localfile";
 import { buildSampleProject } from "../model/sample";
 import exampleText from "../../examples/logic-daw/boxglow.json?raw";
-import type { Block, Project } from "../model/types";
-import { ROOT_ID } from "../model/types";
+import type { Project } from "../model/types";
 import { deleteProject, listProjects, loadProject, saveProject, type ProjectMeta } from "../lib/storage";
 
 /** 履歴に積む上限 */
@@ -125,33 +125,6 @@ function loadScope(p: Project): string | null {
   }
 }
 
-/**
- * 箱が表示範囲 (scope の箱とその中) に入っているか
- * Input : project, scope = 範囲の箱の id, blockId = 調べる箱 (null なら「入っていない」)
- * Output: true = 範囲の中 (scope 自身も含む)
- */
-export function isInScope(project: Project, scope: string, blockId: string | null): boolean {
-  let cur: string | null = blockId;
-  while (cur !== null) {
-    if (cur === scope) return true;
-    cur = project.blocks[cur]?.parentId ?? null;
-  }
-  return false;
-}
-
-/**
- * キャンバスのタブに並べる「大項目」の箱 (プロジェクトの箱の直下。プロジェクトの箱が無ければ最上位の箱)
- * Input : project
- * Output: 大項目の箱の配列 (タブの順 = 配置の上から、同じ高さなら左から)
- */
-export function majorBlocks(project: Project): Block[] {
-  const projects = projectBlocks(project);
-  const parents = projects.length > 0 ? projects.map((b) => b.id) : [ROOT_ID];
-  const out: Block[] = [];
-  for (const pid of parents) out.push(...childrenOf(project, pid).filter((b) => (b.kind ?? "task") !== "project"));
-  return out.sort((a, b) => (a.position.y - b.position.y) || (a.position.x - b.position.x));
-}
-
 function loadEditMode(_p: Project): boolean {
   return false;
 }
@@ -255,8 +228,10 @@ export const useProjectStore = create<State>((set, get) => {
       })();
     }
   , toggleCollapsed: (blockId) => {
-      const { project, editMode, readonly, viewCollapsed } = get();
+      const { project, editMode, readonly, viewCollapsed, viewScope } = get();
       if (!project || !project.blocks[blockId]) return;
+      // All の図では大項目は展開しない (中はタブで見る)。畳む / 展開の操作はその大項目のタブを開く操作にする
+      if (viewScope === null && majorOf(project, blockId) === blockId) { get().setViewScope(blockId); return; }
       if (editMode && !readonly) {
         // 共有の配置として保存する (他の人・AI にも同じ見え方になる)。画面だけの記録は消して、保存した値を見せる
         const rest = { ...viewCollapsed };
@@ -296,9 +271,13 @@ export const useProjectStore = create<State>((set, get) => {
     }
   , focus: null
   , focusBlock: (blockId) => {
-      // 今のタブ (表示範囲) の外にある箱なら、まず All に戻してから寄せる (見えないままでは意味がない)
+      // 箱が見えるタブに切り替えてから寄せる: 大項目の中の箱はその大項目のタブ、大項目そのものや上の階層は All
       const { project, viewScope } = get();
-      if (project && viewScope && !isInScope(project, viewScope, blockId)) get().setViewScope(null);
+      if (project && project.blocks[blockId]) {
+        const major = majorOf(project, blockId);
+        const want = major && major !== blockId ? major : null;
+        if (want !== viewScope) get().setViewScope(want);
+      }
       set({ focus: { blockId, nonce: Date.now() } });
     }
   , saveState: "none"
@@ -308,7 +287,8 @@ export const useProjectStore = create<State>((set, get) => {
       if (!project || readonly) return;
       let next = fn(project);
       if (next === project) return;
-      // 箱は重ねない: 変更のたびに同じ階層の重なりを押し出す (ドラッグ中は呼び出し側が history=false で呼ぶので除く)
+      // 大項目は畳んだ状態でそろえる (All は大項目までしか出さない)。箱は重ねない: 変更のたびに同じ階層の重なりを押し出す (ドラッグ中は呼び出し側が history=false で呼ぶので除く)
+      next = normalizeMajors(next);
       if (opts?.history !== false) next = resolveAllOverlaps(next, blockSize);
       const history = opts?.history ?? true;
       set({
@@ -484,8 +464,8 @@ export function useShownProject(): Project | null {
   const viewScope = useProjectStore((s) => s.viewScope);
   return useMemo(() => {
     if (!project) return null;
-    const shown = withViewCollapsed(project, viewCollapsed);
-    // タブで選んだ大項目は、畳まれていても必ず展開して中を見せる (画面だけ)
+    // All では大項目を必ず畳む (中はタブで見る)。タブで選んだ大項目は、畳まれていても必ず展開して中を見せる (どちらも画面だけ)
+    const shown = normalizeMajors(withViewCollapsed(project, viewCollapsed));
     if (viewScope && shown.blocks[viewScope]?.collapsed) {
       return { ...shown, blocks: { ...shown.blocks, [viewScope]: { ...shown.blocks[viewScope], collapsed: false } } };
     }

@@ -44,12 +44,14 @@ export function matchesFilter(p: Project, blockId: string, f: Filter): boolean {
 /** フィルタが何も絞っていない状態か */
 export const isFilterEmpty = (f: Filter): boolean => f.statuses.size === 3 && f.memberId === null && !f.unassigned && f.category === null;
 
-function TreeRows({ project, parentId, depth, selectedId, onSelect, onToggle }: {
+function TreeRows({ project, parentId, depth, selectedId, onSelect, closed, onToggle }: {
   project: Project;
   parentId: string;
   depth: number;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** 引き出しの中で閉じた箱の id (図の畳みとは別。既定は全部開く) */
+  closed: Set<string>;
   onToggle: (id: string) => void;
 }) {
   const kids = childrenOf(project, parentId).sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
@@ -57,12 +59,13 @@ function TreeRows({ project, parentId, depth, selectedId, onSelect, onToggle }: 
     <>
       {kids.map((b) => {
         const hasKids = childrenOf(project, b.id).length > 0;
+        const isClosed = closed.has(b.id);
         return (
           <div key={b.id}>
             <div className="tree-row" data-selected={selectedId === b.id} style={{ paddingLeft: 8 + depth * 14 }} onClick={() => onSelect(b.id)} title={b.title}>
               {hasKids ? (
-                <button className="btn btn-ghost btn-sm" style={{ padding: "0 4px" }} onClick={(e) => { e.stopPropagation(); onToggle(b.id); }} title={b.collapsed ? "展開" : "畳む"}>
-                  {b.collapsed ? "▸" : "▾"}
+                <button className="btn btn-ghost btn-sm" style={{ padding: "0 4px" }} onClick={(e) => { e.stopPropagation(); onToggle(b.id); }} title={isClosed ? "開く" : "閉じる"}>
+                  {isClosed ? "▸" : "▾"}
                 </button>
               ) : (
                 <span style={{ width: 20, display: "inline-block" }} />
@@ -70,8 +73,8 @@ function TreeRows({ project, parentId, depth, selectedId, onSelect, onToggle }: 
               <span className={`tree-glyph ${b.status}`}>{GLYPH[b.status]}</span>
               <span className="truncate">{b.title}</span>
             </div>
-            {hasKids && !b.collapsed && (
-              <TreeRows project={project} parentId={b.id} depth={depth + 1} selectedId={selectedId} onSelect={onSelect} onToggle={onToggle} />
+            {hasKids && !isClosed && (
+              <TreeRows project={project} parentId={b.id} depth={depth + 1} selectedId={selectedId} onSelect={onSelect} closed={closed} onToggle={onToggle} />
             )}
           </div>
         );
@@ -85,7 +88,9 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
   const selection = useProjectStore((s) => s.selection);
   const select = useProjectStore((s) => s.select);
   const apply = useProjectStore((s) => s.apply);
-  const toggleCollapsed = useProjectStore((s) => s.toggleCollapsed);
+  // ツリーで閉じた箱 (引き出しの中だけの状態)
+  const [closed, setClosed] = useState<Set<string>>(() => new Set());
+  const toggleClosed = (id: string) => setClosed((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const [name, setName] = useState("");
   const [color, setColor] = useState(MEMBER_COLORS[0]);
   const focusBlock = useProjectStore((s) => s.focusBlock);
@@ -162,8 +167,9 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
           parentId={ROOT_ID}
           depth={0}
           selectedId={selection.blockId}
-          onSelect={(id) => select({ blockId: id })}
-          onToggle={(id) => toggleCollapsed(id)}
+          onSelect={(id) => { select({ blockId: id }); focusBlock(id); }}
+          closed={closed}
+          onToggle={toggleClosed}
         />
       ))}
 

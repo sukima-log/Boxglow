@@ -21,7 +21,7 @@ export const STATUS_GLYPH: Record<BlockStatus, string> = { black: "?", gray: "~"
  * Input : status
  * Output: 18px の SVG
  */
-function StatusIcon({ status }: { status: BlockStatus }) {
+export function StatusIcon({ status }: { status: BlockStatus }) {
   const label = STATUS_LABEL[status];
   if (status === "white") {
     return (
@@ -105,6 +105,11 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     ev.stopPropagation();
     toggleCollapsed(blockId);
   };
+  // ダブルクリックでも畳む / 展開 (大項目なら All からそのタブを開く)。箱の側で受ける (React Flow のノードのダブルクリックは View のとき届かない)
+  const onDoubleClick = (ev: React.MouseEvent) => {
+    ev.stopPropagation();
+    if (view.kids > 0) toggleCollapsed(blockId);
+  };
 
   const cls = [
     "bg-block"
@@ -122,7 +127,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   ].filter(Boolean).join(" ");
 
   return (
-    <div className={cls} style={{ width, height, ...(view.category ? ({ "--cat": view.category.color } as React.CSSProperties) : {}) }}>
+    <div className={cls} style={{ width, height, ...(view.category ? ({ "--cat": view.category.color } as React.CSSProperties) : {}) }} onDoubleClick={onDoubleClick}>
       {/* 題名の行: 題名だけ (カテゴリとプロジェクトの札、畳むボタン以外は置かない) */}
       <div className="bg-block__head" style={{ height: headerH - 24 }}>
         {view.category && <span className={`bg-block__cat${view.category.neutral ? " neutral" : ""}`} title={`カテゴリ: ${view.category.label}`}>{view.category.label}</span>}
@@ -130,7 +135,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         {!view.isProject && <StatusIcon status={view.status} />}
         <span className="bg-block__title" title={view.fromTemplate ? `${view.title} (部品: ${view.fromTemplate})` : view.title}>{view.title}</span>
         {view.kids > 0 && (
-          <button className="bg-block__toggle nodrag" onClick={toggle} title={view.collapsed ? "下の階層を展開する" : "下の階層を畳む"}>
+          <button className="bg-block__toggle nodrag" onClick={toggle} title={data.major ? "この大項目のタブを開く (中の箱を見る)" : view.collapsed ? "下の階層を展開する" : "下の階層を畳む"}>
             {view.collapsed ? "▸" : "▾"}
           </button>
         )}

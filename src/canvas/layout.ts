@@ -6,7 +6,7 @@
  */
 import { MarkerType, type Edge as RFEdge, type Node as RFNode } from "@xyflow/react";
 import { ROOT_ID, type Block, type Edge, type Endpoint, type Project } from "../model/types";
-import { CHILD_PADDING, wireNet, inputGroupsOf, isEdgeReady, isHiddenByCollapse, portsOf, rootInputsOf } from "../model/graph";
+import { CHILD_PADDING, wireNet, inputGroupsOf, isEdgeReady, isHiddenByCollapse, majorBlocks, portsOf, rootInputsOf } from "../model/graph";
 
 export { BLOCK_W, HEADER_H, ROW_H, PAD_BOTTOM, EXPANDED_MIN_W, EXPANDED_PAD, TERMINAL_W, isExpanded, blockSize, terminalHeight, type Size } from "../model/size";
 import { blockSize, isExpanded, terminalHeight, TERMINAL_W, HEADER_H, ROW_H, PAD_BOTTOM, EXPANDED_PAD } from "../model/size";
@@ -73,7 +73,7 @@ function depthOf(p: Project, blockId: string): number {
   return d;
 }
 
-export type BlockNodeData = { blockId: string; dimmed: boolean; mine: boolean; headerH: number; dropTarget?: boolean };
+export type BlockNodeData = { blockId: string; dimmed: boolean; mine: boolean; headerH: number; dropTarget?: boolean; major?: boolean };
 /** 入力/出力ノード。scopeId があれば最上位ではなく、タブで開いた大項目の箱の入力/出力を表す */
 export type TerminalNodeData = { which: "in" | "out"; groupId?: string; scopeId?: string };
 /** 見えない枠 (タブで開いた大項目の箱。中の箱の座標の基準にするためだけに置く) */
@@ -250,6 +250,7 @@ export function buildNodes(
   });
   const blocks = Object.values(p.blocks).filter((b) => b.id !== ROOT_ID);
   blocks.sort((a, b) => depthOf(p, a.id) - depthOf(p, b.id));
+  const majors = new Set(majorBlocks(p).map((b) => b.id)); // All では大項目は畳んだまま (▸ はタブを開く)
   for (const b of blocks) {
     const size = blockSize(p, b.id);
     const nested = b.parentId !== null && b.parentId !== ROOT_ID;
@@ -258,7 +259,7 @@ export function buildNodes(
     , type: "block"
     , position: b.position
     , parentId: nested ? b.parentId! : undefined
-    , data: { blockId: b.id, dimmed: opts.matcher ? !opts.matcher(b.id) : false, mine: !!opts.meId && b.assigneeIds.includes(opts.meId), headerH: size.headerH }
+    , data: { blockId: b.id, dimmed: opts.matcher ? !opts.matcher(b.id) : false, mine: !!opts.meId && b.assigneeIds.includes(opts.meId), headerH: size.headerH, major: majors.has(b.id) }
     , width: size.width
     , height: size.height
     , hidden: isHiddenByCollapse(p, b.id)

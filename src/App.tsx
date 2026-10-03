@@ -41,6 +41,7 @@ import { HomeDialog } from "./panels/HomeDialog";
 import { Inspector } from "./panels/Inspector";
 import { Drawer, isFilterEmpty, matchesFilter, type Filter, EMPTY_FILTER } from "./panels/Drawer";
 import { TopBar } from "./panels/TopBar";
+import { TabBar } from "./panels/TabBar";
 
 export function App() {
   const project = useProjectStore((s) => s.project);
@@ -186,7 +187,7 @@ export function App() {
   const gridClass = ["app-grid", embed ? "embed" : "", hasSelection ? "" : "no-right"].filter(Boolean).join(" ");
   // キャンバスのタブ: All (全体) + 大項目ごと (埋め込みでは出さない)
   const majors = useMemo(() => (project ? majorBlocks(project) : []), [project]);
-  const showTabs = !!project && !embed && majors.length > 0;
+  const showTabs = !!project && majors.length > 0; // 埋め込みでも出す (All は大項目までしか見せないので、中を見る手段が要る)
   const scopeOk = viewScope && project?.blocks[viewScope] ? viewScope : null;
 
   return (
@@ -215,14 +216,7 @@ export function App() {
             <span className="absolute top-2 left-2 z-10 font-head text-[14px] px-2 py-1 rounded-lg" style={{ background: "var(--bg-card)", border: "2px solid var(--line)" }}>Boxglow</span>
           )}
         </div>
-        {showTabs && (
-          <div className="canvas-tabs" role="tablist">
-            <button className="canvas-tab" role="tab" data-on={scopeOk === null} onClick={() => setViewScope(null)} title="すべての箱を俯瞰する">All</button>
-            {majors.map((b) => (
-              <button key={b.id} className="canvas-tab" role="tab" data-on={scopeOk === b.id} onClick={() => setViewScope(b.id)} title={`${b.title} の中だけを見る`}>{b.title}</button>
-            ))}
-          </div>
-        )}
+        {showTabs && <TabBar project={project!} majors={majors} scope={scopeOk} onSelect={setViewScope} />}
         {!project && !embed && <HomeDialog />}
         {helpOpen && (
           <div className="modal-backdrop" onClick={() => setHelpOpen(false)}>

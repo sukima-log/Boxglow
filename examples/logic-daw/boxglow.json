@@ -53,7 +53,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": [],
@@ -68,10 +68,10 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 120,
-        "y": 1306
+        "x": 617.6999999999999,
+        "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": [],
@@ -88,10 +88,10 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 120,
-        "y": 3532
+        "x": 1183.0499999999997,
+        "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": [],
@@ -108,10 +108,10 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 120,
-        "y": 5234
+        "x": 1759.9499999999996,
+        "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": [],
@@ -3013,11 +3013,11 @@
   "terminals": {
     "in": {
       "x": 0,
-      "y": 3162
+      "y": 139
     },
     "out": {
-      "x": 3618.0499999999984,
-      "y": 3188
+      "x": 2725.6999999999994,
+      "y": 165
     }
   },
   "log": [
