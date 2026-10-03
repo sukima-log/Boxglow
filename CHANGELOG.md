@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Top bar: `Auto Layout` is its own button; `+ Project` is gone from the bar (`New Project` stays in the ⋯ menu).
 - Much faster editing on large plans: wire routing is recomputed only when connections or box geometry change (not on every keystroke, selection or hover), and text fields commit after you pause typing (or on Enter / blur). Renaming an output with 8 branches went from about 285 ms to 13 ms per keystroke.
 - Wires between a tab's Inputs / Outputs nodes and the opened box are selectable: clicking one selects the real wire that feeds that port (and they light up with it).
 - A connected input's name is the name of the output feeding it: connecting renames the input to the source's name, the name is read-only on the input side (UI, `port --rename` refuses), and renaming the output propagates.

@@ -66,7 +66,7 @@ The server finds `boxglow.json` like the CLI does (current directory upwards, or
 
 ## Several repositories, one plan
 
-A `boxglow.json` can hold several project boxes (the top level only has Inputs, Outputs and project boxes). Add one with `+ Project` in the top bar or `npx boxglow project "Name" --repo ../path`, and set each box's Repository in the inspector. For a multi-repo workspace, keep the file in the parent folder and point every repository's agent at it:
+A `boxglow.json` can hold several project boxes (the top level only has Inputs, Outputs and project boxes). Add one with `New Project` in the ⋯ menu of the top bar or `npx boxglow project "Name" --repo ../path`, and set each box's Repository in the inspector. For a multi-repo workspace, keep the file in the parent folder and point every repository's agent at it:
 
 ```
 workspace/

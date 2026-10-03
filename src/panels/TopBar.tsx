@@ -66,7 +66,7 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
   };
 
   /** ブロックを足す (選んでいる箱の中。何も選んでいなければ最初のプロジェクトの中) */
-  // 最上位にプロジェクトの箱を足す (+ Project ボタンと ⋯ メニューの New Project)
+  // 最上位にプロジェクトの箱を足す (⋯ メニューの New Project。上の帯のボタンにはしない: 使う頻度が低い)
   const addProject = () => {
     const name = prompt("追加するプロジェクトの名前 (リポジトリごとに 1 つなど)");
     if (name?.trim()) apply((p) => { const r = addProjectBlock(p, name.trim()); setTimeout(() => { select({ blockId: r.blockId }); focusBlock(r.blockId); }, 0); return r.project; });
@@ -160,7 +160,7 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
         {!readonly && (
           <>
             <button className="btn btn-primary btn-sm" onClick={addSibling} title="ブロックを追加 (N)。箱を選んでいればその中に、選んでいなければプロジェクトの中に">+ Block</button>
-            <button className="btn btn-sm" onClick={addProject} title="最上位にプロジェクトの箱を足す (リポジトリごとに 1 つなど)">+ Project</button>
+            <button className="btn btn-sm" onClick={() => apply((p) => layoutAll(normalizeCollapsed(p)))} title="Auto Layout: 依存関係で並べ直す (大項目は畳んだ前提)">Auto Layout</button>
             <button className="btn btn-ghost btn-sm hidden md:inline-flex" onClick={undo} disabled={past === 0} title="元に戻す (Ctrl+Z)">↶</button>
             <button className="btn btn-ghost btn-sm hidden md:inline-flex" onClick={redo} disabled={future === 0} title="やり直す (Ctrl+Y)">↷</button>
           </>
@@ -169,7 +169,6 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
           <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setMenu(!menu); }} title="Menu">⋯</button>
           {menu && (
             <div className="card absolute right-0 mt-1 p-1 flex flex-col z-30" style={{ minWidth: 220 }}>
-              {!readonly && <button className="btn btn-ghost btn-sm justify-start" onClick={() => apply((p) => layoutAll(normalizeCollapsed(p)))} title="依存関係で並べ直す (箱は畳んだ前提)">Auto Layout</button>}
               {!readonly && (
                 <button className="btn btn-ghost btn-sm justify-start" onClick={addProject} title="同じファイルにプロジェクトの箱を足す">New Project</button>
               )}
