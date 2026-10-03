@@ -18,7 +18,7 @@ import {
 , type OnConnectEnd
 , type OnNodeDrag
 } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { connect, connectToBlock, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, validateConnection } from "../model/graph";
 import { blockSize, isExpanded } from "../model/size";
 import { ROOT_ID } from "../model/types";
@@ -85,7 +85,16 @@ export function FlowCanvas({ project, matcher }: Props) {
   const focus = useProjectStore((s) => s.focus);
   const meId = useProjectStore((s) => s.meId);
   const focusBlock = useProjectStore((s) => s.focusBlock);
+  const viewScope = useProjectStore((s) => s.viewScope);
   const rf = useReactFlow();
+
+  // タブ (表示範囲) を切り替えたら、その範囲が収まるように全体表示する (ノードが作り直された後に)
+  const scopeMounted = useRef(false);
+  useEffect(() => {
+    if (!scopeMounted.current) { scopeMounted.current = true; return; } // 最初は fitView 属性に任せる
+    const t = setTimeout(() => void rf.fitView({ ...FIT_OPTIONS, duration: 250 }), 80);
+    return () => clearTimeout(t);
+  }, [viewScope, rf]);
   // 動作確認やスクリーンショット用に、React Flow の instance もコンソールから触れるようにしておく
   useEffect(() => { (window as unknown as { boxglow?: { rf?: unknown } }).boxglow = { ...((window as unknown as { boxglow?: object }).boxglow ?? {}), rf }; }, [rf]);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
@@ -113,15 +122,15 @@ export function FlowCanvas({ project, matcher }: Props) {
   // ノードはドラッグ中の見た目のために React Flow 側の状態を持ち、project が変わるたびに作り直す
   const [nodes, setNodes, onNodesChangeRaw] = useNodesState<AnyRFNode>([]);
   useEffect(() => {
-    setNodes(buildNodes(project, { selectedBlockId: selection.blockId, readonly: !canEdit, matcher: matcher ?? undefined, meId }));
-  }, [project, selection.blockId, canEdit, matcher, meId, setNodes]);
+    setNodes(buildNodes(project, { selectedBlockId: selection.blockId, readonly: !canEdit, matcher: matcher ?? undefined, meId, scope: viewScope }));
+  }, [project, selection.blockId, canEdit, matcher, meId, viewScope, setNodes]);
   useEffect(() => {
     setNodes((ns) => ns.map((n) => (n.type === "block" ? { ...n, data: { ...n.data, dropTarget: n.id === dropTarget } } : n)));
   }, [dropTarget, setNodes]);
 
   // 箱にマウスを乗せたら、つながる線を強調する
   const [hovered, setHovered] = useState<string | null>(null);
-  const baseEdges = useMemo(() => buildEdges(project, { selectedEdgeId: selection.edgeId, selectedBlockId: selection.blockId }), [project, selection.edgeId, selection.blockId]);
+  const baseEdges = useMemo(() => buildEdges(project, { selectedEdgeId: selection.edgeId, selectedBlockId: selection.blockId, scope: viewScope }), [project, selection.edgeId, selection.blockId, viewScope]);
 
   // ノードの絶対位置・大きさ・ハンドルの位置 (変わったときだけ経路を計算し直すため、文字列にして比べる)
   const geometrySig = useStore(selectGeometry);

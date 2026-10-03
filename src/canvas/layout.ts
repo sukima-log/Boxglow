@@ -5,7 +5,7 @@
  * ハンドル (ポートの丸) の id は "<in|out>:<ポート id>:<outer|inner>"。
  */
 import { MarkerType, type Edge as RFEdge, type Node as RFNode } from "@xyflow/react";
-import { ROOT_ID, type Edge, type Endpoint, type Project } from "../model/types";
+import { ROOT_ID, type Block, type Edge, type Endpoint, type Project } from "../model/types";
 import { wireNet, inputGroupsOf, isEdgeReady, isHiddenByCollapse, rootInputsOf } from "../model/graph";
 
 export { BLOCK_W, HEADER_H, ROW_H, PAD_BOTTOM, EXPANDED_MIN_W, EXPANDED_PAD, TERMINAL_W, isExpanded, blockSize, terminalHeight, type Size } from "../model/size";
@@ -80,15 +80,92 @@ export type TerminalRFNode = RFNode<TerminalNodeData, "terminal">;
 export type AnyRFNode = BlockRFNode | TerminalRFNode;
 
 /**
+ * 箱が範囲 (scope の箱とその中) に入っているか
+ * Input : p, scope = 範囲の箱の id, blockId
+ * Output: true = scope 自身か、その子孫
+ */
+function isInSubtree(p: Project, scope: string, blockId: string): boolean {
+  let cur: string | null = blockId;
+  while (cur !== null) {
+    if (cur === scope) return true;
+    cur = p.blocks[cur]?.parentId ?? null;
+  }
+  return false;
+}
+
+/**
+ * 範囲の中で「畳まれた箱の中にある」か (範囲の外の祖先が畳まれていても気にしない)
+ * Input : p, blockId, scope
+ * Output: true = 画面に出さない
+ */
+function hiddenIn(p: Project, blockId: string, scope: string): boolean {
+  let cur = p.blocks[blockId]?.parentId ?? null;
+  while (cur !== null && cur !== ROOT_ID) {
+    const b = p.blocks[cur];
+    if (!b) break;
+    if (b.collapsed) return true;
+    if (cur === scope) break;
+    cur = b.parentId;
+  }
+  return false;
+}
+
+/**
+ * 箱の絶対座標 (祖先の位置を足し合わせたもの。最上位の箱は親の座標系を持たない)
+ * Input : p, blockId
+ * Output: {x, y}
+ */
+function absolutePosition(p: Project, blockId: string): { x: number; y: number } {
+  let x = 0;
+  let y = 0;
+  let cur: string | null = blockId;
+  while (cur !== null && cur !== ROOT_ID) {
+    const b: Block | undefined = p.blocks[cur];
+    if (!b) break;
+    x += b.position.x;
+    y += b.position.y;
+    cur = b.parentId;
+  }
+  return { x, y };
+}
+
+/**
  * React Flow のノード一覧を作る
  * Input : selection = 選択中のブロック id, readonly, matcher = フィルタ (false を返したブロックは薄く描く)
  * Output: 親が子より先に並んだノード配列 (React Flow の要件)
  */
 export function buildNodes(
   p: Project
-, opts: { selectedBlockId: string | null; readonly: boolean; matcher?: (blockId: string) => boolean; meId?: string | null }
+, opts: { selectedBlockId: string | null; readonly: boolean; matcher?: (blockId: string) => boolean; meId?: string | null; scope?: string | null }
 ): AnyRFNode[] {
   const nodes: AnyRFNode[] = [];
+  const scope = opts.scope && p.blocks[opts.scope] ? opts.scope : null;
+  // 大項目のタブ: その箱と中の箱だけを出す。範囲の箱は最上位のノードとして、絶対座標の位置に置く
+  // (線の経路計算は React Flow の絶対座標を使うので、All のときと同じ座標系に保つ)
+  if (scope) {
+    const blocks = Object.values(p.blocks).filter((b) => b.id !== ROOT_ID && isInSubtree(p, scope, b.id));
+    blocks.sort((a, b) => depthOf(p, a.id) - depthOf(p, b.id));
+    for (const b of blocks) {
+      const size = blockSize(p, b.id);
+      const isScope = b.id === scope;
+      nodes.push({
+        id: b.id
+      , type: "block"
+      , position: isScope ? absolutePosition(p, b.id) : b.position
+      , parentId: isScope ? undefined : b.parentId!
+      , data: { blockId: b.id, dimmed: opts.matcher ? !opts.matcher(b.id) : false, mine: !!opts.meId && b.assigneeIds.includes(opts.meId), headerH: size.headerH }
+      , width: size.width
+      , height: size.height
+      , hidden: hiddenIn(p, b.id, scope)
+      , selected: opts.selectedBlockId === b.id
+        // 範囲の箱そのものは動かせない (位置が親の座標系ではなく絶対座標になっているため)
+      , draggable: !opts.readonly && !isScope
+      , selectable: true
+      , zIndex: 2 * depthOf(p, b.id)
+      });
+    }
+    return nodes;
+  }
   nodes.push({
     id: "root-in"
   , type: "terminal"
@@ -153,8 +230,9 @@ export function buildNodes(
  * Input : selectedEdgeId
  * Output: 線の配列 (畳まれて見えない端点を持つ線は hidden)
  */
-export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; selectedBlockId?: string | null }): RFEdge[] {
+export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; selectedBlockId?: string | null; scope?: string | null }): RFEdge[] {
   const edges: RFEdge[] = [];
+  const scope = opts.scope && p.blocks[opts.scope] ? opts.scope : null;
   // 線を選んだときは、親の縁を越えてつながる線 (同じ信号) をまとめて強調する
   const net = opts.selectedEdgeId ? wireNet(p, opts.selectedEdgeId) : new Set<string>();
   for (const e of Object.values(p.edges)) {
@@ -168,6 +246,15 @@ export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; se
     const endpointVisible = (ep: Endpoint): boolean => {
       const port = p.ports[ep.portId];
       if (!port) return false;
+      if (scope) {
+        // 大項目のタブ: 範囲の外の箱 (入力・出力ノードも含む) につながる線は出さない
+        if (port.blockId === ROOT_ID || !isInSubtree(p, scope, port.blockId)) return false;
+        // 範囲の箱の外側の面は見えない (外へ出ていく線なので)
+        if (port.blockId === scope && ep.side === "outer") return false;
+        if (hiddenIn(p, port.blockId, scope)) return false;
+        if (ep.side === "inner" && !isExpanded(p, port.blockId)) return false;
+        return true;
+      }
       if (port.blockId === ROOT_ID) return true;
       if (isHiddenByCollapse(p, port.blockId)) return false;
       if (ep.side === "inner" && !isExpanded(p, port.blockId)) return false;

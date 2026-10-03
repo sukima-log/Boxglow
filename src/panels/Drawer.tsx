@@ -80,7 +80,7 @@ function TreeRows({ project, parentId, depth, selectedId, onSelect, onToggle }: 
   );
 }
 
-export function Drawer({ project, filter, onFilter, onClose }: { project: Project; filter: Filter; onFilter: (f: Filter) => void; onClose: () => void }) {
+export function Drawer({ project, filter, onFilter, onClose, width }: { project: Project; filter: Filter; onFilter: (f: Filter) => void; onClose: () => void; width: number }) {
   const readonly = useProjectStore((s) => s.readonly);
   const selection = useProjectStore((s) => s.selection);
   const select = useProjectStore((s) => s.select);
@@ -100,7 +100,7 @@ export function Drawer({ project, filter, onFilter, onClose }: { project: Projec
 
   /** テンプレートを、選んでいる箱の中 (タスクなら隣) に挿入する */
   const insertTemplate = (tpl: BlockTemplate) => {
-    const parentId = parentForNewBlock(project, selection);
+    const parentId = parentForNewBlock(project, selection, useProjectStore.getState().viewScope);
     apply((p) => {
       const r = instantiateTemplate(p, parentId, tpl, "human");
       setTimeout(() => { select({ blockId: r.blockId }); focusBlock(r.blockId); }, 0);
@@ -143,7 +143,7 @@ export function Drawer({ project, filter, onFilter, onClose }: { project: Projec
   ];
 
   return (
-    <div className="drawer card">
+    <div className="drawer card" style={{ width }}>
       <div className="flex items-center gap-1 mb-2">
         <div className="seg flex-1" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
           {tabs.map((x) => (
@@ -200,7 +200,7 @@ export function Drawer({ project, filter, onFilter, onClose }: { project: Projec
 
       {tab === "parts" && (<>
       <div className="text-[11px] mb-1" style={{ color: "var(--text-muted)" }}>
-        挿入先: {(() => { const pid = parentForNewBlock(project, selection); const b = project.blocks[pid]; return b ? (kindOf(b) === "project" ? b.title : `${b.title} の隣`) : "最上位"; })()}
+        挿入先: {(() => { const pid = parentForNewBlock(project, selection, useProjectStore.getState().viewScope); const b = project.blocks[pid]; return b ? (kindOf(b) === "project" ? b.title : `${b.title} の隣`) : "最上位"; })()}
       </div>
       <div className="flex flex-col gap-1">
         {templates.length === 0 && <div className="text-[12px] px-1" style={{ color: "var(--text-muted)" }}>箱を選び、右の「⋯」から「Save as Part」すると、ここに並びます。</div>}

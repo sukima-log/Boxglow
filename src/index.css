@@ -448,6 +448,19 @@ textarea.input { resize: vertical; min-height: 64px; }
 .dec-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 2px solid var(--line-soft); border-radius: 10px; background: var(--bg-paper); cursor: pointer; }
 .dec-head:hover { border-color: var(--primary); }
 .dec-key { flex: none; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 6px; background: var(--primary); color: var(--on-primary); }
+/* キャンバスのタブ (All = 全体、以降は大項目ごと) */
+.canvas-tabs { display: flex; align-items: flex-end; gap: 4px; padding: 6px 12px 0; border-bottom: 2px solid var(--line); background: var(--bg-card); overflow-x: auto; flex: none; }
+.canvas-tab { flex: none; max-width: 240px; padding: 6px 12px; border: 2px solid var(--line-soft); border-bottom: 0; border-radius: 10px 10px 0 0; background: var(--bg-paper); color: var(--text-muted); font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.canvas-tab[data-on="true"] { background: var(--bg-card); color: var(--text); border-color: var(--line); margin-bottom: -2px; padding-bottom: 8px; }
+.canvas-tab:hover { color: var(--text); }
+/* パネルの境界のつまみ (ドラッグで幅を変える) */
+.resize-handle { position: absolute; top: 0; bottom: 0; width: 10px; cursor: col-resize; z-index: 25; }
+.resize-handle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; background: transparent; }
+.resize-handle:hover::after, .resize-handle[data-active="true"]::after { background: var(--primary); }
+.resize-handle.left { left: -5px; }
+.resize-handle.right { right: -5px; }
+.canvas-wrap > .resize-handle { z-index: 20; } /* 引き出し (15) より前 */
+.panel.right { position: relative; }
 .bg-block__tpl {
   display: inline-block;
   margin-left: 6px;
@@ -654,7 +667,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .app-grid {
   display: grid;
   grid-template-rows: 60px 1fr 36px; /* 上の帯は要素の上下に 8px 以上の余白が要る (DESIGN.md の 8px 単位) */
-  grid-template-columns: 1fr 320px;
+  grid-template-columns: 1fr var(--right-w, 320px); /* 右パネルの幅はつまみで変えられる (App が --right-w を更新) */
   height: 100%;
 }
 .app-grid.no-right { grid-template-columns: 1fr 0; }
@@ -675,7 +688,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 
 @media (max-width: 900px) {
   .app-grid, .app-grid.no-right { grid-template-columns: 1fr 0; }
-  .panel.right { position: fixed; top: 60px; bottom: 36px; right: 0; width: min(320px, 92vw); z-index: 20; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.25); }
+  .panel.right { position: fixed; top: 60px; bottom: 36px; right: 0; width: min(var(--right-w, 320px), 92vw); z-index: 20; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.25); }
 }
 
 /* 引き出し (階層・絞り込み・メンバー): キャンバスの左に重ねる */
@@ -690,7 +703,10 @@ textarea.input { resize: vertical; min-height: 64px; }
   z-index: 15;
   box-shadow: var(--shadow-card);
 }
-@media (max-width: 900px) { .drawer { width: min(280px, 90vw); } }
+@media (max-width: 900px) { .drawer { max-width: 90vw; } }
+/* キャンバスの列: タブの帯 + 図 (引き出しや札は図の上に重ねる) */
+.app-main { display: flex; flex-direction: column; }
+.canvas-wrap { position: relative; flex: 1; min-height: 0; min-width: 0; }
 
 /* 状態の切り替え (3 つ並びのボタン) */
 .seg { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; border: 2px solid var(--line-soft); border-radius: 10px; overflow: hidden; }

@@ -11,7 +11,31 @@ import { ReactFlowProvider } from "@xyflow/react";
 import { FlowCanvas } from "./canvas/FlowCanvas";
 import { addBlock, computeProgress, disconnect, removeBlock } from "./model/graph";
 import { ROOT_ID } from "./model/types";
-import { parentForNewBlock, useProjectStore, useShownProject } from "./store/useProjectStore";
+import { majorBlocks, parentForNewBlock, useProjectStore, useShownProject } from "./store/useProjectStore";
+import { ResizeHandle } from "./panels/parts";
+
+/**
+ * ブラウザに記憶したパネルの幅を読む
+ * Input : key = 記憶の名前, fallback = 既定の幅, min/max = 許す範囲
+ * Output: 幅 (px)
+ */
+function loadWidth(key: string, fallback: number, min: number, max: number): number {
+  try {
+    const v = Number(localStorage.getItem(key));
+    return Number.isFinite(v) && v >= min && v <= max ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** 幅を記憶する (できなくても動く) */
+function saveWidth(key: string, w: number): void {
+  try { localStorage.setItem(key, String(w)); } catch { /* 記憶できなくても動く */ }
+}
+
+/** 右パネルと引き出しの幅の範囲 (px) */
+const RIGHT_W = { min: 260, max: 760, def: 320 };
+const DRAWER_W = { min: 220, max: 640, def: 280 };
 import { applyTheme } from "./lib/theme";
 import { HomeDialog } from "./panels/HomeDialog";
 import { Inspector } from "./panels/Inspector";
@@ -36,7 +60,14 @@ export function App() {
   const openExample = useProjectStore((s) => s.openExample);
   const openProject = useProjectStore((s) => s.openProject);
 
+  const viewScope = useProjectStore((s) => s.viewScope);
+  const setViewScope = useProjectStore((s) => s.setViewScope);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // パネルの幅 (境界のつまみで変えられる。ブラウザに記憶)
+  const [rightW, setRightW] = useState(() => loadWidth("boxglow:rightW", RIGHT_W.def, RIGHT_W.min, RIGHT_W.max));
+  const [drawerW, setDrawerW] = useState(() => loadWidth("boxglow:drawerW", DRAWER_W.def, DRAWER_W.min, DRAWER_W.max));
+  const onRightW = useCallback((w: number) => { setRightW(w); saveWidth("boxglow:rightW", w); }, []);
+  const onDrawerW = useCallback((w: number) => { setDrawerW(w); saveWidth("boxglow:drawerW", w); }, []);
   const [helpOpen, setHelpOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>({ ...EMPTY_FILTER, statuses: new Set(EMPTY_FILTER.statuses) });
 
@@ -115,7 +146,7 @@ export function App() {
         }
       } else if (ev.key.toLowerCase() === "n" && !ev.ctrlKey && !ev.metaKey) {
         if (readonly) return;
-        const parentId = parentForNewBlock(p, sel);
+        const parentId = parentForNewBlock(p, sel, useProjectStore.getState().viewScope);
         apply((q) => {
           const r = addBlock(q, { parentId, title: "新しいブロック" });
           const q2 = structuredClone(r.project);
@@ -153,29 +184,45 @@ export function App() {
   // 詳細パネルは何かを選んでいるときだけ出す
   const hasSelection = !!project && !embed && (selection.blockId !== null || selection.edgeId !== null || selection.terminal !== null || selection.project || selection.timeline);
   const gridClass = ["app-grid", embed ? "embed" : "", hasSelection ? "" : "no-right"].filter(Boolean).join(" ");
+  // キャンバスのタブ: All (全体) + 大項目ごと (埋め込みでは出さない)
+  const majors = useMemo(() => (project ? majorBlocks(project) : []), [project]);
+  const showTabs = !!project && !embed && majors.length > 0;
+  const scopeOk = viewScope && project?.blocks[viewScope] ? viewScope : null;
 
   return (
-    <div className={gridClass}>
+    <div className={gridClass} style={{ ["--right-w" as string]: `${rightW}px` }}>
       <div className="app-top">
         {project && !embed && <TopBar project={project} onToggleDrawer={toggleDrawer} onHelp={() => setHelpOpen(true)} />}
       </div>
 
       <main className="app-main relative min-w-0 min-h-0">
-        {project && (
-          <ReactFlowProvider>
-            <FlowCanvas project={shown ?? project} matcher={matcher} />
-          </ReactFlowProvider>
+        {showTabs && (
+          <div className="canvas-tabs" role="tablist">
+            <button className="canvas-tab" role="tab" data-on={scopeOk === null} onClick={() => setViewScope(null)} title="すべての箱を俯瞰する">All</button>
+            {majors.map((b) => (
+              <button key={b.id} className="canvas-tab" role="tab" data-on={scopeOk === b.id} onClick={() => setViewScope(b.id)} title={`${b.title} の中だけを見る`}>{b.title}</button>
+            ))}
+          </div>
         )}
-        {project && drawerOpen && !embed && <Drawer project={shown ?? project} filter={filter} onFilter={setFilter} onClose={() => setDrawerOpen(false)} />}
-        {project && !embed && !isFilterEmpty(filter) && (
-          <button className="chip absolute top-2 left-2 z-10" data-on="true" onClick={() => setFilter({ ...EMPTY_FILTER, statuses: new Set(EMPTY_FILTER.statuses) })} title="絞り込みを解除">Filtered ×</button>
-        )}
-        {embed && (
-          <a className="btn btn-accent absolute top-2 right-2 z-10" href={fullUrl} target="_blank" rel="noopener noreferrer">Open full ↗</a>
-        )}
-        {embed && (
-          <span className="absolute top-2 left-2 z-10 font-head text-[14px] px-2 py-1 rounded-lg" style={{ background: "var(--bg-card)", border: "2px solid var(--line)" }}>Boxglow</span>
-        )}
+        <div className="canvas-wrap">
+          {project && (
+            <ReactFlowProvider>
+              <FlowCanvas project={shown ?? project} matcher={matcher} />
+            </ReactFlowProvider>
+          )}
+          {project && drawerOpen && !embed && <Drawer project={shown ?? project} filter={filter} onFilter={setFilter} onClose={() => setDrawerOpen(false)} width={drawerW} />}
+          {/* 引き出しの右辺のつまみ (引き出しは中が縦に伸びるので、外側 = 図の上に置く。left 8px + 幅) */}
+          {project && drawerOpen && !embed && <ResizeHandle side="right" width={drawerW} min={DRAWER_W.min} max={DRAWER_W.max} onWidth={onDrawerW} style={{ left: 8 + drawerW - 5, top: 8, bottom: 8 }} />}
+          {project && !embed && !isFilterEmpty(filter) && (
+            <button className="chip absolute top-2 left-2 z-10" data-on="true" onClick={() => setFilter({ ...EMPTY_FILTER, statuses: new Set(EMPTY_FILTER.statuses) })} title="絞り込みを解除">Filtered ×</button>
+          )}
+          {embed && (
+            <a className="btn btn-accent absolute top-2 right-2 z-10" href={fullUrl} target="_blank" rel="noopener noreferrer">Open full ↗</a>
+          )}
+          {embed && (
+            <span className="absolute top-2 left-2 z-10 font-head text-[14px] px-2 py-1 rounded-lg" style={{ background: "var(--bg-card)", border: "2px solid var(--line)" }}>Boxglow</span>
+          )}
+        </div>
         {!project && !embed && <HomeDialog />}
         {helpOpen && (
           <div className="modal-backdrop" onClick={() => setHelpOpen(false)}>
@@ -201,6 +248,7 @@ export function App() {
       </main>
 
       <aside className={`panel right ${hasSelection ? "" : "hidden-panel"}`}>
+        {project && hasSelection && <ResizeHandle side="left" width={rightW} min={RIGHT_W.min} max={RIGHT_W.max} onWidth={onRightW} />}
         {project && hasSelection && <Inspector project={project} onOpenDrawer={openDrawer} />}
       </aside>
 

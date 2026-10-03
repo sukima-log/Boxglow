@@ -155,6 +155,40 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
  * Input : value = "YYYY-MM-DD" または "", onChange(値), disabled, danger (期日超過なら赤)
  * Output: 選んだ日付を onChange で返す ("" は消去)
  */
+/**
+ * パネルの境界のつまみ。ドラッグで幅を変える
+ * Input : side = つまみを置く辺 (left = パネルの左辺 / right = 右辺), width = 今の幅, min/max = 幅の範囲,
+ *         onWidth = 新しい幅を受け取る関数 (ドラッグ中に何度も呼ばれる)
+ * Output: 幅 10px の透明な縦の帯 (ホバー / ドラッグ中は線が出る)
+ */
+export function ResizeHandle({ side, width, min, max, onWidth, style }: { side: "left" | "right"; width: number; min: number; max: number; onWidth: (w: number) => void; style?: React.CSSProperties }) {
+  const [active, setActive] = useState(false);
+  const onPointerDown = (ev: React.PointerEvent<HTMLDivElement>) => {
+    ev.preventDefault();
+    const startX = ev.clientX;
+    const startW = width;
+    const el = ev.currentTarget;
+    el.setPointerCapture(ev.pointerId);
+    setActive(true);
+    const move = (e: PointerEvent) => {
+      // 左辺のつまみは左へ引くほど広がる、右辺のつまみは右へ引くほど広がる
+      const dx = e.clientX - startX;
+      const w = side === "left" ? startW - dx : startW + dx;
+      onWidth(Math.round(Math.max(min, Math.min(max, w))));
+    };
+    const up = () => {
+      setActive(false);
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  };
+  return <div className={`resize-handle ${side}`} data-active={active} style={style} onPointerDown={onPointerDown} title="ドラッグで幅を変える" />;
+}
+
 export function DateField({ value, onChange, disabled, danger }: { value: string; onChange: (v: string) => void; disabled?: boolean; danger?: boolean }) {
   const ref = useRef<HTMLInputElement>(null);
   // showPicker は Chrome / Edge / Firefox 101+ にある。無いブラウザでは欄にフォーカスするだけ

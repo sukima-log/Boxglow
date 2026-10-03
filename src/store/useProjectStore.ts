@@ -6,12 +6,13 @@
  */
 import { useMemo } from "react";
 import { create } from "zustand";
-import { createProject, defaultTaskParent, fromJSON, resolveAllOverlaps, toJSON } from "../model/graph";
+import { childrenOf, createProject, defaultTaskParent, fromJSON, projectBlocks, resolveAllOverlaps, toJSON } from "../model/graph";
 import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile, writeLocalFile } from "../lib/localfile";
 import { buildSampleProject } from "../model/sample";
 import exampleText from "../../examples/logic-daw/boxglow.json?raw";
-import type { Project } from "../model/types";
+import type { Block, Project } from "../model/types";
+import { ROOT_ID } from "../model/types";
 import { deleteProject, listProjects, loadProject, saveProject, type ProjectMeta } from "../lib/storage";
 
 /** 履歴に積む上限 */
@@ -49,6 +50,10 @@ interface State {
   viewCollapsed: Record<string, boolean>;
   /** 箱を畳む / 展開する。Edit なら共有の配置として保存、View なら画面だけ */
   toggleCollapsed: (blockId: string) => void;
+  /** キャンバスのタブで選んだ表示範囲 (大項目の箱の id)。null なら All (全体)。画面だけの状態で、プロジェクトごとにブラウザに記憶 */
+  viewScope: string | null;
+  /** 表示範囲を切り替える (null = All)。範囲の外にある箱の選択は解除する */
+  setViewScope: (blockId: string | null) => void;
   /** 今すぐ保存する (Save ボタン。自動保存を待たずに書く) */
   saveNow: () => void;
 
@@ -106,6 +111,47 @@ function loadMe(p: Project): string | null {
 }
 
 /** 開いたときのモードは常に View (誤操作を防ぐため。編集するときに Edit に切り替える) */
+/**
+ * ブラウザに記憶した表示範囲 (タブ) を読む
+ * Input : p = 開いたプロジェクト
+ * Output: 大項目の箱の id (無い・消えていれば null = All)
+ */
+function loadScope(p: Project): string | null {
+  try {
+    const id = localStorage.getItem(`boxglow:scope:${p.id}`);
+    return id && p.blocks[id] ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 箱が表示範囲 (scope の箱とその中) に入っているか
+ * Input : project, scope = 範囲の箱の id, blockId = 調べる箱 (null なら「入っていない」)
+ * Output: true = 範囲の中 (scope 自身も含む)
+ */
+export function isInScope(project: Project, scope: string, blockId: string | null): boolean {
+  let cur: string | null = blockId;
+  while (cur !== null) {
+    if (cur === scope) return true;
+    cur = project.blocks[cur]?.parentId ?? null;
+  }
+  return false;
+}
+
+/**
+ * キャンバスのタブに並べる「大項目」の箱 (プロジェクトの箱の直下。プロジェクトの箱が無ければ最上位の箱)
+ * Input : project
+ * Output: 大項目の箱の配列 (タブの順 = 配置の上から、同じ高さなら左から)
+ */
+export function majorBlocks(project: Project): Block[] {
+  const projects = projectBlocks(project);
+  const parents = projects.length > 0 ? projects.map((b) => b.id) : [ROOT_ID];
+  const out: Block[] = [];
+  for (const pid of parents) out.push(...childrenOf(project, pid).filter((b) => (b.kind ?? "task") !== "project"));
+  return out.sort((a, b) => (a.position.y - b.position.y) || (a.position.x - b.position.x));
+}
+
 function loadEditMode(_p: Project): boolean {
   return false;
 }
@@ -170,6 +216,21 @@ export const useProjectStore = create<State>((set, get) => {
   , fileName: null
   , readonly: false
   , viewCollapsed: {}
+  , viewScope: null
+  , setViewScope: (blockId) => {
+      const { project, selection } = get();
+      if (!project) return;
+      const scope = blockId && project.blocks[blockId] ? blockId : null;
+      try {
+        if (scope) localStorage.setItem(`boxglow:scope:${project.id}`, scope);
+        else localStorage.removeItem(`boxglow:scope:${project.id}`);
+      } catch {
+        /* 記憶できなくても動く */
+      }
+      // 範囲の外の箱や線を選んだままだと、詳細パネルに見えない物が出て混乱するので外す (Summary などの選択は保つ)
+      const keepSel = scope && !isInScope(project, scope, selection.blockId) ? { ...selection, blockId: null, edgeId: null } : selection;
+      set({ viewScope: scope, selection: keepSel });
+    }
   , saveNow: () => {
       const { project, ephemeral, readonly } = get();
       if (!project || ephemeral || readonly) return;
@@ -234,7 +295,12 @@ export const useProjectStore = create<State>((set, get) => {
       set({ meId: memberId });
     }
   , focus: null
-  , focusBlock: (blockId) => set({ focus: { blockId, nonce: Date.now() } })
+  , focusBlock: (blockId) => {
+      // 今のタブ (表示範囲) の外にある箱なら、まず All に戻してから寄せる (見えないままでは意味がない)
+      const { project, viewScope } = get();
+      if (project && viewScope && !isInScope(project, viewScope, blockId)) get().setViewScope(null);
+      set({ focus: { blockId, nonce: Date.now() } });
+    }
   , saveState: "none"
 
   , apply: (fn, opts) => {
@@ -292,7 +358,7 @@ export const useProjectStore = create<State>((set, get) => {
 
   , openProjectObject: (p, ephemeral) => {
       stopWatching();
-      set({ project: p, ephemeral, source: "idb", fileName: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, saveState: ephemeral ? "none" : "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+      set({ project: p, ephemeral, source: "idb", fileName: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: ephemeral ? "none" : "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(ephemeral ? null : p.id);
     }
 
@@ -319,7 +385,7 @@ export const useProjectStore = create<State>((set, get) => {
       }
       stopWatching();
       fileHandle = handle;
-      set({ project: p, ephemeral: false, source: "file", fileName: handle.name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+      set({ project: p, ephemeral: false, source: "file", fileName: handle.name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(null);
       // 監視: 外部 (CLI など) が書き換えたら読み直す (自分の書き込みは fileLastModified で区別)
       watchTimer = setInterval(async () => {
@@ -378,7 +444,7 @@ export const useProjectStore = create<State>((set, get) => {
 
   , closeProject: () => {
       stopWatching();
-      set({ project: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, saveState: "none", ephemeral: false, source: "idb", fileName: null });
+      set({ project: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: null, saveState: "none", ephemeral: false, source: "idb", fileName: null });
       rememberInUrl(null);
     }
 
@@ -391,8 +457,10 @@ export const useProjectStore = create<State>((set, get) => {
  * Input : project, selection
  * Output: 親ブロックの id
  */
-export function parentForNewBlock(project: Project, selection: Selection): string {
+export function parentForNewBlock(project: Project, selection: Selection, scope: string | null = null): string {
   if (selection.blockId && project.blocks[selection.blockId]) return selection.blockId;
+  // 大項目のタブを開いているときは、何も選んでいなければその大項目の中に置く
+  if (scope && project.blocks[scope]) return scope;
   return defaultTaskParent(project);
 }
 
@@ -413,5 +481,14 @@ export function withViewCollapsed(project: Project, viewCollapsed: Record<string
 export function useShownProject(): Project | null {
   const project = useProjectStore((s) => s.project);
   const viewCollapsed = useProjectStore((s) => s.viewCollapsed);
-  return useMemo(() => (project ? withViewCollapsed(project, viewCollapsed) : null), [project, viewCollapsed]);
+  const viewScope = useProjectStore((s) => s.viewScope);
+  return useMemo(() => {
+    if (!project) return null;
+    const shown = withViewCollapsed(project, viewCollapsed);
+    // タブで選んだ大項目は、畳まれていても必ず展開して中を見せる (画面だけ)
+    if (viewScope && shown.blocks[viewScope]?.collapsed) {
+      return { ...shown, blocks: { ...shown.blocks, [viewScope]: { ...shown.blocks[viewScope], collapsed: false } } };
+    }
+    return shown;
+  }, [project, viewCollapsed, viewScope]);
 }

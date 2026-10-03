@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Canvas tabs: "All" shows the whole plan; one tab per major box (children of project boxes) shows only that subtree, fitted to the screen. The active tab is remembered per project in the browser. `+ Block` / `N` with nothing selected adds into the open tab's box.
+- Resizable side panels: drag the border of the details panel (right) and the drawer (left). Widths are remembered in the browser.
+
 ## 0.1.0 (2026-10-03)
 
 First public release.

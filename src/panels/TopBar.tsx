@@ -72,7 +72,7 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
     if (name?.trim()) apply((p) => { const r = addProjectBlock(p, name.trim()); setTimeout(() => { select({ blockId: r.blockId }); focusBlock(r.blockId); }, 0); return r.project; });
   };
   const addSibling = () => {
-    const parentId = parentForNewBlock(project, selection);
+    const parentId = parentForNewBlock(project, selection, useProjectStore.getState().viewScope);
     apply((p) => {
       const r = addBlock(p, { parentId, title: "新しいブロック" });
       const q = structuredClone(r.project);
