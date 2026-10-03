@@ -156,6 +156,8 @@ node bin/boxglow.js help
 
 Schema: `schemaVersion` 5. Older files (1-4) load and are upgraded on the first edit.
 
+The CLI speaks the plan's language: `npx boxglow init --lang en` (or `ja`; the default follows your environment) stores it in `boxglow.json`, and messages, log lines, `status` and the agent instructions written by `setup-agent` follow it. Change it with `npx boxglow lang en`.
+
 URL parameters: `?demo=1` (sample), `&readonly=1`, `&embed=1`, `&theme=dark|light`, `&lang=en|ja` (UI language; otherwise the browser language, remembered once switched from the ⋯ menu), `?view=article` (= demo + embed + readonly), `#p=<id>`.
 
 The web app is hosted on Cloudflare Pages (`npm run deploy:pages` builds with `VITE_BASE=/` into `dist-pages/` and uploads it). Any static host works: `vite build` with `VITE_BASE` set to the path you serve from (the default `/apps/boxglow/` is the author's blog mirror).

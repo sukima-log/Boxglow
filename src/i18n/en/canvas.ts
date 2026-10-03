@@ -23,8 +23,8 @@ export const canvas: Record<string, string> = {
   // 箱 (BlockNode): 入出力
 , "{name} (用意できています)": "{name} (ready)"
 , "{name} (任意: 無くても着手できます)": "{name} (optional: you can start without it)"
-, "{name} を中のブロックへ (ここから中の箱の入力へドラッグ)": "{name} into the inner blocks (drag from here to an inner input)"
-, "中のブロックの出力を {name} へ": "Inner block output to {name}"
+, "{name} を中のブロックへ (ここから中の箱の入力へドラッグ)": "{name} into the inner boxes (drag from here to an inner input)"
+, "中のブロックの出力を {name} へ": "Inner box output to {name}"
   // 入力 / 出力ノード (TerminalNode)
 , "空のグループ (右のパネルで入力を入れる)": "Empty group (add inputs in the right panel)"
 , "供給元のない入力がここに上がります": "Inputs without a source appear here"

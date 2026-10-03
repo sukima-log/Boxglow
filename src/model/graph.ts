@@ -5,6 +5,8 @@
  * 画面 (React) や保存 (IndexedDB) に依存しないので、単体テストで結線ルールを検証できる。
  */
 import { categoryOf } from "./categories";
+// 文言の言語切り替え (React に依存しない core を使う。CLI の束に React を入れないため)
+import { t } from "../i18n/core";
 import { nanoid } from "nanoid";
 import {
   ROOT_ID
@@ -86,7 +88,7 @@ export function childTop(p: Project, parentId: string): number {
  * Output: 最上位ブロック (ROOT_ID) と、既定の出力ポート 1 つを持つ Project
  */
 export function createProject(name: string): Project {
-  const t = now();
+  const ts = now(); // (文言の t() と名前が重ならないよう ts)
   const root: Block = {
     id: ROOT_ID
   , parentId: null
@@ -104,7 +106,7 @@ export function createProject(name: string): Project {
     id: newId()
   , blockId: ROOT_ID
   , direction: "out"
-  , name: "最終成果物"
+  , name: t("最終成果物") // 既定の名前は作成時の言語で計画に書き込む
   , description: ""
   , required: true
   , artifacts: []
@@ -114,7 +116,7 @@ export function createProject(name: string): Project {
   , id: newId()
   , name
   , description: ""
-  , createdAt: t
+  , createdAt: ts
   , visibility: "private"
   , members: []
   , blocks: { [ROOT_ID]: root }
@@ -154,12 +156,12 @@ export function addProjectBlock(p: Project, name: string): { project: Project; b
   , activity: null
   , decisions: []
   };
-  const out: Port = { id: newId(), blockId: id, direction: "out", name: "最終成果物", description: "", required: true, artifacts: [] };
+  const out: Port = { id: newId(), blockId: id, direction: "out", name: t("最終成果物"), description: "", required: true, artifacts: [] };
   q.ports[out.id] = out;
   // 最上位の最終成果物: まだ誰ともつながっていないものがあればそれへ、無ければ同名を作る
   let rootOut = portsOf(q, ROOT_ID, "out").find((o) => incomingEdges(q, { portId: o.id, side: "inner" }).length === 0);
   if (!rootOut) {
-    rootOut = { id: newId(), blockId: ROOT_ID, direction: "out", name: existing.length === 0 ? "最終成果物" : `${name} の成果物`, description: "", required: true, artifacts: [] };
+    rootOut = { id: newId(), blockId: ROOT_ID, direction: "out", name: existing.length === 0 ? t("最終成果物") : t("{name} の成果物", { name }), description: "", required: true, artifacts: [] };
     q.ports[rootOut.id] = rootOut;
   }
   const eid = newId();
@@ -416,20 +418,20 @@ export interface ConnectionCheck {
 export function validateConnection(p: Project, from: Endpoint, to: Endpoint): ConnectionCheck {
   const fp = p.ports[from.portId];
   const tp = p.ports[to.portId];
-  if (!fp || !tp) return { ok: false, reason: "ポートが見つかりません" };
-  if (from.portId === to.portId) return { ok: false, reason: "同じポートどうしはつなげません" };
+  if (!fp || !tp) return { ok: false, reason: t("ポートが見つかりません") };
+  if (from.portId === to.portId) return { ok: false, reason: t("同じポートどうしはつなげません") };
 
   // 出す側は「出力の外側」か「入力の内側 (親の入力を中へ流す)」だけ
   const fromIsSource = (fp.direction === "out" && from.side === "outer") || (fp.direction === "in" && from.side === "inner");
   // 受ける側は「入力の外側」か「出力の内側 (子の出力を親の出力へ)」だけ
   const toIsTarget = (tp.direction === "in" && to.side === "outer") || (tp.direction === "out" && to.side === "inner");
-  if (!fromIsSource) return { ok: false, reason: "線は出力ポート (または親の入力) から引いてください" };
-  if (!toIsTarget) return { ok: false, reason: "線は入力ポート (または親の出力) につないでください" };
+  if (!fromIsSource) return { ok: false, reason: t("線は出力ポート (または親の入力) から引いてください") };
+  if (!toIsTarget) return { ok: false, reason: t("線は入力ポート (または親の出力) につないでください") };
 
   // 同じ階層の中でしかつなげない
   const sf = scopeOf(p, from);
   const st = scopeOf(p, to);
-  if (sf === null || st === null || sf !== st) return { ok: false, reason: "同じ階層のポートどうしだけつなげます" };
+  if (sf === null || st === null || sf !== st) return { ok: false, reason: t("同じ階層のポートどうしだけつなげます") };
 
   // 線の種類
   let kind: EdgeKind;
@@ -440,7 +442,7 @@ export function validateConnection(p: Project, from: Endpoint, to: Endpoint): Co
 
   // 循環の禁止 (同じ階層のブロック間の依存で輪ができないか)
   if (kind === "sibling" && wouldCreateCycle(p, fp.blockId, tp.blockId)) {
-    return { ok: false, reason: "循環する結線はできません" };
+    return { ok: false, reason: t("循環する結線はできません") };
   }
   return { ok: true, kind };
 }
@@ -514,9 +516,9 @@ export function addBlock(
   , activity: null
   , decisions: []
   };
-  const out: Port = { id: newId(), blockId: id, direction: "out", name: args.outputName ?? "出力", description: "", required: true, artifacts: [] };
+  const out: Port = { id: newId(), blockId: id, direction: "out", name: args.outputName ?? t("出力"), description: "", required: true, artifacts: [] };
   q.ports[out.id] = out;
-  if (args.actor) appendLog(q, { actor: args.actor, kind: "added", blockId: id, message: `「${args.title}」を追加` });
+  if (args.actor) appendLog(q, { actor: args.actor, kind: "added", blockId: id, message: t("「{title}」を追加", { title: args.title }) });
   // 子を持ったら親は「分解中」。black のままの親だけ gray に上げる (white は人が決めたので触らない)
   const parent = q.blocks[args.parentId];
   if (parent && parent.id !== ROOT_ID && parent.status === "black") parent.status = "gray";
@@ -920,7 +922,7 @@ export function setProgress(p: Project, blockId: string, value: number | null, a
   if (value === null) delete q.blocks[blockId].progress;
   else q.blocks[blockId].progress = Math.max(0, Math.min(100, Math.round(value)));
   if (value !== null && b.status === "black" && value > 0) q.blocks[blockId].status = "gray";
-  appendLog(q, { actor, kind: "note", blockId, message: `「${b.title}」の進捗 ${value === null ? "自動" : value + "%"}` });
+  appendLog(q, { actor, kind: "note", blockId, message: t("「{title}」の進捗 {value}", { title: b.title, value: value === null ? t("自動") : value + "%" }) });
   return q;
 }
 
@@ -1002,17 +1004,17 @@ export function fromJSON(text: string): Project {
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error("JSON として読めません");
+    throw new Error(t("JSON として読めません"));
   }
-  if (typeof data !== "object" || data === null) throw new Error("プロジェクトの形式ではありません");
+  if (typeof data !== "object" || data === null) throw new Error(t("プロジェクトの形式ではありません"));
   const d = data as Partial<Project>;
   const ver = Number(d.schemaVersion);
-  if (![1, 2, 3, 4, 5].includes(ver)) throw new Error(`対応していないデータ形式の版です (schemaVersion=${String(d.schemaVersion)})`);
-  if (!d.blocks || !d.ports || !d.edges || !d.blocks[ROOT_ID]) throw new Error("ブロック・ポート・線のデータが足りません");
+  if (![1, 2, 3, 4, 5].includes(ver)) throw new Error(t("対応していないデータ形式の版です (schemaVersion={version})", { version: String(d.schemaVersion) }));
+  if (!d.blocks || !d.ports || !d.edges || !d.blocks[ROOT_ID]) throw new Error(t("ブロック・ポート・線のデータが足りません"));
   const q: Project = {
     schemaVersion: SCHEMA_VERSION
   , id: typeof d.id === "string" ? d.id : newId()
-  , name: typeof d.name === "string" ? d.name : "無題"
+  , name: typeof d.name === "string" ? d.name : t("無題")
   , description: typeof d.description === "string" ? d.description : ""
   , createdAt: typeof d.createdAt === "string" ? d.createdAt : now()
   , visibility: d.visibility ?? "private"
@@ -1026,6 +1028,7 @@ export function fromJSON(text: string): Project {
   , nextKey: typeof d.nextKey === "number" ? d.nextKey : 1
   , inputGroups: Array.isArray(d.inputGroups) ? d.inputGroups : []
   };
+  if (d.lang === "en" || d.lang === "ja") q.lang = d.lang; // CLI の文言の言語 (無ければ ja 扱い)
   // 無いグループを指している入力は既定の入力ノードに戻す
   for (const x of Object.values(q.ports)) if (x.groupId && !q.inputGroups!.some((gp) => gp.id === x.groupId)) delete x.groupId;
   // 版 1 (活動・判断の項目が無い) からの移行: 足りない項目を補う
@@ -1112,7 +1115,7 @@ export function wrapIntoProject(p: Project): Project {
   for (const e of Object.values(q.edges)) if (!q.ports[e.from.portId] || !q.ports[e.to.portId]) delete q.edges[e.id];
   // 箱の出力が 1 つも無ければ既定の出力を付け、最終成果物につなぐ
   if (portsOf(q, pid, "out").length === 0) {
-    const out: Port = { id: newId(), blockId: pid, direction: "out", name: "最終成果物", description: "", required: true, artifacts: [] };
+    const out: Port = { id: newId(), blockId: pid, direction: "out", name: t("最終成果物"), description: "", required: true, artifacts: [] };
     q.ports[out.id] = out;
     const rootOut = portsOf(q, ROOT_ID, "out")[0];
     if (rootOut && incomingEdges(q, { portId: rootOut.id, side: "inner" }).length === 0) {
@@ -1146,8 +1149,12 @@ export function setActivity(p: Project, blockId: string, actor: string, state: A
   b.activity = { actor, state, note, since: now() };
   if (state === "working" && b.status === "black") b.status = "gray";
   const kind: LogKind = state === "working" ? "started" : state === "blocked" ? "blocked" : "note";
-  const label = state === "working" ? "開始" : state === "blocked" ? "詰まり" : state === "waiting_review" ? "確認待ち" : "判断待ち";
-  appendLog(q, { actor, kind, blockId, message: `「${b.title}」${label}${note ? ": " + note : ""}` });
+  // 状態ごとに 1 文として訳す (英語は語順が変わるので、題名と状態を別々に訳してつなげない)
+  const label = state === "working" ? t("「{title}」開始", { title: b.title })
+    : state === "blocked" ? t("「{title}」詰まり", { title: b.title })
+    : state === "waiting_review" ? t("「{title}」確認待ち", { title: b.title })
+    : t("「{title}」判断待ち", { title: b.title });
+  appendLog(q, { actor, kind, blockId, message: `${label}${note ? ": " + note : ""}` });
   return q;
 }
 
@@ -1172,12 +1179,12 @@ export function finishBlock(
 , args: { artifacts?: ({ title: string; url?: string } | Artifact)[]; outputName?: string; note?: string } = {}
 ): { project: Project; error?: string } {
   const b = p.blocks[blockId];
-  if (!b || blockId === ROOT_ID) return { project: p, error: "ブロックが見つかりません" };
+  if (!b || blockId === ROOT_ID) return { project: p, error: t("ブロックが見つかりません") };
   const outs = portsOf(p, blockId, "out");
   let target = outs[0];
   if (args.outputName) {
     const found = outs.find((o) => o.name === args.outputName);
-    if (!found) return { project: p, error: `出力「${args.outputName}」がありません (${outs.map((o) => o.name).join(", ")})` };
+    if (!found) return { project: p, error: t("出力「{name}」がありません ({list})", { name: args.outputName, list: outs.map((o) => o.name).join(", ") }) };
     target = found;
   }
   const q = touch(p);
@@ -1187,7 +1194,7 @@ export function finishBlock(
   q.blocks[blockId].activity = null;
   q.blocks[blockId].status = "white";
   const arts = (args.artifacts ?? []).map((a) => a.title).join(", ");
-  appendLog(q, { actor, kind: "done", blockId, message: `「${b.title}」完了${arts ? " (" + arts + ")" : ""}${args.note ? ": " + args.note : ""}` });
+  appendLog(q, { actor, kind: "done", blockId, message: `${t("「{title}」完了", { title: b.title })}${arts ? " (" + arts + ")" : ""}${args.note ? ": " + args.note : ""}` });
   return { project: q };
 }
 
@@ -1203,7 +1210,7 @@ export function askDecision(p: Project, blockId: string, actor: string, question
   const d: Decision = { id: newId(), question, options, askedBy: actor, askedAt: now(), ...(context ? { context } : {}) };
   q.blocks[blockId].decisions.push(d);
   q.blocks[blockId].activity = { actor, state: "needs_decision", note: question, since: now() };
-  appendLog(q, { actor, kind: "asked", blockId, message: `「${b.title}」で判断待ち: ${question}` });
+  appendLog(q, { actor, kind: "asked", blockId, message: t("「{title}」で判断待ち: {question}", { title: b.title, question }) });
   return { project: q, decisionId: d.id };
 }
 
@@ -1241,7 +1248,7 @@ export function answerDecision(p: Project, blockId: string, decisionId: string, 
   // AI が自分で答えた判断は、その場で「確認済み」。人の回答は AI が引き取る (ack) まで未確認のまま残す
   if (isHumanActor(by)) { delete qd.ackedBy; delete qd.ackedAt; } else { qd.ackedBy = by; qd.ackedAt = qd.answeredAt; }
   if (q.blocks[blockId].activity?.state === "needs_decision") q.blocks[blockId].activity = null;
-  appendLog(q, { actor: by, kind: "answered", blockId, message: `「${b.title}」の判断: ${d.question} → ${answer}` });
+  appendLog(q, { actor: by, kind: "answered", blockId, message: t("「{title}」の判断: {question} → {answer}", { title: b.title, question: d.question, answer }) });
   return q;
 }
 
@@ -1259,7 +1266,7 @@ export function editDecisionAnswer(p: Project, blockId: string, decisionId: stri
   qd.answer = answer.trim();
   qd.answeredBy = by;
   qd.answeredAt = now();
-  appendLog(q, { actor: by, kind: "answered", blockId, message: `「${b.title}」の判断の答えを直した: ${d.question} → ${answer.trim()}` });
+  appendLog(q, { actor: by, kind: "answered", blockId, message: t("「{title}」の判断の答えを直した: {question} → {answer}", { title: b.title, question: d.question, answer: answer.trim() }) });
   return q;
 }
 
@@ -1291,7 +1298,9 @@ export function reopenDecision(p: Project, blockId: string, decisionId: string, 
   delete qd.answeredBy;
   delete qd.answeredAt;
   q.blocks[blockId].activity = { actor: by, state: "needs_decision", note: d.question, since: now() };
-  appendLog(q, { actor: by, kind: "asked", blockId, message: `「${b.title}」の判断をやり直し: ${d.question} (前の答え: ${d.answer}${note ? "。理由: " + note : ""})` });
+  appendLog(q, { actor: by, kind: "asked", blockId, message: note
+    ? t("「{title}」の判断をやり直し: {question} (前の答え: {answer}。理由: {note})", { title: b.title, question: d.question, answer: d.answer ?? "", note })
+    : t("「{title}」の判断をやり直し: {question} (前の答え: {answer})", { title: b.title, question: d.question, answer: d.answer ?? "" }) });
   return q;
 }
 
@@ -1347,7 +1356,7 @@ export function ackDecisions(p: Project, blockId: string, by: string, decisionId
   for (const d of q.blocks[blockId].decisions) {
     if (targets.some((x) => x.id === d.id)) { d.ackedBy = by; d.ackedAt = at; }
   }
-  appendLog(q, { actor: by, kind: "note", blockId, message: `「${b.title}」の回答を確認: ${targets.map((d) => d.question).join(" / ")}` });
+  appendLog(q, { actor: by, kind: "note", blockId, message: t("「{title}」の回答を確認: {questions}", { title: b.title, questions: targets.map((d) => d.question).join(" / ") }) });
   return q;
 }
 
@@ -1357,7 +1366,7 @@ export function setStatus(p: Project, blockId: string, status: BlockStatus, acto
   if (!b || b.status === status) return p;
   const q = updateBlock(p, blockId, { status });
   if (status === "white") q.blocks[blockId].activity = null;
-  appendLog(q, { actor, kind: "status", blockId, message: `「${b.title}」を ${status} に` });
+  appendLog(q, { actor, kind: "status", blockId, message: t("「{title}」を {status} に", { title: b.title, status }) });
   return q;
 }
 
@@ -1430,7 +1439,7 @@ export function splitBlock(
 ): { project: Project; errors: string[] } {
   const errors: string[] = [];
   const parent = p.blocks[parentId];
-  if (!parent) return { project: p, errors: ["親ブロックが見つかりません"] };
+  if (!parent) return { project: p, errors: [t("親ブロックが見つかりません")] };
   let q = clone(p);
   const made: Record<string, string> = {};
   for (const b of spec.blocks) {
@@ -1438,12 +1447,12 @@ export function splitBlock(
     q = r.project;
     made[b.title] = r.blockId;
     if (b.description) q.blocks[r.blockId].description = b.description;
-    if ((b.outputs ?? []).length > 1) errors.push(`「${b.title}」の出力は 1 本にしました (下の階層を持たない箱の出力は 1 本。${b.outputs!.slice(1).join(", ")} は省略)`);
+    if ((b.outputs ?? []).length > 1) errors.push(t("「{title}」の出力は 1 本にしました (下の階層を持たない箱の出力は 1 本。{omitted} は省略)", { title: b.title, omitted: b.outputs!.slice(1).join(", ") }));
     for (const name of b.inputs ?? []) q = addPort(q, { blockId: r.blockId, direction: "in", name }).project;
   }
   // 参照の解決: 題名にドットがあってもよいので、区切り方を左から順に試す。失敗の理由 (箱が無い / ポートが無い) も返す
   const resolve = (ref: string, dir: "out" | "in"): { ep: Endpoint | null; why: string } => {
-    let why = "箱が見つかりません";
+    let why = t("箱が見つかりません");
     for (const { title, portName } of refSplits(ref)) {
       const isParent = title === "parent" || title === parent.title || title === parentId;
       const blockId = isParent ? parentId : made[title] ?? findBlock(q, title).block?.id;
@@ -1451,7 +1460,7 @@ export function splitBlock(
       // 親の場合は内側の面: 出す側なら親の入力 (inner)、受ける側なら親の出力 (inner)
       const want: "in" | "out" = isParent ? (dir === "out" ? "in" : "out") : dir;
       const port = portsOf(q, blockId, want).find((x) => x.name === portName);
-      if (!port) { why = `「${title}」に${want === "in" ? "入力" : "出力"}「${portName}」がありません`; continue; }
+      if (!port) { why = want === "in" ? t("「{title}」に入力「{port}」がありません", { title, port: portName }) : t("「{title}」に出力「{port}」がありません", { title, port: portName }); continue; }
       return { ep: { portId: port.id, side: isParent ? "inner" : "outer" }, why: "" };
     }
     return { ep: null, why };
@@ -1475,16 +1484,16 @@ export function splitBlock(
       }
     }
     if (!from.ep || !to.ep) {
-      errors.push(`結線できません: ${c.from} -> ${c.to} (${!from.ep ? from.why : to.why})`);
+      errors.push(t("結線できません: {from} -> {to} ({why})", { from: c.from, to: c.to, why: !from.ep ? from.why : to.why }));
       continue;
     }
     const r = connect(q, from.ep, to.ep);
-    if (r.error) errors.push(`結線できません: ${c.from} -> ${c.to} (${r.error})`);
+    if (r.error) errors.push(t("結線できません: {from} -> {to} ({why})", { from: c.from, to: c.to, why: r.error }));
     q = r.project;
   }
   if (q.blocks[parentId].status === "black") q.blocks[parentId].status = "gray";
   q.blocks[parentId].collapsed = false;
-  appendLog(q, { actor, kind: "split", blockId: parentId, message: `「${parent.title}」を ${spec.blocks.length} 個に分解: ${spec.blocks.map((b) => b.title).join(", ")}` });
+  appendLog(q, { actor, kind: "split", blockId: parentId, message: t("「{title}」を {count} 個に分解: {list}", { title: parent.title, count: spec.blocks.length, list: spec.blocks.map((b) => b.title).join(", ") }) });
   return { project: q, errors };
 }
 
@@ -1599,7 +1608,7 @@ export function instantiateTemplate(p: Project, parentId: string, template: Bloc
   const origin: TemplateOrigin = { id: template.id, name: template.name, version: template.version };
   const r = instantiateNode(p, parentId, template.root, origin, position);
   const q = r.project;
-  appendLog(q, { actor, kind: "added", blockId: r.blockId, message: `テンプレート「${template.name}」v${template.version} を挿入: ${template.root.title}` });
+  appendLog(q, { actor, kind: "added", blockId: r.blockId, message: t("テンプレート「{name}」v{version} を挿入: {title}", { name: template.name, version: template.version, title: template.root.title }) });
   return { project: normalizePromotions(q), blockId: r.blockId };
 }
 
@@ -1609,12 +1618,12 @@ export function parseTemplate(text: string): BlockTemplate {
   try {
     d = JSON.parse(text);
   } catch {
-    throw new Error("JSON として読めません");
+    throw new Error(t("JSON として読めません"));
   }
-  const t = d as Partial<BlockTemplate>;
-  if (!t || t.schema !== "boxglow-block" || !t.root || typeof t.root.title !== "string") throw new Error("Boxglow のテンプレート (boxglow-block) ではありません");
+  const tpl = d as Partial<BlockTemplate>; // (文言の t() と名前が重ならないよう tpl)
+  if (!tpl || tpl.schema !== "boxglow-block" || !tpl.root || typeof tpl.root.title !== "string") throw new Error(t("Boxglow のテンプレート (boxglow-block) ではありません"));
   const fix = (n: Partial<TemplateNode>): TemplateNode => ({
-    title: n.title ?? "無題"
+    title: n.title ?? t("無題")
   , description: n.description ?? ""
   , category: typeof n.category === "string" ? n.category : undefined
   , inputs: (n.inputs ?? []).map((i) => ({ name: i.name, description: i.description ?? "", required: i.required ?? true }))
@@ -1625,14 +1634,14 @@ export function parseTemplate(text: string): BlockTemplate {
   return {
     schema: "boxglow-block"
   , schemaVersion: 1
-  , id: t.id ?? newId()
-  , name: t.name ?? t.root.title
-  , version: t.version ?? 1
-  , description: t.description ?? ""
-  , tags: t.tags ?? []
-  , createdAt: t.createdAt ?? now()
-  , updatedAt: t.updatedAt ?? now()
-  , root: fix(t.root)
+  , id: tpl.id ?? newId()
+  , name: tpl.name ?? tpl.root.title
+  , version: tpl.version ?? 1
+  , description: tpl.description ?? ""
+  , tags: tpl.tags ?? []
+  , createdAt: tpl.createdAt ?? now()
+  , updatedAt: tpl.updatedAt ?? now()
+  , root: fix(tpl.root)
   };
 }
 
@@ -1648,7 +1657,7 @@ export function parseTemplate(text: string): BlockTemplate {
 export function setCategory(p: Project, blockId: string, key: string | null): Project {
   const b = p.blocks[blockId];
   if (!b) return p;
-  if (key && !categoryOf(key)) throw new Error(`知らないカテゴリです: ${key}`);
+  if (key && !categoryOf(key)) throw new Error(t("知らないカテゴリです: {key}", { key }));
   const q = touch(p);
   if (key) q.blocks[blockId].category = key;
   else delete q.blocks[blockId].category;
@@ -1665,22 +1674,22 @@ export function setSchedule(
   const b = p.blocks[blockId];
   if (!b) return p;
   const q = touch(p);
-  const t = q.blocks[blockId];
+  const target = q.blocks[blockId]; // (文言の t() と名前が重ならないよう target)
   const put = <K extends "startDate" | "dueDate" | "estimateHours" | "actualHours">(k: K, v: Block[K] | null | undefined) => {
     if (v === undefined) return;
-    if (v === null || v === "" || (typeof v === "number" && Number.isNaN(v))) delete t[k];
-    else t[k] = v;
+    if (v === null || v === "" || (typeof v === "number" && Number.isNaN(v))) delete target[k];
+    else target[k] = v;
   };
   put("startDate", args.startDate);
   put("dueDate", args.dueDate);
   put("estimateHours", args.estimateHours);
   put("actualHours", args.actualHours);
   const parts: string[] = [];
-  if (args.dueDate !== undefined) parts.push(`期日 ${args.dueDate ?? "なし"}`);
-  if (args.startDate !== undefined) parts.push(`開始 ${args.startDate ?? "なし"}`);
-  if (args.actualHours !== undefined) parts.push(`実績 ${args.actualHours ?? 0}h`);
-  if (args.estimateHours !== undefined) parts.push(`見積 ${args.estimateHours ?? 0}h`);
-  if (parts.length > 0) appendLog(q, { actor, kind: "note", blockId, message: `「${b.title}」${parts.join(", ")}` });
+  if (args.dueDate !== undefined) parts.push(t("期日 {date}", { date: args.dueDate ?? t("なし") }));
+  if (args.startDate !== undefined) parts.push(t("開始 {date}", { date: args.startDate ?? t("なし") }));
+  if (args.actualHours !== undefined) parts.push(t("実績 {hours}h", { hours: args.actualHours ?? 0 }));
+  if (args.estimateHours !== undefined) parts.push(t("見積 {hours}h", { hours: args.estimateHours ?? 0 }));
+  if (parts.length > 0) appendLog(q, { actor, kind: "note", blockId, message: t("「{title}」{detail}", { title: b.title, detail: parts.join(", ") }) });
   return q;
 }
 
@@ -1879,7 +1888,7 @@ export function moveBlockToParent(p: Project, blockId: string, newParentId: stri
   for (const pr of pending) routeConnect(q, pr.from, pr.to);
   if (q.blocks[newParentId].status === "black") q.blocks[newParentId].status = "gray";
   q.blocks[newParentId].collapsed = false;
-  appendLog(q, { actor: "human", kind: "note", blockId, message: `「${b.title}」を「${np.title}」の中へ移動` });
+  appendLog(q, { actor: "human", kind: "note", blockId, message: t("「{title}」を「{parent}」の中へ移動", { title: b.title, parent: np.title }) });
   return normalizePromotions(q);
 }
 
@@ -1892,7 +1901,7 @@ export function moveBlockToParent(p: Project, blockId: string, newParentId: stri
 export function connectToBlock(p: Project, from: Endpoint, targetBlockId: string): { project: Project; error?: string } {
   const fp = p.ports[from.portId];
   const tb = p.blocks[targetBlockId];
-  if (!fp || !tb || targetBlockId === ROOT_ID) return { project: p, error: "つなぐ先が見つかりません" };
+  if (!fp || !tb || targetBlockId === ROOT_ID) return { project: p, error: t("つなぐ先が見つかりません") };
   // 出す側の階層と、落とした箱の階層が合うか (同じ階層の箱、または出す側が親の入力ならその子)
   const fromScope = scopeOf(p, from);
   const targetIsChildOfSource = fp.direction === "in" && from.side === "inner" && tb.parentId === fp.blockId;
@@ -1902,10 +1911,10 @@ export function connectToBlock(p: Project, from: Endpoint, targetBlockId: string
   if (targetIsParent) {
     const outs = portsOf(p, targetBlockId, "out");
     const free = outs.find((o) => incomingEdges(p, { portId: o.id, side: "inner" }).length === 0) ?? outs[0];
-    if (!free) return { project: p, error: "親に出力がありません" };
+    if (!free) return { project: p, error: t("親に出力がありません") };
     return connect(p, from, { portId: free.id, side: "inner" });
   }
-  if (!sameScope && !targetIsChildOfSource) return { project: p, error: "同じ階層の箱 (または親子) にだけつなげます" };
+  if (!sameScope && !targetIsChildOfSource) return { project: p, error: t("同じ階層の箱 (または親子) にだけつなげます") };
   const ins = portsOf(p, targetBlockId, "in");
   let target = ins.find((i) => incomingEdges(p, { portId: i.id, side: "outer" }).every((e) => e.auto) && !i.promotedFrom);
   let q = p;
@@ -2036,7 +2045,7 @@ export function addInputGroup(p: Project, name: string): { project: Project; gro
   const id = newId();
   const y = list.length === 0 ? q.terminals.in.y + 160 : Math.max(...list.map((gp) => gp.position.y)) + 160;
   list.push({ id, name, description: "", position: { x: q.terminals.in.x, y } });
-  appendLog(q, { actor: "human", kind: "added", message: `入力グループ「${name}」を追加` });
+  appendLog(q, { actor: "human", kind: "added", message: t("入力グループ「{name}」を追加", { name }) });
   return { project: q, groupId: id };
 }
 
@@ -2089,9 +2098,9 @@ export function importInputGroup(p: Project, text: string): { project: Project; 
   try {
     d = JSON.parse(text);
   } catch {
-    throw new Error("JSON として読めません");
+    throw new Error(t("JSON として読めません"));
   }
-  if (d.schema !== "boxglow-input-group" || !Array.isArray(d.inputs)) throw new Error("入力グループの JSON (boxglow-input-group) ではありません");
+  if (d.schema !== "boxglow-input-group" || !Array.isArray(d.inputs)) throw new Error(t("入力グループの JSON (boxglow-input-group) ではありません"));
   const r = addInputGroup(p, d.name ?? "Inputs");
   let q = updateInputGroup(r.project, r.groupId, { description: d.description ?? "" });
   for (const i of d.inputs) {

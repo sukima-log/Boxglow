@@ -12,6 +12,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { existsSync, readFileSync, statSync, watch, writeFileSync } from "node:fs";
 import { basename, dirname, extname, join, normalize, resolve } from "node:path";
 import { spawn } from "node:child_process";
+// 文言を今の言語 (日本語 / 英語) で出す。言語は main.ts の serve の入口で決めてある
+import { t } from "../src/i18n/core";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8"
@@ -20,7 +22,7 @@ const MIME: Record<string, string> = {
 
 export function startServe(opts: { file: string; port: number; dist: string; open: boolean; log: (text: string) => void }): void {
   const { file, port, dist, log } = opts;
-  if (!existsSync(join(dist, "index.html"))) throw new Error(`Web アプリが見つかりません: ${dist} (npm run build で dist/ を作ってください)`);
+  if (!existsSync(join(dist, "index.html"))) throw new Error(t("Web アプリが見つかりません: {dist} (npm run build で dist/ を作ってください)", { dist }));
   const clients = new Set<ServerResponse>();
   let lastWritten = ""; // 自分 (API) が書いた中身。監視で拾ったときに区別する
 
@@ -43,7 +45,7 @@ export function startServe(opts: { file: string; port: number; dist: string; ope
       }, 250);
     });
   } catch (e) {
-    log(`[serve] ファイルの監視を始められません: ${e instanceof Error ? e.message : String(e)}`);
+    log(t("[serve] ファイルの監視を始められません: {message}", { message: e instanceof Error ? e.message : String(e) }));
   }
 
   const send = (res: ServerResponse, status: number, body: string | Buffer, type: string) => {
@@ -69,7 +71,7 @@ export function startServe(opts: { file: string; port: number; dist: string; ope
         }
         if (req.method === "PUT") {
           const text = await readBody(req);
-          try { JSON.parse(text); } catch { send(res, 400, JSON.stringify({ ok: false, error: "JSON ではありません" }), "application/json"); return; }
+          try { JSON.parse(text); } catch { send(res, 400, JSON.stringify({ ok: false, error: t("JSON ではありません") }), "application/json"); return; }
           lastWritten = text;
           writeFileSync(file, text, "utf8");
           send(res, 200, JSON.stringify({ ok: true }), "application/json");
@@ -99,7 +101,7 @@ export function startServe(opts: { file: string; port: number; dist: string; ope
   });
   server.listen(port, "127.0.0.1", () => {
     const addr = `http://localhost:${port}/?serve=1`;
-    log(`[serve] ${file}\n[serve] ${addr}  (Ctrl+C で終了)`);
+    log(`[serve] ${file}\n[serve] ${addr}  ${t("(Ctrl+C で終了)")}`);
     if (opts.open) {
       const cmd = process.platform === "win32" ? ["cmd", "/c", "start", "", addr] : process.platform === "darwin" ? ["open", addr] : ["xdg-open", addr];
       try { spawn(cmd[0], cmd.slice(1), { stdio: "ignore", detached: true }).unref(); } catch { /* 開けなくても URL は表示している */ }

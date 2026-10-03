@@ -7,5 +7,8 @@ import { inspector } from "./inspector";
 import { parts } from "./parts";
 import { canvas } from "./canvas";
 import { app } from "./app";
+import { cli } from "./cli";
+import { model } from "./model";
+import { report } from "./report";
 
-export const en: Record<string, string> = { ...common, ...inspector, ...parts, ...canvas, ...app };
+export const en: Record<string, string> = { ...common, ...inspector, ...parts, ...canvas, ...app, ...cli, ...model, ...report };

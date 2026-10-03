@@ -6,6 +6,13 @@ import { ROOT_ID, type Block, type Project } from "./types";
 import { candidatesOf, issueKeyOf, missingRequiredInputs, childrenOf, computeProgress, effectiveDescription, effectiveProgress, incomingEdges, isOverdue, outgoingEdges, pendingDecisions, portsOf, summarize } from "./graph";
 import { t } from "../i18n/core";
 
+/**
+ * 題名を引用符で囲む (日本語は「」、英語は "")
+ * Input : title = 箱の題名
+ * Output: 今の言語の引用符で囲んだ文字列
+ */
+const quoted = (title: string): string => t("「{title}」", { title });
+
 /** 状態の記号 (チェックリスト風) */
 const MARK: Record<Block["status"], string> = { black: "[ ]", gray: "[~]", white: "[x]" };
 
@@ -27,12 +34,12 @@ export function actorName(actor: string): string {
   if (a.startsWith("codex")) return "Codex";
   if (a.startsWith("gemini")) return "Gemini";
   if (a.startsWith("copilot")) return "Copilot";
-  if (a.startsWith("human:")) return actor.slice(6) || "人";
+  if (a.startsWith("human:")) return actor.slice(6) || t("人");
   if (a === "human") return t("人");
   return actor;
 }
 
-/** 活動の状態の日本語 */
+/** 活動の状態の日本語 (定数は日本語のまま。使う側で t() に包んで今の言語にする) */
 export const ACTIVITY_LABEL = { working: "作業中", blocked: "詰まり", needs_decision: "判断待ち", waiting_review: "確認待ち" } as const;
 
 /** 経過時間を短く ("5 分", "2 時間", "3 日") */
@@ -64,12 +71,13 @@ function treeLines(p: Project, parentId: string, depth: number, lines: string[])
   const kids = childrenOf(p, parentId).sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
   for (const b of kids) {
     const outs = portsOf(p, b.id, "out").map((o) => o.name + (o.artifacts.length > 0 ? "*" : "")).join(", ");
-    const act = b.activity ? `  <- ${actorLabel(b.activity.actor)} ${ACTIVITY_LABEL[b.activity.state]}${b.activity.note ? ": " + b.activity.note : ""}` : "";
+    // 札・注記は呼ばれた時点の言語で出す (日本語のときの出力は変えない)
+    const act = b.activity ? `  <- ${actorLabel(b.activity.actor)} ${t(ACTIVITY_LABEL[b.activity.state])}${b.activity.note ? ": " + b.activity.note : ""}` : "";
     const cat = categoryOf(b.category);
-    const tag = (cat ? ` [${cat.label}]` : "") + (b.kind === "project" ? ` [プロジェクト${b.repo ? ": " + b.repo : ""}]` : b.template ? ` [テンプレート: ${b.template.name}]` : "") + (b.issue ? ` [${issueKeyOf(b.issue)}]` : "");
+    const tag = (cat ? ` [${t(cat.label)}]` : "") + (b.kind === "project" ? ` [${t("プロジェクト")}${b.repo ? ": " + b.repo : ""}]` : b.template ? ` [${t("テンプレート: {name}", { name: b.template.name })}]` : "") + (b.issue ? ` [${issueKeyOf(b.issue)}]` : "");
     const pct = b.status === "white" ? "" : (() => { const v = effectiveProgress(p, b.id); return v > 0 ? ` ${v}%` : ""; })();
-    const who = b.assigneeIds.length === 0 && b.kind !== "project" ? " (未担当)" : "";
-    const due = b.dueDate && b.status !== "white" ? ` 期日 ${b.dueDate}${isOverdue(b) ? " (超過)" : ""}` : "";
+    const who = b.assigneeIds.length === 0 && b.kind !== "project" ? " " + t("(未担当)") : "";
+    const due = b.dueDate && b.status !== "white" ? ` ${t("期日 {date}", { date: b.dueDate })}${isOverdue(b) ? " " + t("(超過)") : ""}` : "";
     lines.push(`${"  ".repeat(depth)}- ${MARK[b.status]}${pct} ${b.key ?? ""} ${b.title}${tag}${who}${due} -> ${outs}${act}`);
     treeLines(p, b.id, depth + 1, lines);
   }
@@ -85,47 +93,47 @@ export function statusReport(p: Project): string {
   lines.push(`# ${p.name}`);
   if (p.description) lines.push("", p.description);
   const prog = computeProgress(p, ROOT_ID);
-  lines.push("", `完了 ${s.white} / ${s.total} ・ 進捗 ${prog.percent}% (BlackBox ${s.black}, GrayBox ${s.gray}, WhiteBox ${s.white})`);
+  lines.push("", t("完了 {white} / {total} ・ 進捗 {percent}% (BlackBox {black}, GrayBox {gray}, WhiteBox {white})", { white: s.white, total: s.total, percent: prog.percent, black: s.black, gray: s.gray }));
   const rootOuts = portsOf(p, ROOT_ID, "out").map((o) => o.name + (o.artifacts.length > 0 ? "*" : ""));
-  const rootIns = portsOf(p, ROOT_ID, "in").filter((o) => !o.groupId).map((o) => o.name + (o.promotedFrom ? " (自動)" : ""));
-  lines.push(`最終成果物: ${rootOuts.join(", ") || "(未設定)"}`);
-  lines.push(`プロジェクトの入力: ${rootIns.join(", ") || "(なし)"}`);
+  const rootIns = portsOf(p, ROOT_ID, "in").filter((o) => !o.groupId).map((o) => o.name + (o.promotedFrom ? ` (${t("自動")})` : ""));
+  lines.push(t("最終成果物: {names}", { names: rootOuts.join(", ") || t("(未設定)") }));
+  lines.push(t("プロジェクトの入力: {names}", { names: rootIns.join(", ") || t("(なし)") }));
   for (const gp of p.inputGroups ?? []) {
     const names = portsOf(p, ROOT_ID, "in").filter((o) => o.groupId === gp.id).map((o) => o.name + (o.artifacts.length > 0 ? "*" : ""));
-    lines.push(`  入力グループ「${gp.name}」: ${names.join(", ") || "(空)"}`);
+    lines.push("  " + t("入力グループ「{name}」: {names}", { name: gp.name, names: names.join(", ") || t("(空)") }));
   }
   if (s.decisions.length > 0) {
-    lines.push("", "## 判断待ち (人間の回答が必要)");
+    lines.push("", "## " + t("判断待ち (人間の回答が必要)"));
     for (const { block, decision } of s.decisions) {
-      lines.push(`- ${block.key ?? ""} 「${block.title}」 ${decision.question}${decision.options.length > 0 ? " 選択肢: " + decision.options.join(" / ") : ""} (decision: ${decision.id})`);
-      if (decision.context) lines.push(`  判断材料: ${decision.context.replace(/\n/g, "\n  ")}`);
+      lines.push(`- ${block.key ?? ""} ${quoted(block.title)} ${decision.question}${decision.options.length > 0 ? " " + t("選択肢: {options}", { options: decision.options.join(" / ") }) : ""} (decision: ${decision.id})`);
+      if (decision.context) lines.push("  " + t("判断材料: {text}", { text: decision.context.replace(/\n/g, "\n  ") }));
     }
   }
   if (s.answered.length > 0) {
-    lines.push("", "## 回答あり (人が答えた判断。読んだら `boxglow ack <block>` で引き取る。その箱の start / done などでも引き取られる)");
+    lines.push("", "## " + t("回答あり (人が答えた判断。読んだら `boxglow ack <block>` で引き取る。その箱の start / done などでも引き取られる)"));
     for (const { block, decision } of s.answered) {
-      lines.push(`- ${block.key ?? ""} 「${block.title}」 ${decision.question} -> ${decision.answer} (${decision.answeredBy ?? ""}, decision: ${decision.id})`);
+      lines.push(`- ${block.key ?? ""} ${quoted(block.title)} ${decision.question} -> ${decision.answer} (${decision.answeredBy ?? ""}, decision: ${decision.id})`);
     }
   }
   if (s.overdue.length > 0) {
-    lines.push("", "## 期日超過");
-    for (const b of s.overdue) lines.push(`- ${b.key ?? ""} 「${b.title}」 期日 ${b.dueDate}`);
+    lines.push("", "## " + t("期日超過"));
+    for (const b of s.overdue) lines.push(`- ${b.key ?? ""} ${quoted(b.title)} ${t("期日 {date}", { date: b.dueDate ?? "" })}`);
   }
   if (s.working.length > 0) {
-    lines.push("", "## 作業中");
-    for (const w of s.working) lines.push(`- ${actorLabel(w.actor)} ${w.block.key ?? ""} 「${w.block.title}」 ${w.note} (${agoText(w.since)})`);
+    lines.push("", "## " + t("作業中"));
+    for (const w of s.working) lines.push(`- ${actorLabel(w.actor)} ${w.block.key ?? ""} ${quoted(w.block.title)} ${w.note} (${agoText(w.since)})`);
   }
   if (s.blocked.length > 0) {
-    lines.push("", "## 詰まり・確認待ち");
-    for (const w of s.blocked) lines.push(`- ${actorLabel(w.actor)} ${w.block.key ?? ""} 「${w.block.title}」 ${w.note}`);
+    lines.push("", "## " + t("詰まり・確認待ち"));
+    for (const w of s.blocked) lines.push(`- ${actorLabel(w.actor)} ${w.block.key ?? ""} ${quoted(w.block.title)} ${w.note}`);
   }
-  lines.push("", "## 階層 ([ ] New / [~] In Progress / [x] Done。B 番号は箱の ID。出力名の * は成果物あり)");
+  lines.push("", "## " + t("階層 ([ ] New / [~] In Progress / [x] Done。B 番号は箱の ID。出力名の * は成果物あり)"));
   treeLines(p, ROOT_ID, 0, lines);
   if (s.next.length > 0) {
-    lines.push("", "## 次の候補 (未着手の New。必須の入力がそろっているものから)");
+    lines.push("", "## " + t("次の候補 (未着手の New。必須の入力がそろっているものから)"));
     for (const b of s.next.slice(0, 10)) {
       const missing = missingRequiredInputs(p, b.id);
-      lines.push(`- ${b.key ?? ""} ${b.title}${missing.length > 0 ? `  (必須の入力待ち: ${missing.map((q) => q.name).join(", ")})` : "  (着手できる)"}`);
+      lines.push(`- ${b.key ?? ""} ${b.title}${missing.length > 0 ? "  " + t("(必須の入力待ち: {names})", { names: missing.map((q) => q.name).join(", ") }) : "  " + t("(着手できる)")}`);
     }
   }
   lines.push("");
@@ -137,43 +145,43 @@ export function blockReport(p: Project, blockId: string): string {
   const b = p.blocks[blockId];
   if (!b) return "";
   const name = (id: string) => (id === ROOT_ID ? "project" : p.blocks[id]?.title ?? "?");
-  const lines: string[] = [`# ${b.key ?? ""} ${b.title}`, "", `- 状態: ${b.status}${b.status !== "white" ? ` (進捗 ${effectiveProgress(p, blockId)}%)` : ""}`];
+  const lines: string[] = [`# ${b.key ?? ""} ${b.title}`, "", `- ${t("状態: {status}", { status: b.status })}${b.status !== "white" ? " " + t("(進捗 {percent}%)", { percent: effectiveProgress(p, blockId) }) : ""}`];
   const cat = categoryOf(b.category);
-  if (cat) lines.push(`- カテゴリ: ${cat.label} (${cat.en})`);
-  if (b.issue) lines.push(`- 課題: ${issueKeyOf(b.issue)} <${b.issue}>`);
-  if (b.startDate || b.dueDate) lines.push(`- 日程: ${b.startDate ? "開始 " + b.startDate : ""}${b.startDate && b.dueDate ? " / " : ""}${b.dueDate ? "期日 " + b.dueDate + (isOverdue(b) ? " (超過)" : "") : ""}`);
-  if (b.estimateHours !== undefined || b.actualHours !== undefined) lines.push(`- 時間: ${b.estimateHours !== undefined ? "見積 " + b.estimateHours + "h" : ""}${b.estimateHours !== undefined && b.actualHours !== undefined ? " / " : ""}${b.actualHours !== undefined ? "実績 " + b.actualHours + "h" : ""}`);
-  if (b.activity) lines.push(`- 活動: ${b.activity.actor} ${ACTIVITY_LABEL[b.activity.state]} ${b.activity.note} (${b.activity.since})`);
+  if (cat) lines.push(`- ${t("カテゴリ: {label}", { label: t(cat.label) })} (${cat.en})`);
+  if (b.issue) lines.push(`- ${t("課題: {key}", { key: issueKeyOf(b.issue) })} <${b.issue}>`);
+  if (b.startDate || b.dueDate) lines.push(`- ${t("日程:")} ${b.startDate ? t("開始 {date}", { date: b.startDate }) : ""}${b.startDate && b.dueDate ? " / " : ""}${b.dueDate ? t("期日 {date}", { date: b.dueDate }) + (isOverdue(b) ? " " + t("(超過)") : "") : ""}`);
+  if (b.estimateHours !== undefined || b.actualHours !== undefined) lines.push(`- ${t("時間:")} ${b.estimateHours !== undefined ? t("見積 {hours}h", { hours: b.estimateHours }) : ""}${b.estimateHours !== undefined && b.actualHours !== undefined ? " / " : ""}${b.actualHours !== undefined ? t("実績 {hours}h", { hours: b.actualHours }) : ""}`);
+  if (b.activity) lines.push(`- ${t("活動:")} ${b.activity.actor} ${t(ACTIVITY_LABEL[b.activity.state])} ${b.activity.note} (${b.activity.since})`);
   if (b.description) lines.push("", b.description);
-  lines.push("", "## 入力");
+  lines.push("", "## " + t("入力"));
   for (const q of portsOf(p, blockId, "in")) {
-    const src = incomingEdges(p, { portId: q.id, side: "outer" }).map((e) => `${name(p.ports[e.from.portId].blockId)}.${p.ports[e.from.portId].name}${e.auto ? " (自動)" : ""}`);
+    const src = incomingEdges(p, { portId: q.id, side: "outer" }).map((e) => `${name(p.ports[e.from.portId].blockId)}.${p.ports[e.from.portId].name}${e.auto ? ` (${t("自動")})` : ""}`);
     const desc = effectiveDescription(p, q.id);
-    lines.push(`- ${q.name}${q.required ? "" : " (任意)"}${desc ? ": " + desc : ""}${src.length ? "  <- " + src.join(", ") : "  <- (未接続)"}`);
+    lines.push(`- ${q.name}${q.required ? "" : " " + t("(任意)")}${desc ? ": " + desc : ""}${src.length ? "  <- " + src.join(", ") : "  <- " + t("(未接続)")}`);
   }
-  lines.push("", "## 出力");
+  lines.push("", "## " + t("出力"));
   for (const q of portsOf(p, blockId, "out")) {
     const dst = outgoingEdges(p, { portId: q.id, side: "outer" }).map((e) => `${name(p.ports[e.to.portId].blockId)}.${p.ports[e.to.portId].name}`);
     const arts = q.artifacts.map((a) => (a.url ? `${a.title} <${a.url}>` : a.title));
-    lines.push(`- ${q.name}${q.description ? ": " + q.description : ""}${dst.length ? "  -> " + dst.join(", ") : ""}${arts.length ? "  成果物: " + arts.join(", ") : ""}`);
+    lines.push(`- ${q.name}${q.description ? ": " + q.description : ""}${dst.length ? "  -> " + dst.join(", ") : ""}${arts.length ? "  " + t("成果物: {list}", { list: arts.join(", ") }) : ""}`);
   }
   const kids = childrenOf(p, blockId);
   if (kids.length > 0) {
-    lines.push("", "## 下の階層");
+    lines.push("", "## " + t("下の階層"));
     for (const k of kids) lines.push(`- ${MARK[k.status]} ${k.title} (id: ${k.id})`);
   }
   if (b.decisions.length > 0) {
-    lines.push("", "## 判断");
+    lines.push("", "## " + t("判断"));
     for (const d of b.decisions) {
       const c = candidatesOf(d);
-      lines.push(`- ${d.answer === undefined ? "[未回答]" : "[回答済]"} ${d.question}${d.answer !== undefined ? " -> " + d.answer : ""} (decision: ${d.id})`);
-      if (d.context) lines.push(`  判断材料: ${d.context.replace(/\n/g, "\n  ")}`);
-      if (c.rejected.length > 0) lines.push(`  ${d.answer === undefined ? "候補" : "残した候補"}: ${c.rejected.join(" / ")}`);
-      for (const h of d.history ?? []) lines.push(`  以前の答え: ${h.answer} (${h.by}${h.note ? "、" + h.note : ""}) ${h.at}`);
+      lines.push(`- ${d.answer === undefined ? t("[未回答]") : t("[回答済]")} ${d.question}${d.answer !== undefined ? " -> " + d.answer : ""} (decision: ${d.id})`);
+      if (d.context) lines.push("  " + t("判断材料: {text}", { text: d.context.replace(/\n/g, "\n  ") }));
+      if (c.rejected.length > 0) lines.push("  " + (d.answer === undefined ? t("候補: {list}", { list: c.rejected.join(" / ") }) : t("残した候補: {list}", { list: c.rejected.join(" / ") })));
+      for (const h of d.history ?? []) lines.push(`  ${t("以前の答え: {answer}", { answer: h.answer })} (${h.by}${h.note ? t("、") + h.note : ""}) ${h.at}`);
     }
   }
   if (b.artifacts.length > 0) {
-    lines.push("", "## 資料");
+    lines.push("", "## " + t("資料"));
     for (const a of b.artifacts) lines.push(`- ${a.url ? `${a.title} <${a.url}>` : a.title}`);
   }
   lines.push("");
@@ -183,7 +191,7 @@ export function blockReport(p: Project, blockId: string): string {
 /** ログを新しい順に n 件 */
 export function logReport(p: Project, n = 20): string {
   const items = p.log.slice(-n).reverse();
-  if (items.length === 0) return "(ログはまだありません)\n";
+  if (items.length === 0) return t("(ログはまだありません)") + "\n";
   return items.map((e) => `- ${shortTime(e.at)} ${actorLabel(e.actor)} ${e.message}`).join("\n") + "\n";
 }
 

@@ -21,6 +21,7 @@ let current: Lang = detect();
  * Output: "ja" | "en"
  */
 function detect(): Lang {
+  // CLI (Node): 既定は日本語。boxglow.json の lang や --lang / BOXGLOW_LANG で CLI が setLang する
   if (typeof window === "undefined") return "ja";
   try {
     const q = new URLSearchParams(window.location.search).get("lang");

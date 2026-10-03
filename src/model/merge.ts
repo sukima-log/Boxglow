@@ -5,6 +5,8 @@
  *
  *   boxglow git-setup   で .gitattributes と git config に登録すると、git merge / pull が自動でこれを使う
  */
+// 文言の言語切り替え (React に依存しない core を使う)
+import { t } from "../i18n/core";
 import type { Project } from "./types";
 
 /** マージの結果と、両側で同じ項目を変えていた箇所 (ours を採用し、theirs の値を記録) */
@@ -91,13 +93,13 @@ export function mergeProjects(base: Project | null, ours: Project, theirs: Proje
   const r: MergeResult = { project: ours, merged: 0, conflicts: [] };
   const b = (base ?? undefined) as unknown as Dict | undefined;
   const o = ours as unknown as Dict;
-  const t = theirs as unknown as Dict;
+  const th = theirs as unknown as Dict; // (文言の t() と名前が重ならないよう th)
   const out: Dict = { ...o };
   // 単純な値
-  for (const k of ["name", "description", "visibility", "terminals"]) out[k] = pick(k, b?.[k], o[k], t[k], r);
+  for (const k of ["name", "description", "visibility", "terminals"]) out[k] = pick(k, b?.[k], o[k], th[k], r);
   // id の辞書
   for (const k of ["blocks", "ports", "edges", "agents"]) {
-    out[k] = mergeMap(k, b?.[k] as Record<string, Dict> | undefined, (o[k] ?? {}) as Record<string, Dict>, (t[k] ?? {}) as Record<string, Dict>, r);
+    out[k] = mergeMap(k, b?.[k] as Record<string, Dict> | undefined, (o[k] ?? {}) as Record<string, Dict>, (th[k] ?? {}) as Record<string, Dict>, r);
   }
   // id の配列
   out.members = mergeArrayById("members", base?.members, ours.members ?? [], theirs.members ?? [], r);
@@ -117,7 +119,7 @@ export function mergeProjects(base: Project | null, ours: Project, theirs: Proje
     const owner = used.get(key);
     if (owner && owner !== id) {
       blocks[id] = { ...blocks[id], key: `B${nextKey}` };
-      r.conflicts.push({ path: `blocks.${id}.key`, ours: key, theirs: `B${nextKey} に振り直し` });
+      r.conflicts.push({ path: `blocks.${id}.key`, ours: key, theirs: t("{key} に振り直し", { key: `B${nextKey}` }) });
       nextKey++;
     } else used.set(key, id);
   }

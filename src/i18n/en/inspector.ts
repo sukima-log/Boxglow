@@ -15,7 +15,7 @@ export const inspector: Record<string, string> = {
 , "他のプロジェクトで書き出したグループを読み込む": "Import a group exported from another project"
 , "仕様書などを種類ごとに分けるときは、グループを作って入力を入れます (例: PCIe 仕様書、DDR 仕様書)。": "To sort specs and the like by kind, create a group and put inputs in it (e.g. PCIe spec, DDR spec)."
   // ブロック: 見出し・メニュー
-, "「{title}」と下の階層のブロックを削除します。よろしいですか?": "Delete \"{title}\" and all blocks below it?"
+, "「{title}」と下の階層のブロックを削除します。よろしいですか?": "Delete \"{title}\" and all boxes below it?"
 , "AI に渡すテキストをコピーしました": "Copied the text for the AI"
 , "部品の札 (例: 画像処理, 認証。カンマ区切り。省略可)": "Tags for the part (e.g. image processing, auth; comma-separated; optional)"
 , "「{name}」を部品として保存しました (☰ の「部品」から挿入)": "Saved \"{name}\" as a part (insert it from Parts in ☰)"

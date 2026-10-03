@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-10-03)
+
+- English CLI: every plan has a language (`lang` in `boxglow.json`, set by `init` from the environment or `--lang en|ja`; plans made before this stay Japanese). CLI messages, the log lines stored in the plan, `status` / `show` / `export` / `prompt`, the MCP tool descriptions, and the agent instructions and skill written by `setup-agent` all follow it. `npx boxglow lang [ja|en]` shows or changes it; `--lang` / `BOXGLOW_LANG` override per call. About 260 strings and both documents translated; Japanese output is unchanged.
+- Fix: `boxglow help` printed only "boxglow" in the bundled CLI (the help text lived in a comment that the bundler dropped). Help is now a string in both languages and mentions `--lang`.
+- `examples/notes-app/boxglow.json` is now an English plan end to end (titles, log, language).
 
 - Browser checks moved into the repository: `npm run e2e` (`e2e/`) verifies on the example plans (and with squeezed positions) that no wire crosses a box on any tab, that tab switching stays fast, the double-click / selection / decision flows, the English UI and the VS Code webview mode (37 checks).
 - VS Code extension prepared for the Marketplace (publisher `sukima`, version 0.2.0): English listing with screenshots, changelog, gallery banner. English example plan `examples/notes-app/boxglow.json`.

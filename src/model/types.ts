@@ -215,6 +215,8 @@ export interface Project {
   schemaVersion: number;
   id: string;
   name: string;
+  /** CLI が書く文言 (ログ・status・AI 向け手順) の言語。無ければ ja (この項目より前に作った計画は日本語)。画面の言語とは別 (画面はブラウザの言語) */
+  lang?: "ja" | "en";
   description: string;
   createdAt: string;
   /** 最終更新 (v5 からファイルには書かない。ブラウザ内の一覧は保存時刻を別に持つ) */

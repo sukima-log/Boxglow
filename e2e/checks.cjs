@@ -132,9 +132,8 @@ function squeezed(file) {
     await page.evaluate(() => window.boxglow.store.getState().select({ timeline: true }));
     await page.waitForTimeout(500);
     const leftTimeline = await japaneseLeft(page);
-    // ログの行と活動のメモは CLI が書き込んだデータ (書いた側の言語のまま) なので除く。CLI の英語化は別の課題
-    const data = await page.evaluate(() => { const p = window.boxglow.store.getState().project; return [...p.log.map((e) => e.message), ...Object.values(p.blocks).map((b) => b.activity?.note ?? "")].filter(Boolean); });
-    const all = [...new Set([...leftView, ...leftPanel, ...leftTimeline])].filter((x) => !data.some((m) => m.includes(x) || x.includes(m.slice(0, 40))));
+    // 例の計画は英語 (lang: en) で作ってあるので、ログの行も含めて日本語が 1 つも出ないこと
+    const all = [...new Set([...leftView, ...leftPanel, ...leftTimeline])];
     check("英語 UI: 画面・箱の詳細・一覧に日本語が残らない", all.length === 0, all.slice(0, 5).join(" | "));
     check("英語 UI: html の lang が en", (await page.evaluate(() => document.documentElement.lang)) === "en");
     await page.context().close();

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 5,
-  "id": "2C1XjWWPnC",
+  "id": "RpRZjSIeBI",
   "name": "Notes app",
   "description": "",
-  "createdAt": "2026-10-03T14:16:23.377Z",
+  "createdAt": "2026-10-03T14:45:31.456Z",
   "visibility": "private",
   "members": [],
   "blocks": {
@@ -23,8 +23,8 @@
       "activity": null,
       "decisions": []
     },
-    "JlcyPamtMV": {
-      "id": "JlcyPamtMV",
+    "i773vjD91R": {
+      "id": "i773vjD91R",
       "key": "B1",
       "kind": "project",
       "parentId": "root",
@@ -41,10 +41,10 @@
       "activity": null,
       "decisions": []
     },
-    "LKuSAMsY9x": {
-      "id": "LKuSAMsY9x",
+    "ZMFSNdn0cY": {
+      "id": "ZMFSNdn0cY",
       "key": "B2",
-      "parentId": "JlcyPamtMV",
+      "parentId": "i773vjD91R",
       "title": "Plan and design",
       "description": "Decide the scope, the data model and the screens",
       "status": "white",
@@ -59,10 +59,10 @@
       "decisions": [],
       "category": "design"
     },
-    "9U6Ttz9459": {
-      "id": "9U6Ttz9459",
+    "jqpi9HqSXr": {
+      "id": "jqpi9HqSXr",
       "key": "B3",
-      "parentId": "JlcyPamtMV",
+      "parentId": "i773vjD91R",
       "title": "API",
       "description": "Notes CRUD, search and auth on Workers",
       "status": "gray",
@@ -77,10 +77,10 @@
       "decisions": [],
       "category": "build"
     },
-    "1IuIajVK74": {
-      "id": "1IuIajVK74",
+    "3u5hKihF4D": {
+      "id": "3u5hKihF4D",
       "key": "B4",
-      "parentId": "JlcyPamtMV",
+      "parentId": "i773vjD91R",
       "title": "Web UI",
       "description": "Editor, list and search screens",
       "status": "gray",
@@ -95,10 +95,10 @@
       "decisions": [],
       "category": "ui"
     },
-    "PigmJAw7aB": {
-      "id": "PigmJAw7aB",
+    "0fkP95FsUN": {
+      "id": "0fkP95FsUN",
       "key": "B5",
-      "parentId": "JlcyPamtMV",
+      "parentId": "i773vjD91R",
       "title": "Quality and release",
       "description": "Tests, docs and the production deploy",
       "status": "gray",
@@ -113,10 +113,10 @@
       "decisions": [],
       "category": "ops"
     },
-    "4MuyfwLB_p": {
-      "id": "4MuyfwLB_p",
+    "LYc11K8ruJ": {
+      "id": "LYc11K8ruJ",
       "key": "B6",
-      "parentId": "LKuSAMsY9x",
+      "parentId": "ZMFSNdn0cY",
       "title": "Write the requirements",
       "description": "",
       "status": "white",
@@ -130,10 +130,10 @@
       "activity": null,
       "decisions": []
     },
-    "r2WcJjhcq8": {
-      "id": "r2WcJjhcq8",
+    "dvO1MQyBfr": {
+      "id": "dvO1MQyBfr",
       "key": "B7",
-      "parentId": "LKuSAMsY9x",
+      "parentId": "ZMFSNdn0cY",
       "title": "Design the data model",
       "description": "",
       "status": "white",
@@ -147,10 +147,10 @@
       "activity": null,
       "decisions": []
     },
-    "BCGsXLuXg_": {
-      "id": "BCGsXLuXg_",
+    "ItH-3oembt": {
+      "id": "ItH-3oembt",
       "key": "B8",
-      "parentId": "LKuSAMsY9x",
+      "parentId": "ZMFSNdn0cY",
       "title": "Sketch the screens",
       "description": "",
       "status": "white",
@@ -164,10 +164,10 @@
       "activity": null,
       "decisions": []
     },
-    "YT_k3omc9R": {
-      "id": "YT_k3omc9R",
+    "K4smRPXG7f": {
+      "id": "K4smRPXG7f",
       "key": "B9",
-      "parentId": "LKuSAMsY9x",
+      "parentId": "ZMFSNdn0cY",
       "title": "Write the design doc",
       "description": "",
       "status": "white",
@@ -181,10 +181,10 @@
       "activity": null,
       "decisions": []
     },
-    "JI7FRaAqFO": {
-      "id": "JI7FRaAqFO",
+    "NoZstVEoo8": {
+      "id": "NoZstVEoo8",
       "key": "B10",
-      "parentId": "9U6Ttz9459",
+      "parentId": "jqpi9HqSXr",
       "title": "Set up Workers and D1",
       "description": "",
       "status": "white",
@@ -198,10 +198,10 @@
       "activity": null,
       "decisions": []
     },
-    "iTmSCj4L-R": {
-      "id": "iTmSCj4L-R",
+    "7nd-yeTqjg": {
+      "id": "7nd-yeTqjg",
       "key": "B11",
-      "parentId": "9U6Ttz9459",
+      "parentId": "jqpi9HqSXr",
       "title": "Notes CRUD endpoints",
       "description": "",
       "status": "white",
@@ -215,10 +215,10 @@
       "activity": null,
       "decisions": []
     },
-    "Au-WjbJzxM": {
-      "id": "Au-WjbJzxM",
+    "S4D2E7PYF6": {
+      "id": "S4D2E7PYF6",
       "key": "B12",
-      "parentId": "9U6Ttz9459",
+      "parentId": "jqpi9HqSXr",
       "title": "Full-text search",
       "description": "",
       "status": "gray",
@@ -233,14 +233,14 @@
         "actor": "claude-code",
         "state": "working",
         "note": "Indexing titles and bodies with SQLite FTS5",
-        "since": "2026-10-03T14:17:15.996Z"
+        "since": "2026-10-03T14:45:46.115Z"
       },
       "decisions": []
     },
-    "IF_61IKFyn": {
-      "id": "IF_61IKFyn",
+    "TH10H5-u24": {
+      "id": "TH10H5-u24",
       "key": "B13",
-      "parentId": "9U6Ttz9459",
+      "parentId": "jqpi9HqSXr",
       "title": "Sign-in",
       "description": "",
       "status": "black",
@@ -255,11 +255,11 @@
         "actor": "claude-code",
         "state": "needs_decision",
         "note": "Which sign-in method should ship first?",
-        "since": "2026-10-03T14:17:16.163Z"
+        "since": "2026-10-03T14:45:46.216Z"
       },
       "decisions": [
         {
-          "id": "vCCPQpIQJd",
+          "id": "Hn5eVQyDxb",
           "question": "Which sign-in method should ship first?",
           "options": [
             "Email magic link",
@@ -267,15 +267,15 @@
             "Both at once"
           ],
           "askedBy": "claude-code",
-          "askedAt": "2026-10-03T14:17:16.163Z",
+          "askedAt": "2026-10-03T14:45:46.216Z",
           "context": "Magic link: no password to store, needs an email sender (about 2 days). GitHub OAuth: fastest for developers, excludes non-developers (about 1 day). Both: covers everyone, about 4 days and two flows to test. The choice decides what the sign-in screen looks like."
         }
       ]
     },
-    "lGQwBctscI": {
-      "id": "lGQwBctscI",
+    "22rKT8w03M": {
+      "id": "22rKT8w03M",
       "key": "B14",
-      "parentId": "9U6Ttz9459",
+      "parentId": "jqpi9HqSXr",
       "title": "Deploy the API",
       "description": "",
       "status": "black",
@@ -289,10 +289,10 @@
       "activity": null,
       "decisions": []
     },
-    "X6Cmx-Ta6c": {
-      "id": "X6Cmx-Ta6c",
+    "YidubvffQz": {
+      "id": "YidubvffQz",
       "key": "B15",
-      "parentId": "1IuIajVK74",
+      "parentId": "3u5hKihF4D",
       "title": "Editor screen",
       "description": "",
       "status": "black",
@@ -307,10 +307,10 @@
       "decisions": [],
       "dueDate": "2026-10-20"
     },
-    "m0PVLwSPHn": {
-      "id": "m0PVLwSPHn",
+    "XDtu3zwWAn": {
+      "id": "XDtu3zwWAn",
       "key": "B16",
-      "parentId": "1IuIajVK74",
+      "parentId": "3u5hKihF4D",
       "title": "List and search screen",
       "description": "",
       "status": "black",
@@ -324,10 +324,10 @@
       "activity": null,
       "decisions": []
     },
-    "4D5TtHeCjg": {
-      "id": "4D5TtHeCjg",
+    "xYvOHBC1DN": {
+      "id": "xYvOHBC1DN",
       "key": "B17",
-      "parentId": "1IuIajVK74",
+      "parentId": "3u5hKihF4D",
       "title": "Sign-in screen",
       "description": "",
       "status": "black",
@@ -341,10 +341,10 @@
       "activity": null,
       "decisions": []
     },
-    "lP0adVSSpv": {
-      "id": "lP0adVSSpv",
+    "uZTNlTes5s": {
+      "id": "uZTNlTes5s",
       "key": "B18",
-      "parentId": "1IuIajVK74",
+      "parentId": "3u5hKihF4D",
       "title": "Build and bundle",
       "description": "",
       "status": "black",
@@ -358,10 +358,10 @@
       "activity": null,
       "decisions": []
     },
-    "DWV-kKZ8n3": {
-      "id": "DWV-kKZ8n3",
+    "yxW1zNrZz8": {
+      "id": "yxW1zNrZz8",
       "key": "B19",
-      "parentId": "PigmJAw7aB",
+      "parentId": "0fkP95FsUN",
       "title": "End-to-end tests",
       "description": "",
       "status": "black",
@@ -375,10 +375,10 @@
       "activity": null,
       "decisions": []
     },
-    "CBZmIb3x5r": {
-      "id": "CBZmIb3x5r",
+    "lBs6ymPFkU": {
+      "id": "lBs6ymPFkU",
       "key": "B20",
-      "parentId": "PigmJAw7aB",
+      "parentId": "0fkP95FsUN",
       "title": "User guide",
       "description": "",
       "status": "black",
@@ -392,10 +392,10 @@
       "activity": null,
       "decisions": []
     },
-    "0Kfg97U-na": {
-      "id": "0Kfg97U-na",
+    "w5GL5rLmcl": {
+      "id": "w5GL5rLmcl",
       "key": "B21",
-      "parentId": "PigmJAw7aB",
+      "parentId": "0fkP95FsUN",
       "title": "Production deploy",
       "description": "",
       "status": "black",
@@ -411,8 +411,8 @@
     }
   },
   "ports": {
-    "Zahwx1ScoW": {
-      "id": "Zahwx1ScoW",
+    "wvLELY-DmM": {
+      "id": "wvLELY-DmM",
       "blockId": "root",
       "direction": "out",
       "name": "Released notes app (URL)",
@@ -420,63 +420,63 @@
       "required": true,
       "artifacts": []
     },
-    "Rqr7MgAytt": {
-      "id": "Rqr7MgAytt",
-      "blockId": "JlcyPamtMV",
+    "9Q7BUADPHi": {
+      "id": "9Q7BUADPHi",
+      "blockId": "i773vjD91R",
       "direction": "out",
       "name": "Released notes app (URL)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "WugOPHsf8L": {
-      "id": "WugOPHsf8L",
-      "blockId": "JlcyPamtMV",
+    "PSs2GnRQRn": {
+      "id": "PSs2GnRQRn",
+      "blockId": "i773vjD91R",
       "direction": "in",
       "name": "Product brief (README.md)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "g2RH32SL4V": {
-      "id": "g2RH32SL4V",
+    "VjCJl8IwdS": {
+      "id": "VjCJl8IwdS",
       "blockId": "root",
       "direction": "in",
       "name": "Product brief (README.md)",
       "description": "",
       "required": true,
       "artifacts": [],
-      "promotedFrom": "WugOPHsf8L"
+      "promotedFrom": "PSs2GnRQRn"
     },
-    "-VqRfOxz5S": {
-      "id": "-VqRfOxz5S",
-      "blockId": "JlcyPamtMV",
+    "OIV1FJP2d0": {
+      "id": "OIV1FJP2d0",
+      "blockId": "i773vjD91R",
       "direction": "in",
       "name": "Hosting account (Cloudflare)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "dZDgrA-l2S": {
-      "id": "dZDgrA-l2S",
+    "wy0IP0ip2B": {
+      "id": "wy0IP0ip2B",
       "blockId": "root",
       "direction": "in",
       "name": "Hosting account (Cloudflare)",
       "description": "",
       "required": true,
       "artifacts": [],
-      "promotedFrom": "-VqRfOxz5S"
+      "promotedFrom": "OIV1FJP2d0"
     },
-    "Svxlmrhwyu": {
-      "id": "Svxlmrhwyu",
-      "blockId": "LKuSAMsY9x",
+    "xC471--ZPv": {
+      "id": "xC471--ZPv",
+      "blockId": "ZMFSNdn0cY",
       "direction": "out",
       "name": "Design doc (docs/design.md)",
       "description": "",
       "required": true,
       "artifacts": [
         {
-          "id": "d-XtPn_FBz",
+          "id": "tXY-CA6n0r",
           "title": "Design doc",
           "url": "https://github.com/sukima-log/Boxglow/tree/main/examples/notes-app#design",
           "kind": "url",
@@ -484,106 +484,106 @@
         }
       ]
     },
-    "330x6NnmfP": {
-      "id": "330x6NnmfP",
-      "blockId": "9U6Ttz9459",
+    "Wt69poOp-6": {
+      "id": "Wt69poOp-6",
+      "blockId": "jqpi9HqSXr",
       "direction": "out",
       "name": "API (src/api, deployed)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "3jm3WKixko": {
-      "id": "3jm3WKixko",
-      "blockId": "1IuIajVK74",
+    "LZ1_Z0bw-y": {
+      "id": "LZ1_Z0bw-y",
+      "blockId": "3u5hKihF4D",
       "direction": "out",
       "name": "Web app (src/web, built)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "-YrnjkOIV5": {
-      "id": "-YrnjkOIV5",
-      "blockId": "PigmJAw7aB",
+    "tUS4gnPoks": {
+      "id": "tUS4gnPoks",
+      "blockId": "0fkP95FsUN",
       "direction": "out",
       "name": "Released notes app (URL)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "uTijzQmeQ-": {
-      "id": "uTijzQmeQ-",
-      "blockId": "LKuSAMsY9x",
+    "kRGZ8bJsm_": {
+      "id": "kRGZ8bJsm_",
+      "blockId": "ZMFSNdn0cY",
       "direction": "in",
       "name": "Product brief (README.md)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "mj2yA460Jz": {
-      "id": "mj2yA460Jz",
-      "blockId": "9U6Ttz9459",
+    "3_PRsd3Il1": {
+      "id": "3_PRsd3Il1",
+      "blockId": "jqpi9HqSXr",
       "direction": "in",
       "name": "Design doc (docs/design.md)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "cc2xqEAOzd": {
-      "id": "cc2xqEAOzd",
-      "blockId": "1IuIajVK74",
+    "DPP-PyBQea": {
+      "id": "DPP-PyBQea",
+      "blockId": "3u5hKihF4D",
       "direction": "in",
       "name": "Design doc (docs/design.md)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "tYYMe9nRf7": {
-      "id": "tYYMe9nRf7",
-      "blockId": "1IuIajVK74",
+    "JqOLW08Vfp": {
+      "id": "JqOLW08Vfp",
+      "blockId": "3u5hKihF4D",
       "direction": "in",
       "name": "API (src/api, deployed)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "GCu6ASccDx": {
-      "id": "GCu6ASccDx",
-      "blockId": "PigmJAw7aB",
+    "mxuPc65AZR": {
+      "id": "mxuPc65AZR",
+      "blockId": "0fkP95FsUN",
       "direction": "in",
       "name": "API (src/api, deployed)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "EXi5A0pueb": {
-      "id": "EXi5A0pueb",
-      "blockId": "PigmJAw7aB",
+    "kfalA9zszj": {
+      "id": "kfalA9zszj",
+      "blockId": "0fkP95FsUN",
       "direction": "in",
       "name": "Web app (src/web, built)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "rpVDwWunvv": {
-      "id": "rpVDwWunvv",
-      "blockId": "PigmJAw7aB",
+    "Ye3gDmBDEo": {
+      "id": "Ye3gDmBDEo",
+      "blockId": "0fkP95FsUN",
       "direction": "in",
       "name": "Hosting account (Cloudflare)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "NAhp9Zejez": {
-      "id": "NAhp9Zejez",
-      "blockId": "4MuyfwLB_p",
+    "d5vlnobS1d": {
+      "id": "d5vlnobS1d",
+      "blockId": "LYc11K8ruJ",
       "direction": "out",
       "name": "Requirements (docs/requirements.md)",
       "description": "",
       "required": true,
       "artifacts": [
         {
-          "id": "k_1vgMYr8n",
+          "id": "PGte12J5wv",
           "title": "Requirements",
           "url": "https://github.com/sukima-log/Boxglow/tree/main/examples/notes-app#requirements",
           "kind": "url",
@@ -591,25 +591,25 @@
         }
       ]
     },
-    "6qswh6n0T1": {
-      "id": "6qswh6n0T1",
-      "blockId": "4MuyfwLB_p",
+    "eaHp96bYL3": {
+      "id": "eaHp96bYL3",
+      "blockId": "LYc11K8ruJ",
       "direction": "in",
       "name": "Product brief (README.md)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "Kl9ir5mPq3": {
-      "id": "Kl9ir5mPq3",
-      "blockId": "r2WcJjhcq8",
+    "pXn1nRe4x8": {
+      "id": "pXn1nRe4x8",
+      "blockId": "dvO1MQyBfr",
       "direction": "out",
       "name": "Data model (docs/model.md)",
       "description": "",
       "required": true,
       "artifacts": [
         {
-          "id": "NUNQ7muKIr",
+          "id": "Oe5gM9W2YD",
           "title": "Data model",
           "url": "https://github.com/sukima-log/Boxglow/tree/main/examples/notes-app#data-model",
           "kind": "url",
@@ -617,25 +617,25 @@
         }
       ]
     },
-    "EVSwNlvKR4": {
-      "id": "EVSwNlvKR4",
-      "blockId": "r2WcJjhcq8",
+    "W0WrPY-m8j": {
+      "id": "W0WrPY-m8j",
+      "blockId": "dvO1MQyBfr",
       "direction": "in",
       "name": "Requirements (docs/requirements.md)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "uCsarmLZjy": {
-      "id": "uCsarmLZjy",
-      "blockId": "BCGsXLuXg_",
+    "O-Eo2y8Kco": {
+      "id": "O-Eo2y8Kco",
+      "blockId": "ItH-3oembt",
       "direction": "out",
       "name": "Screen sketches (docs/screens.md)",
       "description": "",
       "required": true,
       "artifacts": [
         {
-          "id": "ju9uM_HtHY",
+          "id": "3tuoF8PfOX",
           "title": "Screen sketches",
           "url": "https://github.com/sukima-log/Boxglow/tree/main/examples/notes-app#screens",
           "kind": "url",
@@ -643,25 +643,25 @@
         }
       ]
     },
-    "NmgGQnoKOZ": {
-      "id": "NmgGQnoKOZ",
-      "blockId": "BCGsXLuXg_",
+    "tdaEMbeTH_": {
+      "id": "tdaEMbeTH_",
+      "blockId": "ItH-3oembt",
       "direction": "in",
       "name": "Requirements (docs/requirements.md)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "h2pqnLFzwj": {
-      "id": "h2pqnLFzwj",
-      "blockId": "YT_k3omc9R",
+    "RfPk9Cpk4C": {
+      "id": "RfPk9Cpk4C",
+      "blockId": "K4smRPXG7f",
       "direction": "out",
       "name": "Design doc (docs/design.md)",
       "description": "",
       "required": true,
       "artifacts": [
         {
-          "id": "slPchRbCyh",
+          "id": "vMSfNaxGbA",
           "title": "Design doc",
           "url": "https://github.com/sukima-log/Boxglow/tree/main/examples/notes-app#design",
           "kind": "url",
@@ -669,34 +669,34 @@
         }
       ]
     },
-    "tfDVR3XXip": {
-      "id": "tfDVR3XXip",
-      "blockId": "YT_k3omc9R",
+    "cI8wOfvB7X": {
+      "id": "cI8wOfvB7X",
+      "blockId": "K4smRPXG7f",
       "direction": "in",
       "name": "Data model (docs/model.md)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "hHoT-HGQbB": {
-      "id": "hHoT-HGQbB",
-      "blockId": "YT_k3omc9R",
+    "BQ_CFxR5-f": {
+      "id": "BQ_CFxR5-f",
+      "blockId": "K4smRPXG7f",
       "direction": "in",
       "name": "Screen sketches (docs/screens.md)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "h1xDIJMRcn": {
-      "id": "h1xDIJMRcn",
-      "blockId": "JI7FRaAqFO",
+    "WFtB5o2uCo": {
+      "id": "WFtB5o2uCo",
+      "blockId": "NoZstVEoo8",
       "direction": "out",
       "name": "Project skeleton (wrangler.toml)",
       "description": "",
       "required": true,
       "artifacts": [
         {
-          "id": "zx1IWjMu1k",
+          "id": "rQu7W5qUh6",
           "title": "wrangler.toml",
           "url": "https://github.com/sukima-log/Boxglow/tree/main/examples/notes-app#skeleton",
           "kind": "url",
@@ -704,25 +704,25 @@
         }
       ]
     },
-    "Ls5wNna7v6": {
-      "id": "Ls5wNna7v6",
-      "blockId": "JI7FRaAqFO",
+    "qRp-Wr-UoJ": {
+      "id": "qRp-Wr-UoJ",
+      "blockId": "NoZstVEoo8",
       "direction": "in",
       "name": "Design doc (docs/design.md)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "HN578lNksc": {
-      "id": "HN578lNksc",
-      "blockId": "iTmSCj4L-R",
+    "IgKds-zPOQ": {
+      "id": "IgKds-zPOQ",
+      "blockId": "7nd-yeTqjg",
       "direction": "out",
       "name": "CRUD API (src/api/notes.ts)",
       "description": "",
       "required": true,
       "artifacts": [
         {
-          "id": "DRodVf4DgC",
+          "id": "Hz1mFswcZT",
           "title": "notes.ts",
           "url": "https://github.com/sukima-log/Boxglow/tree/main/examples/notes-app#crud",
           "kind": "url",
@@ -730,261 +730,261 @@
         }
       ]
     },
-    "Ykag0dJEud": {
-      "id": "Ykag0dJEud",
-      "blockId": "iTmSCj4L-R",
+    "HcRvZ2nb6W": {
+      "id": "HcRvZ2nb6W",
+      "blockId": "7nd-yeTqjg",
       "direction": "in",
       "name": "Project skeleton (wrangler.toml)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "7r7hYcY4iU": {
-      "id": "7r7hYcY4iU",
-      "blockId": "Au-WjbJzxM",
+    "I3RD7OIu-O": {
+      "id": "I3RD7OIu-O",
+      "blockId": "S4D2E7PYF6",
       "direction": "out",
       "name": "Search API (src/api/search.ts)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "giPR3zX8uW": {
-      "id": "giPR3zX8uW",
-      "blockId": "Au-WjbJzxM",
+    "sbj2_geCFp": {
+      "id": "sbj2_geCFp",
+      "blockId": "S4D2E7PYF6",
       "direction": "in",
       "name": "CRUD API (src/api/notes.ts)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "MxYDIVbTbq": {
-      "id": "MxYDIVbTbq",
-      "blockId": "IF_61IKFyn",
+    "eF12CF3FiW": {
+      "id": "eF12CF3FiW",
+      "blockId": "TH10H5-u24",
       "direction": "out",
       "name": "Auth (src/api/auth.ts)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "m1XD4OGtLn": {
-      "id": "m1XD4OGtLn",
-      "blockId": "IF_61IKFyn",
+    "icdYMYD9rs": {
+      "id": "icdYMYD9rs",
+      "blockId": "TH10H5-u24",
       "direction": "in",
       "name": "Project skeleton (wrangler.toml)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "oKmThrAT_v": {
-      "id": "oKmThrAT_v",
-      "blockId": "lGQwBctscI",
+    "qMs01l1LDI": {
+      "id": "qMs01l1LDI",
+      "blockId": "22rKT8w03M",
       "direction": "out",
       "name": "API (src/api, deployed)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "hYbySusi3D": {
-      "id": "hYbySusi3D",
-      "blockId": "lGQwBctscI",
+    "i_49kXPJfx": {
+      "id": "i_49kXPJfx",
+      "blockId": "22rKT8w03M",
       "direction": "in",
       "name": "Search API (src/api/search.ts)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "7JzOsqWioK": {
-      "id": "7JzOsqWioK",
-      "blockId": "lGQwBctscI",
+    "LHerJ5iYEi": {
+      "id": "LHerJ5iYEi",
+      "blockId": "22rKT8w03M",
       "direction": "in",
       "name": "Auth (src/api/auth.ts)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "cjTWiUWyGS": {
-      "id": "cjTWiUWyGS",
-      "blockId": "X6Cmx-Ta6c",
+    "AKlliTGcd9": {
+      "id": "AKlliTGcd9",
+      "blockId": "YidubvffQz",
       "direction": "out",
       "name": "Editor (src/web/Editor.tsx)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "cF49yf3sfn": {
-      "id": "cF49yf3sfn",
-      "blockId": "X6Cmx-Ta6c",
+    "h-iarMzqdp": {
+      "id": "h-iarMzqdp",
+      "blockId": "YidubvffQz",
       "direction": "in",
       "name": "Design doc (docs/design.md)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "qFfSmC1oE4": {
-      "id": "qFfSmC1oE4",
-      "blockId": "X6Cmx-Ta6c",
+    "XStqsMeSbX": {
+      "id": "XStqsMeSbX",
+      "blockId": "YidubvffQz",
       "direction": "in",
       "name": "API (src/api, deployed)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "dT6de5jGIT": {
-      "id": "dT6de5jGIT",
-      "blockId": "m0PVLwSPHn",
+    "0qGNRZ1TsE": {
+      "id": "0qGNRZ1TsE",
+      "blockId": "XDtu3zwWAn",
       "direction": "out",
       "name": "List (src/web/List.tsx)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "k5mIU-UWlY": {
-      "id": "k5mIU-UWlY",
-      "blockId": "m0PVLwSPHn",
+    "LpjkcfJmGt": {
+      "id": "LpjkcfJmGt",
+      "blockId": "XDtu3zwWAn",
       "direction": "in",
       "name": "Design doc (docs/design.md)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "GBoIOg1Ep3": {
-      "id": "GBoIOg1Ep3",
-      "blockId": "m0PVLwSPHn",
+    "5MZstQBM5I": {
+      "id": "5MZstQBM5I",
+      "blockId": "XDtu3zwWAn",
       "direction": "in",
       "name": "API (src/api, deployed)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "eFXn0T9fM1": {
-      "id": "eFXn0T9fM1",
-      "blockId": "4D5TtHeCjg",
+    "YPYcOf3faE": {
+      "id": "YPYcOf3faE",
+      "blockId": "xYvOHBC1DN",
       "direction": "out",
       "name": "Sign-in (src/web/SignIn.tsx)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "gmTiR2vXKj": {
-      "id": "gmTiR2vXKj",
-      "blockId": "4D5TtHeCjg",
+    "YS3uMOQeJ9": {
+      "id": "YS3uMOQeJ9",
+      "blockId": "xYvOHBC1DN",
       "direction": "in",
       "name": "API (src/api, deployed)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "wMpNVX3OqX": {
-      "id": "wMpNVX3OqX",
-      "blockId": "lP0adVSSpv",
+    "8T4qNkDDVD": {
+      "id": "8T4qNkDDVD",
+      "blockId": "uZTNlTes5s",
       "direction": "out",
       "name": "Web app (src/web, built)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "m5JfwQVK5-": {
-      "id": "m5JfwQVK5-",
-      "blockId": "lP0adVSSpv",
+    "XW_sE-OnYM": {
+      "id": "XW_sE-OnYM",
+      "blockId": "uZTNlTes5s",
       "direction": "in",
       "name": "Editor (src/web/Editor.tsx)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "lffabkxPL1": {
-      "id": "lffabkxPL1",
-      "blockId": "lP0adVSSpv",
+    "rjDlStQpz0": {
+      "id": "rjDlStQpz0",
+      "blockId": "uZTNlTes5s",
       "direction": "in",
       "name": "List (src/web/List.tsx)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "MDuPRQT8da": {
-      "id": "MDuPRQT8da",
-      "blockId": "lP0adVSSpv",
+    "FBTeoojjUg": {
+      "id": "FBTeoojjUg",
+      "blockId": "uZTNlTes5s",
       "direction": "in",
       "name": "Sign-in (src/web/SignIn.tsx)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "F90COunnLT": {
-      "id": "F90COunnLT",
-      "blockId": "DWV-kKZ8n3",
+    "p7lb7AMpFW": {
+      "id": "p7lb7AMpFW",
+      "blockId": "yxW1zNrZz8",
       "direction": "out",
       "name": "Test report (e2e/report.html)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "N82zQ3hn7j": {
-      "id": "N82zQ3hn7j",
-      "blockId": "DWV-kKZ8n3",
+    "SgY1T3yM5i": {
+      "id": "SgY1T3yM5i",
+      "blockId": "yxW1zNrZz8",
       "direction": "in",
       "name": "API (src/api, deployed)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "W-1RCCSN5F": {
-      "id": "W-1RCCSN5F",
-      "blockId": "DWV-kKZ8n3",
+    "02yaqbdTXY": {
+      "id": "02yaqbdTXY",
+      "blockId": "yxW1zNrZz8",
       "direction": "in",
       "name": "Web app (src/web, built)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "6k7wCggV4g": {
-      "id": "6k7wCggV4g",
-      "blockId": "CBZmIb3x5r",
+    "-exKTNIaQ9": {
+      "id": "-exKTNIaQ9",
+      "blockId": "lBs6ymPFkU",
       "direction": "out",
       "name": "Guide (docs/guide.md)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "_7a_spa20k": {
-      "id": "_7a_spa20k",
-      "blockId": "CBZmIb3x5r",
+    "o5XAY1mhi6": {
+      "id": "o5XAY1mhi6",
+      "blockId": "lBs6ymPFkU",
       "direction": "in",
       "name": "Web app (src/web, built)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "BJVq__TKrR": {
-      "id": "BJVq__TKrR",
-      "blockId": "0Kfg97U-na",
+    "Vy60ywGQzG": {
+      "id": "Vy60ywGQzG",
+      "blockId": "w5GL5rLmcl",
       "direction": "out",
       "name": "Released notes app (URL)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "skuPRyLcu5": {
-      "id": "skuPRyLcu5",
-      "blockId": "0Kfg97U-na",
+    "5wPahGjQb0": {
+      "id": "5wPahGjQb0",
+      "blockId": "w5GL5rLmcl",
       "direction": "in",
       "name": "Test report (e2e/report.html)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "Jt1jWStxWd": {
-      "id": "Jt1jWStxWd",
-      "blockId": "0Kfg97U-na",
+    "zE05V2rhID": {
+      "id": "zE05V2rhID",
+      "blockId": "w5GL5rLmcl",
       "direction": "in",
       "name": "Guide (docs/guide.md)",
       "description": "",
       "required": true,
       "artifacts": []
     },
-    "QchLWUiULL": {
-      "id": "QchLWUiULL",
-      "blockId": "0Kfg97U-na",
+    "q1-G2bkW1J": {
+      "id": "q1-G2bkW1J",
+      "blockId": "w5GL5rLmcl",
       "direction": "in",
       "name": "Hosting account (Cloudflare)",
       "description": "",
@@ -993,521 +993,521 @@
     }
   },
   "edges": {
-    "9IIfG8Fzbg": {
-      "id": "9IIfG8Fzbg",
+    "vI-uPfcYeG": {
+      "id": "vI-uPfcYeG",
       "from": {
-        "portId": "Rqr7MgAytt",
+        "portId": "9Q7BUADPHi",
         "side": "outer"
       },
       "to": {
-        "portId": "Zahwx1ScoW",
+        "portId": "wvLELY-DmM",
         "side": "inner"
       },
       "kind": "up",
       "auto": false
     },
-    "n0QYCMwKdq": {
-      "id": "n0QYCMwKdq",
+    "cRqhz2nJ82": {
+      "id": "cRqhz2nJ82",
       "from": {
-        "portId": "g2RH32SL4V",
+        "portId": "VjCJl8IwdS",
         "side": "inner"
       },
       "to": {
-        "portId": "WugOPHsf8L",
+        "portId": "PSs2GnRQRn",
         "side": "outer"
       },
       "kind": "down",
       "auto": true
     },
-    "Mgy4_E6NkQ": {
-      "id": "Mgy4_E6NkQ",
+    "XQzKmfEM2l": {
+      "id": "XQzKmfEM2l",
       "from": {
-        "portId": "dZDgrA-l2S",
+        "portId": "wy0IP0ip2B",
         "side": "inner"
       },
       "to": {
-        "portId": "-VqRfOxz5S",
+        "portId": "OIV1FJP2d0",
         "side": "outer"
       },
       "kind": "down",
       "auto": true
     },
-    "q30SPUzXsj": {
-      "id": "q30SPUzXsj",
+    "Yh5fiRCfLS": {
+      "id": "Yh5fiRCfLS",
       "from": {
-        "portId": "WugOPHsf8L",
+        "portId": "PSs2GnRQRn",
         "side": "inner"
       },
       "to": {
-        "portId": "uTijzQmeQ-",
+        "portId": "kRGZ8bJsm_",
         "side": "outer"
       },
       "kind": "down",
       "auto": false
     },
-    "fdeVb2NxbH": {
-      "id": "fdeVb2NxbH",
+    "jhye85RTio": {
+      "id": "jhye85RTio",
       "from": {
-        "portId": "Svxlmrhwyu",
+        "portId": "xC471--ZPv",
         "side": "outer"
       },
       "to": {
-        "portId": "mj2yA460Jz",
+        "portId": "3_PRsd3Il1",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "fKIZ-KLjlo": {
-      "id": "fKIZ-KLjlo",
+    "R5Qn-Rpg6R": {
+      "id": "R5Qn-Rpg6R",
       "from": {
-        "portId": "Svxlmrhwyu",
+        "portId": "xC471--ZPv",
         "side": "outer"
       },
       "to": {
-        "portId": "cc2xqEAOzd",
+        "portId": "DPP-PyBQea",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "IFOXDUMjNn": {
-      "id": "IFOXDUMjNn",
+    "R4Y6UPfOjB": {
+      "id": "R4Y6UPfOjB",
       "from": {
-        "portId": "330x6NnmfP",
+        "portId": "Wt69poOp-6",
         "side": "outer"
       },
       "to": {
-        "portId": "tYYMe9nRf7",
+        "portId": "JqOLW08Vfp",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "fFSa9dUG4P": {
-      "id": "fFSa9dUG4P",
+    "50d15nJMBn": {
+      "id": "50d15nJMBn",
       "from": {
-        "portId": "330x6NnmfP",
+        "portId": "Wt69poOp-6",
         "side": "outer"
       },
       "to": {
-        "portId": "GCu6ASccDx",
+        "portId": "mxuPc65AZR",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "h64TLf-aU1": {
-      "id": "h64TLf-aU1",
+    "VlUSoPXbLg": {
+      "id": "VlUSoPXbLg",
       "from": {
-        "portId": "3jm3WKixko",
+        "portId": "LZ1_Z0bw-y",
         "side": "outer"
       },
       "to": {
-        "portId": "EXi5A0pueb",
+        "portId": "kfalA9zszj",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "yHemfveKNG": {
-      "id": "yHemfveKNG",
+    "U4176IqPRu": {
+      "id": "U4176IqPRu",
       "from": {
-        "portId": "-VqRfOxz5S",
+        "portId": "OIV1FJP2d0",
         "side": "inner"
       },
       "to": {
-        "portId": "rpVDwWunvv",
+        "portId": "Ye3gDmBDEo",
         "side": "outer"
       },
       "kind": "down",
       "auto": false
     },
-    "zVF2gBEUCN": {
-      "id": "zVF2gBEUCN",
+    "f22vJqI_35": {
+      "id": "f22vJqI_35",
       "from": {
-        "portId": "-YrnjkOIV5",
+        "portId": "tUS4gnPoks",
         "side": "outer"
       },
       "to": {
-        "portId": "Rqr7MgAytt",
+        "portId": "9Q7BUADPHi",
         "side": "inner"
       },
       "kind": "up",
       "auto": false
     },
-    "TYAE1f5cpV": {
-      "id": "TYAE1f5cpV",
+    "JiUrshWQKo": {
+      "id": "JiUrshWQKo",
       "from": {
-        "portId": "uTijzQmeQ-",
+        "portId": "kRGZ8bJsm_",
         "side": "inner"
       },
       "to": {
-        "portId": "6qswh6n0T1",
+        "portId": "eaHp96bYL3",
         "side": "outer"
       },
       "kind": "down",
       "auto": false
     },
-    "bSYdrAkLa-": {
-      "id": "bSYdrAkLa-",
+    "x7CjIuo-n-": {
+      "id": "x7CjIuo-n-",
       "from": {
-        "portId": "NAhp9Zejez",
+        "portId": "d5vlnobS1d",
         "side": "outer"
       },
       "to": {
-        "portId": "EVSwNlvKR4",
+        "portId": "W0WrPY-m8j",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "ShF8TQojEu": {
-      "id": "ShF8TQojEu",
+    "eZS0wM-2SW": {
+      "id": "eZS0wM-2SW",
       "from": {
-        "portId": "NAhp9Zejez",
+        "portId": "d5vlnobS1d",
         "side": "outer"
       },
       "to": {
-        "portId": "NmgGQnoKOZ",
+        "portId": "tdaEMbeTH_",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "hNlh61ScOD": {
-      "id": "hNlh61ScOD",
+    "22IQ7NgYcI": {
+      "id": "22IQ7NgYcI",
       "from": {
-        "portId": "Kl9ir5mPq3",
+        "portId": "pXn1nRe4x8",
         "side": "outer"
       },
       "to": {
-        "portId": "tfDVR3XXip",
+        "portId": "cI8wOfvB7X",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "Wot-10dtoM": {
-      "id": "Wot-10dtoM",
+    "Tm456upPme": {
+      "id": "Tm456upPme",
       "from": {
-        "portId": "uCsarmLZjy",
+        "portId": "O-Eo2y8Kco",
         "side": "outer"
       },
       "to": {
-        "portId": "hHoT-HGQbB",
+        "portId": "BQ_CFxR5-f",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "afRkpa6rj9": {
-      "id": "afRkpa6rj9",
+    "XuyEmoTMCD": {
+      "id": "XuyEmoTMCD",
       "from": {
-        "portId": "h2pqnLFzwj",
+        "portId": "RfPk9Cpk4C",
         "side": "outer"
       },
       "to": {
-        "portId": "Svxlmrhwyu",
+        "portId": "xC471--ZPv",
         "side": "inner"
       },
       "kind": "up",
       "auto": false
     },
-    "XyLjagJqZV": {
-      "id": "XyLjagJqZV",
+    "SjEaGtns5L": {
+      "id": "SjEaGtns5L",
       "from": {
-        "portId": "mj2yA460Jz",
+        "portId": "3_PRsd3Il1",
         "side": "inner"
       },
       "to": {
-        "portId": "Ls5wNna7v6",
+        "portId": "qRp-Wr-UoJ",
         "side": "outer"
       },
       "kind": "down",
       "auto": false
     },
-    "j9NaobnzXZ": {
-      "id": "j9NaobnzXZ",
+    "E1vzyKsLfL": {
+      "id": "E1vzyKsLfL",
       "from": {
-        "portId": "h1xDIJMRcn",
+        "portId": "WFtB5o2uCo",
         "side": "outer"
       },
       "to": {
-        "portId": "Ykag0dJEud",
+        "portId": "HcRvZ2nb6W",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "gC8mgERL58": {
-      "id": "gC8mgERL58",
+    "sR1BUWsF5K": {
+      "id": "sR1BUWsF5K",
       "from": {
-        "portId": "h1xDIJMRcn",
+        "portId": "WFtB5o2uCo",
         "side": "outer"
       },
       "to": {
-        "portId": "m1XD4OGtLn",
+        "portId": "icdYMYD9rs",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "KdwLK4XVQq": {
-      "id": "KdwLK4XVQq",
+    "S_rKdGsSuH": {
+      "id": "S_rKdGsSuH",
       "from": {
-        "portId": "HN578lNksc",
+        "portId": "IgKds-zPOQ",
         "side": "outer"
       },
       "to": {
-        "portId": "giPR3zX8uW",
+        "portId": "sbj2_geCFp",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "7GTfFabGbs": {
-      "id": "7GTfFabGbs",
+    "s6HWfpPIIN": {
+      "id": "s6HWfpPIIN",
       "from": {
-        "portId": "7r7hYcY4iU",
+        "portId": "I3RD7OIu-O",
         "side": "outer"
       },
       "to": {
-        "portId": "hYbySusi3D",
+        "portId": "i_49kXPJfx",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "2FSviT79Ag": {
-      "id": "2FSviT79Ag",
+    "XryKVtSG6o": {
+      "id": "XryKVtSG6o",
       "from": {
-        "portId": "MxYDIVbTbq",
+        "portId": "eF12CF3FiW",
         "side": "outer"
       },
       "to": {
-        "portId": "7JzOsqWioK",
+        "portId": "LHerJ5iYEi",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "mXFjXDAVOp": {
-      "id": "mXFjXDAVOp",
+    "zBnWEoZtTE": {
+      "id": "zBnWEoZtTE",
       "from": {
-        "portId": "oKmThrAT_v",
+        "portId": "qMs01l1LDI",
         "side": "outer"
       },
       "to": {
-        "portId": "330x6NnmfP",
+        "portId": "Wt69poOp-6",
         "side": "inner"
       },
       "kind": "up",
       "auto": false
     },
-    "Q5Eaee0HQu": {
-      "id": "Q5Eaee0HQu",
+    "cymkS3hWTI": {
+      "id": "cymkS3hWTI",
       "from": {
-        "portId": "cc2xqEAOzd",
+        "portId": "DPP-PyBQea",
         "side": "inner"
       },
       "to": {
-        "portId": "cF49yf3sfn",
+        "portId": "h-iarMzqdp",
         "side": "outer"
       },
       "kind": "down",
       "auto": false
     },
-    "z_FCb_fDHA": {
-      "id": "z_FCb_fDHA",
+    "OWEFRXbMPc": {
+      "id": "OWEFRXbMPc",
       "from": {
-        "portId": "cc2xqEAOzd",
+        "portId": "DPP-PyBQea",
         "side": "inner"
       },
       "to": {
-        "portId": "k5mIU-UWlY",
+        "portId": "LpjkcfJmGt",
         "side": "outer"
       },
       "kind": "down",
       "auto": false
     },
-    "BUxQ-7voMJ": {
-      "id": "BUxQ-7voMJ",
+    "UOsCQjEqkn": {
+      "id": "UOsCQjEqkn",
       "from": {
-        "portId": "tYYMe9nRf7",
+        "portId": "JqOLW08Vfp",
         "side": "inner"
       },
       "to": {
-        "portId": "qFfSmC1oE4",
+        "portId": "XStqsMeSbX",
         "side": "outer"
       },
       "kind": "down",
       "auto": false
     },
-    "xfAF4O1USh": {
-      "id": "xfAF4O1USh",
+    "Crk_NCjFru": {
+      "id": "Crk_NCjFru",
       "from": {
-        "portId": "tYYMe9nRf7",
+        "portId": "JqOLW08Vfp",
         "side": "inner"
       },
       "to": {
-        "portId": "GBoIOg1Ep3",
+        "portId": "5MZstQBM5I",
         "side": "outer"
       },
       "kind": "down",
       "auto": false
     },
-    "LECkq-pFO0": {
-      "id": "LECkq-pFO0",
+    "ssT3s3y27X": {
+      "id": "ssT3s3y27X",
       "from": {
-        "portId": "tYYMe9nRf7",
+        "portId": "JqOLW08Vfp",
         "side": "inner"
       },
       "to": {
-        "portId": "gmTiR2vXKj",
+        "portId": "YS3uMOQeJ9",
         "side": "outer"
       },
       "kind": "down",
       "auto": false
     },
-    "t-v4-KQ-lA": {
-      "id": "t-v4-KQ-lA",
+    "plIBNf0I6u": {
+      "id": "plIBNf0I6u",
       "from": {
-        "portId": "cjTWiUWyGS",
+        "portId": "AKlliTGcd9",
         "side": "outer"
       },
       "to": {
-        "portId": "m5JfwQVK5-",
+        "portId": "XW_sE-OnYM",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "W7pAw_Fi3v": {
-      "id": "W7pAw_Fi3v",
+    "tJkr8GLU6r": {
+      "id": "tJkr8GLU6r",
       "from": {
-        "portId": "dT6de5jGIT",
+        "portId": "0qGNRZ1TsE",
         "side": "outer"
       },
       "to": {
-        "portId": "lffabkxPL1",
+        "portId": "rjDlStQpz0",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "F7a6Q0cleM": {
-      "id": "F7a6Q0cleM",
+    "KIdaQqmt-4": {
+      "id": "KIdaQqmt-4",
       "from": {
-        "portId": "eFXn0T9fM1",
+        "portId": "YPYcOf3faE",
         "side": "outer"
       },
       "to": {
-        "portId": "MDuPRQT8da",
+        "portId": "FBTeoojjUg",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "w4GwSLgwle": {
-      "id": "w4GwSLgwle",
+    "lLk23K5feW": {
+      "id": "lLk23K5feW",
       "from": {
-        "portId": "wMpNVX3OqX",
+        "portId": "8T4qNkDDVD",
         "side": "outer"
       },
       "to": {
-        "portId": "3jm3WKixko",
+        "portId": "LZ1_Z0bw-y",
         "side": "inner"
       },
       "kind": "up",
       "auto": false
     },
-    "HeDZp-W1DI": {
-      "id": "HeDZp-W1DI",
+    "poenJK-jr4": {
+      "id": "poenJK-jr4",
       "from": {
-        "portId": "GCu6ASccDx",
+        "portId": "mxuPc65AZR",
         "side": "inner"
       },
       "to": {
-        "portId": "N82zQ3hn7j",
+        "portId": "SgY1T3yM5i",
         "side": "outer"
       },
       "kind": "down",
       "auto": false
     },
-    "4DBQkX2zXb": {
-      "id": "4DBQkX2zXb",
+    "49d2J2X9-l": {
+      "id": "49d2J2X9-l",
       "from": {
-        "portId": "EXi5A0pueb",
+        "portId": "kfalA9zszj",
         "side": "inner"
       },
       "to": {
-        "portId": "W-1RCCSN5F",
+        "portId": "02yaqbdTXY",
         "side": "outer"
       },
       "kind": "down",
       "auto": false
     },
-    "-CnBI3EVn3": {
-      "id": "-CnBI3EVn3",
+    "_SGyaqFg44": {
+      "id": "_SGyaqFg44",
       "from": {
-        "portId": "EXi5A0pueb",
+        "portId": "kfalA9zszj",
         "side": "inner"
       },
       "to": {
-        "portId": "_7a_spa20k",
+        "portId": "o5XAY1mhi6",
         "side": "outer"
       },
       "kind": "down",
       "auto": false
     },
-    "OyIzBOCirp": {
-      "id": "OyIzBOCirp",
+    "chP6kGJ5bn": {
+      "id": "chP6kGJ5bn",
       "from": {
-        "portId": "F90COunnLT",
+        "portId": "p7lb7AMpFW",
         "side": "outer"
       },
       "to": {
-        "portId": "skuPRyLcu5",
+        "portId": "5wPahGjQb0",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "FWp5ByLBfC": {
-      "id": "FWp5ByLBfC",
+    "-p4rJNWPzI": {
+      "id": "-p4rJNWPzI",
       "from": {
-        "portId": "6k7wCggV4g",
+        "portId": "-exKTNIaQ9",
         "side": "outer"
       },
       "to": {
-        "portId": "Jt1jWStxWd",
+        "portId": "zE05V2rhID",
         "side": "outer"
       },
       "kind": "sibling",
       "auto": false
     },
-    "sbEV94cxzT": {
-      "id": "sbEV94cxzT",
+    "g9GTgxAH-x": {
+      "id": "g9GTgxAH-x",
       "from": {
-        "portId": "rpVDwWunvv",
+        "portId": "Ye3gDmBDEo",
         "side": "inner"
       },
       "to": {
-        "portId": "QchLWUiULL",
+        "portId": "q1-G2bkW1J",
         "side": "outer"
       },
       "kind": "down",
       "auto": false
     },
-    "-RLalDfp9q": {
-      "id": "-RLalDfp9q",
+    "aEck44L0B6": {
+      "id": "aEck44L0B6",
       "from": {
-        "portId": "BJVq__TKrR",
+        "portId": "Vy60ywGQzG",
         "side": "outer"
       },
       "to": {
-        "portId": "-YrnjkOIV5",
+        "portId": "tUS4gnPoks",
         "side": "inner"
       },
       "kind": "up",
@@ -1526,155 +1526,156 @@
   },
   "log": [
     {
-      "id": "I4G0SKcoWt",
-      "at": "2026-10-03T14:16:32.700Z",
+      "id": "_eNOEYgihM",
+      "at": "2026-10-03T14:45:43.772Z",
       "actor": "claude-code",
       "kind": "added",
-      "blockId": "LKuSAMsY9x",
-      "message": "「Plan and design」を追加"
+      "blockId": "ZMFSNdn0cY",
+      "message": "Added \"Plan and design\""
     },
     {
-      "id": "QMp0qddPwc",
-      "at": "2026-10-03T14:16:32.841Z",
+      "id": "1oVKu-wWkq",
+      "at": "2026-10-03T14:45:43.872Z",
       "actor": "claude-code",
       "kind": "added",
-      "blockId": "9U6Ttz9459",
-      "message": "「API」を追加"
+      "blockId": "jqpi9HqSXr",
+      "message": "Added \"API\""
     },
     {
-      "id": "9HOR_omaZ4",
-      "at": "2026-10-03T14:16:32.986Z",
+      "id": "ALvAxWH-UB",
+      "at": "2026-10-03T14:45:43.971Z",
       "actor": "claude-code",
       "kind": "added",
-      "blockId": "1IuIajVK74",
-      "message": "「Web UI」を追加"
+      "blockId": "3u5hKihF4D",
+      "message": "Added \"Web UI\""
     },
     {
-      "id": "kB5Gd7T8Lh",
-      "at": "2026-10-03T14:16:33.138Z",
+      "id": "BZdeVGiHxs",
+      "at": "2026-10-03T14:45:44.071Z",
       "actor": "claude-code",
       "kind": "added",
-      "blockId": "PigmJAw7aB",
-      "message": "「Quality and release」を追加"
+      "blockId": "0fkP95FsUN",
+      "message": "Added \"Quality and release\""
     },
     {
-      "id": "7eUc7z24v-",
-      "at": "2026-10-03T14:17:06.386Z",
+      "id": "vIai0shXas",
+      "at": "2026-10-03T14:45:44.969Z",
       "actor": "claude-code",
       "kind": "split",
-      "blockId": "LKuSAMsY9x",
-      "message": "「Plan and design」を 4 個に分解: Write the requirements, Design the data model, Sketch the screens, Write the design doc"
+      "blockId": "ZMFSNdn0cY",
+      "message": "Split \"Plan and design\" into 4: Write the requirements, Design the data model, Sketch the screens, Write the design doc"
     },
     {
-      "id": "wZXrg0GTiW",
-      "at": "2026-10-03T14:17:06.556Z",
+      "id": "hJOyTLj-BC",
+      "at": "2026-10-03T14:45:45.078Z",
       "actor": "claude-code",
       "kind": "split",
-      "blockId": "9U6Ttz9459",
-      "message": "「API」を 5 個に分解: Set up Workers and D1, Notes CRUD endpoints, Full-text search, Sign-in, Deploy the API"
+      "blockId": "jqpi9HqSXr",
+      "message": "Split \"API\" into 5: Set up Workers and D1, Notes CRUD endpoints, Full-text search, Sign-in, Deploy the API"
     },
     {
-      "id": "3rrWmZttr4",
-      "at": "2026-10-03T14:17:06.719Z",
+      "id": "-KkGfTVqRB",
+      "at": "2026-10-03T14:45:45.192Z",
       "actor": "claude-code",
       "kind": "split",
-      "blockId": "1IuIajVK74",
-      "message": "「Web UI」を 4 個に分解: Editor screen, List and search screen, Sign-in screen, Build and bundle"
+      "blockId": "3u5hKihF4D",
+      "message": "Split \"Web UI\" into 4: Editor screen, List and search screen, Sign-in screen, Build and bundle"
     },
     {
-      "id": "gPRxv15NHD",
-      "at": "2026-10-03T14:17:06.891Z",
+      "id": "LsaT6AyAHW",
+      "at": "2026-10-03T14:45:45.303Z",
       "actor": "claude-code",
       "kind": "split",
-      "blockId": "PigmJAw7aB",
-      "message": "「Quality and release」を 3 個に分解: End-to-end tests, User guide, Production deploy"
+      "blockId": "0fkP95FsUN",
+      "message": "Split \"Quality and release\" into 3: End-to-end tests, User guide, Production deploy"
     },
     {
-      "id": "x14N7erYMj",
-      "at": "2026-10-03T14:17:15.042Z",
+      "id": "HKA3an0R-M",
+      "at": "2026-10-03T14:45:45.404Z",
       "actor": "claude-code",
       "kind": "done",
-      "blockId": "4MuyfwLB_p",
-      "message": "「Write the requirements」完了 (Requirements)"
+      "blockId": "LYc11K8ruJ",
+      "message": "\"Write the requirements\" done (Requirements)"
     },
     {
-      "id": "st-n1tpcZc",
-      "at": "2026-10-03T14:17:15.212Z",
+      "id": "fjVmvaz0T4",
+      "at": "2026-10-03T14:45:45.504Z",
       "actor": "claude-code",
       "kind": "done",
-      "blockId": "r2WcJjhcq8",
-      "message": "「Design the data model」完了 (Data model)"
+      "blockId": "dvO1MQyBfr",
+      "message": "\"Design the data model\" done (Data model)"
     },
     {
-      "id": "VJYPHCotUY",
-      "at": "2026-10-03T14:17:15.372Z",
+      "id": "8lyE5uEKdt",
+      "at": "2026-10-03T14:45:45.602Z",
       "actor": "claude-code",
       "kind": "done",
-      "blockId": "BCGsXLuXg_",
-      "message": "「Sketch the screens」完了 (Screen sketches)"
+      "blockId": "ItH-3oembt",
+      "message": "\"Sketch the screens\" done (Screen sketches)"
     },
     {
-      "id": "S8GVvMKWcC",
-      "at": "2026-10-03T14:17:15.534Z",
+      "id": "vVM2YtEt0T",
+      "at": "2026-10-03T14:45:45.707Z",
       "actor": "claude-code",
       "kind": "done",
-      "blockId": "YT_k3omc9R",
-      "message": "「Write the design doc」完了 (Design doc)"
+      "blockId": "K4smRPXG7f",
+      "message": "\"Write the design doc\" done (Design doc)"
     },
     {
-      "id": "D2wjPsJdN9",
-      "at": "2026-10-03T14:17:15.685Z",
+      "id": "mzdIWEtaVZ",
+      "at": "2026-10-03T14:45:45.812Z",
       "actor": "claude-code",
       "kind": "done",
-      "blockId": "JI7FRaAqFO",
-      "message": "「Set up Workers and D1」完了 (wrangler.toml)"
+      "blockId": "ZMFSNdn0cY",
+      "message": "\"Plan and design\" done (Design doc)"
     },
     {
-      "id": "OivjxvvAaJ",
-      "at": "2026-10-03T14:17:15.844Z",
+      "id": "td4tZ0HLp-",
+      "at": "2026-10-03T14:45:45.912Z",
       "actor": "claude-code",
       "kind": "done",
-      "blockId": "iTmSCj4L-R",
-      "message": "「Notes CRUD endpoints」完了 (notes.ts)"
+      "blockId": "NoZstVEoo8",
+      "message": "\"Set up Workers and D1\" done (wrangler.toml)"
     },
     {
-      "id": "M1AGO5lfdm",
-      "at": "2026-10-03T14:17:15.997Z",
+      "id": "tpQlZ4R0Mx",
+      "at": "2026-10-03T14:45:46.017Z",
+      "actor": "claude-code",
+      "kind": "done",
+      "blockId": "7nd-yeTqjg",
+      "message": "\"Notes CRUD endpoints\" done (notes.ts)"
+    },
+    {
+      "id": "dxtXKfzMnn",
+      "at": "2026-10-03T14:45:46.115Z",
       "actor": "claude-code",
       "kind": "started",
-      "blockId": "Au-WjbJzxM",
-      "message": "「Full-text search」開始: Indexing titles and bodies with SQLite FTS5"
+      "blockId": "S4D2E7PYF6",
+      "message": "\"Full-text search\" started: Indexing titles and bodies with SQLite FTS5"
     },
     {
-      "id": "vUgD56xO-Z",
-      "at": "2026-10-03T14:17:16.163Z",
+      "id": "JOClW3x7R6",
+      "at": "2026-10-03T14:45:46.216Z",
       "actor": "claude-code",
       "kind": "asked",
-      "blockId": "IF_61IKFyn",
-      "message": "「Sign-in」で判断待ち: Which sign-in method should ship first?"
+      "blockId": "TH10H5-u24",
+      "message": "\"Sign-in\" needs a decision: Which sign-in method should ship first?"
     },
     {
-      "id": "AXdXQ1UMQs",
-      "at": "2026-10-03T14:17:16.322Z",
+      "id": "2w_g3CNedK",
+      "at": "2026-10-03T14:45:46.313Z",
       "actor": "claude-code",
       "kind": "note",
-      "blockId": "X6Cmx-Ta6c",
-      "message": "「Editor screen」期日 2026-10-20"
-    },
-    {
-      "id": "PWRgnalhBD",
-      "at": "2026-10-03T14:17:30.566Z",
-      "actor": "claude-code",
-      "kind": "done",
-      "blockId": "LKuSAMsY9x",
-      "message": "「Plan and design」完了 (Design doc)"
+      "blockId": "YidubvffQz",
+      "message": "\"Editor screen\" Due 2026-10-20"
     }
   ],
   "agents": {
     "claude-code": {
-      "lastSeen": "2026-10-03T14:17:30.566Z"
+      "lastSeen": "2026-10-03T14:45:46.313Z"
     }
   },
   "nextKey": 22,
-  "inputGroups": []
+  "inputGroups": [],
+  "lang": "en"
 }
