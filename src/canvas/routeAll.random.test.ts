@@ -53,7 +53,7 @@ function makeCase(seed: number, gapMin: number): { nodes: NodeRect[]; edges: Edg
 
 describe("無作為な配置でも線は箱を貫かない", () => {
   for (const [label, gapMin] of [["通常の間隔 (96px 以上)", 96], ["詰めた間隔 (24px 以上)", 24]] as const) {
-    it(label, () => {
+    it(label, { timeout: 120000 }, () => { // 300 通りの経路計算は CI の遅い環境でも数十秒かかることがある (既定の 5 秒では足りない)
       const failures: string[] = [];
       let total = 0;
       for (let seed = 1; seed <= 150; seed++) {
