@@ -3,11 +3,69 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  addBlock, addPort, ancestorsOf, answerDecision, askDecision, canSuggestWhite, childrenOf, computeProgress, connect, createArtifact, createProject
-, defaultTaskParent, disconnect, effectiveProgress, extractTemplate, findBlock, finishBlock, fromJSON, incomingEdges, instantiateTemplate, isEdgeReady, isInputReady
-, parseTemplate, pendingDecisions, portsOf, projectBlocks, removeBlock, setActivity, setProgress, splitBlock, summarize, toJSON, updateBlock, updatePort, validateConnection
-, daysToDue, effectiveDescription, isOverdue, searchBlocks, setSchedule, sourceOfInput, connectToBlock, moveBlock, moveBlockToParent, resolveOverlap
-, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, removeInputGroup, resolveAllOverlaps, rootInputsOf, setInputGroup, setCategory, missingRequiredInputs, outgoingEdges, issueKeyOf, candidatesOf, reopenDecision, wireNet, removePort, updateDecision
+  addBlock
+, addPort
+, ancestorsOf
+, answerDecision
+, askDecision
+, canSuggestWhite
+, childrenOf
+, computeProgress
+, connect
+, createArtifact
+, createProject
+, defaultTaskParent
+, disconnect
+, effectiveProgress
+, extractTemplate
+, findBlock
+, finishBlock
+, fromJSON
+, incomingEdges
+, instantiateTemplate
+, isEdgeReady
+, isInputReady
+, parseTemplate
+, pendingDecisions
+, portsOf
+, projectBlocks
+, removeBlock
+, setActivity
+, setProgress
+, splitBlock
+, summarize
+, toJSON
+, updateBlock
+, updatePort
+, validateConnection
+, daysToDue
+, effectiveDescription
+, isOverdue
+, searchBlocks
+, setSchedule
+, sourceOfInput
+, connectToBlock
+, moveBlock
+, moveBlockToParent
+, resolveOverlap
+, addInputGroup
+, exportInputGroup
+, importInputGroup
+, inputGroupsOf
+, removeInputGroup
+, resolveAllOverlaps
+, rootInputsOf
+, setInputGroup
+, setCategory
+, missingRequiredInputs
+, outgoingEdges
+, issueKeyOf
+, candidatesOf
+, reopenDecision
+, wireNet
+, removePort
+, updateDecision
+, isInputNameLocked
 } from "./graph";
 import { ROOT_ID, type Project } from "./types";
 
@@ -583,7 +641,10 @@ describe("階層移動の線の付け替えと重なりの解消", () => {
     const rc = addBlock(q, { parentId: pj, title: "C" });
     q = rc.project;
     q = moveBlockToParent(q, b, rc.blockId, { x: 10, y: 10 });
-    const cIn = portsOf(q, rc.blockId, "in").find((x) => x.name === "x" && !x.promotedFrom);
+    // 入力名は供給元 (A の出力) の名前になっているので、その名前で探す
+    const xName = q.ports[inB.id].name;
+    expect(xName).toBe(outA.name);
+    const cIn = portsOf(q, rc.blockId, "in").find((x) => x.name === xName && !x.promotedFrom);
     const cOut = portsOf(q, rc.blockId, "out").find((x) => x.name === outB.name);
     expect(cIn).toBeDefined();
     expect(cOut).toBeDefined();
@@ -843,7 +904,7 @@ describe("入力名は供給元の出力名に追従する (二重管理をな�
     expect(p.ports[aOut.id].name).toBe("設計書 v2");
   });
 
-  it("名前が違う入力 (わざと別名にしたもの) は変えない", () => {
+  it("別名で作っておいた入力も、つないだ時点で供給元の出力名になる", () => {
     let p = createProject("t");
     const pj = projectBlocks(p)[0].id;
     const a = addBlock(p, { parentId: pj, title: "A", outputName: "設計書" }); p = a.project;
@@ -852,8 +913,7 @@ describe("入力名は供給元の出力名に追従する (二重管理をな�
     const aOut = portsOf(p, a.blockId, "out")[0];
     const bIn = portsOf(p, b.blockId, "in")[0];
     p = connect(p, { portId: aOut.id, side: "outer" }, { portId: bIn.id, side: "outer" }).project;
-    p = updatePort(p, aOut.id, { name: "設計書 v2" });
-    expect(p.ports[bIn.id].name).toBe("参考資料");
+    expect(p.ports[bIn.id].name).toBe("設計書");
   });
 
   it("split の結線は受け側が題名だけでよい (出力名と同じ入力が作られる)", () => {
@@ -866,5 +926,24 @@ describe("入力名は供給元の出力名に追従する (二重管理をな�
     const ins = portsOf(r.project, latter.id, "in");
     expect(ins.map((x) => x.name)).toEqual(["中間ファイル"]);
     expect(incomingEdges(r.project, { portId: ins[0].id, side: "outer" }).some((e) => !e.auto)).toBe(true);
+  });
+});
+
+describe("つないだ入力の名前は供給元で決まる", () => {
+  it("connect すると入力の名前が供給元の出力名になり、以後は入力側で変えられない", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const a = addBlock(p, { parentId: pj, title: "A", outputName: "設計書" }); p = a.project;
+    const b = addBlock(p, { parentId: pj, title: "B", outputName: "成果" }); p = b.project;
+    p = addPort(p, { blockId: b.blockId, direction: "in", name: "何か" }).project;
+    const aOut = portsOf(p, a.blockId, "out")[0];
+    const bIn = portsOf(p, b.blockId, "in")[0];
+    p = connect(p, { portId: aOut.id, side: "outer" }, { portId: bIn.id, side: "outer" }).project;
+    expect(p.ports[bIn.id].name).toBe("設計書");
+    expect(isInputNameLocked(p, bIn.id)).toBe(true);
+    p = updatePort(p, bIn.id, { name: "勝手に変える" });
+    expect(p.ports[bIn.id].name).toBe("設計書");
+    p = updatePort(p, aOut.id, { name: "設計書 v2" });
+    expect(p.ports[bIn.id].name).toBe("設計書 v2");
   });
 });

@@ -3,7 +3,7 @@
  * ポートの行は「名前」と、その直下に「成果物 (リンク)」を主役として並べる。形式・制約は 1 行の補足。
  */
 import { useRef, useState } from "react";
-import { addPort, createArtifact, inputGroupsOf, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort } from "../model/graph";
+import { addPort, createArtifact, inputGroupsOf, isInputNameLocked, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort } from "../model/graph";
 import type { Artifact, Project } from "../model/types";
 import { ROOT_ID } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
@@ -95,9 +95,14 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
         return (
           <div key={q.id} className="port-card">
             <div className="flex items-center gap-1">
-              <input className="input input-plain font-bold" value={q.name} disabled={readonly} title={q.promotedFrom ? "下の階層の未接続の入力 (自動)。元の入力をつなぐと消えます" : undefined}
-                style={q.promotedFrom ? { fontStyle: "italic", opacity: 0.75 } : undefined}
-                onChange={(e) => apply((p) => updatePort(p, q.id, { name: e.target.value }))} />
+              {direction === "in" && isInputNameLocked(project, q.id) ? (
+                // 供給元のある入力: 名前は供給元の出力名で決まる (ここでは変えられない。変えるなら供給元の出力で)
+                <span className="input input-plain font-bold truncate" style={{ cursor: "default" }} title={`入力の名前は供給元 (${srcOwner ?? "?"}) の出力名です。変えるなら供給元の出力で`}>{q.name}</span>
+              ) : (
+                <input className="input input-plain font-bold" value={q.name} disabled={readonly} title={q.promotedFrom ? "下の階層の未接続の入力 (自動)。元の入力をつなぐと消えます" : direction === "in" ? "まだ供給元の無い入力。つなぐと供給元の出力名になります" : undefined}
+                  style={q.promotedFrom ? { fontStyle: "italic", opacity: 0.75 } : undefined}
+                  onChange={(e) => apply((p) => updatePort(p, q.id, { name: e.target.value }))} />
+              )}
               {direction === "in" && !q.promotedFrom && !q.required && <span className="meta-chip muted" title="任意: 無くても着手できます">任意</span>}
               {groups.length > 0 && !readonly && (
                 <select className="input input-plain" style={{ width: 110, fontSize: 11 }} value={q.groupId ?? ""} title="入力グループ" onChange={(e) => apply((p) => setInputGroup(p, q.id, e.target.value || null))}>

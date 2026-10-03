@@ -74,7 +74,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock } from "../src/model/graph";
+import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, isInputNameLocked } from "../src/model/graph";
 import type { Artifact } from "../src/model/types";
 import { blockToPrompt } from "../src/model/export";
 import { blockReport, logReport, statusReport } from "../src/model/report";
@@ -514,6 +514,7 @@ function main(argv: string[]): void {
         const to = spec.slice(eq + 1);
         const port = portsOf(p, blockId).find((x) => x.name === from);
         if (!port) throw new Error(`ポート「${from}」が見つかりません`);
+        if (isInputNameLocked(p, port.id)) throw new Error(`入力「${from}」の名前は供給元の出力名で決まります。供給元の出力の名前を変えてください (port <供給元> --rename)`);
         p = updatePort(p, port.id, { name: to });
         added.push(`${from} -> ${to}`);
       }

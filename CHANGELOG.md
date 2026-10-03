@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Wires between a tab's Inputs / Outputs nodes and the opened box are selectable: clicking one selects the real wire that feeds that port (and they light up with it).
+- A connected input's name is the name of the output feeding it: connecting renames the input to the source's name, the name is read-only on the input side (UI, `port --rename` refuses), and renaming the output propagates.
 - Input names follow the output that feeds them: `connect "A.Design" "B"` (and `split` connections with `to: "B"`) create the input with the output's name, and renaming an output renames the connected inputs that shared the name, through box boundaries.
 - Tabs exist only for major boxes. Inside a tab the whole subtree is shown nested (boxes inside boxes); boxes can be collapsed / expanded again (screen-only in View, saved in Edit). No more drilling into sub-boxes or deeper breadcrumbs.
 - Activity panel: each box in Working / Blocked now shows where it sits in the plan (major › middle item) and what it produces (its outputs), so you can tell at a glance where in the whole plan the agent is working and what for.

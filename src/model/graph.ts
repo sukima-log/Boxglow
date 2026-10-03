@@ -584,7 +584,9 @@ export function updatePort(p: Project, portId: string, patch: Partial<Omit<Port,
   const x = q.ports[portId];
   if (!x) return p;
   const oldName = x.name;
-  Object.assign(x, patch);
+  // 供給元のある入力の名前は入力側では変えられない (供給元の出力の名前が入力名。変えるなら供給元で)
+  if (patch.name !== undefined && isInputNameLocked(q, portId)) patch = { ...patch, name: undefined } as typeof patch;
+  Object.assign(x, Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)));
   // プロジェクトの箱の出力の名前を変えたら、最上位の写しも同じ名前にする
   if (patch.name !== undefined && x.direction === "out" && kindOf(q.blocks[x.blockId]) === "project") {
     const mirror = mirroredRootOutput(q, portId);
@@ -594,6 +596,17 @@ export function updatePort(p: Project, portId: string, patch: Partial<Omit<Port,
   // 二重に管理しなくて済むように、下流 (出力 → 入力、親の入力 → 子の入力、子の出力 → 親の出力) へ伝える)
   if (patch.name !== undefined && patch.name !== oldName) renameDownstream(q, portId, oldName, patch.name);
   return q;
+}
+
+/**
+ * 入力の名前が供給元に固定されているか (外から本物の線 (自動でない) がつながっている入力。名前は供給元の出力名で決まる)
+ * Input : p, portId
+ * Output: true = 入力側では名前を変えられない
+ */
+export function isInputNameLocked(p: Project, portId: string): boolean {
+  const port = p.ports[portId];
+  if (!port || port.direction !== "in") return false;
+  return incomingEdges(p, { portId, side: "outer" }).some((e) => !e.auto);
 }
 
 /**
@@ -649,6 +662,14 @@ export function connect(p: Project, from: Endpoint, to: Endpoint): { project: Pr
   for (const e of incomingEdges(q, to)) delete q.edges[e.id];
   const id = newId();
   q.edges[id] = { id, from, to, kind: check.kind!, auto: false };
+  // つないだ入力の名前は供給元の名前にそろえる (入力名は入力側で決めない。親の入力 → 子の入力も同じ)
+  const fromPort = q.ports[from.portId];
+  const toPort = q.ports[to.portId];
+  if (fromPort && toPort && toPort.direction === "in" && to.side === "outer" && toPort.name !== fromPort.name) {
+    const old = toPort.name;
+    toPort.name = fromPort.name;
+    renameDownstream(q, toPort.id, old, fromPort.name);
+  }
   return { project: normalizePromotions(q), edgeId: id };
 }
 
