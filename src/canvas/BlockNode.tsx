@@ -105,20 +105,11 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     ev.stopPropagation();
     toggleCollapsed(blockId);
   };
-  // ダブルクリックでも開く。箱の側で受ける (React Flow のノードのダブルクリックは View のとき届かない)
+  // ダブルクリックで開く (大項目ならタブ、その中の箱ならパンくずが 1 段深くなる)。1 回のクリックは選ぶだけ。
+  // 箱の側で受ける (React Flow のノードのダブルクリックは View のとき届かない)
   const onDoubleClick = (ev: React.MouseEvent) => {
     ev.stopPropagation();
     if (view.kids > 0) toggleCollapsed(blockId);
-  };
-  // 子のある箱をクリックしたら、その箱を開く (大項目ならタブ、その中の箱ならパンくずが 1 段深くなる)。選択は残るので、右のパネルにはその箱が出る。
-  // ドラッグ (Edit で並べ替え) のあとの click は開かない: 押した位置から 4px 以上動いていたらドラッグとみなす
-  const pressAt = useRef<{ x: number; y: number } | null>(null);
-  const onPointerDown = (ev: React.PointerEvent) => { pressAt.current = { x: ev.clientX, y: ev.clientY }; };
-  const onClick = (ev: React.MouseEvent) => {
-    const at = pressAt.current;
-    pressAt.current = null;
-    if (at && Math.hypot(ev.clientX - at.x, ev.clientY - at.y) > 4) return;
-    if (view.kids > 0) useProjectStore.getState().setViewScope(blockId);
   };
 
   const cls = [
@@ -137,7 +128,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   ].filter(Boolean).join(" ");
 
   return (
-    <div className={cls} style={{ width, height, ...(view.category ? ({ "--cat": view.category.color } as React.CSSProperties) : {}) }} onDoubleClick={onDoubleClick} onPointerDown={onPointerDown} onClick={onClick}>
+    <div className={cls} style={{ width, height, ...(view.category ? ({ "--cat": view.category.color } as React.CSSProperties) : {}) }} onDoubleClick={onDoubleClick}>
       {/* 題名の行: 題名だけ (カテゴリとプロジェクトの札、畳むボタン以外は置かない) */}
       <div className="bg-block__head" style={{ height: headerH - 24 }}>
         {view.category && <span className={`bg-block__cat${view.category.neutral ? " neutral" : ""}`} title={`カテゴリ: ${view.category.label}`}>{view.category.label}</span>}
