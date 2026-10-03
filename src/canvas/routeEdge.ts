@@ -32,6 +32,8 @@ const CROSS_PENALTY = 100000;
 const BEND_PENALTY = 40;
 /** 箱 (や親の縁) に MARGIN より近づく 1 回の罰 (貫くよりは軽いが、回り道より重い) */
 const NEAR_PENALTY = 1500;
+/** 出入りの線分が自分の箱を貫いているとみなす内側の幅 (ポートの丸は縁の上にあり、数 px は箱にかかる) */
+const END_INSET = 8;
 
 /** 線分が矩形から余白 (箱は MARGIN、壁は WALL_MARGIN) 以内を通るか */
 function segmentNear(a: Point, b: Point, r: Rect): boolean {
@@ -89,6 +91,12 @@ function cost(path: Point[], obstacles: Rect[], ends: Rect[] = [], walls: Rect[]
       for (const o of [...ends, ...walls]) {
         if (segmentHits(a, b, o)) crosses++;
         else if (segmentNear(a, b, o)) nears++;
+      }
+    } else {
+      // 出入りの線分も、自分の箱を「反対側から貫いて」ポートに届くのは禁止 (横の通路がポートと同じ高さになると、
+      // 縦の線分が消えて、出入りの線分が箱の上を横切る形になる)。ポートは縁の上にあるので、縁から少し内側を貫くときだけ数える
+      for (const o of ends) {
+        if (segmentHits(a, b, { x: o.x + END_INSET, y: o.y + END_INSET, width: o.width - 2 * END_INSET, height: o.height - 2 * END_INSET })) crosses++;
       }
     }
   }

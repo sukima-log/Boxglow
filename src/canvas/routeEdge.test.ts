@@ -37,6 +37,24 @@ describe("線の経路探索", () => {
     }
   });
 
+  it("戻る線が受ける側の箱を反対側 (右) から貫いてポートに届くことはない", () => {
+    // 受ける側 (左下) の入力ポートの高さに横の通路が来やすい配置 (出す側は右上、間に障害物なし)
+    const src = { x: 1000, y: 100, width: 200, height: 60 };
+    const dst = { x: 100, y: 400, width: 600, height: 300 }; // 大きな箱。入力は左の縁 (x = 100) の y = 500
+    const path = routeEdge({ x: 1200, y: 130 }, { x: 100, y: 500 }, [], 0, [src, dst]);
+    const inner = { x: dst.x + 8, y: dst.y + 8, width: dst.width - 16, height: dst.height - 16 };
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1];
+      const b = path[i];
+      const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
+      const hits = x1 > inner.x && x0 < inner.x + inner.width && y1 > inner.y && y0 < inner.y + inner.height;
+      expect(hits).toBe(false);
+    }
+    // 受ける側へは左から入る (最後の線分は右向き、x は箱の左縁まで)
+    const last = path[path.length - 1], prev = path[path.length - 2];
+    expect(prev.x).toBeLessThan(last.x);
+  });
+
   it("受ける側が左にある (戻る線) ときも経路が作れる", () => {
     const path = routeEdge({ x: 500, y: 100 }, { x: 100, y: 300 }, [{ x: 150, y: 80, width: 300, height: 100 }]);
     expect(path[0]).toEqual({ x: 500, y: 100 });
