@@ -6,7 +6,7 @@
  */
 import { useMemo } from "react";
 import { create } from "zustand";
-import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeCollapsed, normalizeInputNames, resolveAllOverlaps, scopeFor, toJSON, withIndex } from "../model/graph";
+import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeCollapsed, normalizeInputNames, resolveAllOverlaps, scopeFor, toJSON, wireNetTabs, withIndex } from "../model/graph";
 export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile, writeLocalFile } from "../lib/localfile";
@@ -60,6 +60,8 @@ interface State {
   embed: boolean;
   projects: ProjectMeta[];
   selection: Selection;
+  /** 直前まで選んでいた線の id (箱をダブルクリックしてタブを開くとき、最初のクリックで外れた線の選択を戻すため) */
+  lastEdgeId: string | null;
   past: Project[];
   future: Project[];
   /** 画面の下に短く出す通知 */
@@ -270,7 +272,16 @@ export const useProjectStore = create<State>((set, get) => {
       const { project, editMode, readonly, viewCollapsed, viewScope } = get();
       if (!project || !project.blocks[blockId]) return;
       // All の図では大項目は展開しない (中はタブで見る)。畳む / 展開の操作はその大項目のタブを開く操作にする
-      if (viewScope === null && majorOf(project, blockId) === blockId) { get().setViewScope(blockId); return; }
+      if (viewScope === null && majorOf(project, blockId) === blockId) {
+        // ダブルクリックの 1 回目で箱が選ばれ、直前まで選んでいた線の選択が外れている。
+        // その線がこのタブへ続いているなら、線を選んだままタブを開く (線を選んで接続先の箱をダブルクリックする流れ)
+        const { lastEdgeId, selection } = get();
+        if (lastEdgeId && selection.blockId === blockId && project.edges[lastEdgeId] && wireNetTabs(project, lastEdgeId).includes(blockId)) {
+          set({ selection: { ...NO_SELECTION, edgeId: lastEdgeId } });
+        }
+        get().setViewScope(blockId);
+        return;
+      }
       if (!Object.values(project.blocks).some((b) => b.parentId === blockId)) return; // 子が無ければ畳めない
       if (editMode && !readonly) {
         // 共有の配置として保存する (他の人・AI にも同じ見え方になる)。画面だけの記録は消して、保存した値を見せる
@@ -291,6 +302,7 @@ export const useProjectStore = create<State>((set, get) => {
   , embed: false
   , projects: []
   , selection: NO_SELECTION
+  , lastEdgeId: null
   , past: []
   , future: []
   , toast: null
@@ -356,7 +368,14 @@ export const useProjectStore = create<State>((set, get) => {
     }
 
     // 選択は 1 種類だけ (ブロック / 線 / 入出力ノード / プロジェクト設定)。指定した項目以外は解除する
-  , select: (sel) => set({ selection: { ...NO_SELECTION, ...sel } })
+  , select: (sel) => {
+      const cur = get().selection;
+      const next = { ...NO_SELECTION, ...sel };
+      // 「線を選んでいた → 箱を選んだ」の直後だけ、その線を覚える (同じ箱を続けて選ぶダブルクリックの 2 回目では保つ)。
+      // 線を外しただけ (何もない所を押した) や別の物を選んだときは忘れる (あとで無関係に線が選び直されないように)
+      const lastEdgeId = cur.edgeId && next.blockId ? cur.edgeId : next.blockId && next.blockId === cur.blockId ? get().lastEdgeId : null;
+      set({ selection: next, lastEdgeId });
+    }
   , setToast: (msg) => set({ toast: msg })
 
   , refreshList: async () => set({ projects: await listProjects() })
