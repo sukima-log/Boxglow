@@ -2,7 +2,7 @@
  * タイムライン: 判断待ち・作業中・ログを時系列で見る (上の帯の要約チップから開く)
  */
 import { useState } from "react";
-import { answerDecision, summarize, candidatesOf, reopenDecision, ancestorsOf } from "../model/graph";
+import { answerDecision, editDecisionAnswer, summarize, candidatesOf, reopenDecision, ancestorsOf } from "../model/graph";
 import { actorLabel, ACTIVITY_LABEL, agoText, shortTime } from "../model/report";
 import { ROOT_ID, type Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
@@ -12,12 +12,22 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
   const readonly = useProjectStore((s) => s.readonly);
   const apply = useProjectStore((s) => s.apply);
   const [text, setText] = useState("");
+  // 答えたあとの編集 (null = 編集していない)
+  const [editing, setEditing] = useState<string | null>(null);
   const d = project.blocks[blockId]?.decisions.find((x) => x.id === decisionId);
   if (!d) return null;
   const answer = (value: string) => {
     if (!value.trim()) return;
     apply((p) => answerDecision(p, blockId, decisionId, value.trim(), "human"));
+    setText("");
   };
+  const saveEdit = () => {
+    if (editing === null || !editing.trim()) return;
+    apply((p) => editDecisionAnswer(p, blockId, decisionId, editing, "human"));
+    setEditing(null);
+  };
+  // Ctrl+Enter (Mac は Cmd+Enter) で送る。Enter だけ・Shift+Enter は改行 (書いている途中で送られないように)
+  const submitKey = (ev: React.KeyboardEvent, go: () => void) => { if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); go(); } };
   return (
     <div className="flex flex-col gap-2 pl-2" style={{ borderLeft: "3px solid var(--accent)" }}>
       <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{actorLabel(d.askedBy)} からの質問 ({agoText(d.askedAt)})</div>
@@ -26,7 +36,17 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
       {d.context && <div className="text-[12px] whitespace-pre-wrap" style={{ color: "var(--text-muted)", background: "var(--bg-paper)", border: "1px solid var(--line-soft)", borderRadius: 8, padding: "6px 8px" }}>{d.context}</div>}
       {d.answer !== undefined ? (
         <div className="flex flex-col gap-1 text-[13px]">
-          <div>選んだ: <b>{d.answer}</b> <span style={{ color: "var(--text-muted)" }}>({d.answeredBy})</span></div>
+          {editing !== null ? (
+            <div className="flex flex-col gap-1">
+              <textarea className="input" rows={3} value={editing} onChange={(e) => setEditing(e.target.value)} onKeyDown={(e) => submitKey(e, saveEdit)} autoFocus />
+              <div className="flex gap-1 justify-end">
+                <button className="btn btn-ghost btn-sm" onClick={() => setEditing(null)}>Cancel</button>
+                <button className="btn btn-primary btn-sm" disabled={!editing.trim()} onClick={saveEdit} title="Ctrl+Enter でも保存">Save</button>
+              </div>
+            </div>
+          ) : (
+            <div className="whitespace-pre-wrap">選んだ: <b>{d.answer}</b> <span style={{ color: "var(--text-muted)" }}>({d.answeredBy})</span></div>
+          )}
           {/* 選ばなかった候補も残す (方針転換のときに戻れるように) */}
           {candidatesOf(d).rejected.length > 0 && (
             <div className="flex flex-wrap items-center gap-1 text-[12px]" style={{ color: "var(--text-muted)" }}>
@@ -39,8 +59,9 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
               以前の答え: {d.history!.map((h) => `${h.answer} (${h.by}${h.note ? "、" + h.note : ""})`).join(" → ")}
             </div>
           )}
-          {!readonly && (
-            <div>
+          {!readonly && editing === null && (
+            <div className="flex gap-1">
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditing(d.answer ?? "")} title="答えの文面を直す (書き間違いや補足。選び直しではない)">Edit</button>
               <button className="btn btn-ghost btn-sm" onClick={() => { const note = prompt("やり直す理由 (任意)") ?? ""; apply((p) => reopenDecision(p, blockId, decisionId, "human", note)); }} title="方針転換: 答えを履歴に残して、候補から選び直す">やり直す</button>
             </div>
           )}
@@ -52,9 +73,12 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
               {d.options.map((o) => <button key={o} className="btn btn-sm" onClick={() => answer(o)}>{o}</button>)}
             </div>
           )}
-          <div className="flex gap-1">
-            <input className="input" placeholder={d.options.length > 0 ? "または自由に書く" : "回答を書く"} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && answer(text)} />
-            <button className="btn btn-primary btn-sm" disabled={!text.trim()} onClick={() => answer(text)}>Answer</button>
+          <div className="flex flex-col gap-1">
+            <textarea className="input" rows={3} placeholder={d.options.length > 0 ? "または自由に書く (複数行可)" : "回答を書く (複数行可)"} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => submitKey(e, () => answer(text))} />
+            <div className="flex items-center gap-2 justify-end">
+              <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>Enter は改行。送るのはボタンか Ctrl+Enter</span>
+              <button className="btn btn-primary btn-sm" disabled={!text.trim()} onClick={() => answer(text)}>Answer</button>
+            </div>
           </div>
         </>
       )}

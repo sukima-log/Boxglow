@@ -1119,6 +1119,24 @@ export function answerDecision(p: Project, blockId: string, decisionId: string, 
 }
 
 /**
+ * 答えた判断の文面を直す (選び直しではなく、書き間違いや補足の修正。履歴には積まず、ログに残す)
+ * Input : blockId, decisionId, answer = 新しい文面, by = 直した人
+ * Output: 直した複製 (答えていない判断や空文字なら p そのもの)
+ */
+export function editDecisionAnswer(p: Project, blockId: string, decisionId: string, answer: string, by: string): Project {
+  const b = p.blocks[blockId];
+  const d = b?.decisions.find((x) => x.id === decisionId);
+  if (!b || !d || d.answer === undefined || !answer.trim() || answer.trim() === d.answer) return p;
+  const q = touch(p);
+  const qd = q.blocks[blockId].decisions.find((x) => x.id === decisionId)!;
+  qd.answer = answer.trim();
+  qd.answeredBy = by;
+  qd.answeredAt = now();
+  appendLog(q, { actor: by, kind: "answered", blockId, message: `「${b.title}」の判断の答えを直した: ${d.question} → ${answer.trim()}` });
+  return q;
+}
+
+/**
  * 判断の候補を「選んだもの」と「残した候補 (選ばなかったもの)」に分ける
  * Input : d = 判断
  * Output: { chosen, rejected } (未回答なら chosen は undefined、rejected は全候補)

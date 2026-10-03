@@ -652,6 +652,11 @@ textarea.input { resize: vertical; min-height: 64px; }
    遠目では色相より「太さ」と「明るさ」の差で見分けるので、太さ 2 倍・明度も離す */
 .react-flow__edge-path { stroke: var(--wire); stroke-width: 2px; opacity: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; }
 .react-flow__edge.edge-ready .react-flow__edge-path { stroke: var(--primary); stroke-width: 4px; }
+/* 矢印 (入力に入る線の先端): 線と同じ色の規則 (未確定 = 紫、確定 = ティール、選択 = 橙)。大きさは図の座標なので拡大縮小に追従する */
+.react-flow__edge-arrow { fill: var(--wire); stroke: none; pointer-events: none; }
+.react-flow__edge.edge-ready .react-flow__edge-arrow { fill: var(--primary); }
+.react-flow__edge.selected .react-flow__edge-arrow, .react-flow__edge.edge-net .react-flow__edge-arrow { fill: var(--accent); }
+.react-flow__edge.edge-dim .react-flow__edge-arrow { opacity: 0.45; }
 
 /* 選択・ホバー: 色は変えず、太さと縁取りだけ */
 .react-flow__edge-halo { fill: none; stroke: currentColor; stroke-opacity: 0.22; stroke-width: 12px; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; color: var(--wire-halo); }

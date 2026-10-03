@@ -4,7 +4,7 @@
  * ブロックの大きさはここで決める (React Flow に幅・高さを渡し、線の付け根がずれないようにする)。
  * ハンドル (ポートの丸) の id は "<in|out>:<ポート id>:<outer|inner>"。
  */
-import { MarkerType, type Edge as RFEdge, type Node as RFNode } from "@xyflow/react";
+import { type Edge as RFEdge, type Node as RFNode } from "@xyflow/react";
 import { ROOT_ID, type Block, type Edge, type Endpoint, type Project } from "../model/types";
 import { wireNet, inputGroupsOf, isEdgeReady, isHiddenByCollapse, majorBlocks, portsOf, rootInputsOf } from "../model/graph";
 
@@ -79,9 +79,6 @@ export type TerminalNodeData = { which: "in" | "out"; groupId?: string; scopeId?
 export type BlockRFNode = RFNode<BlockNodeData, "block">;
 export type TerminalRFNode = RFNode<TerminalNodeData, "terminal">;
 export type AnyRFNode = BlockRFNode | TerminalRFNode;
-
-/** 未確定の線の色 (紫。index.css の --wire と同じ。矢印の色は CSS 変数が使えないので値で持つ) */
-const WIRE_COLOR = "#8a80d8";
 
 /** タブで開いた大項目の入力ノード / 出力ノードの id */
 export const SCOPE_IN = "scope-in";
@@ -321,15 +318,14 @@ export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; se
     edges.push({
       id: e.id
     , type: "routed"
-      // 矢印は「入力に入る線」だけ (親の出力へ上がる線は出ていく線なので付けない)
-    , markerEnd: tp.direction === "in" ? { type: MarkerType.ArrowClosed, width: 12, height: 12, color: ready ? "#0d8080" : WIRE_COLOR } : undefined
     , source
     , sourceHandle: handleId(fp.direction, fp.id, e.from.side)
     , target
     , targetHandle: handleId(tp.direction, tp.id, e.to.side)
     , hidden
     , selected: opts.selectedEdgeId === e.id
-    , data: { net: net.has(e.id) && opts.selectedEdgeId !== e.id }
+      // 矢印は「入力に入る線」だけ (親の出力へ上がる線は出ていく線なので付けない)。色は CSS で線と同じにする
+    , data: { net: net.has(e.id) && opts.selectedEdgeId !== e.id, arrow: tp.direction === "in" }
       // 箱を選んでいるときは、その箱 (と中の箱) につながる線だけ濃くし、ほかは薄くする
     , className: [
         e.auto ? "edge-auto" : ""
@@ -356,7 +352,7 @@ export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; se
       edges.push(hot({
         id: `scope-in:${port.id}`
       , type: "routed"
-      , markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: ready ? "#0d8080" : WIRE_COLOR }
+      , data: { arrow: true }
       , source: SCOPE_IN
       , sourceHandle: handleId("in", port.id, "inner")
       , target: scope

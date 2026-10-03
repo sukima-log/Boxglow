@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Arrowheads are drawn by Boxglow itself and follow the wire's colour in both themes (purple = not ready, teal = ready, orange = selected); before, ready arrowheads stayed dark teal in dark mode and looked like a third state.
+- Answering a decision: the answer box is multi-line (Enter / Shift+Enter insert a line break), sent only with the Answer button or Ctrl+Enter, and an answered decision can be edited afterwards (Edit / Save) without losing the record.
 - Fewer wire crossings: routes are chosen with a penalty for crossing other wires (two passes), and wires sharing a channel are ordered by where they come from and go to (U-turns outermost, nested by span). Boxglow's own plan went from 426 to 185 crossings across its screens.
 - Wire colours: ready wires are thick teal, not-ready wires are thin purple, box borders stay neutral gray, so both "ready vs not" and "wire vs border" are visible even in a zoomed-in fragment.
 - Selecting a wire highlights only that wire and its continuation across box boundaries (upstream and downstream), not the sibling wires branching from the same port.
