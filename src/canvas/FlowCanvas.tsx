@@ -308,7 +308,17 @@ export function FlowCanvas({ project, matcher }: Props) {
   , [project]
   );
 
-  const onEdgeClick = useCallback((_ev: React.MouseEvent, e: RFEdge) => select({ edgeId: e.id }), [select]);
+  /** 線をクリック: 画面だけの線 (タブの Inputs / Outputs と開いた箱をつなぐ線) は、同じポートに外からつながる本物の線を選ぶ (無ければ箱) */
+  const onEdgeClick = useCallback((_ev: React.MouseEvent, e: RFEdge) => {
+    if (e.id.startsWith("scope-in:") || e.id.startsWith("scope-out:")) {
+      const portId = e.id.slice(e.id.indexOf(":") + 1);
+      const real = Object.values(project.edges).find((x) => (e.id.startsWith("scope-in:") ? x.to.portId === portId && x.to.side === "outer" : x.from.portId === portId && x.from.side === "outer"));
+      if (real) select({ edgeId: real.id });
+      else { const sc = useProjectStore.getState().viewScope; if (sc) select({ blockId: sc }); }
+      return;
+    }
+    select({ edgeId: e.id });
+  }, [select, project]);
   const onPaneClick = useCallback(() => select({}), [select]);
 
 

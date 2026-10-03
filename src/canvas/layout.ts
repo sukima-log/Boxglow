@@ -345,25 +345,31 @@ export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; se
   // 開いている箱の入力/出力ノードと、箱の外側の面のポートとをつなぐ線 (ファイルには無い、画面だけの線)
   if (scope) {
     const hot = (e: RFEdge): RFEdge => (opts.selectedBlockId && opts.selectedBlockId !== scope ? { ...e, className: `${e.className ?? ""} edge-dim`.trim() } : e);
+    // 画面だけの線は、同じポートに外からつながる本物の線が選ばれている (または選んだ線の続き) ときに、同じように強調する
+    const picked = (feeders: Edge[]): { selected: boolean; inNet: boolean } => ({ selected: feeders.some((e) => e.id === opts.selectedEdgeId), inNet: feeders.some((e) => net.has(e.id)) });
     for (const port of portsOf(p, scope, "in")) {
       // 用意できているか: 外から来る線のどれかが用意できている、またはポートに成果物がある
       const feeders = Object.values(p.edges).filter((e) => e.to.portId === port.id && e.to.side === "outer");
       const ready = port.artifacts.length > 0 || feeders.some((e) => isEdgeReady(p, e));
+      const pk = picked(feeders);
       edges.push(hot({
         id: `scope-in:${port.id}`
       , type: "routed"
-      , data: { arrow: true }
       , source: SCOPE_IN
       , sourceHandle: handleId("in", port.id, "inner")
       , target: scope
       , targetHandle: handleId("in", port.id, "outer")
-      , selectable: false
-      , className: ready ? "edge-ready" : undefined
+      , selectable: true
+      , selected: pk.selected
+      , data: { arrow: true, net: pk.inNet && !pk.selected }
+      , className: [ready ? "edge-ready" : "", pk.inNet && !pk.selected ? "edge-net" : ""].filter(Boolean).join(" ") || undefined
       , zIndex: 1
       }));
     }
     for (const port of portsOf(p, scope, "out")) {
       const ready = port.artifacts.length > 0 || p.blocks[scope].status === "white";
+      const consumers = Object.values(p.edges).filter((e) => e.from.portId === port.id && e.from.side === "outer");
+      const pk = picked(consumers);
       edges.push(hot({
         id: `scope-out:${port.id}`
       , type: "routed"
@@ -371,8 +377,10 @@ export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; se
       , sourceHandle: handleId("out", port.id, "outer")
       , target: SCOPE_OUT
       , targetHandle: handleId("out", port.id, "inner")
-      , selectable: false
-      , className: ready ? "edge-ready" : undefined
+      , selectable: true
+      , selected: pk.selected
+      , data: { net: pk.inNet && !pk.selected }
+      , className: [ready ? "edge-ready" : "", pk.inNet && !pk.selected ? "edge-net" : ""].filter(Boolean).join(" ") || undefined
       , zIndex: 1
       }));
     }

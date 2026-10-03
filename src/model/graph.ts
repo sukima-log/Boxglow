@@ -583,13 +583,38 @@ export function updatePort(p: Project, portId: string, patch: Partial<Omit<Port,
   const q = touch(p);
   const x = q.ports[portId];
   if (!x) return p;
+  const oldName = x.name;
   Object.assign(x, patch);
   // プロジェクトの箱の出力の名前を変えたら、最上位の写しも同じ名前にする
   if (patch.name !== undefined && x.direction === "out" && kindOf(q.blocks[x.blockId]) === "project") {
     const mirror = mirroredRootOutput(q, portId);
     if (mirror) mirror.name = patch.name;
   }
+  // 名前を変えたら、線でつながる先のポートで同じ名前だったものも一緒に変える (入力名は供給元の出力名と同じにしておくのが基本。
+  // 二重に管理しなくて済むように、下流 (出力 → 入力、親の入力 → 子の入力、子の出力 → 親の出力) へ伝える)
+  if (patch.name !== undefined && patch.name !== oldName) renameDownstream(q, portId, oldName, patch.name);
   return q;
+}
+
+/**
+ * 線でつながる先のポートの名前を、元と同じ名前だったものだけ、再帰的に変える
+ * Input : q = 変更中のプロジェクト (直接書き換える), portId = 変えたポート, oldName, newName
+ * Output: 無し (q を書き換える)
+ */
+function renameDownstream(q: Project, portId: string, oldName: string, newName: string, seen: Set<string> = new Set()): void {
+  if (seen.has(portId)) return;
+  seen.add(portId);
+  for (const e of Object.values(q.edges)) {
+    if (e.from.portId !== portId) continue;
+    const t = q.ports[e.to.portId];
+    if (!t || t.name !== oldName) continue;
+    t.name = newName;
+    if (t.direction === "out" && kindOf(q.blocks[t.blockId]) === "project") {
+      const mirror = mirroredRootOutput(q, t.id);
+      if (mirror) mirror.name = newName;
+    }
+    renameDownstream(q, t.id, oldName, newName, seen);
+  }
 }
 
 /** ポートを (つながる線ごと) 削除する。自動で引き上げたポートは消せない (元の入力をつなぐと自然に消える) */
@@ -1276,7 +1301,22 @@ export function splitBlock(
   };
   for (const c of spec.connections ?? []) {
     const from = resolve(c.from, "out");
-    const to = resolve(c.to, "in");
+    let to = resolve(c.to, "in");
+    // 受け側が「題名」だけ (ポート名なし) なら、出す側の出力名で入力を作ってつなぐ (入力名を二重に書かなくてよい)
+    if (!to.ep && from.ep && !c.to.includes(".")) {
+      const tid = c.to === "parent" || c.to === parent.title || c.to === parentId ? null : made[c.to] ?? findBlock(q, c.to).block?.id;
+      if (tid) {
+        const fromName = q.ports[from.ep.portId]?.name ?? "";
+        // 同じ名前でまだ (自動の線以外が) つながっていない入力があればそれを使い、無ければ作る
+        let port = portsOf(q, tid, "in").find((x) => x.name === fromName && incomingEdges(q, { portId: x.id, side: "outer" }).every((e) => e.auto));
+        if (!port) {
+          const r = addPort(q, { blockId: tid, direction: "in", name: fromName });
+          q = r.project;
+          port = q.ports[r.portId];
+        }
+        to = { ep: { portId: port.id, side: "outer" }, why: "" };
+      }
+    }
     if (!from.ep || !to.ep) {
       errors.push(`結線できません: ${c.from} -> ${c.to} (${!from.ep ? from.why : to.why})`);
       continue;

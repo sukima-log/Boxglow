@@ -821,3 +821,50 @@ describe("判断材料", () => {
     expect(updateDecision(q, a, asked.decisionId!, { question: "x" })).toBe(q);
   });
 });
+
+describe("入力名は供給元の出力名に追従する (二重管理をなくす)", () => {
+  it("出力の名前を変えると、つながる先の同じ名前の入力も変わる (親の出力や孫まで伝わる)", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const a = addBlock(p, { parentId: pj, title: "A", outputName: "設計書" }); p = a.project;
+    const b = addBlock(p, { parentId: pj, title: "B", outputName: "成果" }); p = b.project;
+    p = addPort(p, { blockId: b.blockId, direction: "in", name: "設計書" }).project;
+    const aOut = portsOf(p, a.blockId, "out")[0];
+    const bIn = portsOf(p, b.blockId, "in")[0];
+    p = connect(p, { portId: aOut.id, side: "outer" }, { portId: bIn.id, side: "outer" }).project;
+    // B の中に子を置き、B の入力 (内側) から子の入力へつなぐ (同じ名前)
+    const c = addBlock(p, { parentId: b.blockId, title: "C", outputName: "x" }); p = c.project;
+    p = addPort(p, { blockId: c.blockId, direction: "in", name: "設計書" }).project;
+    const cIn = portsOf(p, c.blockId, "in")[0];
+    p = connect(p, { portId: bIn.id, side: "inner" }, { portId: cIn.id, side: "outer" }).project;
+    p = updatePort(p, aOut.id, { name: "設計書 v2" });
+    expect(p.ports[bIn.id].name).toBe("設計書 v2");
+    expect(p.ports[cIn.id].name).toBe("設計書 v2");
+    expect(p.ports[aOut.id].name).toBe("設計書 v2");
+  });
+
+  it("名前が違う入力 (わざと別名にしたもの) は変えない", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const a = addBlock(p, { parentId: pj, title: "A", outputName: "設計書" }); p = a.project;
+    const b = addBlock(p, { parentId: pj, title: "B", outputName: "成果" }); p = b.project;
+    p = addPort(p, { blockId: b.blockId, direction: "in", name: "参考資料" }).project;
+    const aOut = portsOf(p, a.blockId, "out")[0];
+    const bIn = portsOf(p, b.blockId, "in")[0];
+    p = connect(p, { portId: aOut.id, side: "outer" }, { portId: bIn.id, side: "outer" }).project;
+    p = updatePort(p, aOut.id, { name: "設計書 v2" });
+    expect(p.ports[bIn.id].name).toBe("参考資料");
+  });
+
+  it("split の結線は受け側が題名だけでよい (出力名と同じ入力が作られる)", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const big = addBlock(p, { parentId: pj, title: "大きい箱", outputName: "成果物" }); p = big.project;
+    const r = splitBlock(p, big.blockId, { blocks: [{ title: "前半", outputs: ["中間ファイル"] }, { title: "後半", outputs: ["成果物"] }], connections: [{ from: "前半.中間ファイル", to: "後半" }, { from: "後半.成果物", to: "parent.成果物" }] }, "test");
+    expect(r.errors).toEqual([]);
+    const latter = findBlock(r.project, "後半").block!;
+    const ins = portsOf(r.project, latter.id, "in");
+    expect(ins.map((x) => x.name)).toEqual(["中間ファイル"]);
+    expect(incomingEdges(r.project, { portId: ins[0].id, side: "outer" }).some((e) => !e.auto)).toBe(true);
+  });
+});

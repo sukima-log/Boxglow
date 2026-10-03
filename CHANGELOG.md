@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Wires between a tab's Inputs / Outputs nodes and the opened box are selectable: clicking one selects the real wire that feeds that port (and they light up with it).
+- Input names follow the output that feeds them: `connect "A.Design" "B"` (and `split` connections with `to: "B"`) create the input with the output's name, and renaming an output renames the connected inputs that shared the name, through box boundaries.
 - Tabs exist only for major boxes. Inside a tab the whole subtree is shown nested (boxes inside boxes); boxes can be collapsed / expanded again (screen-only in View, saved in Edit). No more drilling into sub-boxes or deeper breadcrumbs.
 - Activity panel: each box in Working / Blocked now shows where it sits in the plan (major › middle item) and what it produces (its outputs), so you can tell at a glance where in the whole plan the agent is working and what for.
 - Published `boxglow@0.1.0` to npm (2026-10-03): `npx boxglow` works without a checkout. Runtime dependencies are only the MCP SDK and zod; the web app is shipped prebuilt in `dist/`.

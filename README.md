@@ -17,8 +17,8 @@ Tasks are boxes with inputs and outputs; a box goes New (BlackBox: dark, output 
 cd your-repo
 npx boxglow init --name "My project"
 npx boxglow add "Decide requirements" --out "Requirements list"
-npx boxglow add "Build it" --in "Requirements list" --out "Working app"
-npx boxglow connect "Decide requirements.Requirements list" "Build it.Requirements list"
+npx boxglow add "Build it" --out "Working app"
+npx boxglow connect "Decide requirements.Requirements list" "Build it"   # the input is created with the output's name
 npx boxglow connect "Build it.Working app" "project.最終成果物"
 npx boxglow status
 npx boxglow start "Build it" --note "scaffolding"

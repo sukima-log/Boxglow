@@ -41,10 +41,10 @@ export async function startMcp(run: Run): Promise<void> {
   , inputSchema: { title: z.string(), out: z.string().describe("出力の名前 (具体的な成果物: ファイル・URL・PR)"), parent: block.optional(), in: z.array(z.string()).optional().describe("入力の名前"), category: z.string().optional().describe("design/build/verify/evaluate/study/research/ui/improve/fix/docs/ops/other"), note: z.string().optional() }
   }, async (a) => { const argv = ["add", a.title]; opt(argv, "out", a.out); opt(argv, "parent", a.parent); opt(argv, "in", a.in); opt(argv, "category", a.category); opt(argv, "note", a.note); return safe(run, argv); });
   server.registerTool("boxglow_split", {
-    description: "大きい箱を中の箱に分解する。spec は { blocks: [{ title, in: [名前], out: 名前, category? }], wires: [\"A.出力 -> B.入力\"] } の形"
+    description: "大きい箱を中の箱に分解する。spec は { blocks: [{ title, inputs?: [名前], outputs: [名前] }], connections: [{ from: \"A.出力名\", to: \"B\" }] } の形 (to は題名だけでよい: 出力名と同じ入力が作られる。親の入力からは from: \"parent.入力名\"、親の出力へは to: \"parent.出力名\")"
   , inputSchema: { block, spec: z.record(z.string(), z.unknown()).describe("分解の指定 (JSON)") }
   }, async ({ block: b, spec }) => safe(run, ["split", b, "--spec", JSON.stringify(spec)]));
-  server.registerTool("boxglow_connect", { description: "線をつなぐ: <題名.出力名> から <題名.入力名> へ (親の入力は project.入力名、親の出力へは 題名.出力名 -> project.出力名)", inputSchema: { from: z.string(), to: z.string() } }, async ({ from, to }) => safe(run, ["connect", from, to]));
+  server.registerTool("boxglow_connect", { description: "線をつなぐ: <題名.出力名> から <題名> へ (受け側は題名だけでよい。出力名と同じ名前の入力が作られる。<題名.入力名> で既存の入力を指定してもよい。親の入力は project.入力名、親の出力へは 題名.出力名 -> project)", inputSchema: { from: z.string(), to: z.string() } }, async ({ from, to }) => safe(run, ["connect", from, to]));
   server.registerTool("boxglow_disconnect", { description: "線を外す", inputSchema: { from: z.string(), to: z.string() } }, async ({ from, to }) => safe(run, ["disconnect", from, to]));
   server.registerTool("boxglow_port", { description: "箱に入力 / 出力を足す、名前を変える", inputSchema: { block, in: z.array(z.string()).optional(), out: z.array(z.string()).optional(), rename: z.string().optional().describe("旧=新") } }, async (a) => { const argv = ["port", a.block]; opt(argv, "in", a.in); opt(argv, "out", a.out); opt(argv, "rename", a.rename); return safe(run, argv); });
   server.registerTool("boxglow_move", { description: "箱を別の親の中へ移す (線はつなぎ直される)", inputSchema: { block, parent: z.string().describe("移す先の箱か project") } }, async ({ block: b, parent }) => safe(run, ["move", b, "--parent", parent]));

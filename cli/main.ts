@@ -20,7 +20,7 @@
  *   remove <block> [--force]                          箱を消す (中に箱があるときは --force。線も外れる。元に戻せないので Git で管理していること)
  *   serve [--port 4174] [--open]                      ローカルサーバ: 同梱の Web アプリを http://localhost:4174/?serve=1 で配信し、boxglow.json を読み書き (Firefox / Safari でも使える)
  *   mcp [--file <path>]                               MCP サーバ (標準入出力)。Claude Code などから status / start / done / ask ... をツールとして使う (.mcp.json は setup-agent が書く)
- *   connect <題名.出力名> <題名.入力名>             結線 (親子は自動で内側の面を使う。最終成果物へは project.<出力名>。題名にドットがあってもよい)
+ *   connect <題名.出力名> <題名[.入力名]>           結線 (受け側は題名だけでよい: 出力名と同じ名前の入力を作ってつなぐ。親子は自動で内側の面。最終成果物へは project)
  *   start <block> [--note <何をするか>]            作業開始 (作業中になる)
  *   done <block> [--artifact <題名>=<URL またはパス>]... [--output <出力名>] [--note]   完了 (成果物を付けて white)
  *                                                  パスが Git 管理下なら「コミット + パス + blob」で記録する (アップロードしない)
@@ -74,7 +74,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock } from "../src/model/graph";
+import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock } from "../src/model/graph";
 import type { Artifact } from "../src/model/types";
 import { blockToPrompt } from "../src/model/export";
 import { blockReport, logReport, statusReport } from "../src/model/report";
@@ -545,6 +545,21 @@ function main(argv: string[]): void {
     }
     case "connect": {
       const a = resolveRef(p, rest[0] ?? "");
+      // 受け側が「題名」だけ (ポート名なし) なら、出す側の出力名で入力を作ってつなぐ (入力名を二重に書かなくてよい)
+      if (!(rest[1] ?? "").includes(".")) {
+        const tb = rest[1] === "project" ? p.blocks[projectBlocks(p)[0]?.id ?? ROOT_ID] : mustFind(p, rest[1]);
+        const fromIsParent = tb.parentId === a.blockId;
+        const fromPort = portsOf(p, a.blockId, fromIsParent ? "in" : "out").find((x) => x.name === a.portName);
+        if (!fromPort) throw new Error(`「${rest[0]}」のポートが見つかりません`);
+        const r = connectToBlock(p, { portId: fromPort.id, side: fromIsParent ? "inner" : "outer" }, tb.id);
+        if (r.error) throw new Error(r.error);
+        save(path, r.project);
+        // つながった先のポート名を伝える (受け側が親なら親の出力、そうでなければ出力名と同じ入力)
+        const edge = Object.values(r.project.edges).find((e) => e.from.portId === fromPort.id && !Object.values(p.edges).some((x) => x.id === e.id));
+        const toPort = edge ? r.project.ports[edge.to.portId] : undefined;
+        out(`結線: ${rest[0]} -> ${tb.title}.${toPort?.name ?? fromPort.name}` + (toPort?.direction === "out" ? " (親の出力)" : " (出力名と同じ入力を使いました)"));
+        return;
+      }
       const b = resolveRef(p, rest[1] ?? "");
       const fromBlock = p.blocks[a.blockId];
       const toBlock = p.blocks[b.blockId];
