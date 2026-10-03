@@ -7,6 +7,8 @@
  * の候補を作り、「箱との交差 (重い) + 長さ + 曲がりの数」が最小の経路を選ぶ。
  */
 
+import { gridRouteRelaxed } from "./gridRoute";
+
 export interface Rect {
   x: number;
   y: number;
@@ -33,8 +35,10 @@ export const marginOf = (r: Rect): number => (r.wall ? WALL_MARGIN : MARGIN);
 export const SQUEEZE_MARGIN = 12;
 /** 出入りの最初の直線の長さ */
 const STUB = 40;
-/** 交差 1 回の罰 (長さに換算)。大きな図でも、どんなに遠回りしても箱を横切らない方を選ぶ大きさ */
-const CROSS_PENALTY = 100000;
+/** 箱を貫く 1 回の罰 (長さに換算)。他のどんな罰 (壁・親の外・近さ・曲がり・遠回り) の合計より大きく、箱を貫く経路は最後まで選ばれない */
+const CROSS_PENALTY = 10000000;
+/** 親の縁 (壁) を越える・親の外に出る 1 回の罰。箱を貫くより桁違いに軽い (親の縁ぎりぎりの箱から出る線は、少し外にはみ出しても箱は貫かない) */
+const WALL_PENALTY = 100000;
 /** 曲がり 1 回の罰 */
 const BEND_PENALTY = 40;
 /** 箱 (や親の縁) に MARGIN より近づく 1 回の罰 (貫くよりは軽いが、回り道より重い) */
@@ -106,11 +110,11 @@ const insetOf = (r: Rect): Bounds4 => ({ x0: r.x + END_INSET + 1, y0: r.y + END_
 /** 評価に使う矩形一式 (rankRoutes が 1 回だけ作り、全候補で使い回す) */
 interface CostSetup {
   obstacles: { inner: Bounds4; near: Bounds4 }[];
-  mids: { inner: Bounds4; near: Bounds4 }[]; // 途中の線分だけが避ける: 自分の箱 + 親の壁
+  mids: { inner: Bounds4; near: Bounds4; wall: boolean }[]; // 途中の線分だけが避ける: 自分の箱 + 親の壁 (壁は軽い罰)
   endInsets: Bounds4[]; // 出入りの線分が「反対側から貫く」判定
 }
 function costSetup(obstacles: Rect[], ends: Rect[], walls: Rect[]): CostSetup {
-  const pre = (r: Rect) => ({ inner: innerOf(r), near: nearOf(r) });
+  const pre = (r: Rect) => ({ inner: innerOf(r), near: nearOf(r), wall: !!r.wall });
   return { obstacles: obstacles.map(pre), mids: [...ends, ...walls].map(pre), endInsets: ends.map(insetOf) };
 }
 
@@ -122,6 +126,7 @@ function costSetup(obstacles: Rect[], ends: Rect[], walls: Rect[]): CostSetup {
 function cost(path: Point[], st: CostSetup): number {
   let len = 0;
   let crosses = 0;
+  let wallCrosses = 0;
   let nears = 0;
   const last = path.length - 1;
   for (let i = 1; i <= last; i++) {
@@ -135,7 +140,7 @@ function cost(path: Point[], st: CostSetup): number {
     // 途中の線分が自分の箱 (出す側・受ける側) や親の縁の近くを通るのも避ける (出入りの線分は箱に接するので除く)
     if (i > 1 && i < last) {
       for (const o of st.mids) {
-        if (hits(a.x, a.y, b.x, b.y, o.inner)) crosses++;
+        if (hits(a.x, a.y, b.x, b.y, o.inner)) { if (o.wall) wallCrosses++; else crosses++; }
         else if (hits(a.x, a.y, b.x, b.y, o.near)) nears++;
       }
     } else {
@@ -144,7 +149,7 @@ function cost(path: Point[], st: CostSetup): number {
       for (const o of st.endInsets) if (hits(a.x, a.y, b.x, b.y, o)) crosses++;
     }
   }
-  return len + crosses * CROSS_PENALTY + nears * NEAR_PENALTY + (path.length - 2) * BEND_PENALTY;
+  return len + crosses * CROSS_PENALTY + wallCrosses * WALL_PENALTY + nears * NEAR_PENALTY + (path.length - 2) * BEND_PENALTY;
 }
 
 /** 連続する同じ点・直線上の点を取り除く */
@@ -188,6 +193,21 @@ function freeCenters(lo: number, hi: number, intervals: [number, number][]): num
  * Input : s = 出す側のハンドル位置, t = 受ける側のハンドル位置, obstacles = 避ける箱, lane = 同じ箱に集まる線をずらす量 (px)
  * Output: 折れ線の頂点 (s から t まで)
  */
+/**
+ * 出入りの直線をどこまで伸ばせるか: 同じ高さの真横 (dir = 1 右 / -1 左) にある箱の手前 (4px) まで。箱が無ければ max
+ * Input : from = ハンドル位置, dir, rects = 避ける箱, max = 直線の長さの上限
+ * Output: 直線の長さ (4 以上)
+ */
+export function freeStub(from: Point, dir: 1 | -1, rects: Rect[], max = STUB): number {
+  let d = max;
+  for (const o of rects) {
+    if (from.y < o.y - 1 || from.y > o.y + o.height + 1) continue; // 高さがかぶらない箱は関係ない
+    if (dir > 0 && o.x >= from.x) d = Math.min(d, o.x - from.x - 4);
+    if (dir < 0 && o.x + o.width <= from.x) d = Math.min(d, from.x - (o.x + o.width) - 4);
+  }
+  return Math.max(4, d);
+}
+
 /** 基本の評価 (箱・壁・親の外) で並べた候補。交差の評価 (routeAll の 2 回通し) で使い回す */
 export interface RankedRoute {
   path: Point[];
@@ -203,8 +223,16 @@ export function rankRoutes(s: Point, t: Point, obstacles: Rect[], lane = 0, ends
   // 出入りの直線: 近いときは短くする (受ける側が右にあるのに「戻る線」扱いにならないように)
   const dx = t.x - s.x;
   const stub = dx > 0 ? Math.max(4, Math.min(STUB, dx / 2 - 2)) : STUB;
-  let x1 = s.x + stub + lane;
-  let x2 = t.x - stub - lane;
+  // 出た直後 (入る直前) の真横に箱があるときは、直線をその手前までに縮める (詰めた配置で、出た直後の直線が隣の箱を貫かないように)
+  const stubS = Math.min(stub, freeStub(s, 1, obstacles));
+  const stubT = Math.min(stub, freeStub(t, -1, obstacles));
+  let x1 = s.x + stubS + lane;
+  let x2 = t.x - stubT - lane;
+  // 親の縁ぎりぎりの箱から出る (入る) 線は、出入りの直線を親の内側に収める (外にはみ出すと壁の罰が付き、箱を貫く候補と競ってしまう)
+  if (bounds) {
+    x1 = Math.min(x1, Math.max(s.x + 4, bounds.x + bounds.width - WALL_MARGIN));
+    x2 = Math.max(x2, Math.min(t.x - 4, bounds.x + WALL_MARGIN));
+  }
   if (dx > 0 && x1 > x2) {
     x1 = (s.x + t.x) / 2;
     x2 = x1;
@@ -294,11 +322,22 @@ export function rankRoutes(s: Point, t: Point, obstacles: Rect[], lane = 0, ends
     let k = cost(path, st);
     // 親の箱の外に出る線分には罰 (中の線が外へ出て戻らないように)
     if (inside) {
-      for (let i = 1; i < path.length; i++) if (!inside(path[i - 1]) || !inside(path[i])) k += CROSS_PENALTY;
+      for (let i = 1; i < path.length; i++) if (!inside(path[i - 1]) || !inside(path[i])) k += WALL_PENALTY;
     }
     ranked.push({ path, base: k, order: ranked.length });
   }
   ranked.sort((a, b) => a.base - b.base || a.order - b.order);
+  // 最後の手段: 決まった形の候補が全部どこかの箱を貫くときは、格子の上の最短路で「貫かない経路」を探して先頭に置く
+  // (通れる隙間があれば必ず見つかる。見つかった経路は箱を貫かないので、基本の評価は CROSS_PENALTY 未満になる)
+  if (ranked.length === 0 || ranked[0].base >= CROSS_PENALTY) {
+    const g = gridRouteRelaxed(s, t, obstacles, ends, bounds, stubS, stubT);
+    if (g) {
+      let k = cost(g, st);
+      if (inside) for (let i = 1; i < g.length; i++) if (!inside(g[i - 1]) || !inside(g[i])) k += WALL_PENALTY;
+      ranked.unshift({ path: g, base: k, order: -1 });
+      ranked.sort((a, b) => a.base - b.base || a.order - b.order);
+    }
+  }
   return ranked.map((r) => ({ path: r.path, base: r.base }));
 }
 

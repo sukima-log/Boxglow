@@ -32,7 +32,7 @@ const NEAR = 16; // 間隔 (SEP) より近い線は同じ束として広げる (
  * Input : nodes = 見えているノードの絶対位置, edges = 線 (端点の位置つき)
  * Output: 線 id -> 折れ線
  */
-export function routeAll(nodes: NodeRect[], edges: EdgeSpec[]): Map<string, Point[]> {
+export function routeAll(nodes: NodeRect[], edges: EdgeSpec[], opts: { separate?: boolean } = {}): Map<string, Point[]> {
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const paths = new Map<string, Point[]>();
   const scopeOf = new Map<string, string>();
@@ -83,6 +83,7 @@ export function routeAll(nodes: NodeRect[], edges: EdgeSpec[]): Map<string, Poin
   }
   // 広げた結果、束に入っていなかった別の線の真上に乗ることがあるので、数回繰り返して収束させる
   // (間隔どおりに並んだ束は再び同じ位置に広がるだけなので、繰り返しても崩れない)
+  if (opts.separate === false) return paths; // 検査用: 束を広げる前の経路
   for (let pass = 0; pass < 4; pass++) {
     separateVerticals(paths, scopeOf, obstaclesOf);
     separateHorizontals(paths, scopeOf, obstaclesOf);
@@ -196,8 +197,10 @@ function separateHorizontals(paths: Map<string, Point[]>, scopeOf: Map<string, s
         .map((o) => o.id);
       let lo = -Infinity;
       let hi = Infinity;
+      const ownRange = new Map<HSeg, [number, number]>(); // 線分ごとの空き範囲 (束の範囲とは別に、最後に線分ごとに抑える)
       for (const g of group) {
         const [l, h] = freeRangeAtY(g.y, g.x0, g.x1, obstacles);
+        ownRange.set(g, [l, h]);
         lo = Math.max(lo, l);
         hi = Math.min(hi, h);
       }
@@ -213,8 +216,12 @@ function separateHorizontals(paths: Map<string, Point[]>, scopeOf: Map<string, s
         const path = paths.get(id)!;
         for (const g of group) {
           if (g.edgeId !== id) continue;
-          path[g.idx] = { ...path[g.idx], y };
-          path[g.idx + 1] = { ...path[g.idx + 1], y };
+          // 線分ごとの空き範囲でも抑える: 束の範囲は束全体の共通部分だが、別の線分の範囲に引きずられて
+          // この線分だけが箱 (自分の箱など) の中へ入ることがある。自分の範囲が無い (両側から挟まれている) 線分は動かさない
+          const [ol, oh] = ownRange.get(g)!;
+          const yy = oh < ol ? g.y : Math.max(ol, Math.min(oh, y));
+          path[g.idx] = { ...path[g.idx], y: yy };
+          path[g.idx + 1] = { ...path[g.idx + 1], y: yy };
         }
       });
     }
@@ -332,8 +339,10 @@ function separateVerticals(paths: Map<string, Point[]>, scopeOf: Map<string, str
       // 束全体が置ける範囲: 各線分の空き範囲の共通部分 (箱から MARGIN 以上離れる)
       let lo = -Infinity;
       let hi = Infinity;
+      const ownRange = new Map<VSeg, [number, number]>(); // 線分ごとの空き範囲 (束の範囲とは別に、最後に線分ごとに抑える)
       for (const g of group) {
         const [l, h] = freeRangeAt(g.x, g.y0, g.y1, obstacles);
+        ownRange.set(g, [l, h]);
         lo = Math.max(lo, l);
         hi = Math.min(hi, h);
       }
@@ -350,8 +359,11 @@ function separateVerticals(paths: Map<string, Point[]>, scopeOf: Map<string, str
         const path = paths.get(id)!;
         for (const g of group) {
           if (g.edgeId !== id) continue;
-          path[g.idx] = { ...path[g.idx], x };
-          path[g.idx + 1] = { ...path[g.idx + 1], x };
+          // 線分ごとの空き範囲でも抑える (横線分と同じ理由)
+          const [ol, oh] = ownRange.get(g)!;
+          const xx = oh < ol ? g.x : Math.max(ol, Math.min(oh, x));
+          path[g.idx] = { ...path[g.idx], x: xx };
+          path[g.idx + 1] = { ...path[g.idx + 1], x: xx };
         }
       });
     }
