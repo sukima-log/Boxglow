@@ -189,10 +189,22 @@ export function routeEdge(s: Point, t: Point, obstacles: Rect[], lane = 0, ends:
       candidates.push([s, { x: xa, y: s.y }, { x: xa, y: yl }, { x: xv, y: yl }, { x: xv, y: t.y }, t]); // 入る直前の縦の通路を変える
     }
   }
-  // 受ける側が左にある (戻る線) ときは、出た直後に縦へ、受ける直前にも縦へ
+  // 受ける側が左にある (戻る線) ときは、出た直後に縦へ下り (上り)、横の通路を戻り、受ける直前に縦へ。
+  // 下りる縦の通路は「出た直後 (x1)」だけでなく、その右側の隙間も候補にする (真下に箱があると x1 では貫いてしまう)。
+  // 上がる縦の通路も同じく「入る直前 (x2)」とその左側の隙間を候補にする
   if (x1 > x2) {
+    const all = [...obstacles, ...ends];
+    const xRight = Math.max(x1, ...all.map((o) => o.x + o.width + MARGIN)) + 40;
+    const xLeft = Math.min(x2, ...all.map((o) => o.x - MARGIN)) - 40;
+    const nearest = (xs: number[], ref: number, n: number): number[] => [...new Set(xs)].sort((a, b) => Math.abs(a - ref) - Math.abs(b - ref)).slice(0, n);
+    const dropXs = nearest([x1, ...freeCenters(x1, xRight, xIntervals).filter((x) => x >= x1)], x1, 12);
+    const riseXs = nearest([x2, ...freeCenters(xLeft, x2, xIntervals).filter((x) => x <= x2)], x2, 12);
     for (const yl of lanes) {
-      candidates.push([s, { x: x1, y: s.y }, { x: x1, y: yl }, { x: x2, y: yl }, { x: x2, y: t.y }, t]);
+      for (const xd of dropXs) {
+        for (const xr of riseXs) {
+          candidates.push([s, { x: xd, y: s.y }, { x: xd, y: yl }, { x: xr, y: yl }, { x: xr, y: t.y }, t]);
+        }
+      }
     }
   }
 

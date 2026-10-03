@@ -22,6 +22,21 @@ describe("線の経路探索", () => {
     }
   });
 
+  it("戻る線の真下 (出た直後の縦の通路) に箱があっても貫かない (右の隙間へ回る)", () => {
+    // 出す側の箱 (右上) の真下に別の箱が右へはみ出して並び、受ける側は左下
+    const src = { x: 1100, y: 350, width: 180, height: 40 };
+    const below = { x: 1100, y: 430, width: 210, height: 40 }; // 右端が出す側より 30px 右 → x1 (= s.x + 40) の通路にかかる
+    const dst = { x: 300, y: 550, width: 200, height: 60 };
+    const path = routeEdge({ x: 1280, y: 370 }, { x: 300, y: 580 }, [below], 0, [src, dst]);
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1];
+      const b = path[i];
+      const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
+      const hits = x1 > below.x + 1 && x0 < below.x + below.width - 1 && y1 > below.y + 1 && y0 < below.y + below.height - 1;
+      expect(hits).toBe(false);
+    }
+  });
+
   it("受ける側が左にある (戻る線) ときも経路が作れる", () => {
     const path = routeEdge({ x: 500, y: 100 }, { x: 100, y: 300 }, [{ x: 150, y: 80, width: 300, height: 100 }]);
     expect(path[0]).toEqual({ x: 500, y: 100 });
