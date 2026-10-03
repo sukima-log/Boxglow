@@ -3,6 +3,7 @@
 ## Unreleased
 
 - "All" now shows only the major boxes (children of project boxes), always collapsed; what is inside a major box is seen on its own tab (double-click a major box, or press its arrow, to open the tab). Layout, `boxglow layout` and Auto Layout treat major boxes as collapsed, so the overview stays compact. Dropping a box onto a collapsed major box moves it inside.
+- Clicking a major box on All opens its tab (a drag in Edit mode does not). Adding a box on All with nothing selected creates a new major box, i.e. a new tab.
 - Tab bar works like spreadsheet sheets: no scrollbar, left / right arrows to scroll, and a list button that opens all tabs (with status and progress) to jump directly.
 - Canvas tabs (at the bottom of the canvas, like sheets): "All" shows the whole plan; one tab per major box (children of project boxes) shows only that subtree, fitted to the screen, with the box's own inputs and outputs shown as Inputs / Outputs nodes on the left and right. The active tab is remembered per project in the browser. `+ Block` / `N` with nothing selected adds into the open tab's box.
 - Resizable side panels: drag the border of the details panel (right) and the drawer (left). Widths are remembered in the browser.
