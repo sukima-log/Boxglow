@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- When the browser refuses to open a picked file (for example a file under `\\wsl.localhost\...`, which Chrome blocks as a protected location), the Home dialog now says so and points to `npx boxglow serve --open` instead of silently doing nothing.
+
 ## 0.3.0 (2026-10-03)
 
 - English CLI: every plan has a language (`lang` in `boxglow.json`, set by `init` from the environment or `--lang en|ja`; plans made before this stay Japanese). CLI messages, the log lines stored in the plan, `status` / `show` / `export` / `prompt`, the MCP tool descriptions, and the agent instructions and skill written by `setup-agent` all follow it. `npx boxglow lang [ja|en]` shows or changes it; `--lang` / `BOXGLOW_LANG` override per call. About 260 strings and both documents translated; Japanese output is unchanged.

@@ -27,8 +27,13 @@ export function HomeDialog() {
   }, [refreshList]);
 
   const openFile = async () => {
-    const h = await pickLocalFile();
-    if (h) await openLocalFile(h);
+    try {
+      const h = await pickLocalFile();
+      if (h) await openLocalFile(h);
+    } catch (e) {
+      // ブラウザがその場所のファイルを開かせてくれないとき (WSL やネットワーク上の場所など) は、理由と別の開き方を出す
+      setToast(t("このファイルはブラウザから直接開けませんでした ({error})。npx boxglow serve --open なら、どの場所のファイルでも開けます", { error: e instanceof Error ? e.name : String(e) }));
+    }
   };
 
   const doImport = async () => {

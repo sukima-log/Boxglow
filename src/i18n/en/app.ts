@@ -76,4 +76,5 @@ export const app: Record<string, string> = {
 , "{name} (複製)": "{name} (copy)"
 , "自分のプロジェクトとして保存しました": "Saved as your own project"
 , "回答済み": "Answered"
+, "このファイルはブラウザから直接開けませんでした ({error})。npx boxglow serve --open なら、どの場所のファイルでも開けます": "The browser could not open this file directly ({error}). npx boxglow serve --open opens a file in any location"
 };

@@ -10,19 +10,32 @@ const LAST_HANDLE_KEY = "boxglow:lastFileHandle";
 /** この環境でローカルファイルを開けるか (Chrome / Edge) */
 export const canOpenLocalFile = (): boolean => typeof window !== "undefined" && typeof window.showOpenFilePicker === "function";
 
-/** ファイル選択ダイアログで boxglow.json を選ぶ (キャンセルなら null) */
+/**
+ * ファイル選択ダイアログで boxglow.json を選ぶ
+ * Input : なし
+ * Output: 選んだファイルのハンドル。キャンセルなら null。
+ *         ブラウザが選択を拒んだとき (ネットワーク上の場所や保護された場所など) は例外を投げる (呼び出し側が理由を画面に出す。
+ *         以前は全部「キャンセル」として握りつぶしていて、開けない理由が分からなかった)
+ */
 export async function pickLocalFile(): Promise<FileSystemFileHandle | null> {
   if (!window.showOpenFilePicker) return null;
+  let handle: FileSystemFileHandle;
   try {
-    const [handle] = await window.showOpenFilePicker({
+    [handle] = await window.showOpenFilePicker({
       multiple: false
     , types: [{ description: "Boxglow project", accept: { "application/json": [".json"] } }]
     });
-    await set(LAST_HANDLE_KEY, handle);
-    return handle;
-  } catch {
-    return null; // キャンセル
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") return null; // 利用者がキャンセルした
+    throw e;
   }
+  // 「前回のファイル」として覚える。覚えられない場所 (保存できないハンドル) でも、開くこと自体は続ける
+  try {
+    await set(LAST_HANDLE_KEY, handle);
+  } catch {
+    /* 覚えられなくても開ける */
+  }
+  return handle;
 }
 
 /** 前回開いたファイルのハンドル (無ければ null) */

@@ -53,7 +53,7 @@ Then run `npx boxglow setup-agent` once: it appends the working agreement ([docs
 
 ## Any browser: `npx boxglow serve`
 
-The web app opens a local `boxglow.json` directly only in Chrome / Edge (File System Access API). `npx boxglow serve` runs a small local server (127.0.0.1 only) that serves the bundled app and exposes the file as `GET/PUT /api/project` plus an SSE `/api/events` stream, so the page updates a moment after the CLI or an agent writes the file, and edits in the page are written back. Open `http://localhost:4174/?serve=1` (`--open` opens it for you).
+The web app opens a local `boxglow.json` directly only in Chrome / Edge (File System Access API), and those browsers refuse some locations: a file inside WSL (`\\wsl.localhost\...`) is rejected with a "contains system files" message. Use `serve` (or the VS Code extension) for those. `npx boxglow serve` runs a small local server (127.0.0.1 only) that serves the bundled app and exposes the file as `GET/PUT /api/project` plus an SSE `/api/events` stream, so the page updates a moment after the CLI or an agent writes the file, and edits in the page are written back. Open `http://localhost:4174/?serve=1` (`--open` opens it for you).
 
 ## MCP server
 
