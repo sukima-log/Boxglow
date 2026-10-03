@@ -3,8 +3,8 @@
  *   ブロック / 線 / 入力ノード / 最終成果物ノード / プロジェクト設定
  * 何も選んでいなければ何も出さない (App 側でパネルごと隠す)
  */
-import { useEffect, useState } from "react";
-import { addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, disconnect, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, missingRequiredInputs, removeBlock, setCategory, setProgress, setSchedule, updateBlock } from "../model/graph";
+import { useEffect, useMemo, useState } from "react";
+import { addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, disconnect, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, missingRequiredInputs, removeBlock, setCategory, setProgress, setSchedule, updateBlock, wireNetTabs } from "../model/graph";
 import { saveTemplate } from "../lib/templates";
 import { actorLabel, ACTIVITY_LABEL, agoText } from "../model/report";
 import { DecisionCard, Timeline } from "./Timeline";
@@ -420,6 +420,26 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   );
 }
 
+/** 線が通るタブ (境界を越えた先の続きも含む)。押すとそのタブへ移る (線は選んだまま) */
+function WireTabs({ project, edgeId }: { project: Project; edgeId: string }) {
+  const viewScope = useProjectStore((s) => s.viewScope);
+  const setViewScope = useProjectStore((s) => s.setViewScope);
+  const tabs = useMemo(() => wireNetTabs(project, edgeId), [project, edgeId]);
+  if (tabs.length < 2) return null; // 1 つのタブに収まる線には出さない
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="text-[11px] font-bold" style={{ color: "var(--text-muted)" }}>Tabs</div>
+      <div className="flex flex-wrap gap-1">
+        {tabs.map((t) => (
+          <button key={t ?? "all"} className="chip" data-on={viewScope === t} onClick={() => setViewScope(t)} title={t ? `${project.blocks[t]?.title ?? ""} のタブでこの線の続きを見る` : "All でこの線を見る"}>
+            {t ? project.blocks[t]?.title ?? "?" : "All"}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /** 線 */
 function EdgeInspector({ project, edgeId }: { project: Project; edgeId: string }) {
   const readonly = useProjectStore((s) => s.readonly);
@@ -437,6 +457,7 @@ function EdgeInspector({ project, edgeId }: { project: Project; edgeId: string }
         <div className="my-1" style={{ color: "var(--text-muted)" }}>↓</div>
         <div><b>{name(tp.blockId)}</b>「{tp.name}」</div>
       </div>
+      <WireTabs project={project} edgeId={edgeId} />
       {e.auto ? (
         <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>自動の線。手動でつなぐと置き換わります。</div>
       ) : (

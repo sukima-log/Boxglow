@@ -233,8 +233,9 @@ export const useProjectStore = create<State>((set, get) => {
       } catch {
         /* 記憶できなくても動く */
       }
-      // 範囲の外の箱や線を選んだままだと、詳細パネルに見えない物が出て混乱するので外す (Summary などの選択は保つ)
-      const keepSel = scope && !isInScope(project, scope, selection.blockId) ? { ...selection, blockId: null, edgeId: null } : selection;
+      // 範囲の外の箱を選んだままだと、詳細パネルに見えない物が出て混乱するので外す (Summary などの選択は保つ)。
+      // 線の選択は保つ: 線は境界を越えて別のタブへ続くので、選んだままタブを移って接続先を追えるようにする
+      const keepSel = scope && selection.blockId && !isInScope(project, scope, selection.blockId) ? { ...selection, blockId: null } : selection;
       set({ viewScope: scope, selection: keepSel });
     }
   , saveNow: () => {

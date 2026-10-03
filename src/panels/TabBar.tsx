@@ -13,7 +13,7 @@ import { StatusIcon } from "../canvas/BlockNode";
 /** ◀ ▶ で 1 回に送る幅 (px) */
 const STEP = 240;
 
-export function TabBar({ project, majors, scope, onSelect }: { project: Project; majors: Block[]; scope: string | null; onSelect: (id: string | null) => void }) {
+export function TabBar({ project, majors, scope, onSelect, marked }: { project: Project; majors: Block[]; scope: string | null; onSelect: (id: string | null) => void; marked?: Set<string | null> }) {
   const strip = useRef<HTMLDivElement>(null);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
@@ -63,9 +63,9 @@ export function TabBar({ project, majors, scope, onSelect }: { project: Project;
         <button className="tab-nav-btn" disabled={!canRight} onClick={() => scrollBy(STEP)} title="右へ">▶</button>
       </div>
       <div className="tab-strip" ref={strip} onScroll={updateArrows}>
-        <button className="canvas-tab" role="tab" data-on={scope === null} onClick={() => pick(null)} title="大項目の一覧を俯瞰する (中はそれぞれのタブで)">All</button>
+        <button className="canvas-tab" role="tab" data-on={scope === null} data-marked={marked?.has(null) || undefined} onClick={() => pick(null)} title="大項目の一覧を俯瞰する (中はそれぞれのタブで)">All</button>
         {majors.map((b) => (
-          <button key={b.id} className="canvas-tab" role="tab" data-on={scope === b.id} onClick={() => pick(b.id)} title={`${b.title} の中を見る`}>
+          <button key={b.id} className="canvas-tab" role="tab" data-on={scope === b.id} data-marked={marked?.has(b.id) || undefined} onClick={() => pick(b.id)} title={marked?.has(b.id) ? `${b.title} (選んだ線の続きがある)` : `${b.title} の中を見る`}>
             <StatusIcon status={b.status} />
             <span className="truncate">{b.title}</span>
           </button>

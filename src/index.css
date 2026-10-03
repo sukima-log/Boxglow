@@ -482,6 +482,8 @@ textarea.input { resize: vertical; min-height: 64px; }
 .tab-list-icon { width: 18px; text-align: center; color: var(--text-muted); }
 .tab-list-prog { margin-left: auto; color: var(--text-muted); font-size: 11px; }
 .canvas-tab:hover { color: var(--text); }
+/* 選んだ線の続きがあるタブ: 線と同じ橙の点を題名の前に出す (選んだままタブを移ると続きが光っている) */
+.canvas-tab[data-marked="true"]::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
 /* パネルの境界のつまみ (ドラッグで幅を変える) */
 .resize-handle { position: absolute; top: 0; bottom: 0; width: 10px; cursor: col-resize; z-index: 25; }
 .resize-handle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; background: transparent; }

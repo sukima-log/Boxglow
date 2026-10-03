@@ -13,7 +13,7 @@ import { FlowCanvas } from "./canvas/FlowCanvas";
 import { addBlock, computeProgress, disconnect, removeBlock } from "./model/graph";
 import { ROOT_ID } from "./model/types";
 import { majorBlocks, parentForNewBlock, useProjectStore, useShownProject } from "./store/useProjectStore";
-import { scopePath } from "./model/graph";
+import { scopePath, wireNetTabs } from "./model/graph";
 import { ResizeHandle } from "./panels/parts";
 
 /**
@@ -200,6 +200,8 @@ export function App() {
   const gridClass = ["app-grid", embed ? "embed" : "", hasSelection ? "" : "no-right"].filter(Boolean).join(" ");
   // キャンバスのタブ: All (全体) + 大項目ごと (埋め込みでは出さない)
   const majors = useMemo(() => (project ? majorBlocks(project) : []), [project]);
+  // 選んだ線 (と境界を越えた先の続き) が通るタブ。タブの帯に印を付け、線を選んだまま行き来できるようにする
+  const wireTabs = useMemo(() => (project && selection.edgeId && project.edges[selection.edgeId] ? new Set(wireNetTabs(project, selection.edgeId)) : undefined), [project, selection.edgeId]);
   const showTabs = !!project && majors.length > 0; // 埋め込みでも出す (All は大項目までしか見せないので、中を見る手段が要る)
   const scopeOk = viewScope && project?.blocks[viewScope] ? viewScope : null;
   // パンくず: 開いている箱から大項目までの道 (タブは大項目で選ぶ)
@@ -249,7 +251,7 @@ export function App() {
             <span className="absolute top-2 left-2 z-10 font-head text-[14px] px-2 py-1 rounded-lg" style={{ background: "var(--bg-card)", border: "2px solid var(--line)" }}>Boxglow</span>
           )}
         </div>
-        {showTabs && <TabBar project={project!} majors={majors} scope={activeTab} onSelect={setViewScope} />}
+        {showTabs && <TabBar project={project!} majors={majors} scope={activeTab} onSelect={setViewScope} marked={wireTabs} />}
         {!project && !embed && <HomeDialog />}
         {helpOpen && (
           <div className="modal-backdrop" onClick={() => setHelpOpen(false)}>

@@ -2071,6 +2071,61 @@ export function issueKeyOf(url: string): string {
  * Input : edgeId
  * Output: 線 id の集合 (自分を含む)
  */
+/**
+ * 1 本の線 (と、境界を越えた先の続き) が見えるタブの一覧
+ * 線は「両端の箱が見える画面」に描かれる: 両端とも大項目の中なら、その大項目のタブ。大項目どうし・最上位の入出力との線は All (null)
+ * Input : edgeId
+ * Output: タブ (大項目の id、All は null) の配列。出す側のタブから受ける側のタブへの順。重複なし
+ */
+export function wireNetTabs(p: Project, edgeId: string): (string | null)[] {
+  const out: (string | null)[] = [];
+  const push = (t: string | null) => { if (!out.includes(t)) out.push(t); };
+  const tabOf = (e: Edge): string | null => {
+    const a = p.ports[e.from.portId]?.blockId;
+    const b = p.ports[e.to.portId]?.blockId;
+    // 大項目の外側のポートどうし (兄弟の線) や最上位との線は All。片方が中の箱なら、その大項目のタブ
+    const ma = a && a !== ROOT_ID ? majorOf(p, a) : null;
+    const mb = b && b !== ROOT_ID ? majorOf(p, b) : null;
+    const inner = (id: string | undefined, side: "inner" | "outer") => !!id && id !== ROOT_ID && (majorOf(p, id) !== id || side === "inner");
+    if (inner(a, e.from.side)) return ma;
+    if (inner(b, e.to.side)) return mb;
+    return null;
+  };
+  // 上流側から順に並ぶように、選んだ線のタブを基準に上流・下流を集める (wireNet は集合なので、順序はここで付け直す)
+  const net = wireNet(p, edgeId);
+  const edges = [...net].map((id) => p.edges[id]).filter((e): e is Edge => !!e);
+  const start = p.edges[edgeId];
+  const upstream = edges.filter((e) => e !== start && isUpstreamOf(p, e, start, net));
+  const downstream = edges.filter((e) => e !== start && !upstream.includes(e));
+  for (const e of upstream) push(tabOf(e));
+  if (start) push(tabOf(start));
+  for (const e of downstream) push(tabOf(e));
+  return out;
+}
+
+/** e が start より上流 (start の出す側のポートへ、反対の面からたどり着く線) か */
+function isUpstreamOf(p: Project, e: Edge, start: Edge | undefined, net: Set<string>): boolean {
+  if (!start) return false;
+  const stack = [start];
+  const seen = new Set<string>();
+  while (stack.length > 0) {
+    const cur = stack.pop()!;
+    const fp = p.ports[cur.from.portId];
+    if (!fp) continue;
+    const backSide: "inner" | "outer" = cur.from.side === "outer" ? "inner" : "outer";
+    for (const id of net) {
+      const x = p.edges[id];
+      if (!x || seen.has(id)) continue;
+      if (x.to.portId === fp.id && x.to.side === backSide) {
+        if (x.id === e.id) return true;
+        seen.add(id);
+        stack.push(x);
+      }
+    }
+  }
+  return false;
+}
+
 export function wireNet(p: Project, edgeId: string): Set<string> {
   // 選んだ線から、上流は上流へだけ、下流は下流へだけたどる (向きを折り返さない)。
   // 折り返すと「同じ境界のポートから枝分かれした兄弟の線」まで全部入ってしまい、見にくい
