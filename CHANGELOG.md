@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `boxglow tidy` and every save / edit now align connected input names with their source (fixes plans written before the rule; 82 inputs in Boxglow's own plan were out of sync).
 - VS Code extension (`vscode/`): opens `boxglow.json` as the Boxglow diagram inside the editor (custom editor + command), follows file changes from the CLI / agents, writes edits back, follows the VS Code theme. Built from the same web app (`npm run build:vscode`, `.vsix` via `cd vscode && npm run package`).
 - Fix: after a save, external file changes were no longer picked up until the next edit (the save timer was never cleared).
 - Top bar: `Auto Layout` is its own button; `+ Project` is gone from the bar (`New Project` stays in the ⋯ menu).

@@ -599,6 +599,45 @@ export function updatePort(p: Project, portId: string, patch: Partial<Omit<Port,
 }
 
 /**
+ * 供給元のある入力の名前を、供給元の名前にそろえる (規則が入る前に作った線や、手で直したファイルの食い違いを直す)。
+ * 上流から順に (親の入力 → 子の入力、出力 → 入力) たどって決める
+ * Input : p
+ * Output: そろえた複製 (変える物が無ければ p そのもの)。変えたポートの数も返す
+ */
+export function normalizeInputNames(p: Project): { project: Project; renamed: number } {
+  // 供給元を持つ入力ごとに「供給元の名前」を求める。供給元が入力 (親の入力の内側) なら、さらにその供給元をたどる
+  const feeder = new Map<string, string>(); // 入力ポート id -> 供給元ポート id
+  for (const e of Object.values(p.edges)) {
+    if (e.auto) continue;
+    const t = p.ports[e.to.portId];
+    if (!t || t.direction !== "in" || e.to.side !== "outer") continue;
+    feeder.set(t.id, e.from.portId);
+  }
+  const resolved = new Map<string, string>();
+  const nameOf = (portId: string, seen: Set<string> = new Set()): string => {
+    if (resolved.has(portId)) return resolved.get(portId)!;
+    const port = p.ports[portId];
+    if (!port) return "";
+    const f = feeder.get(portId);
+    let name = port.name;
+    if (f && !seen.has(portId)) { seen.add(portId); const up = nameOf(f, seen); if (up) name = up; }
+    resolved.set(portId, name);
+    return name;
+  };
+  let q: Project | null = null;
+  let renamed = 0;
+  for (const id of feeder.keys()) {
+    const want = nameOf(id);
+    if (want && p.ports[id].name !== want) {
+      if (!q) q = touch(p);
+      q.ports[id].name = want;
+      renamed++;
+    }
+  }
+  return { project: q ?? p, renamed };
+}
+
+/**
  * 入力の名前が供給元に固定されているか (外から本物の線 (自動でない) がつながっている入力。名前は供給元の出力名で決まる)
  * Input : p, portId
  * Output: true = 入力側では名前を変えられない

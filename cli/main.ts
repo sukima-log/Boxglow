@@ -17,6 +17,7 @@
  *   move <block> --parent <block|project>            箱を別の親の中へ移す (線は間の箱のポートを経由してつながったまま)
  *   port <block|project> [--in <名前>]... [--out <名前>]... [--rename <旧名>=<新名>]   既存の箱に入力 / 出力を足す、名前を変える (project = 最初のプロジェクトの箱)
  *   disconnect <題名.出力名> <題名.入力名>          線を外す
+ *   tidy                                              ファイルを規則にそろえて保存し直す (つないだ入力の名前を供給元に合わせる、大項目を畳む、重なりを解く)
  *   remove <block> [--force]                          箱を消す (中に箱があるときは --force。線も外れる。元に戻せないので Git で管理していること)
  *   serve [--port 4174] [--open]                      ローカルサーバ: 同梱の Web アプリを http://localhost:4174/?serve=1 で配信し、boxglow.json を読み書き (Firefox / Safari でも使える)
  *   mcp [--file <path>]                               MCP サーバ (標準入出力)。Claude Code などから status / start / done / ask ... をツールとして使う (.mcp.json は setup-agent が書く)
@@ -74,7 +75,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, isInputNameLocked } from "../src/model/graph";
+import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, isInputNameLocked, normalizeInputNames } from "../src/model/graph";
 import type { Artifact } from "../src/model/types";
 import { blockToPrompt } from "../src/model/export";
 import { blockReport, logReport, statusReport } from "../src/model/report";
@@ -171,7 +172,8 @@ function load(path: string): Project {
 function save(path: string, p: Project): void {
   // 画面と同じく、保存のたびに箱の重なりを解く (子が増えて親が大きくなったときに、下の箱を押し出す)
   // 大項目は常に畳んだ状態 (All の図は大項目までしか出さず、中はタブで見る。大きさもこの前提で計算する)
-  writeFileSync(path, toJSON(resolveAllOverlaps(normalizeCollapsed(p), (q, id) => blockSize(q, id))) + "\n", "utf8");
+  // つないだ入力の名前は供給元にそろえる (古いファイルの食い違いもここで直る)
+  writeFileSync(path, toJSON(resolveAllOverlaps(normalizeCollapsed(normalizeInputNames(p).project), (q, id) => blockSize(q, id))) + "\n", "utf8");
 }
 
 /** ブロックを探す (見つからなければ候補を示して終了) */
@@ -521,6 +523,12 @@ function main(argv: string[]): void {
       if (added.length === 0) throw new Error("--in <名前> / --out <名前> / --rename <旧名>=<新名> のいずれかを指定してください");
       save(path, p);
       out(`ポート: ${p.blocks[blockId]?.title ?? "project"}: ${added.join(", ")}`);
+      return;
+    }
+    case "tidy": {
+      const r = normalizeInputNames(p);
+      save(path, r.project);
+      out(`そろえました: 入力の名前 ${r.renamed} 件を供給元に合わせました`);
       return;
     }
     case "remove": {

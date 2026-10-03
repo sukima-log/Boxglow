@@ -6,7 +6,7 @@
  */
 import { useMemo } from "react";
 import { create } from "zustand";
-import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeCollapsed, resolveAllOverlaps, scopeFor, toJSON } from "../model/graph";
+import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeCollapsed, normalizeInputNames, resolveAllOverlaps, scopeFor, toJSON } from "../model/graph";
 export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile, writeLocalFile } from "../lib/localfile";
@@ -327,7 +327,7 @@ export const useProjectStore = create<State>((set, get) => {
       let next = fn(project);
       if (next === project) return;
       // 大項目は畳んだ状態でそろえる (All は大項目までしか出さない)。箱は重ねない: 変更のたびに同じ階層の重なりを押し出す (ドラッグ中は呼び出し側が history=false で呼ぶので除く)
-      next = normalizeCollapsed(next);
+      next = normalizeCollapsed(normalizeInputNames(next).project);
       if (opts?.history !== false) next = resolveAllOverlaps(next, blockSize);
       const history = opts?.history ?? true;
       set({

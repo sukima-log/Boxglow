@@ -66,6 +66,7 @@ import {
 , removePort
 , updateDecision
 , isInputNameLocked
+, normalizeInputNames
 } from "./graph";
 import { ROOT_ID, type Project } from "./types";
 
@@ -945,5 +946,25 @@ describe("つないだ入力の名前は供給元で決まる", () => {
     expect(p.ports[bIn.id].name).toBe("設計書");
     p = updatePort(p, aOut.id, { name: "設計書 v2" });
     expect(p.ports[bIn.id].name).toBe("設計書 v2");
+  });
+});
+
+describe("normalizeInputNames: 古い食い違いをそろえる", () => {
+  it("供給元と違う名前の入力を、供給元の名前 (さらに上流があればその名前) にそろえる", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const a = addBlock(p, { parentId: pj, title: "A", outputName: "CLI と手順" }); p = a.project;
+    const b = addBlock(p, { parentId: pj, title: "B", outputName: "成果" }); p = b.project;
+    p = addPort(p, { blockId: b.blockId, direction: "in", name: "CLI と手順" }).project;
+    const aOut = portsOf(p, a.blockId, "out")[0];
+    const bIn = portsOf(p, b.blockId, "in")[0];
+    p = connect(p, { portId: aOut.id, side: "outer" }, { portId: bIn.id, side: "outer" }).project;
+    // 規則が入る前のファイルを模して、入力の名前だけ食い違わせる
+    const broken = structuredClone(p);
+    broken.ports[bIn.id].name = "CLI と連携の仕組み";
+    const r = normalizeInputNames(broken);
+    expect(r.renamed).toBe(1);
+    expect(r.project.ports[bIn.id].name).toBe("CLI と手順");
+    expect(normalizeInputNames(r.project).renamed).toBe(0);
   });
 });
