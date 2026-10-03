@@ -101,6 +101,12 @@ export function statusReport(p: Project): string {
       if (decision.context) lines.push(`  判断材料: ${decision.context.replace(/\n/g, "\n  ")}`);
     }
   }
+  if (s.answered.length > 0) {
+    lines.push("", "## 回答あり (人が答えた判断。読んだら `boxglow ack <block>` で引き取る。その箱の start / done などでも引き取られる)");
+    for (const { block, decision } of s.answered) {
+      lines.push(`- ${block.key ?? ""} 「${block.title}」 ${decision.question} -> ${decision.answer} (${decision.answeredBy ?? ""}, decision: ${decision.id})`);
+    }
+  }
   if (s.overdue.length > 0) {
     lines.push("", "## 期日超過");
     for (const b of s.overdue) lines.push(`- ${b.key ?? ""} 「${b.title}」 期日 ${b.dueDate}`);

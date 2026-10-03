@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Answers stay visible until an agent picks them up: after you answer a question it no longer vanishes from the Activity list. It moves to an "Answered" section (and the top bar shows "回答済み N"), marked "not read by the AI yet" and still editable, until an agent acknowledges it with `npx boxglow ack <block>` (or records work on that box: `start`, `done`, `set`, `split`, `ask`, ...). `status` lists them under "回答あり"; MCP tool `boxglow_ack`. Answers an agent records itself are acknowledged immediately.
+
 ## 0.2.0 (2026-10-03)
 
 Highlights: tabs per major box with Inputs / Outputs, wires that never cross boxes (verified on random layouts), English UI, MCP server, `boxglow serve`, VS Code extension, Cloudflare Pages hosting, much faster editing and tab switching. Details:

@@ -2,7 +2,7 @@
  * タイムライン: 判断待ち・作業中・ログを時系列で見る (上の帯の要約チップから開く)
  */
 import { useState } from "react";
-import { answerDecision, editDecisionAnswer, summarize, candidatesOf, reopenDecision, ancestorsOf, kindOf, portsOf } from "../model/graph";
+import { answerDecision, editDecisionAnswer, summarize, candidatesOf, reopenDecision, ancestorsOf, kindOf, portsOf, isAcked } from "../model/graph";
 import { actorLabel, ACTIVITY_LABEL, agoText, shortTime } from "../model/report";
 import { ROOT_ID, type Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
@@ -48,7 +48,13 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
               </div>
             </div>
           ) : (
-            <div className="whitespace-pre-wrap">{t("選んだ:")} <b>{d.answer}</b> <span style={{ color: "var(--text-muted)" }}>({d.answeredBy})</span></div>
+            <>
+              <div className="whitespace-pre-wrap">{t("選んだ:")} <b>{d.answer}</b> <span style={{ color: "var(--text-muted)" }}>({d.answeredBy})</span></div>
+              {/* AI が読んだかどうか: 読まれるまでは橙の札で「未確認」。読まれたら誰がいつ引き取ったか */}
+              {isAcked(project, blockId, d)
+                ? (d.ackedAt && <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{t("AI 確認済み ({by}、{ago})", { by: actorLabel(d.ackedBy ?? ""), ago: agoText(d.ackedAt) })}</div>)
+                : <div className="text-[11px] font-bold" style={{ color: "var(--accent)" }}>{t("AI 未確認 (まだ読まれていません。編集できます)")}</div>}
+            </>
           )}
           {/* 選ばなかった候補も残す (方針転換のときに戻れるように) */}
           {candidatesOf(d).rejected.length > 0 && (
@@ -127,7 +133,7 @@ export function Timeline({ project }: { project: Project }) {
         <span className="label flex-1">Activity</span>
         <button className="btn btn-ghost btn-sm" onClick={() => select({})} title={t("閉じる (Esc)")}>×</button>
       </div>
-      <div className="text-[13px]">Done {s.white} / {s.total} · {t("作業中")} {s.working.length} · {t("判断待ち")} {s.decisions.length}{s.blocked.length > 0 ? ` · ${t("詰まり")} ${s.blocked.length}` : ""}</div>
+      <div className="text-[13px]">Done {s.white} / {s.total} · {t("作業中")} {s.working.length} · {t("判断待ち")} {s.decisions.length}{s.answered.length > 0 ? ` · ${t("回答済み")} ${s.answered.length}` : ""}{s.blocked.length > 0 ? ` · ${t("詰まり")} ${s.blocked.length}` : ""}</div>
 
       {s.decisions.length > 0 && (
         <section className="flex flex-col gap-2">
@@ -135,6 +141,19 @@ export function Timeline({ project }: { project: Project }) {
           {s.decisions.map(({ block, decision }) => (
             <div key={decision.id} className="flex flex-col gap-1">
               {/* どの箱の判断かを見出しで示す: B 番号・階層のパス・題名・箱へ飛ぶボタン */}
+              <BlockRef project={project} blockId={block.id} onJump={jump} />
+              <DecisionCard project={project} blockId={block.id} decisionId={decision.id} />
+            </div>
+          ))}
+        </section>
+      )}
+
+      {s.answered.length > 0 && (
+        <section className="flex flex-col gap-2">
+          {/* 答えた直後に一覧から消えると「どの箱の何に答えたか」を見失う。AI が引き取る (ack) までここに残し、編集もできる */}
+          <span className="label">{t("Answered (AI がまだ読んでいない回答。読まれるまでここに残ります)")}</span>
+          {s.answered.map(({ block, decision }) => (
+            <div key={decision.id} className="flex flex-col gap-1">
               <BlockRef project={project} blockId={block.id} onJump={jump} />
               <DecisionCard project={project} blockId={block.id} decisionId={decision.id} />
             </div>

@@ -21,7 +21,7 @@ boxglow.json はリポジトリ直下に置く (`npx boxglow init --name "<プ�
 4. **完了を記録**: 出力の成果物ができたら `npx boxglow done <block> --artifact "<名前>=<リポジトリ内のパス>"`。
    Git 管理下のパスは「コミット + パス + 中身のハッシュ」で記録される (アップロードはしない)。コミットしてから done する。PR や外部資料は URL でもよい。
    成果物だけ先に付けるなら `npx boxglow artifact <block> <パス>`。進捗の途中経過は `npx boxglow set <block> --progress 60`
-5. **人間の判断が要る**: `npx boxglow ask <block> "<質問>" --options "A|B"`。回答があるまでその箱は進めず、他の箱へ移る。回答は `status` の「判断待ち」が消えたら `show` で読む
+5. **人間の判断が要る**: `npx boxglow ask <block> "<質問>" --options "A|B"`。回答があるまでその箱は進めず、他の箱へ移る。人の回答は `status` の「回答あり」に出る。読んだら `npx boxglow ack <block>` で引き取る (その箱の `start` / `done` / `set` などでも自動で引き取られる)。引き取るまで人の画面には「AI 未確認」として残り、人が答えを直せる。回答の中に問い返しがあれば、`ask` と `answer --by <自分>` で自分の答えも記録する
 6. **詰まったら**: `npx boxglow blocked <block> --note "<困っていること>"`
 7. **成果物の確認**: ファイルを移動・改名したら `npx boxglow check` を実行する (移動を検出してパスを付け替える。見つからなければ印が付く)
 8. **報告**: 作業の最後に `npx boxglow status` の内容を要約して報告する

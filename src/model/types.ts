@@ -110,6 +110,9 @@ export interface Decision {
   askedAt: string;
   answeredBy?: string;
   answeredAt?: string;
+  /** 回答を AI (エージェント) が読んで引き取った記録。無ければ「回答済み・AI 未確認」として画面と status に残る */
+  ackedBy?: string;
+  ackedAt?: string;
   /** やり直す前の答え (方針転換の履歴)。選ばなかった候補は options に残る */
   history?: { answer: string; by: string; at: string; note?: string }[];
 }

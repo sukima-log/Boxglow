@@ -32,6 +32,7 @@
  *   ask <block> <質問> [--options "A|B"] [--context <判断材料>]   人間に判断を求める (判断待ちになる)。質問だけで判断できるよう、前提・比較・影響を --context に書く
  *   decision <block> --id <decision id> [--question] [--options "A|B"] [--context]   未回答の判断を書き直す
  *   answer <block> <回答> [--id <decision id>] [--by <名前>]   判断に答える (既定は最新の未回答)
+ *   ack <block> [--id <decision id>]                人の回答を読んで引き取ったと記録する (status の「回答あり」から消える。start / done / blocked / review / set / split / ask でも自動で引き取る)
  *   reopen <block> [--id <decision id>] [--note <理由>]   判断をやり直す (方針転換)。前の答えは履歴に、候補はそのまま残る
  *   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <題名>] [--note <説明>] [--category <カテゴリ>|none] [--repo <パス>|none] [--issue <URL>|none]
  *               [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <時間>|none] [--hours <実績時間>|none]
@@ -75,7 +76,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, isInputNameLocked, normalizeInputNames } from "../src/model/graph";
+import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, isInputNameLocked, normalizeInputNames, ackDecisions } from "../src/model/graph";
 import type { Artifact } from "../src/model/types";
 import { blockToPrompt } from "../src/model/export";
 import { blockReport, logReport, statusReport } from "../src/model/report";
@@ -483,6 +484,7 @@ function main(argv: string[]): void {
     }
     case "split": {
       const b = mustFind(p, rest[0]);
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
       const specText = str(options["spec-file"]) ? readFileSync(str(options["spec-file"])!, "utf8") : str(options.spec);
       if (!specText) throw new Error("--spec '<JSON>' または --spec-file <path> を指定してください");
       const spec = JSON.parse(specText);
@@ -589,30 +591,35 @@ function main(argv: string[]): void {
     }
     case "start": {
       const b = mustFind(p, rest[0]);
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
       save(path, setActivity(p, b.id, actor, "working", str(options.note) ?? ""));
       out(`開始: 「${b.title}」(${actor})`);
       return;
     }
     case "blocked": {
       const b = mustFind(p, rest[0]);
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
       save(path, setActivity(p, b.id, actor, "blocked", str(options.note) ?? ""));
       out(`詰まり: 「${b.title}」`);
       return;
     }
     case "review": {
       const b = mustFind(p, rest[0]);
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
       save(path, setActivity(p, b.id, actor, "waiting_review", str(options.note) ?? ""));
       out(`確認待ち: 「${b.title}」`);
       return;
     }
     case "leave": {
       const b = mustFind(p, rest[0]);
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
       save(path, clearActivity(p, b.id));
       out(`活動を消しました: 「${b.title}」`);
       return;
     }
     case "done": {
       const b = mustFind(p, rest[0]);
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
       const artifacts = list(options.artifact).map((s) => artifactFrom(s));
       const r = finishBlock(p, b.id, actor, { artifacts, outputName: str(options.output), note: str(options.note) });
       if (r.error) throw new Error(r.error);
@@ -624,6 +631,7 @@ function main(argv: string[]): void {
     }
     case "artifact": {
       const b = mustFind(p, rest[0]);
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
       if (!rest[1]) throw new Error("<URL またはパス> を指定してください");
       const a = artifactFrom(rest[1], str(options.title));
       const outs = portsOf(p, b.id, "out");
@@ -681,6 +689,7 @@ function main(argv: string[]): void {
     }
     case "ask": {
       const b = mustFind(p, rest[0]);
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
       const question = rest.slice(1).join(" ");
       if (!question) throw new Error("<質問> を指定してください");
       const opts = str(options.options) ? str(options.options)!.split("|").map((s) => s.trim()).filter(Boolean) : [];
@@ -703,6 +712,14 @@ function main(argv: string[]): void {
       out(`判断を書き直しました: 「${b.title}」 (decision: ${id})`);
       return;
     }
+    case "ack": {
+      const b = mustFind(p, rest[0]);
+      const q = ackDecisions(p, b.id, actor, str(options.id));
+      if (q === p) { out(`「${b.title}」に未確認の回答はありません`); return; }
+      save(path, q);
+      out(`回答を確認: 「${b.title}」`);
+      return;
+    }
     case "answer": {
       const b = mustFind(p, rest[0]);
       const answer = rest.slice(1).join(" ");
@@ -723,6 +740,7 @@ function main(argv: string[]): void {
     }
     case "set": {
       const b = mustFind(p, rest[0]);
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
       if (str(options.status)) p = setStatus(p, b.id, str(options.status) as "black" | "gray" | "white", actor);
       if (str(options.progress) !== undefined) p = setProgress(p, b.id, str(options.progress) === "auto" ? null : Number(str(options.progress)), actor);
       const sched: { startDate?: string | null; dueDate?: string | null; estimateHours?: number | null; actualHours?: number | null } = {};

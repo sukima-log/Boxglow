@@ -130,7 +130,9 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
         {busy > 0 && <span><span className="summary-chip__txt">{t("作業中")} </span>{busy}</span>}
         {sum.decisions.length > 0 && <span className="dot decision" />}
         {sum.decisions.length > 0 && <span><span className="summary-chip__txt">{t("判断待ち")} </span>{sum.decisions.length}</span>}
-        {busy === 0 && sum.decisions.length === 0 && <span>Activity</span>}
+        {/* 人が答えて AI がまだ読んでいない回答: 答えた直後に見失わないよう、引き取られるまで帯に出す */}
+        {sum.answered.length > 0 && <span><span className="summary-chip__txt">{t("回答済み")} </span>{sum.answered.length}</span>}
+        {busy === 0 && sum.decisions.length === 0 && sum.answered.length === 0 && <span>Activity</span>}
       </button>
       <div className="ml-auto flex items-center gap-1">
         {!readonly && (

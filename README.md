@@ -130,6 +130,8 @@ Expanded boxes (containers) are drawn as frames: the shallower the level, the th
 - Saving: the top bar always shows Saved / Unsaved / Saving and a Save button. Opening a local file asks for read access only; write access is requested on the first edit.
 - `boxglow validate` reports broken wiring as errors and "holes in the plan" (unconnected ports, Done boxes without deliverables) as warnings; `done` without `--artifact` warns.
 
+When a person answers a question an agent asked (`ask`), the answer stays listed as "Answered" (and editable) until an agent picks it up with `npx boxglow ack <block>` or by recording work on that box (`start`, `done`, `set`, ...). `status` lists such answers under "回答あり" so an agent never misses them.
+
 ## Example plan
 
 [examples/logic-daw/boxglow.json](examples/logic-daw/boxglow.json) is a mid-size plan for a browser DAW that borrows ideas from hardware logic design: a reference clock, dividers, counters and gates decide when sounds trigger. Open it in the web app (Home → "boxglow.json を開く") or run `BOXGLOW_FILE=examples/logic-daw/boxglow.json npx boxglow status` to see decisions, who is working where, and the next candidates.

@@ -81,4 +81,9 @@ export const parts: Record<string, string> = {
 , "出力: {outs}": "Output: {outs}"
 , "Next (未着手)": "Next (not started)"
 , "まだありません。CLI や画面の操作で記録されます。": "Nothing yet. Actions from the CLI or the UI are recorded here."
+  // 回答の引き取り (ack)
+, "Answered (AI がまだ読んでいない回答。読まれるまでここに残ります)": "Answered (not yet read by the AI; stays here until it is)"
+, "AI 確認済み ({by}、{ago})": "Read by the AI ({by}, {ago})"
+, "AI 未確認 (まだ読まれていません。編集できます)": "Not read by the AI yet (you can still edit)"
+, "回答済み": "Answered"
 };

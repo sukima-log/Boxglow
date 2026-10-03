@@ -1238,6 +1238,8 @@ export function answerDecision(p: Project, blockId: string, decisionId: string, 
   qd.answer = answer;
   qd.answeredBy = by;
   qd.answeredAt = now();
+  // AI が自分で答えた判断は、その場で「確認済み」。人の回答は AI が引き取る (ack) まで未確認のまま残す
+  if (isHumanActor(by)) { delete qd.ackedBy; delete qd.ackedAt; } else { qd.ackedBy = by; qd.ackedAt = qd.answeredAt; }
   if (q.blocks[blockId].activity?.state === "needs_decision") q.blocks[blockId].activity = null;
   appendLog(q, { actor: by, kind: "answered", blockId, message: `「${b.title}」の判断: ${d.question} → ${answer}` });
   return q;
@@ -1283,6 +1285,8 @@ export function reopenDecision(p: Project, blockId: string, decisionId: string, 
   const q = touch(p);
   const qd = q.blocks[blockId].decisions.find((x) => x.id === decisionId)!;
   qd.history = [...(qd.history ?? []), { answer: d.answer, by: d.answeredBy ?? "", at: d.answeredAt ?? now(), note: note || undefined }];
+  delete qd.ackedBy;
+  delete qd.ackedAt;
   delete qd.answer;
   delete qd.answeredBy;
   delete qd.answeredAt;
@@ -1298,6 +1302,53 @@ export function pendingDecisions(p: Project): { block: Block; decision: Decision
     for (const d of b.decisions) if (d.answer === undefined) out.push({ block: b, decision: d });
   }
   return out;
+}
+
+/** 人の名前か (human / human:<名前>)。それ以外は AI エージェント (claude-code / codex / agent など) とみなす */
+export const isHumanActor = (actor: string): boolean => actor === "human" || actor.startsWith("human:");
+
+/**
+ * 回答済みだが AI がまだ引き取っていない判断 (人が答えた直後に一覧から消えて見失わないように、ack されるまで出し続ける)
+ * Input : p
+ * Output: { block, decision } の配列 (回答の新しい順)
+ */
+export function answeredUnacked(p: Project): { block: Block; decision: Decision }[] {
+  const out: { block: Block; decision: Decision }[] = [];
+  for (const b of Object.values(p.blocks)) {
+    for (const d of b.decisions) if (d.answer !== undefined && !isAcked(p, b.id, d)) out.push({ block: b, decision: d });
+  }
+  return out.sort((a, b) => (b.decision.answeredAt ?? "").localeCompare(a.decision.answeredAt ?? ""));
+}
+
+/**
+ * 回答が AI に引き取られたとみなせるか: ack の記録があるか、回答の後にその箱で AI の記録 (ログ) があるか
+ * (この仕組みより前の回答も、AI が作業を記録していれば読まれている。古い回答が全部「未確認」に出ないように)
+ */
+export function isAcked(p: Project, blockId: string, d: Decision): boolean {
+  if (d.ackedAt) return true;
+  if (d.answer === undefined) return false;
+  if (d.answeredBy && !isHumanActor(d.answeredBy)) return true; // AI が自分で答えた判断は読まれている
+  const at = d.answeredAt ?? "";
+  return p.log.some((e) => e.blockId === blockId && e.at > at && !isHumanActor(e.actor) && e.kind !== "answered");
+}
+
+/**
+ * 回答を AI が引き取った記録を付ける (ack)。decisionId を省略すると、その箱の未確認の回答すべて
+ * Input : blockId, by = 引き取った AI の名前, decisionId
+ * Output: 付けた複製 (付ける物が無ければ p そのもの)
+ */
+export function ackDecisions(p: Project, blockId: string, by: string, decisionId?: string): Project {
+  const b = p.blocks[blockId];
+  if (!b || isHumanActor(by)) return p; // 引き取るのは AI だけ (人が CLI を使っても回答は未確認のまま)
+  const targets = b.decisions.filter((d) => d.answer !== undefined && !d.ackedAt && (!decisionId || d.id === decisionId));
+  if (targets.length === 0) return p;
+  const q = touch(p);
+  const at = now();
+  for (const d of q.blocks[blockId].decisions) {
+    if (targets.some((x) => x.id === d.id)) { d.ackedBy = by; d.ackedAt = at; }
+  }
+  appendLog(q, { actor: by, kind: "note", blockId, message: `「${b.title}」の回答を確認: ${targets.map((d) => d.question).join(" / ")}` });
+  return q;
 }
 
 /** 状態を手で変える (ログ付き) */
@@ -1318,6 +1369,8 @@ export interface Summary {
   working: { block: Block; actor: string; note: string; since: string }[];
   blocked: { block: Block; actor: string; note: string }[];
   decisions: { block: Block; decision: Decision }[];
+  /** 回答済みで AI が未確認の判断 (人が答えた後、AI が引き取るまで見える所に残す) */
+  answered: { block: Block; decision: Decision }[];
   /** 未着手で活動も無い black のブロック (次の候補) */
   next: Block[];
   /** 期日を過ぎた未完了の箱 */
@@ -1340,6 +1393,7 @@ export function summarize(p: Project): Summary {
   , working
   , blocked
   , decisions: pendingDecisions(p)
+  , answered: answeredUnacked(p)
   , next: leafBlack
   , overdue: blocks.filter((b) => isOverdue(b))
   };

@@ -75,4 +75,5 @@ export const app: Record<string, string> = {
 , "「{name}」を読み込みました": "Loaded \"{name}\""
 , "{name} (複製)": "{name} (copy)"
 , "自分のプロジェクトとして保存しました": "Saved as your own project"
+, "回答済み": "Answered"
 };
