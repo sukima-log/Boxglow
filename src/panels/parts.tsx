@@ -2,7 +2,7 @@
  * 詳細パネルで使う小さな部品: 成果物の一覧、ポートの一覧
  * ポートの行は「名前」と、その直下に「成果物 (リンク)」を主役として並べる。形式・制約は 1 行の補足。
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { addPort, createArtifact, inputGroupsOf, isInputNameLocked, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort } from "../model/graph";
 import type { Artifact, Project } from "../model/types";
 import { ROOT_ID } from "../model/types";
@@ -99,9 +99,9 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                 // 供給元のある入力: 名前は供給元の出力名で決まる (ここでは変えられない。変えるなら供給元の出力で)
                 <span className="input input-plain font-bold truncate" style={{ cursor: "default" }} title={`入力の名前は供給元 (${srcOwner ?? "?"}) の出力名です。変えるなら供給元の出力で`}>{q.name}</span>
               ) : (
-                <input className="input input-plain font-bold" value={q.name} disabled={readonly} title={q.promotedFrom ? "下の階層の未接続の入力 (自動)。元の入力をつなぐと消えます" : direction === "in" ? "まだ供給元の無い入力。つなぐと供給元の出力名になります" : undefined}
+                <DebouncedText className="input input-plain font-bold" value={q.name} disabled={readonly} title={q.promotedFrom ? "下の階層の未接続の入力 (自動)。元の入力をつなぐと消えます" : direction === "in" ? "まだ供給元の無い入力。つなぐと供給元の出力名になります" : undefined}
                   style={q.promotedFrom ? { fontStyle: "italic", opacity: 0.75 } : undefined}
-                  onChange={(e) => apply((p) => updatePort(p, q.id, { name: e.target.value }))} />
+                  onCommit={(v) => apply((p) => updatePort(p, q.id, { name: v }))} />
               )}
               {direction === "in" && !q.promotedFrom && !q.required && <span className="meta-chip muted" title="任意: 無くても着手できます">任意</span>}
               {groups.length > 0 && !readonly && (
@@ -133,8 +133,8 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                 {src ? (
                   <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>形式・制約は供給元「{src.name}」の出力で書きます{src.description ? `: ${src.description}` : ""}</div>
                 ) : (
-                  <input className="input" placeholder="形式・制約 (任意。例: Markdown、PNG 1920x1080、API は OpenAPI 3)" value={q.description} disabled={readonly}
-                    onChange={(e) => apply((p) => updatePort(p, q.id, { description: e.target.value }))} />
+                  <DebouncedText className="input" placeholder="形式・制約 (任意。例: Markdown、PNG 1920x1080、API は OpenAPI 3)" value={q.description} disabled={readonly}
+                    onCommit={(v) => apply((p) => updatePort(p, q.id, { description: v }))} />
                 )}
                 {direction === "in" && !q.promotedFrom && (
                   <div className="flex items-center gap-2 text-[12px]">
@@ -192,6 +192,44 @@ export function ResizeHandle({ side, width, min, max, onWidth, style }: { side: 
     el.addEventListener("pointercancel", up);
   };
   return <div className={`resize-handle ${side}`} data-active={active} style={style} onPointerDown={onPointerDown} title="ドラッグで幅を変える" />;
+}
+
+/**
+ * 文字の入力欄: 打っている間は手元の値だけを変え、手を止めてから (またはフォーカスを外したとき / Enter で) 反映する。
+ * 1 文字ごとに計画を更新すると図全体 (経路や重なりの解消) を作り直して重くなるため
+ * Input : value = 今の値, onCommit = 反映する関数, multiline = textarea にするか, delay = 待ち時間 (ms)。ほかは input/textarea にそのまま渡す
+ * Output: input または textarea
+ */
+export function DebouncedText({ value, onCommit, multiline = false, delay = 400, onKeyDown, ...rest }: {
+  value: string;
+  onCommit: (v: string) => void;
+  multiline?: boolean;
+  delay?: number;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement> & React.TextareaHTMLAttributes<HTMLTextAreaElement>, "value" | "onChange">) {
+  const [text, setText] = useState(value);
+  const focused = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest = useRef(value);
+  latest.current = value;
+  // 外から値が変わったとき (別の箱を選んだ、AI が書き換えた) は、打っている最中でなければ追従する
+  useEffect(() => { if (!focused.current) setText(value); }, [value]);
+  const commit = (v: string) => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } if (v !== latest.current) onCommit(v); };
+  const change = (v: string) => {
+    setText(v);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => { timer.current = null; if (v !== latest.current) onCommit(v); }, delay);
+  };
+  const common = {
+    value: text
+  , onFocus: () => { focused.current = true; }
+  , onBlur: () => { focused.current = false; commit(text); }
+  , onKeyDown: (e: React.KeyboardEvent<HTMLInputElement & HTMLTextAreaElement>) => {
+      if (!multiline && (e.key === "Enter" || e.key === "Escape")) { commit(text); (e.target as HTMLElement).blur(); }
+      onKeyDown?.(e);
+    }
+  };
+  if (multiline) return <textarea {...(rest as React.TextareaHTMLAttributes<HTMLTextAreaElement>)} {...common} onChange={(e) => change(e.target.value)} />;
+  return <input {...(rest as React.InputHTMLAttributes<HTMLInputElement>)} {...common} onChange={(e) => change(e.target.value)} />;
 }
 
 export function DateField({ value, onChange, disabled, danger }: { value: string; onChange: (v: string) => void; disabled?: boolean; danger?: boolean }) {

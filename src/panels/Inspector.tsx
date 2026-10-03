@@ -12,7 +12,7 @@ import { blockToPrompt } from "../model/export";
 import { ROOT_ID, type BlockStatus, type Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
 import { copyText, downloadText, pickTextFile, safeFilename } from "../lib/download";
-import { ArtifactsEditor, DateField, PortsEditor } from "./parts";
+import { ArtifactsEditor, DateField, DebouncedText, PortsEditor } from "./parts";
 import { GLYPH, MEMBER_COLORS } from "./Drawer";
 import { CATEGORIES } from "../model/categories";
 import { STATUS_HELP, STATUS_LABEL } from "../model/status";
@@ -50,8 +50,8 @@ function ProjectInspector({ project }: { project: Project }) {
       <PanelHead title="Project" />
       <input className="input font-head text-[16px]" value={project.name} disabled={readonly}
         onChange={(e) => apply((p) => ({ ...structuredClone(p), name: e.target.value }))} />
-      <textarea className="input" placeholder="ゴール (何を達成したいか)" value={project.description} disabled={readonly}
-        onChange={(e) => apply((p) => ({ ...structuredClone(p), description: e.target.value }))} />
+      <DebouncedText multiline className="input" placeholder="ゴール (何を達成したいか)" value={project.description} disabled={readonly}
+        onCommit={(v) => apply((p) => ({ ...structuredClone(p), description: v }))} />
       <div>
         <div className="progress-bar"><span style={{ width: `${Math.round(prog.ratio * 100)}%` }} /></div>
         <div className="text-[12px] mt-1" style={{ color: "var(--text-muted)" }}>完了 {prog.white} / {prog.total}</div>
@@ -204,9 +204,8 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         <button className="btn btn-ghost btn-sm" onClick={() => select({})} title="閉じる (Esc)">×</button>
       </div>
 
-      <input className="input font-head text-[16px]" value={b.title} disabled={readonly} placeholder="Title (何を作るか)"
-        onChange={(e) => apply((p) => updateBlock(p, blockId, { title: e.target.value }))}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === "Escape") (e.target as HTMLInputElement).blur(); }} />
+      <DebouncedText className="input font-head text-[16px]" value={b.title} disabled={readonly} placeholder="Title (何を作るか)"
+        onCommit={(v) => apply((p) => updateBlock(p, blockId, { title: v }))} />
 
       {/* タブ: 一度に 1 項目だけ見せる */}
       <div className="seg" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
@@ -410,8 +409,8 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           <button className="btn btn-ghost btn-sm" onClick={() => setMore(!more)}>{more ? "▴" : "▾"}</button></div>
         {more && (
           <div className="flex flex-col gap-2">
-            <textarea className="input" placeholder="メモ (入力から出力をどう作るか)" value={b.description} disabled={readonly}
-              onChange={(e) => apply((p) => updateBlock(p, blockId, { description: e.target.value }))} />
+            <DebouncedText multiline className="input" placeholder="メモ (入力から出力をどう作るか)" value={b.description} disabled={readonly}
+              onCommit={(v) => apply((p) => updateBlock(p, blockId, { description: v }))} />
             <ArtifactsEditor artifacts={b.artifacts} readonly={readonly} addLabel="Link" onChange={(next) => apply((p) => updateBlock(p, blockId, { artifacts: next }))} />
           </div>
         )}

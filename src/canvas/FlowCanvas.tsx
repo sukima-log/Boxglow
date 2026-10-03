@@ -130,28 +130,33 @@ export function FlowCanvas({ project, matcher }: Props) {
 
   // ノードの絶対位置・大きさ・ハンドルの位置 (変わったときだけ経路を計算し直すため、文字列にして比べる)
   const geometrySig = useStore(selectGeometry);
-  const edges = useMemo(() => {
+  // 線の「つながり」だけの署名 (どの端からどの端へ、見えているか)。名前・選択・ホバー・ラベルが変わっても経路は同じなので、
+  // 経路計算 (交差を減らす 2 回通しは重い) はこの署名と位置が変わったときだけ行う
+  const topoSig = useMemo(() => baseEdges.filter((e) => !e.hidden).map((e) => `${e.id}\t${e.source}\t${e.sourceHandle ?? ""}\t${e.target}\t${e.targetHandle ?? ""}`).join("\n"), [baseEdges]);
+  const paths = useMemo(() => {
     const { nodeRects, handles } = parseGeometry(geometrySig);
     const specs: EdgeSpec[] = [];
-    for (const e of baseEdges) {
-      if (e.hidden) continue;
-      const s = handles.get(`${e.source}|${e.sourceHandle ?? ""}`);
-      const t = handles.get(`${e.target}|${e.targetHandle ?? ""}`);
+    for (const line of topoSig.split("\n")) {
+      if (!line) continue;
+      const [id, source, sourceHandle, target, targetHandle] = line.split("\t");
+      const s = handles.get(`${source}|${sourceHandle}`);
+      const t = handles.get(`${target}|${targetHandle}`);
       if (!s || !t) continue;
-      specs.push({ id: e.id, source: e.source, target: e.target, s, t });
+      specs.push({ id, source, target, s, t });
     }
-    const paths = routeAll(nodeRects, specs);
-    return baseEdges.map((e) => {
-      const path = paths.get(e.id);
-      const hot = hovered && (e.source === hovered || e.target === hovered);
-      const hotClass = hot || (e.className ?? "").includes("edge-hot");
-      return {
-        ...e
-      , data: { ...(e.data ?? {}), path, hot: !!hotClass } // net (選んだ線とのつながり) を残す
-      , className: hot ? `${(e.className ?? "").replace("edge-dim", "")} edge-hot` : e.className
-      };
-    });
-  }, [baseEdges, geometrySig, hovered]);
+    return routeAll(nodeRects, specs);
+  }, [topoSig, geometrySig]);
+  // 見た目の飾り (選択・ホバー・ラベル) は経路を使い回して付け直すだけ (軽い)
+  const edges = useMemo(() => baseEdges.map((e) => {
+    const path = paths.get(e.id);
+    const hot = hovered && (e.source === hovered || e.target === hovered);
+    const hotClass = hot || (e.className ?? "").includes("edge-hot");
+    return {
+      ...e
+    , data: { ...(e.data ?? {}), path, hot: !!hotClass } // net (選んだ線とのつながり) を残す
+    , className: hot ? `${(e.className ?? "").replace("edge-dim", "")} edge-hot` : e.className
+    };
+  }), [baseEdges, paths, hovered]);
 
   /** 選択の変化を store に伝え、位置の変化は React Flow の状態に反映する */
   const onNodesChange = useCallback(
