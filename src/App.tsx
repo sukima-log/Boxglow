@@ -1,6 +1,7 @@
 /**
  * 画面全体: 上の帯 / キャンバス (+ 引き出し) / 詳細パネル (選んでいるときだけ) / 下の帯
  * URL の引数: ?demo=1 (小さなサンプル) ?demo=daw (公開用の例: Logic DAW の計画) &readonly=1 (閲覧のみ) &embed=1 (記事内の埋め込み: 帯とパネルを隠す)
+ *             ?serve=1 (npx boxglow serve が配信する手元の boxglow.json を API で開く)
  *             &theme=dark|light (表示モードの指定)
  *             ?view=article (= demo + embed + readonly。記事内の iframe 用)
  * 埋め込みで同じドメインの記事の中にいるときは、記事側 (親) の表示モード (html の data-theme) に追従する。
@@ -61,6 +62,7 @@ export function App() {
   const openSample = useProjectStore((s) => s.openSample);
   const openExample = useProjectStore((s) => s.openExample);
   const openProject = useProjectStore((s) => s.openProject);
+  const openFromServer = useProjectStore((s) => s.openFromServer);
 
   const viewScope = useProjectStore((s) => s.viewScope);
   const setViewScope = useProjectStore((s) => s.setViewScope);
@@ -101,12 +103,14 @@ export function App() {
       openExample(); // 記事の埋め込みと ?demo=daw は 3 階層の例
     } else if (params.get("demo") === "1") {
       openSample();
+    } else if (params.get("serve") === "1") {
+      void openFromServer(); // npx boxglow serve が配信する手元の boxglow.json
     } else {
       const m = window.location.hash.match(/p=([\w-]+)/);
       if (m) void openProject(m[1]);
     }
     return () => observer?.disconnect();
-  }, [setMode, openSample, openExample, openProject]);
+  }, [setMode, openSample, openExample, openProject, openFromServer]);
 
   // 通知は 3 秒で消す
   useEffect(() => {

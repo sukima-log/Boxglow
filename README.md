@@ -29,11 +29,13 @@ npx boxglow done "Build it" --artifact "app=src/App.tsx"                    # de
 
 Recommended flow for a new project: the agent reads the brief (README, request) and creates 3-7 top-level boxes with concrete outputs, asks the human to confirm the split (`ask`), and only then decomposes the box it starts (`split`). Decisions keep the candidates that were not chosen; `reopen` lets you change course later without losing the history.
 
-Then run `npx boxglow setup-agent` once: it appends the working agreement ([docs/AGENTS_SNIPPET.md](docs/AGENTS_SNIPPET.md)) to your `AGENTS.md` / `CLAUDE.md`, installs a Claude Code skill (`.claude/skills/boxglow`) and a SessionStart hook that runs `npx boxglow status`, so the agent reads the plan at the start of every session. Open `boxglow.json` in the web app (Chrome / Edge: "boxglow.json を開く"): the agent creates and decomposes boxes, records `start` / `done` / `ask` by itself, and the boxes change in front of you.
+Then run `npx boxglow setup-agent` once: it appends the working agreement ([docs/AGENTS_SNIPPET.md](docs/AGENTS_SNIPPET.md)) to your `AGENTS.md` / `CLAUDE.md`, installs a Claude Code skill (`.claude/skills/boxglow`), a SessionStart hook that runs `npx boxglow status`, and registers the MCP server in `.mcp.json` (`npx boxglow mcp`), so the agent reads the plan at the start of every session and can call `boxglow_status` / `boxglow_start` / `boxglow_done` / `boxglow_ask` ... as tools. Open `boxglow.json` in the web app (Chrome / Edge: "boxglow.json を開く"): the agent creates and decomposes boxes, records `start` / `done` / `ask` by itself, and the boxes change in front of you.
 
 | Command | What it does |
 |---|---|
-| `setup-agent` | One-time setup for AI agents: AGENTS.md / CLAUDE.md snippet, Claude Code skill, SessionStart hook |
+| `setup-agent` | One-time setup for AI agents: AGENTS.md / CLAUDE.md snippet, Claude Code skill, SessionStart hook, `.mcp.json` |
+| `mcp [--file path]` | MCP server over stdio: every command above as a tool (`boxglow_status`, `boxglow_add`, `boxglow_split`, `boxglow_start`, `boxglow_done`, `boxglow_ask`, `boxglow_answer`, ... and `boxglow_run` for the rest) |
+| `serve [--port 4174] [--open]` | Local server: the bundled web app at `http://localhost:4174/?serve=1` reading and writing your `boxglow.json` through a small API, with live reload when the CLI or an agent changes the file. Works in any browser (Firefox, Safari) |
 | `status` | Markdown summary: pending decisions, who is working where, tree with ids, next candidates |
 | `start <block> --note` / `done <block> --artifact name=url` | Record work in progress / completion with deliverables |
 | `split <block> --spec '<json>'` | Decompose a box into child boxes with named inputs / outputs and connections |
@@ -47,6 +49,20 @@ Then run `npx boxglow setup-agent` once: it appends the working agreement ([docs
 | `check` / `artifact` | Re-find deliverables after renames; attach a deliverable without finishing |
 | `merge <base> <ours> <theirs>` / `git-setup` | Box-level 3-way merge for Git (see below) |
 | `blocked`, `review`, `leave`, `show`, `log`, `layout`, `validate`, `prompt`, `group*` | See `npx boxglow help` |
+
+## Any browser: `npx boxglow serve`
+
+The web app opens a local `boxglow.json` directly only in Chrome / Edge (File System Access API). `npx boxglow serve` runs a small local server (127.0.0.1 only) that serves the bundled app and exposes the file as `GET/PUT /api/project` plus an SSE `/api/events` stream, so the page updates a moment after the CLI or an agent writes the file, and edits in the page are written back. Open `http://localhost:4174/?serve=1` (`--open` opens it for you).
+
+## MCP server
+
+`npx boxglow mcp` is a stdio MCP server exposing the CLI as tools (`boxglow_status`, `boxglow_show`, `boxglow_add`, `boxglow_split`, `boxglow_connect`, `boxglow_start`, `boxglow_done`, `boxglow_blocked`, `boxglow_ask`, `boxglow_answer`, `boxglow_set`, `boxglow_export`, `boxglow_validate`, `boxglow_run`, ...). `setup-agent` writes the registration into `.mcp.json`:
+
+```json
+{ "mcpServers": { "boxglow": { "command": "npx", "args": ["boxglow", "mcp"] } } }
+```
+
+The server finds `boxglow.json` like the CLI does (current directory upwards, or `--file` / `BOXGLOW_FILE`). The CLI and the MCP tools write the same file, so either can be used.
 
 ## Several repositories, one plan
 

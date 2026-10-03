@@ -42,7 +42,7 @@ interface State {
   /** サンプルなど、保存しないプロジェクトを開いているか */
   ephemeral: boolean;
   /** 保存先: ブラウザ内 (idb) か、ローカルファイル (file) か */
-  source: "idb" | "file";
+  source: "idb" | "file" | "serve";
   /** ローカルファイルの名前 (source = file のとき) */
   fileName: string | null;
   readonly: boolean;
@@ -90,6 +90,8 @@ interface State {
   openExample: () => void;
   /** ローカルの boxglow.json を開く (監視と書き戻しを始める) */
   openLocalFile: (handle: FileSystemFileHandle) => Promise<boolean>;
+  /** ローカルサーバ (npx boxglow serve) の boxglow.json を開く (API で読み書き。変更は SSE で受ける) */
+  openFromServer: () => Promise<boolean>;
   copyToMine: () => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
   closeProject: () => void;
@@ -131,6 +133,17 @@ function loadEditMode(_p: Project): boolean {
 let fileHandle: FileSystemFileHandle | null = null;
 let fileLastModified = 0;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
+/** ローカルサーバ連携の状態: 自分が最後に書いた中身 (サーバからの変更通知と区別する) と、通知の接続 */
+let serveLastText = "";
+let serveEvents: EventSource | null = null;
+/** サーバの API の場所 (アプリは相対パスで配信されるので、ページの場所から解く) */
+const serveApi = (path: string): string => new URL(path, document.baseURI).toString();
+/** サーバへ書く */
+async function writeToServer(text: string): Promise<void> {
+  serveLastText = text;
+  const r = await fetch(serveApi("api/project"), { method: "PUT", headers: { "content-type": "application/json" }, body: text });
+  if (!r.ok) throw new Error(`サーバに書けません (${r.status})`);
+}
 /** ファイルの監視間隔 (ms) */
 const WATCH_INTERVAL = 1500;
 
@@ -146,7 +159,10 @@ export const useProjectStore = create<State>((set, get) => {
       if (!p) return;
       set({ saveState: "saving" });
       try {
-        if (get().source === "file" && fileHandle) {
+        if (get().source === "serve") {
+          await writeToServer(toJSON(p) + "\n");
+          set({ saveState: "saved" });
+        } else if (get().source === "file" && fileHandle) {
           // 最初の保存のときに書き込み権限を求める (開くときは読み取りだけ)
           if (!(await ensurePermission(fileHandle, "readwrite"))) {
             set({ saveState: "unsaved", toast: "ファイルへの書き込みが許可されていません (Save を押すともう一度確認します)" });
@@ -172,6 +188,8 @@ export const useProjectStore = create<State>((set, get) => {
     if (watchTimer) clearInterval(watchTimer);
     watchTimer = null;
     fileHandle = null;
+    if (serveEvents) serveEvents.close();
+    serveEvents = null;
   };
 
   const rememberInUrl = (id: string | null) => {
@@ -211,7 +229,9 @@ export const useProjectStore = create<State>((set, get) => {
       void (async () => {
         set({ saveState: "saving" });
         try {
-          if (get().source === "file" && fileHandle) {
+          if (get().source === "serve") {
+            await writeToServer(toJSON(get().project!) + "\n");
+          } else if (get().source === "file" && fileHandle) {
             if (!(await ensurePermission(fileHandle, "readwrite"))) { set({ saveState: "unsaved", toast: "ファイルへの書き込みが許可されていません" }); return; }
             fileLastModified = await writeLocalFile(fileHandle, toJSON(get().project!) + "\n");
           } else {
@@ -370,6 +390,51 @@ export const useProjectStore = create<State>((set, get) => {
           /* 一時的に読めないときは次の周期で */
         }
       }, WATCH_INTERVAL);
+      return true;
+    }
+
+  , openFromServer: async () => {
+      let text: string;
+      let name = "boxglow.json";
+      try {
+        const r = await fetch(serveApi("api/project"), { cache: "no-store" });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        text = await r.text();
+        name = decodeURIComponent(r.headers.get("x-boxglow-file") ?? name);
+      } catch (e) {
+        set({ toast: `サーバから読めません (npx boxglow serve が動いていますか): ${String(e)}` });
+        return false;
+      }
+      let p: Project;
+      try {
+        p = fromJSON(text);
+      } catch (e) {
+        set({ toast: e instanceof Error ? e.message : String(e) });
+        return false;
+      }
+      stopWatching();
+      serveLastText = text;
+      set({ project: p, ephemeral: false, source: "serve", fileName: name, past: [], future: [], selection: NO_SELECTION, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+      rememberInUrl(null);
+      // サーバからの変更通知 (CLI や AI が書いたとき): 読み直す。自分の未保存の変更がある間は後回し
+      const reload = async () => {
+        if (saveTimer) { setTimeout(reload, SAVE_DELAY + 300); return; }
+        try {
+          const r = await fetch(serveApi("api/project"), { cache: "no-store" });
+          const t = await r.text();
+          if (t === serveLastText) return;
+          serveLastText = t;
+          const next = fromJSON(t);
+          const cur = get().project;
+          const sel = get().selection;
+          const keep = sel.blockId && next.blocks[sel.blockId] ? sel : sel.blockId ? NO_SELECTION : sel;
+          set({ project: next, past: cur ? [...get().past.slice(-HISTORY_LIMIT + 1), cur] : get().past, future: [], selection: keep, saveState: "saved" });
+        } catch {
+          /* 次の通知で */
+        }
+      };
+      serveEvents = new EventSource(serveApi("api/events"));
+      serveEvents.addEventListener("change", () => { void reload(); });
       return true;
     }
 

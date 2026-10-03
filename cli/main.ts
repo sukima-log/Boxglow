@@ -18,6 +18,8 @@
  *   port <block|project> [--in <名前>]... [--out <名前>]... [--rename <旧名>=<新名>]   既存の箱に入力 / 出力を足す、名前を変える (project = 最初のプロジェクトの箱)
  *   disconnect <題名.出力名> <題名.入力名>          線を外す
  *   remove <block> [--force]                          箱を消す (中に箱があるときは --force。線も外れる。元に戻せないので Git で管理していること)
+ *   serve [--port 4174] [--open]                      ローカルサーバ: 同梱の Web アプリを http://localhost:4174/?serve=1 で配信し、boxglow.json を読み書き (Firefox / Safari でも使える)
+ *   mcp [--file <path>]                               MCP サーバ (標準入出力)。Claude Code などから status / start / done / ask ... をツールとして使う (.mcp.json は setup-agent が書く)
  *   connect <題名.出力名> <題名.入力名>             結線 (親子は自動で内側の面を使う。最終成果物へは project.<出力名>。題名にドットがあってもよい)
  *   start <block> [--note <何をするか>]            作業開始 (作業中になる)
  *   done <block> [--artifact <題名>=<URL またはパス>]... [--output <出力名>] [--note]   完了 (成果物を付けて white)
@@ -49,6 +51,9 @@
  *       --actor <名前> (既定: 環境変数 BOXGLOW_ACTOR、Claude Code なら claude-code、それ以外は agent)
  * <block> は短い ID (B12)、内部 id、または題名 (完全一致、または 1 つに決まる部分一致)。status に ID が出る
  */
+import { fileURLToPath } from "node:url";
+import { startMcp } from "./mcp";
+import { startServe } from "./serve";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import AGENTS_SNIPPET from "../docs/AGENTS_SNIPPET.md";
 import SKILL_MD from "../.claude/skills/boxglow/SKILL.md";
@@ -210,11 +215,32 @@ function resolveRef(p: Project, ref: string): { blockId: string; portName: strin
   return { blockId: best.blockId, portName: best.portName };
 }
 
+/** 出力先 (既定は標準出力。MCP やテストでは文字列に集める) */
+let sink: (text: string) => void = (text) => process.stdout.write(text);
+const out = (text: string) => sink(text.endsWith("\n") ? text : text + "\n");
+
+/**
+ * CLI を関数として実行し、出力を文字列で返す (MCP サーバから使う。標準出力には何も書かない)
+ * Input : argv = コマンドと引数 (process.argv.slice(2) と同じ形)
+ * Output: 出力の文字列。失敗は例外
+ */
+export function runCli(argv: string[]): string {
+  const prev = sink;
+  let buf = "";
+  sink = (text) => { buf += text; };
+  try {
+    main(argv);
+    return buf;
+  } finally {
+    sink = prev;
+  }
+}
+
 function main(argv: string[]): void {
   const { positional, options } = parseArgs(argv);
   const [cmd, ...rest] = positional;
   if (!cmd || cmd === "help" || options.help) {
-    console.log(readFileSync(new URL(import.meta.url)).toString().match(/\/\*\*[\s\S]*?\*\//)?.[0].replace(/^\/\*\*|\*\/$/g, "").replace(/^ \* ?/gm, "") ?? "boxglow");
+    out(readFileSync(new URL(import.meta.url)).toString().match(/\/\*\*[\s\S]*?\*\//)?.[0].replace(/^\/\*\*|\*\/$/g, "").replace(/^ \* ?/gm, "") ?? "boxglow");
     return;
   }
   const actor = actorOf(str(options.actor));
@@ -224,13 +250,12 @@ function main(argv: string[]): void {
     if (existsSync(path) && !options.force) throw new Error(`${path} は既にあります (--force で上書き)`);
     const p = createProject(str(options.name) ?? "新しいプロジェクト");
     save(path, p);
-    console.log(`作成: ${path}`);
+    out(`作成: ${path}`);
     return;
   }
 
   const path = locateFile(str(options.file));
   let p = load(path);
-  const out = (text: string) => process.stdout.write(text.endsWith("\n") ? text : text + "\n");
 
   switch (cmd) {
     case "status": {
@@ -287,7 +312,17 @@ function main(argv: string[]): void {
         writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf8");
         done.push(".claude/settings.json (SessionStart: npx boxglow status)");
       }
-      out(`設定しました: ${done.join(", ")}\nAI は作業の始まり・終わり・判断待ちを boxglow.json に記録し、セッションの最初に計画を読みます。人は画面 (boxglow.json を開く) で見て判断してください`);
+      // MCP サーバの登録 (Claude Code はプロジェクトの .mcp.json を読む。他のサーバの設定は残す)
+      const mcpPath = join(root, ".mcp.json");
+      let mcp: { mcpServers?: Record<string, unknown> } = {};
+      if (existsSync(mcpPath)) { try { mcp = JSON.parse(readFileSync(mcpPath, "utf8")) as typeof mcp; } catch { mcp = {}; } }
+      mcp.mcpServers = mcp.mcpServers ?? {};
+      if (!mcp.mcpServers.boxglow) {
+        mcp.mcpServers.boxglow = { command: "npx", args: ["boxglow", "mcp"] };
+        writeFileSync(mcpPath, JSON.stringify(mcp, null, 2) + "\n", "utf8");
+        done.push(".mcp.json (MCP サーバ boxglow)");
+      }
+      out(`設定しました: ${done.join(", ")}\nAI は作業の始まり・終わり・判断待ちを boxglow.json に記録し、セッションの最初に計画を読みます。人は画面 (boxglow.json を開く、または npx boxglow serve) で見て判断してください`);
       return;
     }
     case "project": {
@@ -691,9 +726,28 @@ function main(argv: string[]): void {
   }
 }
 
-try {
-  main(process.argv.slice(2));
-} catch (e) {
-  console.error(`[boxglow] ${e instanceof Error ? e.message : String(e)}`);
-  process.exitCode = 1;
+// 入口: mcp と serve は常駐するので別扱い。それ以外は 1 回実行して終わる
+const argv = process.argv.slice(2);
+if (argv[0] === "mcp") {
+  // MCP サーバ (標準入出力)。--file で計画の場所を指定できる (無ければカレントから上へ探す)
+  const { options } = parseArgs(argv.slice(1));
+  if (str(options.file)) process.env.BOXGLOW_FILE = resolve(str(options.file)!);
+  startMcp(runCli).catch((e) => { console.error(`[boxglow mcp] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });
+} else if (argv[0] === "serve") {
+  // ローカルサーバ: 同梱の Web アプリを配信し、boxglow.json を API で読み書きする (どのブラウザでも開ける)
+  const { options } = parseArgs(argv.slice(1));
+  try {
+    const file = locateFile(str(options.file));
+    startServe({ file, port: Number(str(options.port) ?? 4174), dist: fileURLToPath(new URL("../dist/", import.meta.url)), open: !!options.open, log: out });
+  } catch (e) {
+    console.error(`[boxglow serve] ${e instanceof Error ? e.message : String(e)}`);
+    process.exitCode = 1;
+  }
+} else {
+  try {
+    main(argv);
+  } catch (e) {
+    console.error(`[boxglow] ${e instanceof Error ? e.message : String(e)}`);
+    process.exitCode = 1;
+  }
 }

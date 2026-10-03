@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `boxglow mcp`: MCP server (stdio) exposing the CLI as tools; `setup-agent` registers it in `.mcp.json`.
+- `boxglow serve`: local server for any browser (Firefox / Safari): bundled web app + `/api/project` read/write + SSE live reload (`?serve=1`).
+- The web build now uses relative asset paths, so the same `dist/` works when served from the npm package, the blog mirror and Cloudflare Pages.
 - Free / paid line written down (README "Free and paid", docs/MONETIZATION.md) and a waitlist for Boxglow Cloud at /waitlist/ (Cloudflare Pages Function + KV; stores the email only).
 - CLI: `boxglow remove <block> [--force]` deletes a box (with its children when forced); project boxes cannot be removed.
 - Arrowheads are drawn by Boxglow itself and follow the wire's colour in both themes (amber = not ready, green = ready, orange = selected); before, ready arrowheads stayed dark teal in dark mode and looked like a third state.
