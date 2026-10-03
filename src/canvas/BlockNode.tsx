@@ -100,26 +100,25 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   }, [view.status]);
 
   const toggleCollapsed = useProjectStore((s) => s.toggleCollapsed);
-  // 畳む / 展開: Edit なら保存、View なら画面だけ (ファイルに差分を出さない)
+  // ▸ で中を見る (その箱を開く) (ファイルに差分を出さない)
   const toggle = (ev: React.MouseEvent) => {
     ev.stopPropagation();
     toggleCollapsed(blockId);
   };
-  // ダブルクリックでも畳む / 展開 (大項目なら All からそのタブを開く)。箱の側で受ける (React Flow のノードのダブルクリックは View のとき届かない)
+  // ダブルクリックでも開く。箱の側で受ける (React Flow のノードのダブルクリックは View のとき届かない)
   const onDoubleClick = (ev: React.MouseEvent) => {
     ev.stopPropagation();
     if (view.kids > 0) toggleCollapsed(blockId);
   };
-  // All で大項目をクリックしたら、そのタブへ飛ぶ (選択はそのまま残るので、右のパネルにはその大項目が出る)。
-  // ドラッグ (Edit で並べ替え) のあとの click は飛ばさない: 押した位置から 4px 以上動いていたらドラッグとみなす
+  // 子のある箱をクリックしたら、その箱を開く (大項目ならタブ、その中の箱ならパンくずが 1 段深くなる)。選択は残るので、右のパネルにはその箱が出る。
+  // ドラッグ (Edit で並べ替え) のあとの click は開かない: 押した位置から 4px 以上動いていたらドラッグとみなす
   const pressAt = useRef<{ x: number; y: number } | null>(null);
   const onPointerDown = (ev: React.PointerEvent) => { pressAt.current = { x: ev.clientX, y: ev.clientY }; };
   const onClick = (ev: React.MouseEvent) => {
     const at = pressAt.current;
     pressAt.current = null;
     if (at && Math.hypot(ev.clientX - at.x, ev.clientY - at.y) > 4) return;
-    const s = useProjectStore.getState();
-    if (data.major && s.viewScope === null) s.setViewScope(blockId);
+    if (view.kids > 0) useProjectStore.getState().setViewScope(blockId);
   };
 
   const cls = [
@@ -146,9 +145,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         {!view.isProject && <StatusIcon status={view.status} />}
         <span className="bg-block__title" title={view.fromTemplate ? `${view.title} (部品: ${view.fromTemplate})` : view.title}>{view.title}</span>
         {view.kids > 0 && (
-          <button className="bg-block__toggle nodrag" onClick={toggle} title={data.major ? "この大項目のタブを開く (中の箱を見る)" : view.collapsed ? "下の階層を展開する" : "下の階層を畳む"}>
-            {view.collapsed ? "▸" : "▾"}
-          </button>
+          <button className="bg-block__toggle nodrag" onClick={toggle} title={`中の箱を見る (${view.kids} 個)`}>▸</button>
         )}
       </div>
       {/* 情報の行: 記号ではなく文字で (状態・担当・進捗・活動・期日・ID) */}

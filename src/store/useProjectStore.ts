@@ -6,7 +6,7 @@
  */
 import { useMemo } from "react";
 import { create } from "zustand";
-import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeMajors, resolveAllOverlaps, toJSON } from "../model/graph";
+import { createProject, defaultTaskParent, fromJSON, isInScope, normalizeCollapsed, resolveAllOverlaps, scopeFor, toJSON } from "../model/graph";
 export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile, writeLocalFile } from "../lib/localfile";
@@ -46,11 +46,9 @@ interface State {
   /** ローカルファイルの名前 (source = file のとき) */
   fileName: string | null;
   readonly: boolean;
-  /** View モードで畳んだ / 展開した箱 (画面だけの状態。ファイルには書かない)。id -> collapsed */
-  viewCollapsed: Record<string, boolean>;
-  /** 箱を畳む / 展開する。Edit なら共有の配置として保存、View なら画面だけ */
+  /** 箱を開く (中の箱を見る = その箱を表示範囲にする)。子の無い箱なら何もしない */
   toggleCollapsed: (blockId: string) => void;
-  /** キャンバスのタブで選んだ表示範囲 (大項目の箱の id)。null なら All (全体)。画面だけの状態で、プロジェクトごとにブラウザに記憶 */
+  /** 開いている箱 (表示範囲) の id。null なら All (大項目の一覧)。大項目でもその中の箱でもよい。画面だけの状態で、プロジェクトごとにブラウザに記憶 */
   viewScope: string | null;
   /** 表示範囲を切り替える (null = All)。範囲の外にある箱の選択は解除する */
   setViewScope: (blockId: string | null) => void;
@@ -72,7 +70,7 @@ interface State {
   setEditMode: (on: boolean) => void;
   /** キャンバスに「このブロックが見えるように寄せて」と頼む (追加直後など)。nonce で同じ id でも再度反応する */
   focus: { blockId: string; nonce: number } | null;
-  focusBlock: (blockId: string) => void;
+  focusBlock: (blockId: string, opts?: { scope?: boolean }) => void;
   saveState: "saved" | "saving" | "unsaved" | "none";
 
   /** 純粋関数で project を変更する。history=false なら履歴に積まない (ドラッグ中など) */
@@ -188,7 +186,6 @@ export const useProjectStore = create<State>((set, get) => {
   , source: "idb"
   , fileName: null
   , readonly: false
-  , viewCollapsed: {}
   , viewScope: null
   , setViewScope: (blockId) => {
       const { project, selection } = get();
@@ -228,25 +225,11 @@ export const useProjectStore = create<State>((set, get) => {
       })();
     }
   , toggleCollapsed: (blockId) => {
-      const { project, editMode, readonly, viewCollapsed, viewScope } = get();
+      // 画面はどの階層でも「開いている箱の直下」だけを出す。畳む / 展開の操作は、その箱を開く (中を見る) 操作
+      const { project } = get();
       if (!project || !project.blocks[blockId]) return;
-      // All の図では大項目は展開しない (中はタブで見る)。畳む / 展開の操作はその大項目のタブを開く操作にする
-      if (viewScope === null && majorOf(project, blockId) === blockId) { get().setViewScope(blockId); return; }
-      if (editMode && !readonly) {
-        // 共有の配置として保存する (他の人・AI にも同じ見え方になる)。画面だけの記録は消して、保存した値を見せる
-        const rest = { ...viewCollapsed };
-        delete rest[blockId];
-        set({ viewCollapsed: rest });
-        get().apply((p) => {
-          const q = structuredClone(p);
-          q.blocks[blockId].collapsed = !q.blocks[blockId].collapsed;
-          return q;
-        });
-        return;
-      }
-      // 見るだけ: 画面の中だけで切り替える (ファイルに差分を出さない)
-      const cur = viewCollapsed[blockId] ?? project.blocks[blockId].collapsed;
-      set({ viewCollapsed: { ...viewCollapsed, [blockId]: !cur } });
+      if (!Object.values(project.blocks).some((b) => b.parentId === blockId)) return; // 子が無ければ開く物が無い
+      get().setViewScope(blockId);
     }
   , embed: false
   , projects: []
@@ -256,7 +239,7 @@ export const useProjectStore = create<State>((set, get) => {
   , toast: null
   , meId: null
   , editMode: false
-  , setEditMode: (on) => set(on ? { editMode: true, viewCollapsed: {} } : { editMode: on }) // 記憶しない (開くたびに View から)。Edit に入るときは画面だけの畳みを捨てて共有の配置を見せる
+  , setEditMode: (on) => set({ editMode: on }) // 記憶しない (開くたびに View から)
   , setMe: (memberId) => {
       const p = get().project;
       if (p) {
@@ -270,12 +253,12 @@ export const useProjectStore = create<State>((set, get) => {
       set({ meId: memberId });
     }
   , focus: null
-  , focusBlock: (blockId) => {
-      // 箱が見えるタブに切り替えてから寄せる: 大項目の中の箱はその大項目のタブ、大項目そのものや上の階層は All
+  , focusBlock: (blockId, opts) => {
+      // 箱が見える画面に切り替えてから寄せる: 親の箱を開く (親がプロジェクトの箱や最上位なら All)。
+      // scope: false なら画面は変えない (キャンバスでクリックして選んだときは、クリック側が箱を開くのでここでは切り替えない)
       const { project, viewScope } = get();
-      if (project && project.blocks[blockId]) {
-        const major = majorOf(project, blockId);
-        const want = major && major !== blockId ? major : null;
+      if (opts?.scope !== false && project && project.blocks[blockId]) {
+        const want = scopeFor(project, blockId);
         if (want !== viewScope) get().setViewScope(want);
       }
       set({ focus: { blockId, nonce: Date.now() } });
@@ -287,8 +270,8 @@ export const useProjectStore = create<State>((set, get) => {
       if (!project || readonly) return;
       let next = fn(project);
       if (next === project) return;
-      // 大項目は畳んだ状態でそろえる (All は大項目までしか出さない)。箱は重ねない: 変更のたびに同じ階層の重なりを押し出す (ドラッグ中は呼び出し側が history=false で呼ぶので除く)
-      next = normalizeMajors(next);
+      // タスクの箱は畳んだ状態でそろえる (画面は開いている箱の直下だけ)。箱は重ねない: 変更のたびに同じ階層の重なりを押し出す (ドラッグ中は呼び出し側が history=false で呼ぶので除く)
+      next = normalizeCollapsed(next);
       if (opts?.history !== false) next = resolveAllOverlaps(next, blockSize);
       const history = opts?.history ?? true;
       set({
@@ -338,7 +321,7 @@ export const useProjectStore = create<State>((set, get) => {
 
   , openProjectObject: (p, ephemeral) => {
       stopWatching();
-      set({ project: p, ephemeral, source: "idb", fileName: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: ephemeral ? "none" : "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+      set({ project: p, ephemeral, source: "idb", fileName: null, past: [], future: [], selection: NO_SELECTION, viewScope: loadScope(p), saveState: ephemeral ? "none" : "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(ephemeral ? null : p.id);
     }
 
@@ -365,7 +348,7 @@ export const useProjectStore = create<State>((set, get) => {
       }
       stopWatching();
       fileHandle = handle;
-      set({ project: p, ephemeral: false, source: "file", fileName: handle.name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+      set({ project: p, ephemeral: false, source: "file", fileName: handle.name, past: [], future: [], selection: NO_SELECTION, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(null);
       // 監視: 外部 (CLI など) が書き換えたら読み直す (自分の書き込みは fileLastModified で区別)
       watchTimer = setInterval(async () => {
@@ -424,7 +407,7 @@ export const useProjectStore = create<State>((set, get) => {
 
   , closeProject: () => {
       stopWatching();
-      set({ project: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: null, saveState: "none", ephemeral: false, source: "idb", fileName: null });
+      set({ project: null, past: [], future: [], selection: NO_SELECTION, viewScope: null, saveState: "none", ephemeral: false, source: "idb", fileName: null });
       rememberInUrl(null);
     }
 
@@ -444,31 +427,17 @@ export function parentForNewBlock(project: Project, selection: Selection, scope:
   return defaultTaskParent(project);
 }
 
-/**
- * View モードで畳んだ / 展開した状態を重ねたプロジェクトを返す (描画用)
- * Input : project = ファイルの内容, viewCollapsed = 画面だけの状態
- * Output: collapsed だけ上書きした複製 (上書きが無ければ project そのもの)
- */
-export function withViewCollapsed(project: Project, viewCollapsed: Record<string, boolean>): Project {
-  const ids = Object.keys(viewCollapsed).filter((id) => project.blocks[id] && project.blocks[id].collapsed !== viewCollapsed[id]);
-  if (ids.length === 0) return project;
-  const blocks = { ...project.blocks };
-  for (const id of ids) blocks[id] = { ...blocks[id], collapsed: viewCollapsed[id] };
-  return { ...project, blocks };
-}
-
-/** 描画用のプロジェクト (View モードの畳む / 展開を反映したもの) を返すフック */
+/** 描画用のプロジェクト (開いている箱だけ展開し、ほかのタスクの箱は畳んだもの。画面だけで、ファイルは変えない) を返すフック */
 export function useShownProject(): Project | null {
   const project = useProjectStore((s) => s.project);
-  const viewCollapsed = useProjectStore((s) => s.viewCollapsed);
   const viewScope = useProjectStore((s) => s.viewScope);
   return useMemo(() => {
     if (!project) return null;
-    // All では大項目を必ず畳む (中はタブで見る)。タブで選んだ大項目は、畳まれていても必ず展開して中を見せる (どちらも画面だけ)
-    const shown = normalizeMajors(withViewCollapsed(project, viewCollapsed));
+    // どの階層でも「開いている箱の直下」だけを出す: タスクの箱は全部畳み、開いている箱だけ展開する
+    const shown = normalizeCollapsed(project);
     if (viewScope && shown.blocks[viewScope]?.collapsed) {
       return { ...shown, blocks: { ...shown.blocks, [viewScope]: { ...shown.blocks[viewScope], collapsed: false } } };
     }
     return shown;
-  }, [project, viewCollapsed, viewScope]);
+  }, [project, viewScope]);
 }

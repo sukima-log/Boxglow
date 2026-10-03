@@ -2,7 +2,7 @@
  * 上の帯: ☰ (引き出し)、ロゴ、プロジェクト名 (押すと設定)、追加、元に戻す、メニュー、表示モード
  */
 import { useEffect, useRef, useState } from "react";
-import { addBlock, addProjectBlock, normalizeMajors, searchBlocks, summarize, toJSON } from "../model/graph";
+import { addBlock, addProjectBlock, normalizeCollapsed, searchBlocks, summarize, toJSON } from "../model/graph";
 import { layoutAll } from "../model/autolayout";
 import { projectToMarkdown, scopeToMermaid } from "../model/export";
 import { ROOT_ID, type Project } from "../model/types";
@@ -169,7 +169,7 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
           <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setMenu(!menu); }} title="Menu">⋯</button>
           {menu && (
             <div className="card absolute right-0 mt-1 p-1 flex flex-col z-30" style={{ minWidth: 220 }}>
-              {!readonly && <button className="btn btn-ghost btn-sm justify-start" onClick={() => apply((p) => layoutAll(normalizeMajors(p)))} title="依存関係で並べ直す (大項目は畳んだ前提)">Auto Layout</button>}
+              {!readonly && <button className="btn btn-ghost btn-sm justify-start" onClick={() => apply((p) => layoutAll(normalizeCollapsed(p)))} title="依存関係で並べ直す (箱は畳んだ前提)">Auto Layout</button>}
               {!readonly && (
                 <button className="btn btn-ghost btn-sm justify-start" onClick={addProject} title="同じファイルにプロジェクトの箱を足す">New Project</button>
               )}

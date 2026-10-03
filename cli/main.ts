@@ -68,7 +68,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeMajors } from "../src/model/graph";
+import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed } from "../src/model/graph";
 import type { Artifact } from "../src/model/types";
 import { blockToPrompt } from "../src/model/export";
 import { blockReport, logReport, statusReport } from "../src/model/report";
@@ -165,7 +165,7 @@ function load(path: string): Project {
 function save(path: string, p: Project): void {
   // 画面と同じく、保存のたびに箱の重なりを解く (子が増えて親が大きくなったときに、下の箱を押し出す)
   // 大項目は常に畳んだ状態 (All の図は大項目までしか出さず、中はタブで見る。大きさもこの前提で計算する)
-  writeFileSync(path, toJSON(resolveAllOverlaps(normalizeMajors(p), (q, id) => blockSize(q, id))) + "\n", "utf8");
+  writeFileSync(path, toJSON(resolveAllOverlaps(normalizeCollapsed(p), (q, id) => blockSize(q, id))) + "\n", "utf8");
 }
 
 /** ブロックを探す (見つからなければ候補を示して終了) */
@@ -356,7 +356,7 @@ function main(argv: string[]): void {
     }
     case "layout": {
       // 大項目は畳んだ前提で並べる (All は大項目までしか出さない)
-      const q = rest[0] ? layoutScope(normalizeMajors(p), mustFind(p, rest[0]).id) : layoutAll(normalizeMajors(p));
+      const q = rest[0] ? layoutScope(normalizeCollapsed(p), mustFind(p, rest[0]).id) : layoutAll(normalizeCollapsed(p));
       save(path, q);
       out(rest[0] ? `整列: 「${mustFind(p, rest[0]).title}」の中` : "整列: 全体");
       return;

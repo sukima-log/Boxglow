@@ -130,7 +130,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -144,10 +144,10 @@
       "status": "white",
       "assigneeIds": [],
       "position": {
-        "x": 120,
-        "y": 574
+        "x": 645.7499999999999,
+        "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -164,7 +164,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -181,7 +181,7 @@
         "x": 634.1999999999999,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -198,7 +198,7 @@
         "x": 1166.5499999999997,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -215,7 +215,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": [
@@ -247,7 +247,7 @@
         "x": 766.1999999999998,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -264,7 +264,7 @@
         "x": 1488.2999999999997,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -281,7 +281,7 @@
         "x": 2141.0999999999995,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -298,7 +298,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -312,10 +312,10 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 120,
-        "y": 574
+        "x": 711.7499999999998,
+        "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": [],
@@ -330,10 +330,10 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 120,
-        "y": 1072
+        "x": 1336.4999999999995,
+        "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -347,10 +347,10 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 120,
-        "y": 1596
+        "x": 1951.3499999999995,
+        "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -367,7 +367,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -384,7 +384,7 @@
         "x": 662.2499999999998,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -401,7 +401,7 @@
         "x": 1250.6999999999996,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -418,7 +418,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -435,7 +435,7 @@
         "x": 790.9499999999997,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -452,7 +452,7 @@
         "x": 1447.0499999999993,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": {
         "actor": "claude-code",
@@ -474,7 +474,7 @@
         "x": 2119.6499999999987,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -491,7 +491,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -508,7 +508,7 @@
         "x": 733.1999999999998,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": {
         "actor": "claude-code",
@@ -541,7 +541,7 @@
         "x": 1410.7499999999995,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -558,7 +558,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -575,7 +575,7 @@
         "x": 804.1499999999997,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -592,7 +592,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -606,10 +606,10 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 120,
-        "y": 574
+        "x": 715.0499999999997,
+        "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -623,10 +623,10 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 120,
-        "y": 1072
+        "x": 1328.2499999999995,
+        "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -643,7 +643,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -660,7 +660,7 @@
         "x": 733.1999999999998,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -677,7 +677,7 @@
         "x": 1273.7999999999997,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -694,7 +694,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -711,7 +711,7 @@
         "x": 665.5499999999998,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -728,7 +728,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -745,7 +745,7 @@
         "x": 766.1999999999997,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -762,7 +762,7 @@
         "x": 1395.8999999999994,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -779,7 +779,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -793,10 +793,10 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 120,
-        "y": 574
+        "x": 685.3499999999998,
+        "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -813,7 +813,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -830,7 +830,7 @@
         "x": 647.3999999999999,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -847,7 +847,7 @@
         "x": 1176.4499999999998,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -864,7 +864,7 @@
         "x": 120,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -881,7 +881,7 @@
         "x": 576.4499999999998,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []
@@ -898,7 +898,7 @@
         "x": 966.8999999999997,
         "y": 76
       },
-      "collapsed": false,
+      "collapsed": true,
       "artifacts": [],
       "activity": null,
       "decisions": []

@@ -221,16 +221,47 @@ export function isInScope(p: Project, scope: string, blockId: string | null): bo
 }
 
 /**
- * 大項目の箱は常に畳んだ状態にそろえる (All の図は大項目までしか出さない前提で並べるため。大きさの計算もこの状態で行う)
+ * タスクの箱は常に畳んだ状態にそろえる。画面はどの階層でも「開いている箱の直下」だけを出し、中はその箱を開いて (タブ / パンくず) 見る。
+ * 並べるときの大きさの計算もこの状態で行う (プロジェクトの箱と最上位は展開のまま)
  * Input : p
- * Output: 大項目の collapsed を true にした複製 (変える物が無ければ p そのもの)
+ * Output: タスクの箱の collapsed を true にした複製 (変える物が無ければ p そのもの)
  */
-export function normalizeMajors(p: Project): Project {
-  const ids = majorBlocks(p).filter((b) => !b.collapsed).map((b) => b.id);
+export function normalizeCollapsed(p: Project): Project {
+  const ids = Object.values(p.blocks).filter((b) => b.id !== ROOT_ID && kindOf(b) !== "project" && !b.collapsed).map((b) => b.id);
   if (ids.length === 0) return p;
   const blocks = { ...p.blocks };
   for (const id of ids) blocks[id] = { ...blocks[id], collapsed: true };
   return { ...p, blocks };
+}
+
+/**
+ * 箱が見える画面 (開いておくべき箱)。親がタスクの箱ならその親、親がプロジェクトの箱か最上位なら All (null)
+ * Input : p, blockId
+ * Output: 開く箱の id または null (= All)
+ */
+export function scopeFor(p: Project, blockId: string): string | null {
+  const parent = p.blocks[blockId]?.parentId ?? null;
+  if (parent === null || parent === ROOT_ID) return null;
+  const pb = p.blocks[parent];
+  if (!pb || kindOf(pb) === "project") return null;
+  return parent;
+}
+
+/**
+ * 開いている箱から大項目までの道 (パンくず用)。大項目が先頭、開いている箱が末尾
+ * Input : p, scope = 開いている箱の id
+ * Output: 箱の配列 (scope が大項目なら 1 個)
+ */
+export function scopePath(p: Project, scope: string): Block[] {
+  const out: Block[] = [];
+  let cur: string | null = scope;
+  while (cur !== null && cur !== ROOT_ID) {
+    const b: Block | undefined = p.blocks[cur];
+    if (!b || kindOf(b) === "project") break;
+    out.unshift(b);
+    cur = b.parentId;
+  }
+  return out;
 }
 
 /** ブロックの種類 (省略時は task) */

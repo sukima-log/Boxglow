@@ -12,6 +12,7 @@ import { FlowCanvas } from "./canvas/FlowCanvas";
 import { addBlock, computeProgress, disconnect, removeBlock } from "./model/graph";
 import { ROOT_ID } from "./model/types";
 import { majorBlocks, parentForNewBlock, useProjectStore, useShownProject } from "./store/useProjectStore";
+import { scopePath } from "./model/graph";
 import { ResizeHandle } from "./panels/parts";
 
 /**
@@ -189,6 +190,9 @@ export function App() {
   const majors = useMemo(() => (project ? majorBlocks(project) : []), [project]);
   const showTabs = !!project && majors.length > 0; // 埋め込みでも出す (All は大項目までしか見せないので、中を見る手段が要る)
   const scopeOk = viewScope && project?.blocks[viewScope] ? viewScope : null;
+  // パンくず: 開いている箱から大項目までの道 (タブは大項目で選ぶ)
+  const path = useMemo(() => (project && scopeOk ? scopePath(project, scopeOk) : []), [project, scopeOk]);
+  const activeTab = path[0]?.id ?? null;
 
   return (
     <div className={gridClass} style={{ ["--right-w" as string]: `${rightW}px` }}>
@@ -206,17 +210,34 @@ export function App() {
           {project && drawerOpen && !embed && <Drawer project={shown ?? project} filter={filter} onFilter={setFilter} onClose={() => setDrawerOpen(false)} width={drawerW} />}
           {/* 引き出しの右辺のつまみ (引き出しは中が縦に伸びるので、外側 = 図の上に置く。left 8px + 幅) */}
           {project && drawerOpen && !embed && <ResizeHandle side="right" width={drawerW} min={DRAWER_W.min} max={DRAWER_W.max} onWidth={onDrawerW} style={{ left: 8 + drawerW - 5, top: 8, bottom: 8 }} />}
-          {project && !embed && !isFilterEmpty(filter) && (
-            <button className="chip absolute top-2 left-2 z-10" data-on="true" onClick={() => setFilter({ ...EMPTY_FILTER, statuses: new Set(EMPTY_FILTER.statuses) })} title="絞り込みを解除">Filtered ×</button>
+          {project && (path.length > 0 || (!embed && !isFilterEmpty(filter))) && (
+            <div className="scope-path" style={{ left: drawerOpen && !embed ? 8 + drawerW + 8 : 8 }}>
+              {path.length > 0 && (
+                <>
+                  <button className="scope-crumb" onClick={() => setViewScope(null)} title="大項目の一覧へ">All</button>
+                  {path.map((b, i) => (
+                    <span key={b.id} className="contents">
+                      <span className="scope-sep">›</span>
+                      {i === path.length - 1
+                        ? <span className="scope-crumb current" title={b.title}>{b.title}</span>
+                        : <button className="scope-crumb" onClick={() => setViewScope(b.id)} title={`${b.title} へ戻る`}>{b.title}</button>}
+                    </span>
+                  ))}
+                </>
+              )}
+              {!embed && !isFilterEmpty(filter) && (
+                <button className="chip" data-on="true" onClick={() => setFilter({ ...EMPTY_FILTER, statuses: new Set(EMPTY_FILTER.statuses) })} title="絞り込みを解除">Filtered ×</button>
+              )}
+            </div>
           )}
           {embed && (
             <a className="btn btn-accent absolute top-2 right-2 z-10" href={fullUrl} target="_blank" rel="noopener noreferrer">Open full ↗</a>
           )}
-          {embed && (
+          {embed && path.length === 0 && (
             <span className="absolute top-2 left-2 z-10 font-head text-[14px] px-2 py-1 rounded-lg" style={{ background: "var(--bg-card)", border: "2px solid var(--line)" }}>Boxglow</span>
           )}
         </div>
-        {showTabs && <TabBar project={project!} majors={majors} scope={scopeOk} onSelect={setViewScope} />}
+        {showTabs && <TabBar project={project!} majors={majors} scope={activeTab} onSelect={setViewScope} />}
         {!project && !embed && <HomeDialog />}
         {helpOpen && (
           <div className="modal-backdrop" onClick={() => setHelpOpen(false)}>

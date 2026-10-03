@@ -3,7 +3,7 @@
  */
 import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, useNodesState, useReactFlow, useStore, type ReactFlowState, type Connection, type Edge as RFEdge, type NodeChange, type OnConnectEnd, type OnNodeDrag } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { connect, connectToBlock, isHiddenByCollapse, majorBlocks, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, validateConnection } from "../model/graph";
+import { connect, connectToBlock, isHiddenByCollapse, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, validateConnection } from "../model/graph";
 import { blockSize, isExpanded } from "../model/size";
 import { ROOT_ID } from "../model/types";
 import { nextFreePosition } from "../model/autolayout";
@@ -166,8 +166,8 @@ export function FlowCanvas({ project, matcher }: Props) {
           // 大項目の入力/出力ノードを選んだら、その大項目の箱を選ぶ (右のパネルで入出力を直せる)
           else if (ch.id === SCOPE_IN || ch.id === SCOPE_OUT) { const sc = useProjectStore.getState().viewScope; if (sc) select({ blockId: sc }); }
           else select({ blockId: ch.id });
-          // 右の詳細パネルが開いてキャンバスが狭まり、選んだノードが隠れることがあるので、見えなければ寄せる
-          focusBlock(ch.id);
+          // 右の詳細パネルが開いてキャンバスが狭まり、選んだノードが隠れることがあるので、見えなければ寄せる (画面 = 開いている箱は変えない)
+          focusBlock(ch.id, { scope: false });
         }
       }
     }
@@ -192,11 +192,9 @@ export function FlowCanvas({ project, matcher }: Props) {
         for (const b of Object.values(project.blocks)) if (b.parentId === cur) { myDesc.add(b.id); stack.push(b.id); }
       }
       let best: { id: string; depth: number } | null = null;
-      // 落とせる箱: 展開中の箱、または All で畳まれている大項目 (中はタブで見る。落とすとその大項目の中の空いた場所に入る)
-      const majors = new Set(majorBlocks(project).map((b) => b.id));
+      // 落とせる箱: 見えている箱ならどれでも (畳まれた箱に落とすと、その中の空いた場所に入る)
       for (const b of Object.values(project.blocks)) {
-        if (b.id === ROOT_ID || b.id === nodeId || myDesc.has(b.id)) continue;
-        if (!isExpanded(project, b.id) && !(majors.has(b.id) && !isHiddenByCollapse(project, b.id))) continue;
+        if (b.id === ROOT_ID || b.id === nodeId || myDesc.has(b.id) || isHiddenByCollapse(project, b.id)) continue;
         const n = rf.getInternalNode(b.id);
         if (!n) continue;
         const x = n.internals.positionAbsolute.x;
