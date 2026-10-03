@@ -2,10 +2,10 @@
 
 ## Unreleased
 
-- Arrowheads are drawn by Boxglow itself and follow the wire's colour in both themes (purple = not ready, teal = ready, orange = selected); before, ready arrowheads stayed dark teal in dark mode and looked like a third state.
+- Arrowheads are drawn by Boxglow itself and follow the wire's colour in both themes (amber = not ready, green = ready, orange = selected); before, ready arrowheads stayed dark teal in dark mode and looked like a third state.
 - Answering a decision: the answer box is multi-line (Enter / Shift+Enter insert a line break), sent only with the Answer button or Ctrl+Enter, and an answered decision can be edited afterwards (Edit / Save) without losing the record.
 - Fewer wire crossings: routes are chosen with a penalty for crossing other wires (two passes), and wires sharing a channel are ordered by where they come from and go to (U-turns outermost, nested by span). Boxglow's own plan went from 426 to 185 crossings across its screens.
-- Wire colours: ready wires are thick teal, not-ready wires are thin purple, box borders stay neutral gray, so both "ready vs not" and "wire vs border" are visible even in a zoomed-in fragment.
+- Wire colours: ready wires are thick green, not-ready wires are thin amber (per-theme shades with at least 3.5:1 contrast), box borders stay neutral gray, so both "ready vs not" and "wire vs border" are visible even in a zoomed-in fragment.
 - Selecting a wire highlights only that wire and its continuation across box boundaries (upstream and downstream), not the sibling wires branching from the same port.
 - A wire never reaches a port by cutting through its own box from the far side (this happened when the return lane was at the port's height). Wires that go back to a box on the left no longer cut through a box sitting right below (or above) their start: the vertical channels of a backward wire are now chosen from all free gaps, not only right next to the ports.
 - Web app moved to Cloudflare Pages: https://boxglow.pages.dev/ (`npm run deploy:pages`). The blog mirror at sukimalog.com stays for a while.

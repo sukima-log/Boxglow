@@ -21,9 +21,11 @@
   --line-soft: #c9ced4;
   --primary: #0d8080;
   /* 線 (配線) の色。枠線 (--line) は無彩色。配線は色を持たせ、拡大して一部だけ見ても枠線と見分けがつくようにする。
-     確定した線 (供給元が出来ている) はティール (--primary) で太く、未確定の線は紫で細く。色と太さの両方で分ける */
-  --wire: #8a80d8;        /* 未確定の線 (細い、紫) */
-  --wire-halo: #8a80d8;
+     意味が直感で分かる色にする: 確定した線 (供給元が出来ている) = 緑で太く (OK・出来ている)、未確定の線 = 琥珀で細く (まだ・保留)。
+     テーマごとに背景とのコントラスト 3.5:1 以上 */
+  --wire: #a86f00;        /* 未確定の線 (細い、琥珀) */
+  --wire-halo: #a86f00;
+  --wire-ready: #1f8a3a;  /* 確定した線 (太い、緑) */
   --primary-strong: #006a6a;
   --primary-soft: #e3f1f0;
   --primary-soft-2: #cde6e4;
@@ -61,8 +63,9 @@
   --line: #4a5058;
   --line-soft: #3a4047;
   --primary: #3fb5b5;
-  --wire: #8a80d8;
-  --wire-halo: #8a80d8;
+  --wire: #e0b24a;
+  --wire-halo: #e0b24a;
+  --wire-ready: #52c26b;
   --primary-strong: #74d3d3;
   --primary-soft: #1f3536;
   --primary-soft-2: #24494a;
@@ -651,16 +654,16 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* 線は 2 種類だけ。未確定 = 細い薄い灰色、確定 (成果物あり) = 太いティール。
    遠目では色相より「太さ」と「明るさ」の差で見分けるので、太さ 2 倍・明度も離す */
 .react-flow__edge-path { stroke: var(--wire); stroke-width: 2px; opacity: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; }
-.react-flow__edge.edge-ready .react-flow__edge-path { stroke: var(--primary); stroke-width: 4px; }
-/* 矢印 (入力に入る線の先端): 線と同じ色の規則 (未確定 = 紫、確定 = ティール、選択 = 橙)。大きさは図の座標なので拡大縮小に追従する */
+.react-flow__edge.edge-ready .react-flow__edge-path { stroke: var(--wire-ready); stroke-width: 4px; }
+/* 矢印 (入力に入る線の先端): 線と同じ色の規則 (未確定 = 琥珀、確定 = 緑、選択 = 橙)。大きさは図の座標なので拡大縮小に追従する */
 .react-flow__edge-arrow { fill: var(--wire); stroke: none; pointer-events: none; }
-.react-flow__edge.edge-ready .react-flow__edge-arrow { fill: var(--primary); }
+.react-flow__edge.edge-ready .react-flow__edge-arrow { fill: var(--wire-ready); }
 .react-flow__edge.selected .react-flow__edge-arrow, .react-flow__edge.edge-net .react-flow__edge-arrow { fill: var(--accent); }
 .react-flow__edge.edge-dim .react-flow__edge-arrow { opacity: 0.45; }
 
 /* 選択・ホバー: 色は変えず、太さと縁取りだけ */
 .react-flow__edge-halo { fill: none; stroke: currentColor; stroke-opacity: 0.22; stroke-width: 12px; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; color: var(--wire-halo); }
-.react-flow__edge.edge-ready .react-flow__edge-halo { color: var(--primary); }
+.react-flow__edge.edge-ready .react-flow__edge-halo { color: var(--wire-ready); }
 .react-flow__edge.edge-hot .react-flow__edge-path,
 .react-flow__edge:hover .react-flow__edge-path { stroke-width: 5px; }
 /* 選んだ線: 一目で分かるように、アクセント色 (橙) の太い線 + 広い光 + 流れる破線。他の線は薄くなる
