@@ -286,8 +286,47 @@ export function createGitArtifact(title: string, git: { repo: string; path: stri
 /* 参照 (読み取り)                                                       */
 /* ------------------------------------------------------------------ */
 
+/**
+ * 参照の索引 (表示用): portsOf / childrenOf は毎回 Object.values を走査する (ポート 300 x 呼び出し数千で数百 ms)。
+ * Project を書き換えない処理 (画面の構築) の間だけ、withIndex で索引を作って引く。
+ * 索引は p.ports / p.blocks のオブジェクトの同一性で有効性を判定する (別の Project には使わない)。
+ * 注意: 索引が有効な間に p.blocks / p.ports の中身を書き換えてはいけない (childrenOf は false にして無効にできる)
+ */
+let index: { ports: Project["ports"]; portsByBlock: Map<string, Port[]>; blocks: Project["blocks"] | null; kidsByParent: Map<string, Block[]> } | null = null;
+
+/**
+ * fn の間だけ p の索引を使う
+ * Input : p = 参照する Project, fn = その間に行う処理, opts.children = false なら childrenOf は索引を使わない (箱を差し替える処理向け)
+ * Output: fn の戻り値
+ */
+export function withIndex<T>(p: Project, fn: () => T, opts: { children?: boolean } = {}): T {
+  const portsByBlock = new Map<string, Port[]>();
+  for (const q of Object.values(p.ports)) {
+    const list = portsByBlock.get(q.blockId) ?? [];
+    list.push(q);
+    portsByBlock.set(q.blockId, list);
+  }
+  const kidsByParent = new Map<string, Block[]>();
+  if (opts.children !== false) {
+    for (const b of Object.values(p.blocks)) {
+      if (b.parentId === null) continue;
+      const list = kidsByParent.get(b.parentId) ?? [];
+      list.push(b);
+      kidsByParent.set(b.parentId, list);
+    }
+  }
+  const prev = index;
+  index = { ports: p.ports, portsByBlock, blocks: opts.children !== false ? p.blocks : null, kidsByParent };
+  try {
+    return fn();
+  } finally {
+    index = prev;
+  }
+}
+
 /** ブロックの子ブロック一覧 */
 export function childrenOf(p: Project, blockId: string): Block[] {
+  if (index && index.blocks === p.blocks) return (index.kidsByParent.get(blockId) ?? []).slice();
   return Object.values(p.blocks).filter((b) => b.parentId === blockId);
 }
 
@@ -320,6 +359,10 @@ export function ancestorsOf(p: Project, blockId: string): Block[] {
 
 /** ブロックのポート一覧 (direction を指定すればその向きだけ) */
 export function portsOf(p: Project, blockId: string, direction?: "in" | "out"): Port[] {
+  if (index && index.ports === p.ports) {
+    const list = index.portsByBlock.get(blockId) ?? [];
+    return direction === undefined ? list.slice() : list.filter((q) => q.direction === direction);
+  }
   return Object.values(p.ports).filter((q) => q.blockId === blockId && (direction === undefined || q.direction === direction));
 }
 
@@ -1820,32 +1863,37 @@ export function connectToBlock(p: Project, from: Endpoint, targetBlockId: string
   return connect(q, from, { portId: target.id, side: "outer" });
 }
 
+/** 箱と箱の間に要る間隔: 線は箱の縁から 36px 離れるので、両側で 72px + 線 1 本分。8px 単位で 96px */
+const GAP = 96;
+
+type SizeOf = (p: Project, id: string) => { width: number; height: number };
+
 /**
- * ドラッグで離した箱が同じ階層の箱と重なっていたら、最小の移動で押し出す
- * Input : blockId, sizeOf = 箱の大きさを返す関数 (size.ts の blockSize),
- *         against = 避ける兄弟の id (省略時は同じ階層の全部。resolveAllOverlaps は「先に確定した箱」だけを渡し、
- *         後ろの箱は順に玉突きで動かす。全部を避けると、左右の箱に挟まれたとき右へ押す ↔ 左へ戻すの往復で終わらない)
- * Output: 位置を直した Project
+ * 1 つの箱を、重なっている兄弟から押し出す (q を直接書き換える。箱のオブジェクトは差し替える = 元の Project は壊さない)
+ * Input : q = blocks が浅くコピーされた Project, blockId, sizeOf, against = 避ける兄弟の id (省略時は全部),
+ *         siblings = 同じ階層の箱の id (childrenOf の走査を省くため呼び出し側で渡せる)
+ * Output: 動かしたら true
  */
-export function resolveOverlap(p: Project, blockId: string, sizeOf: (p: Project, id: string) => { width: number; height: number }, against?: Set<string>): Project {
-  const b = p.blocks[blockId];
-  if (!b || b.parentId === null) return p;
-  const q = clone(p);
-  // 箱と箱の間には線の通路が要る: 線は箱の縁から 36px 離れるので、両側で 72px + 線 1 本分。8px 単位で 96px
-  const GAP = 96;
+function pushOut(q: Project, blockId: string, sizeOf: SizeOf, against?: Set<string>, siblings?: string[]): boolean {
+  const b = q.blocks[blockId];
+  if (!b || b.parentId === null) return false;
+  const sibIds = siblings ?? childrenOf(q, b.parentId).map((s) => s.id);
   const me = sizeOf(q, blockId);
   // 確定済みの箱だけを避けるとき (全体の解消) は右か下にしか動かさない: 上や左へ戻すと、先に確定した別の箱に当たって
   // 「下へ押す ↔ 上へ戻す」の往復になり、重なったまま終わる。右・下だけなら単調に進むので必ず終わる (回数の上限も大きく取る)
   const forwardOnly = !!against;
+  let moved = false;
   for (let iter = 0; iter < (forwardOnly ? 64 : 8); iter++) {
     const cur = q.blocks[blockId];
-    const sib = childrenOf(q, cur.parentId!).find((s) => {
-      if (s.id === blockId) return false;
-      if (against && !against.has(s.id)) return false; // まだ確定していない (後で動かす) 箱は避けない
-      const sz = sizeOf(q, s.id);
-      return cur.position.x < s.position.x + sz.width + GAP && cur.position.x + me.width + GAP > s.position.x
-        && cur.position.y < s.position.y + sz.height + GAP && cur.position.y + me.height + GAP > s.position.y;
-    });
+    let sib: Block | undefined;
+    for (const id of sibIds) {
+      if (id === blockId) continue;
+      if (against && !against.has(id)) continue; // まだ確定していない (後で動かす) 箱は避けない
+      const s = q.blocks[id];
+      const sz = sizeOf(q, id);
+      if (cur.position.x < s.position.x + sz.width + GAP && cur.position.x + me.width + GAP > s.position.x
+        && cur.position.y < s.position.y + sz.height + GAP && cur.position.y + me.height + GAP > s.position.y) { sib = s; break; }
+    }
     if (!sib) break;
     const sz = sizeOf(q, sib.id);
     // 4 方向の押し出し量を比べ、一番小さいものを採る
@@ -1859,9 +1907,60 @@ export function resolveOverlap(p: Project, blockId: string, sizeOf: (p: Project,
     const ok = moves.filter((m) => !nested || (m.x >= CHILD_PADDING.left && m.y >= childTop(q, cur.parentId!)));
     const best = (ok.length > 0 ? ok : moves).sort((a, c) => a.d - c.d)[0];
     if (!best) break;
-    q.blocks[blockId].position = { x: best.x, y: best.y };
+    q.blocks[blockId] = { ...cur, position: { x: best.x, y: best.y } };
+    moved = true;
   }
-  return q;
+  return moved;
+}
+
+/**
+ * ドラッグで離した箱が同じ階層の箱と重なっていたら、最小の移動で押し出す
+ * Input : blockId, sizeOf = 箱の大きさを返す関数 (size.ts の blockSize),
+ *         against = 避ける兄弟の id (省略時は同じ階層の全部。resolveAllOverlaps は「先に確定した箱」だけを渡し、
+ *         後ろの箱は順に玉突きで動かす。全部を避けると、左右の箱に挟まれたとき右へ押す ↔ 左へ戻すの往復で終わらない)
+ * Output: 位置を直した Project (動かなければ元のまま)
+ */
+export function resolveOverlap(p: Project, blockId: string, sizeOf: SizeOf, against?: Set<string>): Project {
+  const q: Project = { ...p, blocks: { ...p.blocks } };
+  return pushOut(q, blockId, sizeOf, against) ? q : p;
+}
+
+/**
+ * すべての階層で、重なっている兄弟を押し出す (移動・幅の変化・追加のたびに呼ぶ。表示用の計画にも毎回掛ける)
+ * 位置が上 (左) の箱を優先して残し、後の箱を動かす。
+ * 各箱は「先に確定した箱」だけを避ける (玉突き): 1 つ目の箱が広がって 2 つ目を右へ押すと、3 つ目は押された 2 つ目を避けて右へ、と順に動く。
+ * (全部の兄弟を避けさせると、2 つ目が 1 つ目と 3 つ目に挟まれて右へ ↔ 左への往復になり、重なったまま終わることがある)
+ * 速さのために: Project は複製せず、動いた箱だけ差し替える。大きさは箱ごとに 1 回だけ見積もる (深い階層から順に処理するので、
+ * 開いた箱の大きさを見積もる時点で中の箱の位置は確定している)。何も動かなければ元の Project をそのまま返す
+ * Input : sizeOf = 箱の大きさを返す関数 (size.ts の blockSize)
+ * Output: 位置を直した Project
+ */
+export function resolveAllOverlaps(p: Project, sizeOf: SizeOf): Project {
+  const q: Project = { ...p, blocks: { ...p.blocks } };
+  // 親ごとの子の一覧 (1 回の走査で作る)
+  const kidsOf = new Map<string, string[]>();
+  for (const b of Object.values(q.blocks)) {
+    if (b.id === ROOT_ID || b.parentId === null) continue;
+    const list = kidsOf.get(b.parentId) ?? [];
+    list.push(b.id);
+    kidsOf.set(b.parentId, list);
+  }
+  // 深さ (根からの段数)。深い階層の親から処理する
+  const depthOf = (id: string): number => { let d = 0; let cur = q.blocks[id]?.parentId; while (cur) { d++; cur = q.blocks[cur]?.parentId; } return d; };
+  const parents = [...kidsOf.keys()].sort((a, b) => depthOf(b) - depthOf(a));
+  // 大きさは箱ごとに 1 回 (位置は大きさに効かない。開いた箱は中の箱の位置に効くが、中の階層を先に済ませてから見積もる)
+  const sizes = new Map<string, { width: number; height: number }>();
+  const cachedSize: SizeOf = (pp, id) => { let s = sizes.get(id); if (!s) { s = sizeOf(pp, id); sizes.set(id, s); } return s; };
+  let moved = false;
+  for (const parentId of parents) {
+    const kids = (kidsOf.get(parentId) ?? []).slice().sort((a, b) => q.blocks[a].position.y - q.blocks[b].position.y || q.blocks[a].position.x - q.blocks[b].position.x);
+    const settled = new Set<string>(kids.slice(0, 1));
+    for (let i = 1; i < kids.length; i++) {
+      if (pushOut(q, kids[i], cachedSize, settled, kids)) moved = true;
+      settled.add(kids[i]);
+    }
+  }
+  return moved ? q : p;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1947,28 +2046,6 @@ export function importInputGroup(p: Project, text: string): { project: Project; 
     q = setInputGroup(q, a.portId, r.groupId);
   }
   return { project: q, groupId: r.groupId };
-}
-
-/**
- * すべての階層で、重なっている兄弟を押し出す (移動・幅の変化・追加のたびに呼ぶ)
- * 位置が上 (左) の箱を優先して残し、後の箱を動かす。
- * 各箱は「先に確定した箱」だけを避ける (玉突き): 1 つ目の箱が広がって 2 つ目を右へ押すと、3 つ目は押された 2 つ目を避けて右へ、と順に動く。
- * (全部の兄弟を避けさせると、2 つ目が 1 つ目と 3 つ目に挟まれて右へ ↔ 左への往復になり、重なったまま終わることがある)
- * Input : sizeOf = 箱の大きさを返す関数 (size.ts の blockSize)
- * Output: 位置を直した Project
- */
-export function resolveAllOverlaps(p: Project, sizeOf: (p: Project, id: string) => { width: number; height: number }): Project {
-  let q = p;
-  const parents = new Set(Object.values(p.blocks).filter((b) => b.id !== ROOT_ID).map((b) => b.parentId!));
-  for (const parentId of parents) {
-    const kids = childrenOf(q, parentId).sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
-    const settled = new Set<string>([kids[0]?.id].filter((x): x is string => !!x));
-    for (let i = 1; i < kids.length; i++) {
-      q = resolveOverlap(q, kids[i].id, sizeOf, settled);
-      settled.add(kids[i].id);
-    }
-  }
-  return q;
 }
 
 /**

@@ -2,7 +2,7 @@
  * 同じ階層の線をまとめて経路計算し、縦の通路が重なる線を横にずらす (純粋関数)
  * 1 本ずつ別々に計算すると同じ通路に重なるため、全部の経路が決まってから重なりを解く。
  */
-import { marginOf, wallsOf, routeEdge, SQUEEZE_MARGIN, type Point, type Rect } from "./routeEdge";
+import { marginOf, wallsOf, rankRoutes, chooseRoute, SQUEEZE_MARGIN, type Point, type Rect, type RankedRoute } from "./routeEdge";
 
 export interface NodeRect {
   id: string;
@@ -68,13 +68,17 @@ export function routeAll(nodes: NodeRect[], edges: EdgeSpec[]): Map<string, Poin
     }
     return out;
   };
+  // 候補の基本の評価 (箱・壁) は線ごとに 1 回だけ (2 回通しの両方で使い回す。候補 x 箱の総当たりが一番重い)
+  const ranked = new Map<string, RankedRoute[]>();
+  for (const e of edges) {
+    const st = setup.get(e.id)!;
+    ranked.set(e.id, rankRoutes(e.s, e.t, st.obstacles, 0, st.ends, st.bounds));
+  }
   // 1 回目: 先に決まった線との交差を避けながら順に決める。2 回目: 全部の線が決まった状態で、それぞれを選び直す
   // (後から決まった線に横切られた線が、別の通路に逃げられる)
   for (let pass = 0; pass < 2; pass++) {
     for (const e of edges) {
-      const st = setup.get(e.id)!;
-      const others = othersOf(e);
-      paths.set(e.id, routeEdge(e.s, e.t, st.obstacles, 0, st.ends, st.bounds, others));
+      paths.set(e.id, chooseRoute(ranked.get(e.id)!, othersOf(e)));
     }
   }
   // 広げた結果、束に入っていなかった別の線の真上に乗ることがあるので、数回繰り返して収束させる

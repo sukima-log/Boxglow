@@ -3,7 +3,7 @@
  */
 import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, useNodesState, useReactFlow, useStore, type ReactFlowState, type Connection, type Edge as RFEdge, type NodeChange, type OnConnectEnd, type OnNodeDrag } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { connect, connectToBlock, isHiddenByCollapse, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, validateConnection } from "../model/graph";
+import { connect, connectToBlock, isHiddenByCollapse, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, validateConnection, withIndex } from "../model/graph";
 import { blockSize, isExpanded } from "../model/size";
 import { ROOT_ID } from "../model/types";
 import { nextFreePosition } from "../model/autolayout";
@@ -100,7 +100,7 @@ export function FlowCanvas({ project, matcher }: Props) {
   // ノードはドラッグ中の見た目のために React Flow 側の状態を持ち、project が変わるたびに作り直す
   const [nodes, setNodes, onNodesChangeRaw] = useNodesState<AnyRFNode>([]);
   useEffect(() => {
-    setNodes(buildNodes(project, { selectedBlockId: selection.blockId, readonly: !canEdit, matcher: matcher ?? undefined, meId, scope: viewScope }));
+    setNodes(withIndex(project, () => buildNodes(project, { selectedBlockId: selection.blockId, readonly: !canEdit, matcher: matcher ?? undefined, meId, scope: viewScope })));
   }, [project, selection.blockId, canEdit, matcher, meId, viewScope, setNodes]);
   useEffect(() => {
     setNodes((ns) => ns.map((n) => (n.type === "block" ? { ...n, data: { ...n.data, dropTarget: n.id === dropTarget } } : n)));
@@ -120,13 +120,13 @@ export function FlowCanvas({ project, matcher }: Props) {
     const ready = rf.getNodes().every((n) => n.hidden || (n.measured?.width ?? 0) > 0);
     if (!ready) return;
     pendingFit.current = false;
-    const t = setTimeout(() => void rf.fitView({ ...FIT_OPTIONS, duration: 250 }), 30);
+    const t = setTimeout(() => void rf.fitView({ ...FIT_OPTIONS, duration: 150 }), 30); // 動きは短め (タブの行き来を軽快に)
     return () => clearTimeout(t);
   }, [nodes, rf]);
 
   // 箱にマウスを乗せたら、つながる線を強調する
   const [hovered, setHovered] = useState<string | null>(null);
-  const baseEdges = useMemo(() => buildEdges(project, { selectedEdgeId: selection.edgeId, selectedBlockId: selection.blockId, scope: viewScope }), [project, selection.edgeId, selection.blockId, viewScope]);
+  const baseEdges = useMemo(() => withIndex(project, () => buildEdges(project, { selectedEdgeId: selection.edgeId, selectedBlockId: selection.blockId, scope: viewScope })), [project, selection.edgeId, selection.blockId, viewScope]);
 
   // ノードの絶対位置・大きさ・ハンドルの位置 (変わったときだけ経路を計算し直すため、文字列にして比べる)
   const geometrySig = useStore(selectGeometry);

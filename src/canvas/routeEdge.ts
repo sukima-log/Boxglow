@@ -72,12 +72,6 @@ function wireCrossings(path: Point[], others: Point[][]): number {
   return n;
 }
 
-/** 線分が矩形から余白 (箱は MARGIN、壁は WALL_MARGIN) 以内を通るか */
-function segmentNear(a: Point, b: Point, r: Rect): boolean {
-  const m = marginOf(r);
-  return segmentHits(a, b, { x: r.x - m + 1, y: r.y - m + 1, width: r.width + 2 * m - 2, height: r.height + 2 * m - 2 });
-}
-
 /** 親の箱の題名の行の高さ (子はこの下に置かれる。線もこの下を通る) */
 export const HEADER_ZONE = 76;
 
@@ -92,49 +86,62 @@ export function wallsOf(bounds: Rect): Rect[] {
   ];
 }
 
-/** 線分 (水平または垂直) が矩形の内側を通るか */
-function segmentHits(a: Point, b: Point, r: Rect): boolean {
-  const x0 = Math.min(a.x, b.x);
-  const x1 = Math.max(a.x, b.x);
-  const y0 = Math.min(a.y, b.y);
-  const y1 = Math.max(a.y, b.y);
-  // 矩形を少し縮めて、縁をかすめるだけなら交差とみなさない
-  const rx0 = r.x + 1;
-  const ry0 = r.y + 1;
-  const rx1 = r.x + r.width - 1;
-  const ry1 = r.y + r.height - 1;
-  return x1 >= rx0 && x0 <= rx1 && y1 >= ry0 && y0 <= ry1;
+/** 前計算した矩形の境界 (線分との判定を数値の比較だけにする) */
+interface Bounds4 { x0: number; y0: number; x1: number; y1: number }
+/** 線分 (水平または垂直) が前計算した境界の内側を通るか */
+const hits = (ax: number, ay: number, bx: number, by: number, r: Bounds4): boolean => {
+  const x0 = ax < bx ? ax : bx;
+  const x1 = ax < bx ? bx : ax;
+  const y0 = ay < by ? ay : by;
+  const y1 = ay < by ? by : ay;
+  return x1 >= r.x0 && x0 <= r.x1 && y1 >= r.y0 && y0 <= r.y1;
+};
+/** 矩形の内側 (縁をかすめるだけは数えない) */
+const innerOf = (r: Rect): Bounds4 => ({ x0: r.x + 1, y0: r.y + 1, x1: r.x + r.width - 1, y1: r.y + r.height - 1 });
+/** 矩形の余白込み (箱は MARGIN、壁は WALL_MARGIN) */
+const nearOf = (r: Rect): Bounds4 => { const m = marginOf(r); return { x0: r.x - m + 2, y0: r.y - m + 2, x1: r.x + r.width + m - 2, y1: r.y + r.height + m - 2 }; };
+/** 自分の箱の縁から END_INSET 内側 */
+const insetOf = (r: Rect): Bounds4 => ({ x0: r.x + END_INSET + 1, y0: r.y + END_INSET + 1, x1: r.x + r.width - END_INSET - 1, y1: r.y + r.height - END_INSET - 1 });
+
+/** 評価に使う矩形一式 (rankRoutes が 1 回だけ作り、全候補で使い回す) */
+interface CostSetup {
+  obstacles: { inner: Bounds4; near: Bounds4 }[];
+  mids: { inner: Bounds4; near: Bounds4 }[]; // 途中の線分だけが避ける: 自分の箱 + 親の壁
+  endInsets: Bounds4[]; // 出入りの線分が「反対側から貫く」判定
+}
+function costSetup(obstacles: Rect[], ends: Rect[], walls: Rect[]): CostSetup {
+  const pre = (r: Rect) => ({ inner: innerOf(r), near: nearOf(r) });
+  return { obstacles: obstacles.map(pre), mids: [...ends, ...walls].map(pre), endInsets: ends.map(insetOf) };
 }
 
 /**
  * 経路の評価 (小さいほど良い)
- * Input : path, obstacles = 避ける箱, ends = 出す側・受ける側の箱 (最初と最後の線分以外では避ける), walls = 親の箱の縁 (最初と最後の線分以外では近づかない)
+ * Input : path, st = costSetup で前計算した矩形 (obstacles = 避ける箱, mids = 出す側・受ける側の箱と親の縁 (最初と最後の線分以外では避ける))
  * Output: 長さ + 貫く回数 * CROSS_PENALTY + 近づく回数 * NEAR_PENALTY + 曲がり * BEND_PENALTY
  */
-function cost(path: Point[], obstacles: Rect[], ends: Rect[] = [], walls: Rect[] = []): number {
+function cost(path: Point[], st: CostSetup): number {
   let len = 0;
   let crosses = 0;
   let nears = 0;
-  for (let i = 1; i < path.length; i++) {
+  const last = path.length - 1;
+  for (let i = 1; i <= last; i++) {
     const a = path[i - 1];
     const b = path[i];
     len += Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
-    for (const o of obstacles) {
-      if (segmentHits(a, b, o)) crosses++;
-      else if (segmentNear(a, b, o)) nears++; // 貫かなくても、縁をかすめるのは避ける
+    for (const o of st.obstacles) {
+      if (hits(a.x, a.y, b.x, b.y, o.inner)) crosses++;
+      else if (hits(a.x, a.y, b.x, b.y, o.near)) nears++; // 貫かなくても、縁をかすめるのは避ける
     }
     // 途中の線分が自分の箱 (出す側・受ける側) や親の縁の近くを通るのも避ける (出入りの線分は箱に接するので除く)
-    if (i > 1 && i < path.length - 1) {
-      for (const o of [...ends, ...walls]) {
-        if (segmentHits(a, b, o)) crosses++;
-        else if (segmentNear(a, b, o)) nears++;
+    if (i > 1 && i < last) {
+      for (const o of st.mids) {
+        if (hits(a.x, a.y, b.x, b.y, o.inner)) crosses++;
+        else if (hits(a.x, a.y, b.x, b.y, o.near)) nears++;
       }
     } else {
       // 出入りの線分も、自分の箱を「反対側から貫いて」ポートに届くのは禁止 (横の通路がポートと同じ高さになると、
       // 縦の線分が消えて、出入りの線分が箱の上を横切る形になる)。ポートは縁の上にあるので、縁から少し内側を貫くときだけ数える
-      for (const o of ends) {
-        if (segmentHits(a, b, { x: o.x + END_INSET, y: o.y + END_INSET, width: o.width - 2 * END_INSET, height: o.height - 2 * END_INSET })) crosses++;
-      }
+      for (const o of st.endInsets) if (hits(a.x, a.y, b.x, b.y, o)) crosses++;
     }
   }
   return len + crosses * CROSS_PENALTY + nears * NEAR_PENALTY + (path.length - 2) * BEND_PENALTY;
@@ -181,7 +188,18 @@ function freeCenters(lo: number, hi: number, intervals: [number, number][]): num
  * Input : s = 出す側のハンドル位置, t = 受ける側のハンドル位置, obstacles = 避ける箱, lane = 同じ箱に集まる線をずらす量 (px)
  * Output: 折れ線の頂点 (s から t まで)
  */
-export function routeEdge(s: Point, t: Point, obstacles: Rect[], lane = 0, ends: Rect[] = [], bounds: Rect | null = null, others: Point[][] = []): Point[] {
+/** 基本の評価 (箱・壁・親の外) で並べた候補。交差の評価 (routeAll の 2 回通し) で使い回す */
+export interface RankedRoute {
+  path: Point[];
+  base: number;
+}
+
+/**
+ * 経路の候補を作り、基本の評価 (ほかの線との交差を除く) が安い順に並べる
+ * Input : routeEdge と同じ (others を除く)
+ * Output: 候補 (同じ折れ線は 1 つにまとめる)。routeAll は 1 本につき 1 回だけこれを呼び、交差の評価は chooseRoute で何度でも行う
+ */
+export function rankRoutes(s: Point, t: Point, obstacles: Rect[], lane = 0, ends: Rect[] = [], bounds: Rect | null = null): RankedRoute[] {
   // 出入りの直線: 近いときは短くする (受ける側が右にあるのに「戻る線」扱いにならないように)
   const dx = t.x - s.x;
   const stub = dx > 0 ? Math.max(4, Math.min(STUB, dx / 2 - 2)) : STUB;
@@ -260,28 +278,58 @@ export function routeEdge(s: Point, t: Point, obstacles: Rect[], lane = 0, ends:
   }
 
   const walls = bounds ? wallsOf(bounds) : [];
-  let best = candidates[0];
-  let bestCost = Infinity;
+  const st = costSetup(obstacles, ends, walls);
+  // 評価は 2 段階: まず箱・壁・親の外に出る罰 (基本の評価) を全候補で求め、安い順に並べる。
+  // ほかの線との交差 (候補 x 線 x 線分の総当たりで一番重い) は、基本の評価がそれまでの最良の合計を下回る候補にだけ足す。
+  // 交差の罰は 0 以上なので、基本の評価が最良の合計以上の候補はもう勝てない (打ち切っても結果は同じ)。
+  // 同じ折れ線になる候補は 1 回だけ評価する
+  const inside = bounds ? (pt: Point) => pt.x >= bounds.x - 1 && pt.x <= bounds.x + bounds.width + 1 && pt.y >= bounds.y - 1 && pt.y <= bounds.y + bounds.height + 1 : null;
+  const seen = new Set<string>();
+  const ranked: { path: Point[]; base: number; order: number }[] = [];
   for (const c of candidates) {
     const path = simplify(c);
-    let k = cost(path, obstacles, ends, walls);
-    // ほかの線との交差 (同じ階層で先に決まった線)。箱を貫く・近づくより軽いが、遠回りより重い
-    if (others.length > 0) k += wireCrossings(path, others) * WIRE_CROSS_PENALTY;
+    const key = path.map((q) => `${q.x},${q.y}`).join(";");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    let k = cost(path, st);
     // 親の箱の外に出る線分には罰 (中の線が外へ出て戻らないように)
-    if (bounds) {
-      for (let i = 1; i < path.length; i++) {
-        const a = path[i - 1];
-        const q = path[i];
-        const inside = (pt: Point) => pt.x >= bounds.x - 1 && pt.x <= bounds.x + bounds.width + 1 && pt.y >= bounds.y - 1 && pt.y <= bounds.y + bounds.height + 1;
-        if (!inside(a) || !inside(q)) k += CROSS_PENALTY;
-      }
+    if (inside) {
+      for (let i = 1; i < path.length; i++) if (!inside(path[i - 1]) || !inside(path[i])) k += CROSS_PENALTY;
     }
+    ranked.push({ path, base: k, order: ranked.length });
+  }
+  ranked.sort((a, b) => a.base - b.base || a.order - b.order);
+  return ranked.map((r) => ({ path: r.path, base: r.base }));
+}
+
+/**
+ * 並べた候補から、ほかの線との交差も含めて一番安いものを選ぶ
+ * Input : ranked = rankRoutes の結果, others = 同じ階層のほかの線の経路
+ * Output: 折れ線
+ */
+export function chooseRoute(ranked: RankedRoute[], others: Point[][]): Point[] {
+  let best = ranked[0]?.path ?? [];
+  let bestCost = Infinity;
+  for (const r of ranked) {
+    if (r.base >= bestCost) break; // これ以降は交差の罰を足しても最良を超えない
+    // ほかの線との交差 (同じ階層で先に決まった線)。箱を貫く・近づくより軽いが、遠回りより重い
+    const k = others.length > 0 ? r.base + wireCrossings(r.path, others) * WIRE_CROSS_PENALTY : r.base;
     if (k < bestCost) {
       bestCost = k;
-      best = path;
+      best = r.path;
     }
   }
-  return simplify(best);
+  return best;
+}
+
+/**
+ * 経路を求める
+ * Input : s = 出す側のハンドル位置, t = 受ける側のハンドル位置, obstacles = 避ける箱, lane = 同じ箱に集まる線をずらす量 (px),
+ *         ends = 出す側・受ける側の箱, bounds = 親の箱, others = 同じ階層のほかの線の経路 (交差を減らす)
+ * Output: 折れ線の頂点 (s から t まで)
+ */
+export function routeEdge(s: Point, t: Point, obstacles: Rect[], lane = 0, ends: Rect[] = [], bounds: Rect | null = null, others: Point[][] = []): Point[] {
+  return chooseRoute(rankRoutes(s, t, obstacles, lane, ends, bounds), others);
 }
 
 /**

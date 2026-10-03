@@ -6,7 +6,7 @@
  */
 import { useMemo } from "react";
 import { create } from "zustand";
-import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeCollapsed, normalizeInputNames, resolveAllOverlaps, scopeFor, toJSON } from "../model/graph";
+import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeCollapsed, normalizeInputNames, resolveAllOverlaps, scopeFor, toJSON, withIndex } from "../model/graph";
 export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile, writeLocalFile } from "../lib/localfile";
@@ -589,6 +589,8 @@ export function useShownProject(): Project | null {
     // 箱の間隔は画面で保証する: ファイルの配置が詰まっていても (間隔を広げる前に保存した計画、外のツールが書いた位置など)、
     // 線の通路 (箱から 36px x 2) が無いと線が箱を貫くしかなくなる。表示の時点で重なり・間隔を解消しておく (ファイルは変えない。
     // 編集すれば apply が同じ解消を保存する)。畳んだ箱は畳んだ大きさで、開いた箱は開いた大きさで計算する
-    return resolveAllOverlaps(shown, blockSize);
+    // 索引は ports だけ (箱は押し出しで差し替わるので childrenOf の索引は使わない)
+    const base = shown;
+    return withIndex(base, () => resolveAllOverlaps(base, blockSize), { children: false });
   }, [project, viewCollapsed, viewScope]);
 }
