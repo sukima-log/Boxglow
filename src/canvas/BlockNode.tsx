@@ -105,7 +105,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     ev.stopPropagation();
     toggleCollapsed(blockId);
   };
-  // ダブルクリックで開く (大項目ならタブ、その中の箱ならパンくずが 1 段深くなる)。1 回のクリックは選ぶだけ。
+  // ダブルクリック: 大項目なら All からそのタブを開く、中の箱なら畳む / 展開。1 回のクリックは選ぶだけ。
   // 箱の側で受ける (React Flow のノードのダブルクリックは View のとき届かない)
   const onDoubleClick = (ev: React.MouseEvent) => {
     ev.stopPropagation();
@@ -136,7 +136,9 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         {!view.isProject && <StatusIcon status={view.status} />}
         <span className="bg-block__title" title={view.fromTemplate ? `${view.title} (部品: ${view.fromTemplate})` : view.title}>{view.title}</span>
         {(view.kids > 0 || data.major) && (
-          <button className="bg-block__toggle nodrag" onClick={toggle} title={data.major ? `この大項目のタブを開く (中の箱 ${view.kids} 個)` : `中の箱を見る (${view.kids} 個)`}>▸</button>
+          <button className="bg-block__toggle nodrag" onClick={toggle} title={data.major ? `この大項目のタブを開く (中の箱 ${view.kids} 個)` : view.collapsed ? "下の階層を展開する" : "下の階層を畳む"}>
+            {data.major || view.collapsed ? "▸" : "▾"}
+          </button>
         )}
       </div>
       {/* 情報の行: 記号ではなく文字で (状態・担当・進捗・活動・期日・ID) */}

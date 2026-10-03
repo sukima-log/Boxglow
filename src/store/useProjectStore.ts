@@ -46,9 +46,11 @@ interface State {
   /** ローカルファイルの名前 (source = file のとき) */
   fileName: string | null;
   readonly: boolean;
-  /** 箱を開く (中の箱を見る = その箱を表示範囲にする)。子の無い箱なら何もしない */
+  /** View モードで畳んだ / 展開した箱 (画面だけの状態。ファイルには書かない)。id -> collapsed */
+  viewCollapsed: Record<string, boolean>;
+  /** 箱を畳む / 展開する。All で大項目なら、そのタブを開く。Edit なら共有の配置として保存、View なら画面だけ */
   toggleCollapsed: (blockId: string) => void;
-  /** 開いている箱 (表示範囲) の id。null なら All (大項目の一覧)。大項目でもその中の箱でもよい。画面だけの状態で、プロジェクトごとにブラウザに記憶 */
+  /** 開いているタブ (大項目の箱の id)。null なら All (大項目の一覧)。画面だけの状態で、プロジェクトごとにブラウザに記憶 */
   viewScope: string | null;
   /** 表示範囲を切り替える (null = All)。範囲の外にある箱の選択は解除する */
   setViewScope: (blockId: string | null) => void;
@@ -204,11 +206,13 @@ export const useProjectStore = create<State>((set, get) => {
   , source: "idb"
   , fileName: null
   , readonly: false
+  , viewCollapsed: {}
   , viewScope: null
   , setViewScope: (blockId) => {
       const { project, selection } = get();
       if (!project) return;
-      const scope = blockId && project.blocks[blockId] ? blockId : null;
+      // タブになるのは大項目だけ (中の箱は入れ子で見せる)。大項目以外を指定されたら、その箱が属する大項目のタブにする
+      const scope = blockId && project.blocks[blockId] ? majorOf(project, blockId) : null;
       try {
         if (scope) localStorage.setItem(`boxglow:scope:${project.id}`, scope);
         else localStorage.removeItem(`boxglow:scope:${project.id}`);
@@ -245,13 +249,26 @@ export const useProjectStore = create<State>((set, get) => {
       })();
     }
   , toggleCollapsed: (blockId) => {
-      // 画面はどの階層でも「開いている箱の直下」だけを出す。畳む / 展開の操作は、その箱を開く (中を見る) 操作
-      const { project } = get();
+      const { project, editMode, readonly, viewCollapsed, viewScope } = get();
       if (!project || !project.blocks[blockId]) return;
-      // 子が無ければ開く物が無い。ただし大項目はタブがあるので (空でも) 開ける
-      const hasKids = Object.values(project.blocks).some((b) => b.parentId === blockId);
-      if (!hasKids && majorOf(project, blockId) !== blockId) return;
-      get().setViewScope(blockId);
+      // All の図では大項目は展開しない (中はタブで見る)。畳む / 展開の操作はその大項目のタブを開く操作にする
+      if (viewScope === null && majorOf(project, blockId) === blockId) { get().setViewScope(blockId); return; }
+      if (!Object.values(project.blocks).some((b) => b.parentId === blockId)) return; // 子が無ければ畳めない
+      if (editMode && !readonly) {
+        // 共有の配置として保存する (他の人・AI にも同じ見え方になる)。画面だけの記録は消して、保存した値を見せる
+        const rest = { ...viewCollapsed };
+        delete rest[blockId];
+        set({ viewCollapsed: rest });
+        get().apply((p) => {
+          const q = structuredClone(p);
+          q.blocks[blockId].collapsed = !q.blocks[blockId].collapsed;
+          return q;
+        });
+        return;
+      }
+      // 見るだけ: 画面の中だけで切り替える (ファイルに差分を出さない)
+      const cur = viewCollapsed[blockId] ?? project.blocks[blockId].collapsed;
+      set({ viewCollapsed: { ...viewCollapsed, [blockId]: !cur } });
     }
   , embed: false
   , projects: []
@@ -261,7 +278,7 @@ export const useProjectStore = create<State>((set, get) => {
   , toast: null
   , meId: null
   , editMode: false
-  , setEditMode: (on) => set({ editMode: on }) // 記憶しない (開くたびに View から)
+  , setEditMode: (on) => set(on ? { editMode: true, viewCollapsed: {} } : { editMode: on }) // 記憶しない (開くたびに View から)。Edit に入るときは画面だけの畳みを捨てて共有の配置を見せる
   , setMe: (memberId) => {
       const p = get().project;
       if (p) {
@@ -292,7 +309,7 @@ export const useProjectStore = create<State>((set, get) => {
       if (!project || readonly) return;
       let next = fn(project);
       if (next === project) return;
-      // タスクの箱は畳んだ状態でそろえる (画面は開いている箱の直下だけ)。箱は重ねない: 変更のたびに同じ階層の重なりを押し出す (ドラッグ中は呼び出し側が history=false で呼ぶので除く)
+      // 大項目は畳んだ状態でそろえる (All は大項目までしか出さない)。箱は重ねない: 変更のたびに同じ階層の重なりを押し出す (ドラッグ中は呼び出し側が history=false で呼ぶので除く)
       next = normalizeCollapsed(next);
       if (opts?.history !== false) next = resolveAllOverlaps(next, blockSize);
       const history = opts?.history ?? true;
@@ -343,7 +360,7 @@ export const useProjectStore = create<State>((set, get) => {
 
   , openProjectObject: (p, ephemeral) => {
       stopWatching();
-      set({ project: p, ephemeral, source: "idb", fileName: null, past: [], future: [], selection: NO_SELECTION, viewScope: loadScope(p), saveState: ephemeral ? "none" : "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+      set({ project: p, ephemeral, source: "idb", fileName: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: ephemeral ? "none" : "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(ephemeral ? null : p.id);
     }
 
@@ -370,7 +387,7 @@ export const useProjectStore = create<State>((set, get) => {
       }
       stopWatching();
       fileHandle = handle;
-      set({ project: p, ephemeral: false, source: "file", fileName: handle.name, past: [], future: [], selection: NO_SELECTION, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+      set({ project: p, ephemeral: false, source: "file", fileName: handle.name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(null);
       // 監視: 外部 (CLI など) が書き換えたら読み直す (自分の書き込みは fileLastModified で区別)
       watchTimer = setInterval(async () => {
@@ -414,7 +431,7 @@ export const useProjectStore = create<State>((set, get) => {
       }
       stopWatching();
       serveLastText = text;
-      set({ project: p, ephemeral: false, source: "serve", fileName: name, past: [], future: [], selection: NO_SELECTION, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+      set({ project: p, ephemeral: false, source: "serve", fileName: name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(null);
       // サーバからの変更通知 (CLI や AI が書いたとき): 読み直す。自分の未保存の変更がある間は後回し
       const reload = async () => {
@@ -474,7 +491,7 @@ export const useProjectStore = create<State>((set, get) => {
 
   , closeProject: () => {
       stopWatching();
-      set({ project: null, past: [], future: [], selection: NO_SELECTION, viewScope: null, saveState: "none", ephemeral: false, source: "idb", fileName: null });
+      set({ project: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: null, saveState: "none", ephemeral: false, source: "idb", fileName: null });
       rememberInUrl(null);
     }
 
@@ -494,17 +511,30 @@ export function parentForNewBlock(project: Project, selection: Selection, scope:
   return defaultTaskParent(project);
 }
 
-/** 描画用のプロジェクト (開いている箱だけ展開し、ほかのタスクの箱は畳んだもの。画面だけで、ファイルは変えない) を返すフック */
+/**
+ * View モードで畳んだ / 展開した状態を重ねたプロジェクトを返す (描画用)
+ * Input : project = ファイルの内容, viewCollapsed = 画面だけの状態
+ * Output: collapsed だけ上書きした複製 (上書きが無ければ project そのもの)
+ */
+export function withViewCollapsed(project: Project, viewCollapsed: Record<string, boolean>): Project {
+  const ids = Object.keys(viewCollapsed).filter((id) => project.blocks[id] && project.blocks[id].collapsed !== viewCollapsed[id]);
+  if (ids.length === 0) return project;
+  const blocks = { ...project.blocks };
+  for (const id of ids) blocks[id] = { ...blocks[id], collapsed: viewCollapsed[id] };
+  return { ...project, blocks };
+}
+
+/** 描画用のプロジェクト (All では大項目を畳み、開いているタブの大項目だけ展開。View の畳みも重ねる。画面だけで、ファイルは変えない) を返すフック */
 export function useShownProject(): Project | null {
   const project = useProjectStore((s) => s.project);
+  const viewCollapsed = useProjectStore((s) => s.viewCollapsed);
   const viewScope = useProjectStore((s) => s.viewScope);
   return useMemo(() => {
     if (!project) return null;
-    // どの階層でも「開いている箱の直下」だけを出す: タスクの箱は全部畳み、開いている箱だけ展開する
-    const shown = normalizeCollapsed(project);
+    const shown = normalizeCollapsed(withViewCollapsed(project, viewCollapsed));
     if (viewScope && shown.blocks[viewScope]?.collapsed) {
       return { ...shown, blocks: { ...shown.blocks, [viewScope]: { ...shown.blocks[viewScope], collapsed: false } } };
     }
     return shown;
-  }, [project, viewScope]);
+  }, [project, viewCollapsed, viewScope]);
 }
