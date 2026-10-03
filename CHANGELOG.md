@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Selecting a box no longer blurs its wires into one band: connected wires get only +1 px of width and no glow, so a bundle of six wires stays six wires. The glow is reserved for a single selected wire.
 - Box spacing is now guaranteed on screen, whatever the file says: the shown plan is passed through overlap resolution (96 px between siblings), so plans saved before the spacing change, or positions written by other tools, no longer leave wires with no channel but through a box. The file is untouched until you edit. Chain pushing only moves boxes right / down, fixing a case where a tightly packed column ended up stacked on one spot.
 - Wires never run through boxes, even when staggered rows leave less than 72 px between boxes: the router now has fallback channels with a 12 px margin (used only when no normal channel exists), channel spreading keeps wires inside the free range, and sibling boxes are kept 96 px apart (room for two 36 px margins and a wire). Overlap resolution pushes boxes in a chain (each box avoids only the boxes already settled), fixing a ping-pong that left boxes overlapping after a title grew.
 - `boxglow tidy` and every save / edit now align connected input names with their source (fixes plans written before the rule; 82 inputs in Boxglow's own plan were out of sync).

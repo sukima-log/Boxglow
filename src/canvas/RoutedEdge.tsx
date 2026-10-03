@@ -8,7 +8,6 @@ import { toRoundedPath, type Point } from "./routeEdge";
 
 export const RoutedEdge = memo(function RoutedEdge(props: EdgeProps) {
   const { id, sourceX, sourceY, targetX, targetY, markerEnd, style, label, labelStyle, labelBgStyle, selected, data } = props;
-  const hot = !!(data as { hot?: boolean } | undefined)?.hot;
   const net = !!(data as { net?: boolean } | undefined)?.net; // 選んだ線とつながっている線
   const arrow = !!(data as { arrow?: boolean } | undefined)?.arrow; // 入力に入る線は先端に矢印
   const path = ((data as { path?: Point[] } | undefined)?.path) ?? [{ x: sourceX, y: sourceY }, { x: targetX, y: targetY }];
@@ -59,7 +58,8 @@ export const RoutedEdge = memo(function RoutedEdge(props: EdgeProps) {
 
   return (
     <>
-      {(selected || hot || net) && <path d={d} className="react-flow__edge-halo" />}
+      {/* 光 (halo) は線を 1 本選んだときだけ。箱を選んだとき (hot) は束になった線の光が重なって 1 本の帯に見えるので出さない */}
+      {(selected || net) && <path d={d} className="react-flow__edge-halo" />}
       <BaseEdge id={id} path={d} markerEnd={markerEnd} style={style} interactionWidth={0} />
       {arrowD && <path d={arrowD} className="react-flow__edge-arrow" />}
       <path d={dHit} fill="none" stroke="transparent" strokeWidth={14} className="react-flow__edge-interaction" />

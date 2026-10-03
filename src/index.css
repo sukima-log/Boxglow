@@ -664,7 +664,10 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* 選択・ホバー: 色は変えず、太さと縁取りだけ */
 .react-flow__edge-halo { fill: none; stroke: currentColor; stroke-opacity: 0.22; stroke-width: 12px; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; color: var(--wire-halo); }
 .react-flow__edge.edge-ready .react-flow__edge-halo { color: var(--wire-ready); }
-.react-flow__edge.edge-hot .react-flow__edge-path,
+/* 箱を選んだとき、つながる線 (edge-hot) は少しだけ太くする。光は付けない (束の線が 1 本の帯に潰れる)。
+   太さは線 1 本分 (+1px) にとどめ、16px 間隔の束でも 1 本ずつ見えるようにする */
+.react-flow__edge.edge-hot .react-flow__edge-path { stroke-width: 3px; }
+.react-flow__edge.edge-hot.edge-ready .react-flow__edge-path { stroke-width: 5px; }
 .react-flow__edge:hover .react-flow__edge-path { stroke-width: 5px; }
 /* 選んだ線: 一目で分かるように、アクセント色 (橙) の太い線 + 広い光 + 流れる破線。他の線は薄くなる
    edge-net = 選んだ線と親の縁を越えてつながっている線 (出力から最終的な入力まで同じ強調) */
