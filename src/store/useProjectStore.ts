@@ -6,7 +6,7 @@
  */
 import { useMemo } from "react";
 import { create } from "zustand";
-import { createProject, defaultTaskParent, fromJSON, isInScope, normalizeCollapsed, resolveAllOverlaps, scopeFor, toJSON } from "../model/graph";
+import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeCollapsed, resolveAllOverlaps, scopeFor, toJSON } from "../model/graph";
 export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile, writeLocalFile } from "../lib/localfile";
@@ -228,7 +228,9 @@ export const useProjectStore = create<State>((set, get) => {
       // 画面はどの階層でも「開いている箱の直下」だけを出す。畳む / 展開の操作は、その箱を開く (中を見る) 操作
       const { project } = get();
       if (!project || !project.blocks[blockId]) return;
-      if (!Object.values(project.blocks).some((b) => b.parentId === blockId)) return; // 子が無ければ開く物が無い
+      // 子が無ければ開く物が無い。ただし大項目はタブがあるので (空でも) 開ける
+      const hasKids = Object.values(project.blocks).some((b) => b.parentId === blockId);
+      if (!hasKids && majorOf(project, blockId) !== blockId) return;
       get().setViewScope(blockId);
     }
   , embed: false

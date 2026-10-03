@@ -109,7 +109,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   // 箱の側で受ける (React Flow のノードのダブルクリックは View のとき届かない)
   const onDoubleClick = (ev: React.MouseEvent) => {
     ev.stopPropagation();
-    if (view.kids > 0) toggleCollapsed(blockId);
+    if (view.kids > 0 || data.major) toggleCollapsed(blockId); // 大項目はタブがあるので、中が空でも開ける
   };
 
   const cls = [
@@ -135,8 +135,8 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         {view.isProject && <span className="bg-block__tag">Project</span>}
         {!view.isProject && <StatusIcon status={view.status} />}
         <span className="bg-block__title" title={view.fromTemplate ? `${view.title} (部品: ${view.fromTemplate})` : view.title}>{view.title}</span>
-        {view.kids > 0 && (
-          <button className="bg-block__toggle nodrag" onClick={toggle} title={`中の箱を見る (${view.kids} 個)`}>▸</button>
+        {(view.kids > 0 || data.major) && (
+          <button className="bg-block__toggle nodrag" onClick={toggle} title={data.major ? `この大項目のタブを開く (中の箱 ${view.kids} 個)` : `中の箱を見る (${view.kids} 個)`}>▸</button>
         )}
       </div>
       {/* 情報の行: 記号ではなく文字で (状態・担当・進捗・活動・期日・ID) */}
