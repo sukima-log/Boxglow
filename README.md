@@ -64,6 +64,10 @@ The web app opens a local `boxglow.json` directly only in Chrome / Edge (File Sy
 
 The server finds `boxglow.json` like the CLI does (current directory upwards, or `--file` / `BOXGLOW_FILE`). The CLI and the MCP tools write the same file, so either can be used.
 
+## VS Code extension
+
+`vscode/` holds a VS Code extension that opens `boxglow.json` as the same diagram inside the editor (custom editor "Boxglow"; right-click the file or use the editor title button / command *Boxglow: Open boxglow.json as a diagram*). The diagram follows the file when the CLI or an agent writes it, edits in the diagram are written back, and light / dark follow the VS Code theme. Build it with `npm run build:vscode` (bundles the web app into `vscode/media/`) and package with `cd vscode && npm run package` (`.vsix`, install via *Extensions: Install from VSIX...*).
+
 ## Several repositories, one plan
 
 A `boxglow.json` can hold several project boxes (the top level only has Inputs, Outputs and project boxes). Add one with `New Project` in the ⋯ menu of the top bar or `npx boxglow project "Name" --repo ../path`, and set each box's Repository in the inspector. For a multi-repo workspace, keep the file in the parent folder and point every repository's agent at it:

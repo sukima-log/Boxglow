@@ -1,0 +1,43 @@
+{
+  "name": "boxglow-vscode",
+  "displayName": "Boxglow",
+  "description": "Open boxglow.json as a diagram of boxes and wires: see what your AI agents and your team are working on, right inside VS Code.",
+  "version": "0.1.0",
+  "publisher": "sukima-log",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/sukima-log/Boxglow.git", "directory": "vscode" },
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Visualization", "Other"],
+  "keywords": ["boxglow", "plan", "roadmap", "ai-agents", "claude-code"],
+  "icon": "media/icon-128.png",
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "boxglow.editor",
+        "displayName": "Boxglow",
+        "selector": [{ "filenamePattern": "**/boxglow.json" }],
+        "priority": "option"
+      }
+    ],
+    "commands": [
+      { "command": "boxglow.open", "title": "Boxglow: Open boxglow.json as a diagram" }
+    ],
+    "menus": {
+      "editor/title": [
+        { "command": "boxglow.open", "when": "resourceFilename == boxglow.json", "group": "navigation" }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node18 --external:vscode --outfile=out/extension.js",
+    "package": "npx --yes @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -42,7 +42,7 @@ interface State {
   /** サンプルなど、保存しないプロジェクトを開いているか */
   ephemeral: boolean;
   /** 保存先: ブラウザ内 (idb) か、ローカルファイル (file) か */
-  source: "idb" | "file" | "serve";
+  source: "idb" | "file" | "serve" | "vscode";
   /** ローカルファイルの名前 (source = file のとき) */
   fileName: string | null;
   readonly: boolean;
@@ -94,6 +94,8 @@ interface State {
   openLocalFile: (handle: FileSystemFileHandle) => Promise<boolean>;
   /** ローカルサーバ (npx boxglow serve) の boxglow.json を開く (API で読み書き。変更は SSE で受ける) */
   openFromServer: () => Promise<boolean>;
+  /** VS Code 拡張の webview の中で開く (拡張とメッセージで読み書き。ファイルの変更は拡張から届く) */
+  openFromVsCode: () => void;
   copyToMine: () => Promise<void>;
   deleteProject: (id: string) => Promise<void>;
   closeProject: () => void;
@@ -138,6 +140,12 @@ let watchTimer: ReturnType<typeof setInterval> | null = null;
 /** ローカルサーバ連携の状態: 自分が最後に書いた中身 (サーバからの変更通知と区別する) と、通知の接続 */
 let serveLastText = "";
 let serveEvents: EventSource | null = null;
+/** VS Code の webview の API (拡張の中だけで定義される)。postMessage で拡張とやり取りする */
+type VsCodeApi = { postMessage: (msg: unknown) => void };
+declare global { interface Window { acquireVsCodeApi?: () => VsCodeApi } }
+let vscodeApi: VsCodeApi | null = null;
+let vscodeLastText = "";
+
 /** サーバの API の場所 (アプリは相対パスで配信されるので、ページの場所から解く) */
 const serveApi = (path: string): string => new URL(path, document.baseURI).toString();
 /** サーバへ書く */
@@ -157,12 +165,18 @@ export const useProjectStore = create<State>((set, get) => {
     set({ saveState: "unsaved" });
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
+      saveTimer = null; // 発火したら「未保存の変更がある」状態は終わり (外からの変更の読み直しを止めない)
       const p = get().project;
       if (!p) return;
       set({ saveState: "saving" });
       try {
         if (get().source === "serve") {
           await writeToServer(toJSON(p) + "\n");
+          set({ saveState: "saved" });
+        } else if (get().source === "vscode" && vscodeApi) {
+          // 拡張に書いてもらう (ファイルは拡張が持っている)
+          vscodeLastText = toJSON(p) + "\n";
+          vscodeApi.postMessage({ type: "save", text: vscodeLastText });
           set({ saveState: "saved" });
         } else if (get().source === "file" && fileHandle) {
           // 最初の保存のときに書き込み権限を求める (開くときは読み取りだけ)
@@ -235,6 +249,9 @@ export const useProjectStore = create<State>((set, get) => {
         try {
           if (get().source === "serve") {
             await writeToServer(toJSON(get().project!) + "\n");
+          } else if (get().source === "vscode" && vscodeApi) {
+            vscodeLastText = toJSON(get().project!) + "\n";
+            vscodeApi.postMessage({ type: "save", text: vscodeLastText });
           } else if (get().source === "file" && fileHandle) {
             if (!(await ensurePermission(fileHandle, "readwrite"))) { set({ saveState: "unsaved", toast: "ファイルへの書き込みが許可されていません" }); return; }
             fileLastModified = await writeLocalFile(fileHandle, toJSON(get().project!) + "\n");
@@ -453,6 +470,40 @@ export const useProjectStore = create<State>((set, get) => {
       serveEvents = new EventSource(serveApi("api/events"));
       serveEvents.addEventListener("change", () => { void reload(); });
       return true;
+    }
+
+  , openFromVsCode: () => {
+      if (!window.acquireVsCodeApi) return;
+      vscodeApi = vscodeApi ?? window.acquireVsCodeApi();
+      // 拡張からの通知: load (最初の中身) / update (ファイルが外で変わった)
+      const applyText = (text: string, name: string, first: boolean) => {
+        if (!first && text === vscodeLastText) return; // 自分の書き込みの反映
+        if (!first && saveTimer) { setTimeout(() => applyText(text, name, false), SAVE_DELAY + 300); return; } // 自分の未保存の変更がある間は後回し
+        let p: Project;
+        try {
+          p = fromJSON(text);
+        } catch (e) {
+          set({ toast: e instanceof Error ? e.message : String(e) });
+          return;
+        }
+        vscodeLastText = text;
+        if (first) {
+          stopWatching();
+          set({ project: p, ephemeral: false, source: "vscode", fileName: name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+          return;
+        }
+        const cur = get().project;
+        const sel = get().selection;
+        const keep = sel.blockId && p.blocks[sel.blockId] ? sel : sel.blockId ? NO_SELECTION : sel;
+        set({ project: p, past: cur ? [...get().past.slice(-HISTORY_LIMIT + 1), cur] : get().past, future: [], selection: keep, saveState: "saved" });
+      };
+      window.addEventListener("message", (ev: MessageEvent) => {
+        const msg = ev.data as { type?: string; text?: string; name?: string } | undefined;
+        if (!msg || typeof msg.text !== "string") return;
+        if (msg.type === "load") applyText(msg.text, msg.name ?? "boxglow.json", get().source !== "vscode");
+        else if (msg.type === "update") applyText(msg.text, msg.name ?? "boxglow.json", false);
+      });
+      vscodeApi.postMessage({ type: "ready" });
     }
 
   , importJSON: async (text) => {

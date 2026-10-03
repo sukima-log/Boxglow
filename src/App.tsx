@@ -63,6 +63,7 @@ export function App() {
   const openExample = useProjectStore((s) => s.openExample);
   const openProject = useProjectStore((s) => s.openProject);
   const openFromServer = useProjectStore((s) => s.openFromServer);
+  const openFromVsCode = useProjectStore((s) => s.openFromVsCode);
 
   const viewScope = useProjectStore((s) => s.viewScope);
   const setViewScope = useProjectStore((s) => s.setViewScope);
@@ -99,7 +100,14 @@ export function App() {
         /* 別ドメインからの埋め込み: 親は読めない */
       }
     }
-    if (article || params.get("demo") === "daw") {
+    if (window.acquireVsCodeApi) {
+      // VS Code 拡張の webview: 拡張が持つ boxglow.json を開き、表示モードは VS Code のテーマに合わせる
+      const follow = () => applyTheme(document.body.classList.contains("vscode-dark") || document.body.classList.contains("vscode-high-contrast") ? "dark" : "light", false);
+      follow();
+      observer = new MutationObserver(follow);
+      observer.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+      openFromVsCode();
+    } else if (article || params.get("demo") === "daw") {
       openExample(); // 記事の埋め込みと ?demo=daw は 3 階層の例
     } else if (params.get("demo") === "1") {
       openSample();
@@ -110,7 +118,7 @@ export function App() {
       if (m) void openProject(m[1]);
     }
     return () => observer?.disconnect();
-  }, [setMode, openSample, openExample, openProject, openFromServer]);
+  }, [setMode, openSample, openExample, openProject, openFromServer, openFromVsCode]);
 
   // 通知は 3 秒で消す
   useEffect(() => {

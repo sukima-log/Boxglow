@@ -17,7 +17,8 @@
     "build:pages": "tsc -b && VITE_BASE=/ vite build --outDir dist-pages && npm run build:cli",
     "deploy:pages": "npm run build:pages && npx --yes wrangler@4 pages deploy dist-pages --project-name=boxglow --commit-dirty=true",
     "waitlist:list": "npx --yes wrangler@4 kv key list --binding WAITLIST --prefix email: --remote",
-    "waitlist:get": "npx --yes wrangler@4 kv key get --binding WAITLIST --remote"
+    "waitlist:get": "npx --yes wrangler@4 kv key get --binding WAITLIST --remote",
+    "build:vscode": "npm run build && rm -rf vscode/media && cp -r dist vscode/media && rm -rf vscode/media/waitlist && cp docs/logo/boxglow-128.png vscode/media/icon-128.png && cd vscode && npm run compile"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.0",
