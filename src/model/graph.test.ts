@@ -7,7 +7,7 @@ import {
 , defaultTaskParent, disconnect, effectiveProgress, extractTemplate, findBlock, finishBlock, fromJSON, incomingEdges, instantiateTemplate, isEdgeReady, isInputReady
 , parseTemplate, pendingDecisions, portsOf, projectBlocks, removeBlock, setActivity, setProgress, splitBlock, summarize, toJSON, updateBlock, updatePort, validateConnection
 , daysToDue, effectiveDescription, isOverdue, searchBlocks, setSchedule, sourceOfInput, connectToBlock, moveBlock, moveBlockToParent, resolveOverlap
-, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, removeInputGroup, resolveAllOverlaps, rootInputsOf, setInputGroup, setCategory, missingRequiredInputs, outgoingEdges, issueKeyOf, candidatesOf, reopenDecision, wireNet, removePort
+, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, removeInputGroup, resolveAllOverlaps, rootInputsOf, setInputGroup, setCategory, missingRequiredInputs, outgoingEdges, issueKeyOf, candidatesOf, reopenDecision, wireNet, removePort, updateDecision
 } from "./graph";
 import { ROOT_ID, type Project } from "./types";
 
@@ -805,5 +805,19 @@ describe("プロジェクトの箱の出力は最上位に写る", () => {
     expect(portsOf(p, ROOT_ID, "out").some((o) => o.name === "Boxglow 2.0")).toBe(true);
     p = removePort(p, r.portId);
     expect(portsOf(p, ROOT_ID, "out").some((o) => o.name === "Boxglow 2.0")).toBe(false);
+  });
+});
+
+describe("判断材料", () => {
+  it("ask に判断材料を付けられ、未回答のうちは書き直せる。回答済みは変えない", () => {
+    const { p, a } = twoBlocks();
+    const asked = askDecision(p, a, "claude-code", "どれ?", ["A", "B"], "前提: ...");
+    let q = asked.project;
+    expect(q.blocks[a].decisions[0].context).toBe("前提: ...");
+    q = updateDecision(q, a, asked.decisionId!, { context: "前提を書き直した", options: ["A", "B", "C"] });
+    expect(q.blocks[a].decisions[0].context).toBe("前提を書き直した");
+    expect(q.blocks[a].decisions[0].options).toEqual(["A", "B", "C"]);
+    q = answerDecision(q, a, asked.decisionId!, "C", "human");
+    expect(updateDecision(q, a, asked.decisionId!, { question: "x" })).toBe(q);
   });
 });

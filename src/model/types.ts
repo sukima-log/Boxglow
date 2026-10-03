@@ -103,6 +103,8 @@ export interface Decision {
   question: string;
   /** 選択肢 (無ければ自由記述) */
   options: string[];
+  /** 判断材料 (質問だけで判断できるように、前提・比較・影響をここに書く。「これ」「上記」で外を指さない) */
+  context?: string;
   answer?: string;
   askedBy: string;
   askedAt: string;

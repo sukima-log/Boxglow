@@ -56,7 +56,7 @@ boxglow.json はリポジトリ直下に置く (`npx boxglow init --name "<プ�
 期日や時間は `npx boxglow set <block> --due 2026-10-15 --start 2026-10-01 --estimate 8 --hours 3.5` で記録する。
 箱には仕事の種類 (カテゴリ) を付ける: `--category design` (設計) / build (実装) / verify (検証) / evaluate (評価) / study (検討) / research (調査) / ui (デザイン) / improve (改善) / fix (課題解決) / docs (文書) / ops (運用) / other (その他: 迷ったとき)。add のときに付け、変えるなら `npx boxglow set <block> --category verify`。
 既存の箱に入出力を足す / 名前を変えるのは `npx boxglow port <block> --in <名前> --out <名前> --rename <旧>=<新>` (`project` = 最初のプロジェクトの箱。最終成果物の名前もこれで変える)。線を外すのは `npx boxglow disconnect <題名.出力名> <題名.入力名>`。計画の文書は `npx boxglow export --out docs/ROADMAP.md`。
-新しいプロジェクトでは、方針 (README や依頼文) から最上位の大項目 3〜7 個を先に作り、人に `ask` で確認してから、着手する大項目だけを `split` で分解する (先の段階は粗いまま)。候補から 1 つを選ぶ場面では、自分で決めるときも `ask ... --options "A|B|C"` と `answer --by <自分>` で記録し、選ばなかった候補を残す。方針転換は `reopen <block> --note <理由>`。すべて CLI だけで成立する (画面は人が見るためのもの)。人がいない運用なら、AI が `answer --by <自分>` で判断を記録して進める。
+新しいプロジェクトでは、方針 (README や依頼文) から最上位の大項目 3〜7 個を先に作り、人に `ask` で確認してから、着手する大項目だけを `split` で分解する (先の段階は粗いまま)。`ask` の質問はそれだけで判断できるように書き、前提・比較・影響は `--context` に入れる (「これでよいですか」のように外を指さない)。候補から 1 つを選ぶ場面では、自分で決めるときも `ask ... --options "A|B|C"` と `answer --by <自分>` で記録し、選ばなかった候補を残す。方針転換は `reopen <block> --note <理由>`。すべて CLI だけで成立する (画面は人が見るためのもの)。人がいない運用なら、AI が `answer --by <自分>` で判断を記録して進める。
 出力の名前は「具体的な成果物」にする (例: `設計書 docs/design.md`、`PR #12`、`公開 URL`、`テスト結果 (vitest 53 件)`)。「機能一式」「所見」のような抽象的な名前は避け、done のときは必ず --artifact でファイル・URL・コミットを付ける。
 すべての箱は「入力 → 出力」が何かにつながっているようにする (つながっていない箱は計画の穴。最上位の入力ノードは、未接続の入力が自動で上がる)。
 複数人で同じ boxglow.json を編集するなら、各自の clone で一度 `npx boxglow git-setup` を実行する (箱の単位で自動マージされ、別の箱の変更は衝突しない)。

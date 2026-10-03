@@ -22,6 +22,8 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
     <div className="flex flex-col gap-2 pl-2" style={{ borderLeft: "3px solid var(--accent)" }}>
       <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{actorLabel(d.askedBy)} からの質問 ({agoText(d.askedAt)})</div>
       <div className="text-[13px] font-bold">{d.question}</div>
+      {/* 判断材料: 質問だけで判断できるように、前提・比較・影響をここに出す */}
+      {d.context && <div className="text-[12px] whitespace-pre-wrap" style={{ color: "var(--text-muted)", background: "var(--bg-paper)", border: "1px solid var(--line-soft)", borderRadius: 8, padding: "6px 8px" }}>{d.context}</div>}
       {d.answer !== undefined ? (
         <div className="flex flex-col gap-1 text-[13px]">
           <div>選んだ: <b>{d.answer}</b> <span style={{ color: "var(--text-muted)" }}>({d.answeredBy})</span></div>

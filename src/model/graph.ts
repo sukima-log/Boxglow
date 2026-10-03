@@ -984,15 +984,33 @@ export function finishBlock(
  * Input : blockId, actor, question, options = 選択肢 (省略可)
  * Output: { project, decisionId }
  */
-export function askDecision(p: Project, blockId: string, actor: string, question: string, options: string[] = []): { project: Project; decisionId?: string } {
+export function askDecision(p: Project, blockId: string, actor: string, question: string, options: string[] = [], context = ""): { project: Project; decisionId?: string } {
   const b = p.blocks[blockId];
   if (!b || blockId === ROOT_ID) return { project: p };
   const q = touch(p);
-  const d: Decision = { id: newId(), question, options, askedBy: actor, askedAt: now() };
+  const d: Decision = { id: newId(), question, options, askedBy: actor, askedAt: now(), ...(context ? { context } : {}) };
   q.blocks[blockId].decisions.push(d);
   q.blocks[blockId].activity = { actor, state: "needs_decision", note: question, since: now() };
   appendLog(q, { actor, kind: "asked", blockId, message: `「${b.title}」で判断待ち: ${question}` });
   return { project: q, decisionId: d.id };
+}
+
+/**
+ * 未回答の判断を書き直す (質問・選択肢・判断材料)。回答済みは変えない (履歴が崩れるため)
+ * Input : blockId, decisionId, patch
+ * Output: 更新した Project (回答済み・見つからないときはそのまま)
+ */
+export function updateDecision(p: Project, blockId: string, decisionId: string, patch: { question?: string; options?: string[]; context?: string }): Project {
+  const b = p.blocks[blockId];
+  const d = b?.decisions.find((x) => x.id === decisionId);
+  if (!b || !d || d.answer !== undefined) return p;
+  const q = touch(p);
+  const qd = q.blocks[blockId].decisions.find((x) => x.id === decisionId)!;
+  if (patch.question !== undefined) qd.question = patch.question;
+  if (patch.options !== undefined) qd.options = patch.options;
+  if (patch.context !== undefined) { if (patch.context) qd.context = patch.context; else delete qd.context; }
+  if (q.blocks[blockId].activity?.state === "needs_decision") q.blocks[blockId].activity = { ...q.blocks[blockId].activity!, note: qd.question };
+  return q;
 }
 
 /**

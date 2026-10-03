@@ -95,6 +95,7 @@ export function statusReport(p: Project): string {
     lines.push("", "## 判断待ち (人間の回答が必要)");
     for (const { block, decision } of s.decisions) {
       lines.push(`- ${block.key ?? ""} 「${block.title}」 ${decision.question}${decision.options.length > 0 ? " 選択肢: " + decision.options.join(" / ") : ""} (decision: ${decision.id})`);
+      if (decision.context) lines.push(`  判断材料: ${decision.context.replace(/\n/g, "\n  ")}`);
     }
   }
   if (s.overdue.length > 0) {
@@ -157,6 +158,7 @@ export function blockReport(p: Project, blockId: string): string {
     for (const d of b.decisions) {
       const c = candidatesOf(d);
       lines.push(`- ${d.answer === undefined ? "[未回答]" : "[回答済]"} ${d.question}${d.answer !== undefined ? " -> " + d.answer : ""} (decision: ${d.id})`);
+      if (d.context) lines.push(`  判断材料: ${d.context.replace(/\n/g, "\n  ")}`);
       if (c.rejected.length > 0) lines.push(`  ${d.answer === undefined ? "候補" : "残した候補"}: ${c.rejected.join(" / ")}`);
       for (const h of d.history ?? []) lines.push(`  以前の答え: ${h.answer} (${h.by}${h.note ? "、" + h.note : ""}) ${h.at}`);
     }

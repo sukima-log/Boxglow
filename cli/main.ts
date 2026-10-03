@@ -25,7 +25,8 @@
  *   check                                          Git の成果物が今も見つかるか確認し、移動していればパスを付け替える
  *   blocked <block> --note <困っていること>          詰まり
  *   review <block> [--note]                        確認待ち
- *   ask <block> <質問> [--options "A|B"]            人間に判断を求める (判断待ちになる)
+ *   ask <block> <質問> [--options "A|B"] [--context <判断材料>]   人間に判断を求める (判断待ちになる)。質問だけで判断できるよう、前提・比較・影響を --context に書く
+ *   decision <block> --id <decision id> [--question] [--options "A|B"] [--context]   未回答の判断を書き直す
  *   answer <block> <回答> [--id <decision id>] [--by <名前>]   判断に答える (既定は最新の未回答)
  *   reopen <block> [--id <decision id>] [--note <理由>]   判断をやり直す (方針転換)。前の答えは履歴に、候補はそのまま残る
  *   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <題名>] [--note <説明>] [--category <カテゴリ>|none] [--repo <パス>|none] [--issue <URL>|none]
@@ -67,7 +68,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory,
+import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory,
   addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON
 , instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection
 , addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup
@@ -615,9 +616,23 @@ function main(argv: string[]): void {
       const question = rest.slice(1).join(" ");
       if (!question) throw new Error("<質問> を指定してください");
       const opts = str(options.options) ? str(options.options)!.split("|").map((s) => s.trim()).filter(Boolean) : [];
-      const r = askDecision(p, b.id, actor, question, opts);
+      const r = askDecision(p, b.id, actor, question, opts, str(options.context) ?? "");
       save(path, r.project);
       out(`判断待ち: 「${b.title}」 ${question} (decision: ${r.decisionId})`);
+      return;
+    }
+    case "decision": {
+      const b = mustFind(p, rest[0]);
+      const id = str(options.id) ?? [...b.decisions].reverse().find((d) => d.answer === undefined)?.id;
+      if (!id) throw new Error("未回答の判断がありません (--id で指定)");
+      const patch: { question?: string; options?: string[]; context?: string } = {};
+      if (str(options.question) !== undefined) patch.question = str(options.question);
+      if (str(options.options) !== undefined) patch.options = str(options.options)!.split("|").map((s) => s.trim()).filter(Boolean);
+      if (str(options.context) !== undefined) patch.context = str(options.context);
+      const q = updateDecision(p, b.id, id, patch);
+      if (q === p) throw new Error("書き直せません (回答済み、または見つかりません)");
+      save(path, q);
+      out(`判断を書き直しました: 「${b.title}」 (decision: ${id})`);
       return;
     }
     case "answer": {
