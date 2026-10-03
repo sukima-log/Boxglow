@@ -5,28 +5,80 @@
   "version": "0.1.0",
   "publisher": "sukima-log",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/sukima-log/Boxglow.git", "directory": "vscode" },
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Visualization", "Other"],
-  "keywords": ["boxglow", "plan", "roadmap", "ai-agents", "claude-code"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sukima-log/Boxglow.git",
+    "directory": "vscode"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "keywords": [
+    "boxglow",
+    "plan",
+    "roadmap",
+    "ai-agents",
+    "claude-code"
+  ],
   "icon": "media/icon-128.png",
   "main": "./out/extension.js",
-  "activationEvents": [],
+  "activationEvents": [
+    "onCommand:boxglow.open",
+    "onCustomEditor:boxglow.editor"
+  ],
   "contributes": {
     "customEditors": [
       {
         "viewType": "boxglow.editor",
         "displayName": "Boxglow",
-        "selector": [{ "filenamePattern": "**/boxglow.json" }],
+        "selector": [
+          {
+            "filenamePattern": "**/boxglow.json"
+          }
+        ],
         "priority": "option"
       }
     ],
     "commands": [
-      { "command": "boxglow.open", "title": "Boxglow: Open boxglow.json as a diagram" }
+      {
+        "command": "boxglow.open",
+        "title": "Boxglow: Open boxglow.json as a diagram",
+        "category": "Boxglow",
+        "icon": "$(graph)"
+      }
     ],
     "menus": {
       "editor/title": [
-        { "command": "boxglow.open", "when": "resourceFilename == boxglow.json", "group": "navigation" }
+        {
+          "command": "boxglow.open",
+          "when": "resourceFilename == boxglow.json",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "boxglow.open",
+          "when": "resourceFilename == boxglow.json",
+          "group": "navigation@1"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "boxglow.open",
+          "when": "resourceFilename == boxglow.json",
+          "group": "navigation@1"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "boxglow.open",
+          "when": "resourceFilename == boxglow.json",
+          "group": "navigation@1"
+        }
       ]
     }
   },
