@@ -1822,19 +1822,23 @@ export function connectToBlock(p: Project, from: Endpoint, targetBlockId: string
 
 /**
  * ドラッグで離した箱が同じ階層の箱と重なっていたら、最小の移動で押し出す
- * Input : blockId, sizeOf = 箱の大きさを返す関数 (size.ts の blockSize)
+ * Input : blockId, sizeOf = 箱の大きさを返す関数 (size.ts の blockSize),
+ *         against = 避ける兄弟の id (省略時は同じ階層の全部。resolveAllOverlaps は「先に確定した箱」だけを渡し、
+ *         後ろの箱は順に玉突きで動かす。全部を避けると、左右の箱に挟まれたとき右へ押す ↔ 左へ戻すの往復で終わらない)
  * Output: 位置を直した Project
  */
-export function resolveOverlap(p: Project, blockId: string, sizeOf: (p: Project, id: string) => { width: number; height: number }): Project {
+export function resolveOverlap(p: Project, blockId: string, sizeOf: (p: Project, id: string) => { width: number; height: number }, against?: Set<string>): Project {
   const b = p.blocks[blockId];
   if (!b || b.parentId === null) return p;
   const q = clone(p);
-  const GAP = 24;
+  // 箱と箱の間には線の通路が要る: 線は箱の縁から 36px 離れるので、両側で 72px + 線 1 本分。8px 単位で 96px
+  const GAP = 96;
   const me = sizeOf(q, blockId);
   for (let iter = 0; iter < 8; iter++) {
     const cur = q.blocks[blockId];
     const sib = childrenOf(q, cur.parentId!).find((s) => {
       if (s.id === blockId) return false;
+      if (against && !against.has(s.id)) return false; // まだ確定していない (後で動かす) 箱は避けない
       const sz = sizeOf(q, s.id);
       return cur.position.x < s.position.x + sz.width + GAP && cur.position.x + me.width + GAP > s.position.x
         && cur.position.y < s.position.y + sz.height + GAP && cur.position.y + me.height + GAP > s.position.y;
@@ -1944,14 +1948,22 @@ export function importInputGroup(p: Project, text: string): { project: Project; 
 
 /**
  * すべての階層で、重なっている兄弟を押し出す (移動・幅の変化・追加のたびに呼ぶ)
- * 位置が上 (左) の箱を優先して残し、後の箱を動かす
+ * 位置が上 (左) の箱を優先して残し、後の箱を動かす。
+ * 各箱は「先に確定した箱」だけを避ける (玉突き): 1 つ目の箱が広がって 2 つ目を右へ押すと、3 つ目は押された 2 つ目を避けて右へ、と順に動く。
+ * (全部の兄弟を避けさせると、2 つ目が 1 つ目と 3 つ目に挟まれて右へ ↔ 左への往復になり、重なったまま終わることがある)
+ * Input : sizeOf = 箱の大きさを返す関数 (size.ts の blockSize)
+ * Output: 位置を直した Project
  */
 export function resolveAllOverlaps(p: Project, sizeOf: (p: Project, id: string) => { width: number; height: number }): Project {
   let q = p;
   const parents = new Set(Object.values(p.blocks).filter((b) => b.id !== ROOT_ID).map((b) => b.parentId!));
   for (const parentId of parents) {
     const kids = childrenOf(q, parentId).sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
-    for (let i = 1; i < kids.length; i++) q = resolveOverlap(q, kids[i].id, sizeOf);
+    const settled = new Set<string>([kids[0]?.id].filter((x): x is string => !!x));
+    for (let i = 1; i < kids.length; i++) {
+      q = resolveOverlap(q, kids[i].id, sizeOf, settled);
+      settled.add(kids[i].id);
+    }
   }
   return q;
 }

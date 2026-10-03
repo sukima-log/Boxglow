@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Wires never run through boxes, even when staggered rows leave less than 72 px between boxes: the router now has fallback channels with a 12 px margin (used only when no normal channel exists), channel spreading keeps wires inside the free range, and sibling boxes are kept 96 px apart (room for two 36 px margins and a wire). Overlap resolution pushes boxes in a chain (each box avoids only the boxes already settled), fixing a ping-pong that left boxes overlapping after a title grew.
 - `boxglow tidy` and every save / edit now align connected input names with their source (fixes plans written before the rule; 82 inputs in Boxglow's own plan were out of sync).
 - VS Code extension (`vscode/`): opens `boxglow.json` as the Boxglow diagram inside the editor (custom editor + command), follows file changes from the CLI / agents, writes edits back, follows the VS Code theme. Built from the same web app (`npm run build:vscode`, `.vsix` via `cd vscode && npm run package`).
 - Fix: after a save, external file changes were no longer picked up until the next edit (the save timer was never cleared).

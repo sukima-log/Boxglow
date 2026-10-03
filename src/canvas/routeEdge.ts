@@ -24,6 +24,13 @@ const MARGIN = 36;
 export const WALL_MARGIN = 12;
 /** 矩形ごとの余白 (壁は小さく) */
 export const marginOf = (r: Rect): number => (r.wall ? WALL_MARGIN : MARGIN);
+/**
+ * 通路がどこにも無いときの予備の余白 (箱と箱の隙間が MARGIN * 2 に満たないとき)。
+ * 段違いの箱 (高さの違う箱が別の列にある) の間は 36px * 2 の通路が取れないことがあり、
+ * 通常の余白の候補だけでは「箱を貫く候補」しか残らない。詰めた通路は NEAR_PENALTY が付くので、
+ * 通常の通路があるときは選ばれず、無いときだけ貫通の代わりに選ばれる
+ */
+export const SQUEEZE_MARGIN = 12;
 /** 出入りの最初の直線の長さ */
 const STUB = 40;
 /** 交差 1 回の罰 (長さに換算)。大きな図でも、どんなに遠回りしても箱を横切らない方を選ぶ大きさ */
@@ -186,15 +193,18 @@ export function routeEdge(s: Point, t: Point, obstacles: Rect[], lane = 0, ends:
   }
   const candidates: Point[][] = [];
 
-  // 縦の通路の候補 (障害物の x 区間の隙間)
+  // 縦の通路の候補 (障害物の x 区間の隙間)。通常の余白と、詰めた余白 (予備) の 2 通り
   const xIntervals: [number, number][] = obstacles.map((o) => [o.x - MARGIN, o.x + o.width + MARGIN]);
+  const xIntervalsTight: [number, number][] = obstacles.map((o) => [o.x - SQUEEZE_MARGIN, o.x + o.width + SQUEEZE_MARGIN]);
+  /** 区間の隙間の候補 (通常の余白 → 詰めた余白の順。詰めた方は近づく罰が付くので、通常の通路が無いときだけ選ばれる) */
+  const freeXs = (lo: number, hi: number): number[] => [...freeCenters(lo, hi, xIntervals), ...freeCenters(lo, hi, xIntervalsTight)];
   // 横の通路の候補 (障害物の y 区間の隙間。x の範囲を限定して集める)
-  const yIntervalsIn = (xa: number, xb: number): [number, number][] =>
-    obstacles.filter((o) => o.x + o.width + MARGIN >= Math.min(xa, xb) && o.x - MARGIN <= Math.max(xa, xb)).map((o) => [o.y - MARGIN, o.y + o.height + MARGIN]);
+  const yIntervalsIn = (xa: number, xb: number, m: number): [number, number][] =>
+    obstacles.filter((o) => o.x + o.width + m >= Math.min(xa, xb) && o.x - m <= Math.max(xa, xb)).map((o) => [o.y - m, o.y + o.height + m]);
 
   if (x1 <= x2) {
     // Z 型: 縦の通路 xm を隙間から選ぶ (真ん中も必ず候補に)。線ごとのずらし (lane) を通路に足して重なりを避ける
-    for (const base of [x1, x2, (x1 + x2) / 2, ...freeCenters(x1, x2, xIntervals)]) {
+    for (const base of [x1, x2, (x1 + x2) / 2, ...freeXs(x1, x2)]) {
       const xm = Math.max(x1, Math.min(x2, base + lane));
       candidates.push([s, { x: xm, y: s.y }, { x: xm, y: t.y }, t]);
     }
@@ -205,10 +215,12 @@ export function routeEdge(s: Point, t: Point, obstacles: Rect[], lane = 0, ends:
   // 横の通路は、自分の箱 (出す側・受ける側) の上も避ける (通路の x 範囲にかかるときだけ。出入りの直線で離れていれば関係ない)
   const xlo = Math.min(xa, xb);
   const xhi = Math.max(xa, xb);
-  const ys: [number, number][] = [
-    ...yIntervalsIn(xlo, xhi)
-  , ...ends.filter((o) => o.x + o.width + MARGIN >= xlo && o.x - MARGIN <= xhi).map((o): [number, number] => [o.y - MARGIN, o.y + o.height + MARGIN])
+  const ysWith = (m: number): [number, number][] => [
+    ...yIntervalsIn(xlo, xhi, m)
+  , ...ends.filter((o) => o.x + o.width + m >= xlo && o.x - m <= xhi).map((o): [number, number] => [o.y - m, o.y + o.height + m])
   ];
+  const ys = ysWith(MARGIN);
+  const ysTight = ysWith(SQUEEZE_MARGIN);
   const allY = [...obstacles, ...ends].flatMap((o) => [o.y - MARGIN, o.y + o.height + MARGIN]);
   let lo = Math.min(s.y, t.y, ...allY) - 40;
   let hi = Math.max(s.y, t.y, ...allY) + 40;
@@ -218,9 +230,10 @@ export function routeEdge(s: Point, t: Point, obstacles: Rect[], lane = 0, ends:
     hi = Math.min(hi, bounds.y + bounds.height - WALL_MARGIN);
     if (hi < lo) hi = lo;
   }
-  const lanes = [...freeCenters(lo, hi, ys), lo, hi];
+  // 横の通路: 通常の余白の隙間 → 詰めた余白の隙間 (予備) → 上下の端
+  const lanes = [...new Set([...freeCenters(lo, hi, ys), ...freeCenters(lo, hi, ysTight), lo, hi])];
   // 縦の通路も複数候補にする (出た直後 / 入る直前に幅の広い箱がかかると、固定の通路では回り道も横切ってしまう)
-  const xs = x1 <= x2 ? [...new Set([x1, x2, ...freeCenters(x1, x2, xIntervals)])].filter((x) => x >= x1 && x <= x2) : [xa];
+  const xs = x1 <= x2 ? [...new Set([x1, x2, ...freeXs(x1, x2)])].filter((x) => x >= x1 && x <= x2) : [xa];
   for (const yl of lanes) {
     for (const xv of xs) {
       candidates.push([s, { x: xv, y: s.y }, { x: xv, y: yl }, { x: xb, y: yl }, { x: xb, y: t.y }, t]); // 出た直後の縦の通路を変える
@@ -235,8 +248,8 @@ export function routeEdge(s: Point, t: Point, obstacles: Rect[], lane = 0, ends:
     const xRight = Math.max(x1, ...all.map((o) => o.x + o.width + MARGIN)) + 40;
     const xLeft = Math.min(x2, ...all.map((o) => o.x - MARGIN)) - 40;
     const nearest = (xs: number[], ref: number, n: number): number[] => [...new Set(xs)].sort((a, b) => Math.abs(a - ref) - Math.abs(b - ref)).slice(0, n);
-    const dropXs = nearest([x1, ...freeCenters(x1, xRight, xIntervals).filter((x) => x >= x1)], x1, 8);
-    const riseXs = nearest([x2, ...freeCenters(xLeft, x2, xIntervals).filter((x) => x <= x2)], x2, 8);
+    const dropXs = nearest([x1, ...freeXs(x1, xRight).filter((x) => x >= x1)], x1, 10);
+    const riseXs = nearest([x2, ...freeXs(xLeft, x2).filter((x) => x <= x2)], x2, 10);
     for (const yl of lanes) {
       for (const xd of dropXs) {
         for (const xr of riseXs) {

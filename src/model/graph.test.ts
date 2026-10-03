@@ -658,6 +658,29 @@ describe("階層移動の線の付け替えと重なりの解消", () => {
     expect(portsOf(q, ROOT_ID, "in")).toHaveLength(0);
   });
 
+  it("1 つ目の箱が広がったとき、間の箱と右の箱が順に (玉突きで) 押し出されて重ならない", () => {
+    // 横一列 A B C。A が広がって B と重なり、B を右へ押すと C とも重なる (B を全部の兄弟から避けさせると右 ↔ 左の往復になる)
+    const p0 = createProject("t");
+    const pj = defaultTaskParent(p0);
+    const a = addBlock(p0, { parentId: pj, title: "A", position: { x: 120, y: 76 } });
+    const b = addBlock(a.project, { parentId: pj, title: "B", position: { x: 504, y: 76 } });
+    const c = addBlock(b.project, { parentId: pj, title: "C", position: { x: 888, y: 76 } });
+    const q = c.project;
+    const size = (pp: Project, id: string) => ({ width: pp.blocks[id].title === "A" ? 440 : 240, height: 98 }); // A だけ広い
+    const r = resolveAllOverlaps(q, size);
+    const rect = (id: string) => ({ ...r.blocks[id].position, ...size(r, id) });
+    const ids = [a.blockId, b.blockId, c.blockId];
+    for (const i of ids) for (const j of ids) {
+      if (i >= j) continue;
+      const u = rect(i), v = rect(j);
+      const overlap = u.x < v.x + v.width && u.x + u.width > v.x && u.y < v.y + v.height && u.y + u.height > v.y;
+      expect(overlap).toBe(false);
+    }
+    // 同じ列に並んだまま (下の段へ逃げていない)
+    expect(r.blocks[b.blockId].position.y).toBe(76);
+    expect(r.blocks[c.blockId].position.y).toBe(76);
+  });
+
   it("重なった兄弟から最小の移動で押し出される", () => {
     const { p, a, b } = twoBlocks();
     let q = moveBlock(p, a, { x: 100, y: 200 });

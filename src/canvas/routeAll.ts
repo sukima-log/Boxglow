@@ -2,7 +2,7 @@
  * 同じ階層の線をまとめて経路計算し、縦の通路が重なる線を横にずらす (純粋関数)
  * 1 本ずつ別々に計算すると同じ通路に重なるため、全部の経路が決まってから重なりを解く。
  */
-import { marginOf, wallsOf, routeEdge, type Point, type Rect } from "./routeEdge";
+import { marginOf, wallsOf, routeEdge, SQUEEZE_MARGIN, type Point, type Rect } from "./routeEdge";
 
 export interface NodeRect {
   id: string;
@@ -92,19 +92,27 @@ export function routeAll(nodes: NodeRect[], edges: EdgeSpec[]): Map<string, Poin
  * Output: [lo, hi]
  */
 function freeRangeAtY(y: number, x0: number, x1: number, obstacles: Rect[]): [number, number] {
-  let lo = -Infinity;
-  let hi = Infinity;
-  for (const o of obstacles) {
-    if (o.wall === "left" || o.wall === "right") continue; // 左右の壁は横線分の y を制約しない (親の縁のハンドルから出る線は箱の外から始まる)
-    const m = marginOf(o);
-    if (o.x + o.width + m < x0 || o.x - m > x1) continue; // 横にかぶらない箱は関係ない
-    const top = o.y - m;
-    const bottom = o.y + o.height + m;
-    if (bottom <= y) lo = Math.max(lo, bottom);
-    else if (top >= y) hi = Math.min(hi, top);
-    else if (y - top < bottom - y) hi = Math.min(hi, top);
-    else lo = Math.max(lo, bottom);
-  }
+  // 通常の余白 (箱から MARGIN) で範囲を取り、取れなければ詰めた余白 (SQUEEZE_MARGIN) で取り直す
+  // (経路探索が「詰めた通路」を選んだ線は、通常の余白では両側から挟まれて範囲が無い。
+  //  その線を通常の余白の範囲へ押し出すと箱の縁の上に乗ってしまうので、詰めた余白で動かせる範囲を求める)
+  const rangeWith = (squeeze: boolean): [number, number] => {
+    let lo = -Infinity;
+    let hi = Infinity;
+    for (const o of obstacles) {
+      if (o.wall === "left" || o.wall === "right") continue; // 左右の壁は横線分の y を制約しない (親の縁のハンドルから出る線は箱の外から始まる)
+      const m = squeeze && !o.wall ? SQUEEZE_MARGIN : marginOf(o);
+      if (o.x + o.width + m < x0 || o.x - m > x1) continue; // 横にかぶらない箱は関係ない
+      const top = o.y - m;
+      const bottom = o.y + o.height + m;
+      if (bottom <= y) lo = Math.max(lo, bottom);
+      else if (top >= y) hi = Math.min(hi, top);
+      else if (y - top < bottom - y) hi = Math.min(hi, top);
+      else lo = Math.max(lo, bottom);
+    }
+    return [lo, hi];
+  };
+  let [lo, hi] = rangeWith(false);
+  if (hi < lo) [lo, hi] = rangeWith(true);
   if (hi < lo) return [y, y];
   return [lo, hi];
 }
@@ -196,7 +204,8 @@ function separateHorizontals(paths: Map<string, Point[]>, scopeOf: Map<string, s
       if (Number.isFinite(lo) && center - half < lo) center = lo + half;
       if (Number.isFinite(hi) && center + half > hi) center = hi - half;
       order.forEach((id, k) => {
-        const y = center + (k - (order.length - 1) / 2) * sep;
+        // 範囲の外には出さない (束が範囲より広いときは端で重なる。箱の縁に乗るよりまし)
+        const y = Math.max(lo, Math.min(hi, center + (k - (order.length - 1) / 2) * sep));
         const path = paths.get(id)!;
         for (const g of group) {
           if (g.edgeId !== id) continue;
@@ -214,19 +223,25 @@ function separateHorizontals(paths: Map<string, Point[]>, scopeOf: Map<string, s
  * Output: [lo, hi]
  */
 function freeRangeAt(x: number, y0: number, y1: number, obstacles: Rect[]): [number, number] {
-  let lo = -Infinity;
-  let hi = Infinity;
-  for (const o of obstacles) {
-    if (o.wall === "top" || o.wall === "bottom") continue; // 上下の壁は縦線分の x を制約しない
-    const m = marginOf(o); // 壁は箱より近づいてよい
-    if (o.y + o.height + m < y0 || o.y - m > y1) continue; // 縦にかぶらない箱は関係ない
-    const left = o.x - m;
-    const right = o.x + o.width + m;
-    if (right <= x) lo = Math.max(lo, right);
-    else if (left >= x) hi = Math.min(hi, left);
-    else if (x - left < right - x) hi = Math.min(hi, left); // 余白の中 (左寄り): 左へ押し出す
-    else lo = Math.max(lo, right); // 余白の中 (右寄り。親の縁のすぐ内側など): 右へ押し出す
-  }
+  // 通常の余白で範囲を取り、取れなければ詰めた余白で取り直す (freeRangeAtY と同じ考え方)
+  const rangeWith = (squeeze: boolean): [number, number] => {
+    let lo = -Infinity;
+    let hi = Infinity;
+    for (const o of obstacles) {
+      if (o.wall === "top" || o.wall === "bottom") continue; // 上下の壁は縦線分の x を制約しない
+      const m = squeeze && !o.wall ? SQUEEZE_MARGIN : marginOf(o); // 壁は箱より近づいてよい
+      if (o.y + o.height + m < y0 || o.y - m > y1) continue; // 縦にかぶらない箱は関係ない
+      const left = o.x - m;
+      const right = o.x + o.width + m;
+      if (right <= x) lo = Math.max(lo, right);
+      else if (left >= x) hi = Math.min(hi, left);
+      else if (x - left < right - x) hi = Math.min(hi, left); // 余白の中 (左寄り): 左へ押し出す
+      else lo = Math.max(lo, right); // 余白の中 (右寄り。親の縁のすぐ内側など): 右へ押し出す
+    }
+    return [lo, hi];
+  };
+  let [lo, hi] = rangeWith(false);
+  if (hi < lo) [lo, hi] = rangeWith(true);
   if (hi < lo) return [x, x]; // 両側から挟まれて置けない: 動かさない
   return [lo, hi];
 }
@@ -326,7 +341,8 @@ function separateVerticals(paths: Map<string, Point[]>, scopeOf: Map<string, str
       if (Number.isFinite(lo) && center - half < lo) center = lo + half;
       if (Number.isFinite(hi) && center + half > hi) center = hi - half;
       order.forEach((id, k) => {
-        const x = center + (k - (order.length - 1) / 2) * sep;
+        // 範囲の外には出さない (束が範囲より広いときは端で重なる。箱の縁に乗るよりまし)
+        const x = Math.max(lo, Math.min(hi, center + (k - (order.length - 1) / 2) * sep));
         const path = paths.get(id)!;
         for (const g of group) {
           if (g.edgeId !== id) continue;
