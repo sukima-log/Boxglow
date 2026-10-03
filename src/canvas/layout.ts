@@ -80,6 +80,9 @@ export type BlockRFNode = RFNode<BlockNodeData, "block">;
 export type TerminalRFNode = RFNode<TerminalNodeData, "terminal">;
 export type AnyRFNode = BlockRFNode | TerminalRFNode;
 
+/** 未確定の線の色 (index.css の --wire と同じ。矢印の色は CSS 変数が使えないので値で持つ) */
+const WIRE_COLOR = "#5a9a9a";
+
 /** タブで開いた大項目の入力ノード / 出力ノードの id */
 export const SCOPE_IN = "scope-in";
 export const SCOPE_OUT = "scope-out";
@@ -319,7 +322,7 @@ export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; se
       id: e.id
     , type: "routed"
       // 矢印は「入力に入る線」だけ (親の出力へ上がる線は出ていく線なので付けない)
-    , markerEnd: tp.direction === "in" ? { type: MarkerType.ArrowClosed, width: 12, height: 12, color: ready ? "#0d8080" : "#a9afb6" } : undefined
+    , markerEnd: tp.direction === "in" ? { type: MarkerType.ArrowClosed, width: 12, height: 12, color: ready ? "#0d8080" : WIRE_COLOR } : undefined
     , source
     , sourceHandle: handleId(fp.direction, fp.id, e.from.side)
     , target
@@ -353,7 +356,7 @@ export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; se
       edges.push(hot({
         id: `scope-in:${port.id}`
       , type: "routed"
-      , markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: ready ? "#0d8080" : "#a9afb6" }
+      , markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12, color: ready ? "#0d8080" : WIRE_COLOR }
       , source: SCOPE_IN
       , sourceHandle: handleId("in", port.id, "inner")
       , target: scope

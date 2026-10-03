@@ -20,6 +20,9 @@
   --line: #3a3f46;
   --line-soft: #c9ced4;
   --primary: #0d8080;
+  /* 線 (配線) の色。枠線 (--line) は無彩色、配線はティール系にして、拡大して一部だけ見ても見分けがつくようにする */
+  --wire: #5a9a9a;        /* 未確定の線 (細い) */
+  --wire-halo: #5a9a9a;
   --primary-strong: #006a6a;
   --primary-soft: #e3f1f0;
   --primary-soft-2: #cde6e4;
@@ -57,6 +60,8 @@
   --line: #4a5058;
   --line-soft: #3a4047;
   --primary: #3fb5b5;
+  --wire: #5a9a9a;
+  --wire-halo: #5a9a9a;
   --primary-strong: #74d3d3;
   --primary-soft: #1f3536;
   --primary-soft-2: #24494a;
@@ -644,12 +649,11 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* 線は 2 種類だけ: 要素が確定している線 (太いティール) と、まだの線 (灰色)。太さはズームに関係なく画面上で一定 */
 /* 線は 2 種類だけ。未確定 = 細い薄い灰色、確定 (成果物あり) = 太いティール。
    遠目では色相より「太さ」と「明るさ」の差で見分けるので、太さ 2 倍・明度も離す */
-.react-flow__edge-path { stroke: #a9afb6; stroke-width: 2px; opacity: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; }
-:root[data-theme="dark"] .react-flow__edge-path { stroke: #6b737c; }
+.react-flow__edge-path { stroke: var(--wire); stroke-width: 2px; opacity: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; }
 .react-flow__edge.edge-ready .react-flow__edge-path { stroke: var(--primary); stroke-width: 4px; }
 
 /* 選択・ホバー: 色は変えず、太さと縁取りだけ */
-.react-flow__edge-halo { fill: none; stroke: currentColor; stroke-opacity: 0.22; stroke-width: 12px; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; color: #7a8088; }
+.react-flow__edge-halo { fill: none; stroke: currentColor; stroke-opacity: 0.22; stroke-width: 12px; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; color: var(--wire-halo); }
 .react-flow__edge.edge-ready .react-flow__edge-halo { color: var(--primary); }
 .react-flow__edge.edge-hot .react-flow__edge-path,
 .react-flow__edge:hover .react-flow__edge-path { stroke-width: 5px; }
