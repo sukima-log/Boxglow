@@ -2,7 +2,7 @@
   "name": "boxglow-vscode",
   "displayName": "Boxglow",
   "description": "Open boxglow.json as a diagram of boxes and wires: see what your AI agents and your team are working on, right inside VS Code.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "sukima-log",
   "license": "MIT",
   "repository": {

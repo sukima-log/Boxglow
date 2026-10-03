@@ -681,6 +681,29 @@ describe("階層移動の線の付け替えと重なりの解消", () => {
     expect(r.blocks[c.blockId].position.y).toBe(76);
   });
 
+  it("縦に詰まった列 (隣どうしが重なる) は、どの箱も重ならない位置まで順に押し下げられる", () => {
+    // 高さ 98 の箱を 60px 刻みで 6 つ並べる (全部が隣と重なる)。往復せずに全部ばらけること
+    let p = createProject("t");
+    const pj = defaultTaskParent(p);
+    const ids: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      const r = addBlock(p, { parentId: pj, title: `K${i}`, position: { x: 120, y: 76 + i * 60 } });
+      p = r.project;
+      ids.push(r.blockId);
+    }
+    const size = (pp: Project, id: string) => ({ width: pp.blocks[id].title === "K1" ? 460 : 300, height: pp.blocks[id].title === "K2" ? 116 : 98 });
+    const r = resolveAllOverlaps(p, size);
+    const rect = (id: string) => ({ ...r.blocks[id].position, ...size(r, id) });
+    for (const i of ids) for (const j of ids) {
+      if (i >= j) continue;
+      const u = rect(i), v = rect(j);
+      const overlap = u.x < v.x + v.width && u.x + u.width > v.x && u.y < v.y + v.height && u.y + u.height > v.y;
+      expect(overlap).toBe(false);
+    }
+    // 同じ位置に積み重なっていない
+    expect(new Set(ids.map((id) => `${r.blocks[id].position.x},${r.blocks[id].position.y}`)).size).toBe(ids.length);
+  });
+
   it("重なった兄弟から最小の移動で押し出される", () => {
     const { p, a, b } = twoBlocks();
     let q = moveBlock(p, a, { x: 100, y: 200 });

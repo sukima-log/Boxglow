@@ -1834,7 +1834,10 @@ export function resolveOverlap(p: Project, blockId: string, sizeOf: (p: Project,
   // 箱と箱の間には線の通路が要る: 線は箱の縁から 36px 離れるので、両側で 72px + 線 1 本分。8px 単位で 96px
   const GAP = 96;
   const me = sizeOf(q, blockId);
-  for (let iter = 0; iter < 8; iter++) {
+  // 確定済みの箱だけを避けるとき (全体の解消) は右か下にしか動かさない: 上や左へ戻すと、先に確定した別の箱に当たって
+  // 「下へ押す ↔ 上へ戻す」の往復になり、重なったまま終わる。右・下だけなら単調に進むので必ず終わる (回数の上限も大きく取る)
+  const forwardOnly = !!against;
+  for (let iter = 0; iter < (forwardOnly ? 64 : 8); iter++) {
     const cur = q.blocks[blockId];
     const sib = childrenOf(q, cur.parentId!).find((s) => {
       if (s.id === blockId) return false;
@@ -1851,7 +1854,7 @@ export function resolveOverlap(p: Project, blockId: string, sizeOf: (p: Project,
     , { x: cur.position.x, y: sib.position.y + sz.height + GAP, d: sib.position.y + sz.height + GAP - cur.position.y }
     , { x: sib.position.x - me.width - GAP, y: cur.position.y, d: cur.position.x - (sib.position.x - me.width - GAP) }
     , { x: cur.position.x, y: sib.position.y - me.height - GAP, d: cur.position.y - (sib.position.y - me.height - GAP) }
-    ].filter((m) => m.d >= 0);
+    ].filter((m, i) => m.d >= 0 && (!forwardOnly || i < 2)); // 先頭 2 つが右・下
     const nested = cur.parentId !== ROOT_ID;
     const ok = moves.filter((m) => !nested || (m.x >= CHILD_PADDING.left && m.y >= childTop(q, cur.parentId!)));
     const best = (ok.length > 0 ? ok : moves).sort((a, c) => a.d - c.d)[0];
