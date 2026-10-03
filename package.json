@@ -13,7 +13,9 @@
     "typecheck": "tsc -b",
     "build:cli": "esbuild cli/main.ts --bundle --loader:.md=text --platform=node --format=esm --target=node18 --outfile=bin/boxglow.js --banner:js='#!/usr/bin/env node'",
     "prepare": "npm run build:cli",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "build:pages": "tsc -b && VITE_BASE=/ vite build --outDir dist-pages && npm run build:cli",
+    "deploy:pages": "npm run build:pages && npx --yes wrangler@4 pages deploy dist-pages --project-name=boxglow --commit-dirty=true"
   },
   "dependencies": {
     "@xyflow/react": "^12.12.0",

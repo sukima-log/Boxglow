@@ -1,6 +1,7 @@
 # 依存と生成物
 node_modules
 dist
+dist-pages
 bin/
 *.local
 .DS_Store

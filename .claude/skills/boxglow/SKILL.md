@@ -5,7 +5,7 @@ description: Boxglow (boxglow.json) で計画と進捗を人間と共有する�
 
 # Boxglow で計画と進捗を共有する
 
-リポジトリ直下の `boxglow.json` が計画の正本。人間は Boxglow の画面 (https://www.sukimalog.com/apps/boxglow/ で「boxglow.json を開く」) で見ている。
+リポジトリ直下の `boxglow.json` が計画の正本。人間は Boxglow の画面 (https://boxglow.pages.dev/ で「boxglow.json を開く」) で見ている。
 直接編集せず `npx boxglow` で更新する。
 
 ## 最初の計画づくり (新しいプロジェクトのとき)

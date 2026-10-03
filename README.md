@@ -7,7 +7,7 @@ Tasks are boxes with inputs and outputs; a box goes New (BlackBox: dark, output 
 
 **計画と進捗を、箱と線で。AI エージェントとチームが今どこを作っていて、何が終わり、どこで判断を待っているかが一目でわかる。**
 
-- Web app: https://www.sukimalog.com/apps/boxglow/ (no sign-in; data stays in your browser, or opens a local `boxglow.json`)
+- Web app: https://boxglow.pages.dev/ (no sign-in; data stays in your browser, or opens a local `boxglow.json`)
 - CLI for agents: `npx boxglow` (status / start / done / split / ask / answer ...)
 - License: MIT
 
@@ -129,7 +129,7 @@ Schema: `schemaVersion` 5. Older files (1-4) load and are upgraded on the first 
 
 URL parameters: `?demo=1` (sample), `&readonly=1`, `&embed=1`, `&theme=dark|light`, `?view=article` (= demo + embed + readonly), `#p=<id>`.
 
-The hosted demo at sukimalog.com is deployed from `dist/` by the author's blog tooling; any static host works (`vite build`, serve `dist/` under `/apps/boxglow/` or change `base` in `vite.config.ts`).
+The web app is hosted on Cloudflare Pages (`npm run deploy:pages` builds with `VITE_BASE=/` into `dist-pages/` and uploads it). Any static host works: `vite build` with `VITE_BASE` set to the path you serve from (the default `/apps/boxglow/` is the author's blog mirror).
 
 ## Layout
 

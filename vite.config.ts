@@ -1,7 +1,7 @@
 // Vite の設定
 // 配置先の URL パス (base) は環境変数 VITE_BASE で切り替える。
 //   段階 1: livedoor のファイル置き場 https://www.sukimalog.com/apps/boxglow/  -> 既定値 "/apps/boxglow/"
-//   段階 2: Cloudflare Pages (app.sukimalog.com)                              -> VITE_BASE=/ でビルド
+//   段階 2: Cloudflare Pages (https://boxglow.pages.dev/)                     -> VITE_BASE=/ でビルド (npm run build:pages -> dist-pages/)
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";

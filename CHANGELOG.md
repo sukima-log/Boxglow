@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Web app moved to Cloudflare Pages: https://boxglow.pages.dev/ (`npm run deploy:pages`). The blog mirror at sukimalog.com stays for a while.
 - "All" now shows only the major boxes (children of project boxes), always collapsed; what is inside a major box is seen on its own tab (double-click a major box, or press its arrow, to open the tab). Layout, `boxglow layout` and Auto Layout treat major boxes as collapsed, so the overview stays compact. Dropping a box onto a collapsed major box moves it inside.
 - Every level works the same way as All: a tab (or any opened box) draws the opened box as the top-level box with its direct children (collapsed) inside, and the box's Inputs / Outputs nodes outside it, wired to the box. Click a box that has children to open it; a breadcrumb (All › major › ...) at the top-left of the canvas goes back up. Task boxes are stored collapsed; layout uses collapsed sizes.
 - Double-click a box that has children (or press its arrow) to open it; a single click only selects. Adding a box on All with nothing selected creates a new major box, i.e. a new tab.
