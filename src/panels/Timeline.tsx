@@ -2,9 +2,9 @@
  * タイムライン: 判断待ち・作業中・ログを時系列で見る (上の帯の要約チップから開く)
  */
 import { useState } from "react";
-import { answerDecision, summarize, candidatesOf, reopenDecision } from "../model/graph";
+import { answerDecision, summarize, candidatesOf, reopenDecision, ancestorsOf } from "../model/graph";
 import { actorLabel, ACTIVITY_LABEL, agoText, shortTime } from "../model/report";
-import type { Project } from "../model/types";
+import { ROOT_ID, type Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
 
 /** 判断に答える小さなカード (ブロックの詳細とタイムラインで共用) */
@@ -60,6 +60,26 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
   );
 }
 
+/**
+ * 箱の見出し (一覧の中で「どの箱か」をすぐ分かるように): B 番号、階層のパス、題名、箱へ飛ぶボタン
+ * Input : blockId, onJump = 押したときに箱を選んで画面を寄せる
+ */
+function BlockRef({ project, blockId, onJump }: { project: Project; blockId: string; onJump: (id: string) => void }) {
+  const b = project.blocks[blockId];
+  if (!b) return null;
+  const path = ancestorsOf(project, blockId).filter((a) => a.id !== ROOT_ID).reverse().map((a) => a.title).join(" › ");
+  return (
+    <div className="dec-head" role="button" tabIndex={0} onClick={() => onJump(blockId)} onKeyDown={(e) => e.key === "Enter" && onJump(blockId)} title="この箱を画面で選ぶ">
+      <span className="dec-key">{b.key}</span>
+      <div className="min-w-0 flex-1">
+        {path && <div className="text-[11px] truncate" style={{ color: "var(--text-muted)" }}>{path}</div>}
+        <div className="text-[13px] font-bold truncate">{b.title}</div>
+      </div>
+      <span className="btn btn-sm flex-none">箱へ →</span>
+    </div>
+  );
+}
+
 export function Timeline({ project }: { project: Project }) {
   const select = useProjectStore((s) => s.select);
   const focusBlock = useProjectStore((s) => s.focusBlock);
@@ -82,7 +102,8 @@ export function Timeline({ project }: { project: Project }) {
           <span className="label">Decisions (あなたの回答で AI が進めます)</span>
           {s.decisions.map(({ block, decision }) => (
             <div key={decision.id} className="flex flex-col gap-1">
-              <button className="btn btn-ghost btn-sm justify-start" onClick={() => jump(block.id)}>→ {block.title}</button>
+              {/* どの箱の判断かを見出しで示す: B 番号・階層のパス・題名・箱へ飛ぶボタン */}
+              <BlockRef project={project} blockId={block.id} onJump={jump} />
               <DecisionCard project={project} blockId={block.id} decisionId={decision.id} />
             </div>
           ))}
@@ -95,6 +116,7 @@ export function Timeline({ project }: { project: Project }) {
           {[...s.working, ...s.blocked.map((b) => ({ ...b, since: project.blocks[b.block.id].activity?.since ?? "" }))].map((w) => (
             <button key={w.block.id} className="tree-row text-left" onClick={() => jump(w.block.id)}>
               <span className="tl-actor">{actorLabel(w.actor)}</span>
+              <span className="dec-key">{w.block.key}</span>
               <span className="truncate"><b>{w.block.title}</b> {ACTIVITY_LABEL[project.blocks[w.block.id].activity!.state]} {w.note}</span>
               <span className="ml-auto text-[11px] flex-none" style={{ color: "var(--text-muted)" }}>{w.since ? agoText(w.since) : ""}</span>
             </button>

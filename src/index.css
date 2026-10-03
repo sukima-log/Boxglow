@@ -444,6 +444,10 @@ textarea.input { resize: vertical; min-height: 64px; }
 .status-icon.progress circle { stroke: var(--primary); }
 .status-icon.progress path { fill: var(--primary); }
 .status-icon.done circle { fill: var(--primary); }
+/* 一覧の中の箱の見出し (判断待ち・作業中): どの箱かを B 番号 + パス + 題名で示す。押すと箱へ */
+.dec-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 2px solid var(--line-soft); border-radius: 10px; background: var(--bg-paper); cursor: pointer; }
+.dec-head:hover { border-color: var(--primary); }
+.dec-key { flex: none; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 6px; background: var(--primary); color: var(--on-primary); }
 .bg-block__tpl {
   display: inline-block;
   margin-left: 6px;
