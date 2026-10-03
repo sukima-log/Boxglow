@@ -144,4 +144,27 @@ const japaneseLeft = (page) => page.evaluate(() => {
   return out;
 });
 
-module.exports = { chromium, BASE, ROOT, check, result, open, load, majorsOf, idOf, switchTab, penetrations, japaneseLeft };
+/** 今の画面の交差の数 (水平の線分と垂直の線分が互いの内側で交わる回数。同じ線の中は数えない) */
+const crossings = (page) => page.evaluate(() => {
+  const rf = window.boxglow.rf;
+  const segs = [];
+  for (const e of rf.getEdges()) {
+    if (e.hidden || !e.data?.path) continue;
+    const p = e.data.path;
+    for (let i = 1; i < p.length; i++) segs.push({ id: e.id, a: p[i - 1], b: p[i] });
+  }
+  let n = 0;
+  for (let i = 0; i < segs.length; i++) for (let j = i + 1; j < segs.length; j++) {
+    const s = segs[i], t = segs[j];
+    if (s.id === t.id) continue;
+    const sh = Math.abs(s.a.y - s.b.y) < 0.5, th = Math.abs(t.a.y - t.b.y) < 0.5;
+    if (sh === th) continue;
+    const h = sh ? s : t, v = sh ? t : s;
+    const hx0 = Math.min(h.a.x, h.b.x), hx1 = Math.max(h.a.x, h.b.x), vy0 = Math.min(v.a.y, v.b.y), vy1 = Math.max(v.a.y, v.b.y);
+    if (v.a.x > hx0 + 1 && v.a.x < hx1 - 1 && h.a.y > vy0 + 1 && h.a.y < vy1 - 1) n++;
+  }
+  return n;
+});
+
+
+module.exports = { chromium, BASE, ROOT, check, result, open, load, majorsOf, idOf, switchTab, penetrations, japaneseLeft, crossings };

@@ -185,6 +185,7 @@ function separateHorizontals(paths: Map<string, Point[]>, scopeOf: Map<string, s
           let side = 0;
           let midX = 0;
           let span = 0;
+          let leftUp = false; // Z 型のとき: 左端につながる縦線分が上へ伸びるか (左上から来て右下へ抜ける形)
           for (const g of mine) {
             const before = path[g.idx - 1];
             const after = path[g.idx + 2];
@@ -192,10 +193,15 @@ function separateHorizontals(paths: Map<string, Point[]>, scopeOf: Map<string, s
             if (after) side += after.y < g.y ? -1 : 1;
             midX += (g.x0 + g.x1) / 2;
             span += g.x1 - g.x0;
+            const leftNeighbor = path[g.idx].x <= path[g.idx + 1].x ? before : after;
+            if (leftNeighbor) leftUp = leftNeighbor.y < g.y;
           }
-          return { id, side, midX: midX / Math.max(1, mine.length), span };
+          const mid = midX / Math.max(1, mine.length);
+          // Z 型どうしの並び: 「左上から来て右下へ抜ける」線は、左にあるものほど下に置く (右の線の入りの縦線分が、左の線の横線分を横切らない)。
+          // 「左下から来て右上へ抜ける」線は逆で、左にあるものほど上に置く
+          return { id, side, zOrder: leftUp ? -mid : mid, span };
         })
-        .sort((p, q) => p.side - q.side || (p.side < 0 ? p.span - q.span : p.side > 0 ? q.span - p.span : p.midX - q.midX))
+        .sort((p, q) => p.side - q.side || (p.side < 0 ? p.span - q.span : p.side > 0 ? q.span - p.span : p.zOrder - q.zOrder))
         .map((o) => o.id);
       let lo = -Infinity;
       let hi = Infinity;
@@ -337,6 +343,7 @@ function separateVerticals(paths: Map<string, Point[]>, scopeOf: Map<string, str
           let side = 0;
           let midY = 0;
           let span = 0;
+          let topLeft = false; // Z 型のとき: 上端につながる横線分が左へ伸びるか (左上から来て右下へ下りる形)
           for (const g of mine) {
             const path = paths.get(g.edgeId)!;
             const before = path[g.idx - 1];
@@ -345,10 +352,15 @@ function separateVerticals(paths: Map<string, Point[]>, scopeOf: Map<string, str
             if (after) side += after.x < g.x ? -1 : 1;
             midY += (g.y0 + g.y1) / 2;
             span += g.y1 - g.y0;
+            const topNeighbor = path[g.idx].y <= path[g.idx + 1].y ? before : after;
+            if (topNeighbor) topLeft = topNeighbor.x < g.x;
           }
-          return { id, side, midY: midY / Math.max(1, mine.length), span };
+          const mid = midY / Math.max(1, mine.length);
+          // Z 型どうしの並び: 「左上から来て右下へ下りる」線は、上にあるものほど右に置く (下の線の横線分が、上の線の縦線分を横切らない)。
+          // 「左下から来て右上へ上がる」線は逆で、上にあるものほど左に置く。以前は向きを見ずに「上の線を左」にしていて、下りる束が互いに交差していた
+          return { id, side, zOrder: topLeft ? -mid : mid, span };
         })
-        .sort((p, q) => p.side - q.side || (p.side < 0 ? p.span - q.span : p.side > 0 ? q.span - p.span : p.midY - q.midY))
+        .sort((p, q) => p.side - q.side || (p.side < 0 ? p.span - q.span : p.side > 0 ? q.span - p.span : p.zOrder - q.zOrder))
         .map((o) => o.id);
       // 束全体が置ける範囲: 各線分の空き範囲の共通部分 (箱から MARGIN 以上離れる)
       let lo = -Infinity;

@@ -2,7 +2,7 @@
   "name": "boxglow-vscode",
   "displayName": "Boxglow",
   "description": "See what your AI agents (Claude Code, Codex, ...) and your team are working on: open boxglow.json as a diagram of boxes and wires, right inside VS Code.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": "sukima",
   "license": "MIT",
   "homepage": "https://boxglow.pages.dev/",

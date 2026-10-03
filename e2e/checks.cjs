@@ -9,7 +9,7 @@
  */
 const fs = require("fs");
 const path = require("path");
-const { chromium, ROOT, check, result, open, load, majorsOf, idOf, switchTab, penetrations, japaneseLeft } = require("./lib.cjs");
+const { chromium, ROOT, check, result, open, load, majorsOf, idOf, switchTab, penetrations, japaneseLeft, crossings } = require("./lib.cjs");
 
 const DAW = path.join(ROOT, "examples/logic-daw/boxglow.json");
 const NOTES = path.join(ROOT, "examples/notes-app/boxglow.json");
@@ -36,16 +36,21 @@ function squeezed(file) {
     const majors = await majorsOf(page);
     let total = 0;
     let slowest = 0;
+    let crossed = 0;
     const detail = [];
     for (const scope of [null, ...majors.map((m) => m.id)]) {
       const ms = await switchTab(page, scope);
       slowest = Math.max(slowest, ms);
+      crossed += await crossings(page);
       const hits = await penetrations(page);
       total += hits.length;
       for (const h of hits.slice(0, 3)) detail.push(`${h.src} -> ${h.dst} が ${h.box} を貫通`);
     }
     check(`${label}: 線が箱の上を通らない (${majors.length + 1} 画面)`, total === 0, total ? `${total} 件: ${detail.join(" / ")}` : "");
     check(`${label}: タブの切り替えが 2.5 秒以内`, slowest < 2500, `最大 ${slowest} ms`);
+    // 線どうしの不要な交差が増えていないこと (例の計画だけ上限を決めて見張る。並びの規則を壊すと数倍に増える)
+    const limit = { "DAW の例": 2, "notes-app の例": 10 }[label];
+    if (limit !== undefined) check(`${label}: 線どうしの交差が ${limit} 以下`, crossed <= limit, `交差 ${crossed}`);
     check(`${label}: コンソールにエラーが無い`, errors.length === 0, errors.slice(0, 2).join(" | "));
     await page.context().close();
   }

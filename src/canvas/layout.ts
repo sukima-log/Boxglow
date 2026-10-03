@@ -83,9 +83,8 @@ export type AnyRFNode = BlockRFNode | TerminalRFNode;
 /** タブで開いた大項目の入力ノード / 出力ノードの id */
 export const SCOPE_IN = "scope-in";
 export const SCOPE_OUT = "scope-out";
-/** 開いている箱と、その入力/出力ノードとの横の間隔 (自動整列の GAP_X と同じ 144px) と、箱の上端からの縦の位置 */
+/** 開いている箱と、その入力/出力ノードとの横の間隔 (自動整列の GAP_X と同じ 144px) */
 const SCOPE_TERMINAL_GAP = 144;
-const SCOPE_TERMINAL_TOP = 40;
 
 /**
  * 箱が範囲 (scope の箱とその中) に入っているか
@@ -155,6 +154,9 @@ export function buildNodes(
     const scopeSize = blockSize(p, scope);
     const scopeAbs = absolutePosition(p, scope);
     const sb = p.blocks[scope];
+    // 入力 / 出力ノードの行を、箱のポートの行と同じ高さにそろえる (線がまっすぐになる)。
+    // 箱のポートの 1 行目は見出し (headerH) の下、ノードの 1 行目は HEADER_H の下なので、その差だけ下げる
+    const terminalTop = scopeSize.headerH - HEADER_H;
     nodes.push({
       id: scope
     , type: "block"
@@ -174,7 +176,7 @@ export function buildNodes(
       id: SCOPE_IN
     , type: "terminal"
       // 箱の左に間隔ぶん離して置く (最上位のノード。箱の中ではない)
-    , position: { x: scopeAbs.x - SCOPE_TERMINAL_GAP - TERMINAL_W, y: scopeAbs.y + SCOPE_TERMINAL_TOP }
+    , position: { x: scopeAbs.x - SCOPE_TERMINAL_GAP - TERMINAL_W, y: scopeAbs.y + terminalTop }
     , data: { which: "in", scopeId: scope }
     , width: TERMINAL_W
     , height: HEADER_H + Math.max(nIn, 1) * ROW_H + PAD_BOTTOM
@@ -185,7 +187,7 @@ export function buildNodes(
     nodes.push({
       id: SCOPE_OUT
     , type: "terminal"
-    , position: { x: scopeAbs.x + scopeSize.width + SCOPE_TERMINAL_GAP, y: scopeAbs.y + SCOPE_TERMINAL_TOP }
+    , position: { x: scopeAbs.x + scopeSize.width + SCOPE_TERMINAL_GAP, y: scopeAbs.y + terminalTop }
     , data: { which: "out", scopeId: scope }
     , width: TERMINAL_W
     , height: HEADER_H + Math.max(nOut, 1) * ROW_H + PAD_BOTTOM
