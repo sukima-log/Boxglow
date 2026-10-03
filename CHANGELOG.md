@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- VS Code extension prepared for the Marketplace (publisher `sukima`, version 0.2.0): English listing with screenshots, changelog, gallery banner. English example plan `examples/notes-app/boxglow.json`.
 - Answers stay visible until an agent picks them up: after you answer a question it no longer vanishes from the Activity list. It moves to an "Answered" section (and the top bar shows "回答済み N"), marked "not read by the AI yet" and still editable, until an agent acknowledges it with `npx boxglow ack <block>` (or records work on that box: `start`, `done`, `set`, `split`, `ask`, ...). `status` lists them under "回答あり"; MCP tool `boxglow_ack`. Answers an agent records itself are acknowledged immediately.
 
 ## 0.2.0 (2026-10-03)

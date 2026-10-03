@@ -1,14 +1,23 @@
 {
   "name": "boxglow-vscode",
   "displayName": "Boxglow",
-  "description": "Open boxglow.json as a diagram of boxes and wires: see what your AI agents and your team are working on, right inside VS Code.",
-  "version": "0.1.10",
-  "publisher": "sukima-log",
+  "description": "See what your AI agents (Claude Code, Codex, ...) and your team are working on: open boxglow.json as a diagram of boxes and wires, right inside VS Code.",
+  "version": "0.2.0",
+  "publisher": "sukima",
   "license": "MIT",
+  "homepage": "https://boxglow.pages.dev/",
+  "bugs": {
+    "url": "https://github.com/sukima-log/Boxglow/issues"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/sukima-log/Boxglow.git",
     "directory": "vscode"
+  },
+  "qna": false,
+  "galleryBanner": {
+    "color": "#1c1f24",
+    "theme": "dark"
   },
   "engines": {
     "vscode": "^1.85.0"
@@ -19,10 +28,15 @@
   ],
   "keywords": [
     "boxglow",
-    "plan",
+    "ai agents",
+    "claude code",
+    "codex",
+    "mcp",
     "roadmap",
-    "ai-agents",
-    "claude-code"
+    "plan",
+    "task management",
+    "diagram",
+    "progress"
   ],
   "icon": "media/icon-128.png",
   "main": "./out/extension.js",

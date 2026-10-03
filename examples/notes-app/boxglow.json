@@ -1,0 +1,1680 @@
+{
+  "schemaVersion": 5,
+  "id": "2C1XjWWPnC",
+  "name": "Notes app",
+  "description": "",
+  "createdAt": "2026-10-03T14:16:23.377Z",
+  "visibility": "private",
+  "members": [],
+  "blocks": {
+    "root": {
+      "id": "root",
+      "parentId": null,
+      "title": "Notes app",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "JlcyPamtMV": {
+      "id": "JlcyPamtMV",
+      "key": "B1",
+      "kind": "project",
+      "parentId": "root",
+      "title": "Notes app",
+      "description": "",
+      "status": "gray",
+      "assigneeIds": [],
+      "position": {
+        "x": 344,
+        "y": 40
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "LKuSAMsY9x": {
+      "id": "LKuSAMsY9x",
+      "key": "B2",
+      "parentId": "JlcyPamtMV",
+      "title": "Plan and design",
+      "description": "Decide the scope, the data model and the screens",
+      "status": "white",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 76
+      },
+      "collapsed": true,
+      "artifacts": [],
+      "activity": null,
+      "decisions": [],
+      "category": "design"
+    },
+    "9U6Ttz9459": {
+      "id": "9U6Ttz9459",
+      "key": "B3",
+      "parentId": "JlcyPamtMV",
+      "title": "API",
+      "description": "Notes CRUD, search and auth on Workers",
+      "status": "gray",
+      "assigneeIds": [],
+      "position": {
+        "x": 667.1999999999998,
+        "y": 76
+      },
+      "collapsed": true,
+      "artifacts": [],
+      "activity": null,
+      "decisions": [],
+      "category": "build"
+    },
+    "1IuIajVK74": {
+      "id": "1IuIajVK74",
+      "key": "B4",
+      "parentId": "JlcyPamtMV",
+      "title": "Web UI",
+      "description": "Editor, list and search screens",
+      "status": "gray",
+      "assigneeIds": [],
+      "position": {
+        "x": 1201.1999999999996,
+        "y": 76
+      },
+      "collapsed": true,
+      "artifacts": [],
+      "activity": null,
+      "decisions": [],
+      "category": "ui"
+    },
+    "PigmJAw7aB": {
+      "id": "PigmJAw7aB",
+      "key": "B5",
+      "parentId": "JlcyPamtMV",
+      "title": "Quality and release",
+      "description": "Tests, docs and the production deploy",
+      "status": "gray",
+      "assigneeIds": [],
+      "position": {
+        "x": 1741.7999999999993,
+        "y": 76
+      },
+      "collapsed": true,
+      "artifacts": [],
+      "activity": null,
+      "decisions": [],
+      "category": "ops"
+    },
+    "4MuyfwLB_p": {
+      "id": "4MuyfwLB_p",
+      "key": "B6",
+      "parentId": "LKuSAMsY9x",
+      "title": "Write the requirements",
+      "description": "",
+      "status": "white",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "r2WcJjhcq8": {
+      "id": "r2WcJjhcq8",
+      "key": "B7",
+      "parentId": "LKuSAMsY9x",
+      "title": "Design the data model",
+      "description": "",
+      "status": "white",
+      "assigneeIds": [],
+      "position": {
+        "x": 719.9999999999998,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "BCGsXLuXg_": {
+      "id": "BCGsXLuXg_",
+      "key": "B8",
+      "parentId": "LKuSAMsY9x",
+      "title": "Sketch the screens",
+      "description": "",
+      "status": "white",
+      "assigneeIds": [],
+      "position": {
+        "x": 719.9999999999998,
+        "y": 270
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "YT_k3omc9R": {
+      "id": "YT_k3omc9R",
+      "key": "B9",
+      "parentId": "LKuSAMsY9x",
+      "title": "Write the design doc",
+      "description": "",
+      "status": "white",
+      "assigneeIds": [],
+      "position": {
+        "x": 1372.7999999999995,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "JI7FRaAqFO": {
+      "id": "JI7FRaAqFO",
+      "key": "B10",
+      "parentId": "9U6Ttz9459",
+      "title": "Set up Workers and D1",
+      "description": "",
+      "status": "white",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "iTmSCj4L-R": {
+      "id": "iTmSCj4L-R",
+      "key": "B11",
+      "parentId": "9U6Ttz9459",
+      "title": "Notes CRUD endpoints",
+      "description": "",
+      "status": "white",
+      "assigneeIds": [],
+      "position": {
+        "x": 713.3999999999997,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "Au-WjbJzxM": {
+      "id": "Au-WjbJzxM",
+      "key": "B12",
+      "parentId": "9U6Ttz9459",
+      "title": "Full-text search",
+      "description": "",
+      "status": "gray",
+      "assigneeIds": [],
+      "position": {
+        "x": 1306.7999999999995,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": {
+        "actor": "claude-code",
+        "state": "working",
+        "note": "Indexing titles and bodies with SQLite FTS5",
+        "since": "2026-10-03T14:17:15.996Z"
+      },
+      "decisions": []
+    },
+    "IF_61IKFyn": {
+      "id": "IF_61IKFyn",
+      "key": "B13",
+      "parentId": "9U6Ttz9459",
+      "title": "Sign-in",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 713.3999999999997,
+        "y": 270
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": {
+        "actor": "claude-code",
+        "state": "needs_decision",
+        "note": "Which sign-in method should ship first?",
+        "since": "2026-10-03T14:17:16.163Z"
+      },
+      "decisions": [
+        {
+          "id": "vCCPQpIQJd",
+          "question": "Which sign-in method should ship first?",
+          "options": [
+            "Email magic link",
+            "GitHub OAuth",
+            "Both at once"
+          ],
+          "askedBy": "claude-code",
+          "askedAt": "2026-10-03T14:17:16.163Z",
+          "context": "Magic link: no password to store, needs an email sender (about 2 days). GitHub OAuth: fastest for developers, excludes non-developers (about 1 day). Both: covers everyone, about 4 days and two flows to test. The choice decides what the sign-in screen looks like."
+        }
+      ]
+    },
+    "lGQwBctscI": {
+      "id": "lGQwBctscI",
+      "key": "B14",
+      "parentId": "9U6Ttz9459",
+      "title": "Deploy the API",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 1886.9999999999993,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "X6Cmx-Ta6c": {
+      "id": "X6Cmx-Ta6c",
+      "key": "B15",
+      "parentId": "1IuIajVK74",
+      "title": "Editor screen",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": [],
+      "dueDate": "2026-10-20"
+    },
+    "m0PVLwSPHn": {
+      "id": "m0PVLwSPHn",
+      "key": "B16",
+      "parentId": "1IuIajVK74",
+      "title": "List and search screen",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 296
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "4D5TtHeCjg": {
+      "id": "4D5TtHeCjg",
+      "key": "B17",
+      "parentId": "1IuIajVK74",
+      "title": "Sign-in screen",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 516
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "lP0adVSSpv": {
+      "id": "lP0adVSSpv",
+      "key": "B18",
+      "parentId": "1IuIajVK74",
+      "title": "Build and bundle",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 680.3999999999999,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "DWV-kKZ8n3": {
+      "id": "DWV-kKZ8n3",
+      "key": "B19",
+      "parentId": "PigmJAw7aB",
+      "title": "End-to-end tests",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "CBZmIb3x5r": {
+      "id": "CBZmIb3x5r",
+      "key": "B20",
+      "parentId": "PigmJAw7aB",
+      "title": "User guide",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 296
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "0Kfg97U-na": {
+      "id": "0Kfg97U-na",
+      "key": "B21",
+      "parentId": "PigmJAw7aB",
+      "title": "Production deploy",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 673.7999999999998,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    }
+  },
+  "ports": {
+    "Zahwx1ScoW": {
+      "id": "Zahwx1ScoW",
+      "blockId": "root",
+      "direction": "out",
+      "name": "Released notes app (URL)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "Rqr7MgAytt": {
+      "id": "Rqr7MgAytt",
+      "blockId": "JlcyPamtMV",
+      "direction": "out",
+      "name": "Released notes app (URL)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "WugOPHsf8L": {
+      "id": "WugOPHsf8L",
+      "blockId": "JlcyPamtMV",
+      "direction": "in",
+      "name": "Product brief (README.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "g2RH32SL4V": {
+      "id": "g2RH32SL4V",
+      "blockId": "root",
+      "direction": "in",
+      "name": "Product brief (README.md)",
+      "description": "",
+      "required": true,
+      "artifacts": [],
+      "promotedFrom": "WugOPHsf8L"
+    },
+    "-VqRfOxz5S": {
+      "id": "-VqRfOxz5S",
+      "blockId": "JlcyPamtMV",
+      "direction": "in",
+      "name": "Hosting account (Cloudflare)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "dZDgrA-l2S": {
+      "id": "dZDgrA-l2S",
+      "blockId": "root",
+      "direction": "in",
+      "name": "Hosting account (Cloudflare)",
+      "description": "",
+      "required": true,
+      "artifacts": [],
+      "promotedFrom": "-VqRfOxz5S"
+    },
+    "Svxlmrhwyu": {
+      "id": "Svxlmrhwyu",
+      "blockId": "LKuSAMsY9x",
+      "direction": "out",
+      "name": "Design doc (docs/design.md)",
+      "description": "",
+      "required": true,
+      "artifacts": [
+        {
+          "id": "d-XtPn_FBz",
+          "title": "Design doc",
+          "url": "https://github.com/sukima-log/Boxglow/tree/main/examples/notes-app#design",
+          "kind": "url",
+          "note": ""
+        }
+      ]
+    },
+    "330x6NnmfP": {
+      "id": "330x6NnmfP",
+      "blockId": "9U6Ttz9459",
+      "direction": "out",
+      "name": "API (src/api, deployed)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "3jm3WKixko": {
+      "id": "3jm3WKixko",
+      "blockId": "1IuIajVK74",
+      "direction": "out",
+      "name": "Web app (src/web, built)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "-YrnjkOIV5": {
+      "id": "-YrnjkOIV5",
+      "blockId": "PigmJAw7aB",
+      "direction": "out",
+      "name": "Released notes app (URL)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "uTijzQmeQ-": {
+      "id": "uTijzQmeQ-",
+      "blockId": "LKuSAMsY9x",
+      "direction": "in",
+      "name": "Product brief (README.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "mj2yA460Jz": {
+      "id": "mj2yA460Jz",
+      "blockId": "9U6Ttz9459",
+      "direction": "in",
+      "name": "Design doc (docs/design.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "cc2xqEAOzd": {
+      "id": "cc2xqEAOzd",
+      "blockId": "1IuIajVK74",
+      "direction": "in",
+      "name": "Design doc (docs/design.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "tYYMe9nRf7": {
+      "id": "tYYMe9nRf7",
+      "blockId": "1IuIajVK74",
+      "direction": "in",
+      "name": "API (src/api, deployed)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "GCu6ASccDx": {
+      "id": "GCu6ASccDx",
+      "blockId": "PigmJAw7aB",
+      "direction": "in",
+      "name": "API (src/api, deployed)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "EXi5A0pueb": {
+      "id": "EXi5A0pueb",
+      "blockId": "PigmJAw7aB",
+      "direction": "in",
+      "name": "Web app (src/web, built)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "rpVDwWunvv": {
+      "id": "rpVDwWunvv",
+      "blockId": "PigmJAw7aB",
+      "direction": "in",
+      "name": "Hosting account (Cloudflare)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "NAhp9Zejez": {
+      "id": "NAhp9Zejez",
+      "blockId": "4MuyfwLB_p",
+      "direction": "out",
+      "name": "Requirements (docs/requirements.md)",
+      "description": "",
+      "required": true,
+      "artifacts": [
+        {
+          "id": "k_1vgMYr8n",
+          "title": "Requirements",
+          "url": "https://github.com/sukima-log/Boxglow/tree/main/examples/notes-app#requirements",
+          "kind": "url",
+          "note": ""
+        }
+      ]
+    },
+    "6qswh6n0T1": {
+      "id": "6qswh6n0T1",
+      "blockId": "4MuyfwLB_p",
+      "direction": "in",
+      "name": "Product brief (README.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "Kl9ir5mPq3": {
+      "id": "Kl9ir5mPq3",
+      "blockId": "r2WcJjhcq8",
+      "direction": "out",
+      "name": "Data model (docs/model.md)",
+      "description": "",
+      "required": true,
+      "artifacts": [
+        {
+          "id": "NUNQ7muKIr",
+          "title": "Data model",
+          "url": "https://github.com/sukima-log/Boxglow/tree/main/examples/notes-app#data-model",
+          "kind": "url",
+          "note": ""
+        }
+      ]
+    },
+    "EVSwNlvKR4": {
+      "id": "EVSwNlvKR4",
+      "blockId": "r2WcJjhcq8",
+      "direction": "in",
+      "name": "Requirements (docs/requirements.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "uCsarmLZjy": {
+      "id": "uCsarmLZjy",
+      "blockId": "BCGsXLuXg_",
+      "direction": "out",
+      "name": "Screen sketches (docs/screens.md)",
+      "description": "",
+      "required": true,
+      "artifacts": [
+        {
+          "id": "ju9uM_HtHY",
+          "title": "Screen sketches",
+          "url": "https://github.com/sukima-log/Boxglow/tree/main/examples/notes-app#screens",
+          "kind": "url",
+          "note": ""
+        }
+      ]
+    },
+    "NmgGQnoKOZ": {
+      "id": "NmgGQnoKOZ",
+      "blockId": "BCGsXLuXg_",
+      "direction": "in",
+      "name": "Requirements (docs/requirements.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "h2pqnLFzwj": {
+      "id": "h2pqnLFzwj",
+      "blockId": "YT_k3omc9R",
+      "direction": "out",
+      "name": "Design doc (docs/design.md)",
+      "description": "",
+      "required": true,
+      "artifacts": [
+        {
+          "id": "slPchRbCyh",
+          "title": "Design doc",
+          "url": "https://github.com/sukima-log/Boxglow/tree/main/examples/notes-app#design",
+          "kind": "url",
+          "note": ""
+        }
+      ]
+    },
+    "tfDVR3XXip": {
+      "id": "tfDVR3XXip",
+      "blockId": "YT_k3omc9R",
+      "direction": "in",
+      "name": "Data model (docs/model.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "hHoT-HGQbB": {
+      "id": "hHoT-HGQbB",
+      "blockId": "YT_k3omc9R",
+      "direction": "in",
+      "name": "Screen sketches (docs/screens.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "h1xDIJMRcn": {
+      "id": "h1xDIJMRcn",
+      "blockId": "JI7FRaAqFO",
+      "direction": "out",
+      "name": "Project skeleton (wrangler.toml)",
+      "description": "",
+      "required": true,
+      "artifacts": [
+        {
+          "id": "zx1IWjMu1k",
+          "title": "wrangler.toml",
+          "url": "https://github.com/sukima-log/Boxglow/tree/main/examples/notes-app#skeleton",
+          "kind": "url",
+          "note": ""
+        }
+      ]
+    },
+    "Ls5wNna7v6": {
+      "id": "Ls5wNna7v6",
+      "blockId": "JI7FRaAqFO",
+      "direction": "in",
+      "name": "Design doc (docs/design.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "HN578lNksc": {
+      "id": "HN578lNksc",
+      "blockId": "iTmSCj4L-R",
+      "direction": "out",
+      "name": "CRUD API (src/api/notes.ts)",
+      "description": "",
+      "required": true,
+      "artifacts": [
+        {
+          "id": "DRodVf4DgC",
+          "title": "notes.ts",
+          "url": "https://github.com/sukima-log/Boxglow/tree/main/examples/notes-app#crud",
+          "kind": "url",
+          "note": ""
+        }
+      ]
+    },
+    "Ykag0dJEud": {
+      "id": "Ykag0dJEud",
+      "blockId": "iTmSCj4L-R",
+      "direction": "in",
+      "name": "Project skeleton (wrangler.toml)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "7r7hYcY4iU": {
+      "id": "7r7hYcY4iU",
+      "blockId": "Au-WjbJzxM",
+      "direction": "out",
+      "name": "Search API (src/api/search.ts)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "giPR3zX8uW": {
+      "id": "giPR3zX8uW",
+      "blockId": "Au-WjbJzxM",
+      "direction": "in",
+      "name": "CRUD API (src/api/notes.ts)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "MxYDIVbTbq": {
+      "id": "MxYDIVbTbq",
+      "blockId": "IF_61IKFyn",
+      "direction": "out",
+      "name": "Auth (src/api/auth.ts)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "m1XD4OGtLn": {
+      "id": "m1XD4OGtLn",
+      "blockId": "IF_61IKFyn",
+      "direction": "in",
+      "name": "Project skeleton (wrangler.toml)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "oKmThrAT_v": {
+      "id": "oKmThrAT_v",
+      "blockId": "lGQwBctscI",
+      "direction": "out",
+      "name": "API (src/api, deployed)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "hYbySusi3D": {
+      "id": "hYbySusi3D",
+      "blockId": "lGQwBctscI",
+      "direction": "in",
+      "name": "Search API (src/api/search.ts)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "7JzOsqWioK": {
+      "id": "7JzOsqWioK",
+      "blockId": "lGQwBctscI",
+      "direction": "in",
+      "name": "Auth (src/api/auth.ts)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "cjTWiUWyGS": {
+      "id": "cjTWiUWyGS",
+      "blockId": "X6Cmx-Ta6c",
+      "direction": "out",
+      "name": "Editor (src/web/Editor.tsx)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "cF49yf3sfn": {
+      "id": "cF49yf3sfn",
+      "blockId": "X6Cmx-Ta6c",
+      "direction": "in",
+      "name": "Design doc (docs/design.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "qFfSmC1oE4": {
+      "id": "qFfSmC1oE4",
+      "blockId": "X6Cmx-Ta6c",
+      "direction": "in",
+      "name": "API (src/api, deployed)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "dT6de5jGIT": {
+      "id": "dT6de5jGIT",
+      "blockId": "m0PVLwSPHn",
+      "direction": "out",
+      "name": "List (src/web/List.tsx)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "k5mIU-UWlY": {
+      "id": "k5mIU-UWlY",
+      "blockId": "m0PVLwSPHn",
+      "direction": "in",
+      "name": "Design doc (docs/design.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "GBoIOg1Ep3": {
+      "id": "GBoIOg1Ep3",
+      "blockId": "m0PVLwSPHn",
+      "direction": "in",
+      "name": "API (src/api, deployed)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "eFXn0T9fM1": {
+      "id": "eFXn0T9fM1",
+      "blockId": "4D5TtHeCjg",
+      "direction": "out",
+      "name": "Sign-in (src/web/SignIn.tsx)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "gmTiR2vXKj": {
+      "id": "gmTiR2vXKj",
+      "blockId": "4D5TtHeCjg",
+      "direction": "in",
+      "name": "API (src/api, deployed)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "wMpNVX3OqX": {
+      "id": "wMpNVX3OqX",
+      "blockId": "lP0adVSSpv",
+      "direction": "out",
+      "name": "Web app (src/web, built)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "m5JfwQVK5-": {
+      "id": "m5JfwQVK5-",
+      "blockId": "lP0adVSSpv",
+      "direction": "in",
+      "name": "Editor (src/web/Editor.tsx)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "lffabkxPL1": {
+      "id": "lffabkxPL1",
+      "blockId": "lP0adVSSpv",
+      "direction": "in",
+      "name": "List (src/web/List.tsx)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "MDuPRQT8da": {
+      "id": "MDuPRQT8da",
+      "blockId": "lP0adVSSpv",
+      "direction": "in",
+      "name": "Sign-in (src/web/SignIn.tsx)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "F90COunnLT": {
+      "id": "F90COunnLT",
+      "blockId": "DWV-kKZ8n3",
+      "direction": "out",
+      "name": "Test report (e2e/report.html)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "N82zQ3hn7j": {
+      "id": "N82zQ3hn7j",
+      "blockId": "DWV-kKZ8n3",
+      "direction": "in",
+      "name": "API (src/api, deployed)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "W-1RCCSN5F": {
+      "id": "W-1RCCSN5F",
+      "blockId": "DWV-kKZ8n3",
+      "direction": "in",
+      "name": "Web app (src/web, built)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "6k7wCggV4g": {
+      "id": "6k7wCggV4g",
+      "blockId": "CBZmIb3x5r",
+      "direction": "out",
+      "name": "Guide (docs/guide.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "_7a_spa20k": {
+      "id": "_7a_spa20k",
+      "blockId": "CBZmIb3x5r",
+      "direction": "in",
+      "name": "Web app (src/web, built)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "BJVq__TKrR": {
+      "id": "BJVq__TKrR",
+      "blockId": "0Kfg97U-na",
+      "direction": "out",
+      "name": "Released notes app (URL)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "skuPRyLcu5": {
+      "id": "skuPRyLcu5",
+      "blockId": "0Kfg97U-na",
+      "direction": "in",
+      "name": "Test report (e2e/report.html)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "Jt1jWStxWd": {
+      "id": "Jt1jWStxWd",
+      "blockId": "0Kfg97U-na",
+      "direction": "in",
+      "name": "Guide (docs/guide.md)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "QchLWUiULL": {
+      "id": "QchLWUiULL",
+      "blockId": "0Kfg97U-na",
+      "direction": "in",
+      "name": "Hosting account (Cloudflare)",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    }
+  },
+  "edges": {
+    "9IIfG8Fzbg": {
+      "id": "9IIfG8Fzbg",
+      "from": {
+        "portId": "Rqr7MgAytt",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "Zahwx1ScoW",
+        "side": "inner"
+      },
+      "kind": "up",
+      "auto": false
+    },
+    "n0QYCMwKdq": {
+      "id": "n0QYCMwKdq",
+      "from": {
+        "portId": "g2RH32SL4V",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "WugOPHsf8L",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": true
+    },
+    "Mgy4_E6NkQ": {
+      "id": "Mgy4_E6NkQ",
+      "from": {
+        "portId": "dZDgrA-l2S",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "-VqRfOxz5S",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": true
+    },
+    "q30SPUzXsj": {
+      "id": "q30SPUzXsj",
+      "from": {
+        "portId": "WugOPHsf8L",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "uTijzQmeQ-",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "fdeVb2NxbH": {
+      "id": "fdeVb2NxbH",
+      "from": {
+        "portId": "Svxlmrhwyu",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "mj2yA460Jz",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "fKIZ-KLjlo": {
+      "id": "fKIZ-KLjlo",
+      "from": {
+        "portId": "Svxlmrhwyu",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "cc2xqEAOzd",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "IFOXDUMjNn": {
+      "id": "IFOXDUMjNn",
+      "from": {
+        "portId": "330x6NnmfP",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "tYYMe9nRf7",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "fFSa9dUG4P": {
+      "id": "fFSa9dUG4P",
+      "from": {
+        "portId": "330x6NnmfP",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "GCu6ASccDx",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "h64TLf-aU1": {
+      "id": "h64TLf-aU1",
+      "from": {
+        "portId": "3jm3WKixko",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "EXi5A0pueb",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "yHemfveKNG": {
+      "id": "yHemfveKNG",
+      "from": {
+        "portId": "-VqRfOxz5S",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "rpVDwWunvv",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "zVF2gBEUCN": {
+      "id": "zVF2gBEUCN",
+      "from": {
+        "portId": "-YrnjkOIV5",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "Rqr7MgAytt",
+        "side": "inner"
+      },
+      "kind": "up",
+      "auto": false
+    },
+    "TYAE1f5cpV": {
+      "id": "TYAE1f5cpV",
+      "from": {
+        "portId": "uTijzQmeQ-",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "6qswh6n0T1",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "bSYdrAkLa-": {
+      "id": "bSYdrAkLa-",
+      "from": {
+        "portId": "NAhp9Zejez",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "EVSwNlvKR4",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "ShF8TQojEu": {
+      "id": "ShF8TQojEu",
+      "from": {
+        "portId": "NAhp9Zejez",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "NmgGQnoKOZ",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "hNlh61ScOD": {
+      "id": "hNlh61ScOD",
+      "from": {
+        "portId": "Kl9ir5mPq3",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "tfDVR3XXip",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "Wot-10dtoM": {
+      "id": "Wot-10dtoM",
+      "from": {
+        "portId": "uCsarmLZjy",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "hHoT-HGQbB",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "afRkpa6rj9": {
+      "id": "afRkpa6rj9",
+      "from": {
+        "portId": "h2pqnLFzwj",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "Svxlmrhwyu",
+        "side": "inner"
+      },
+      "kind": "up",
+      "auto": false
+    },
+    "XyLjagJqZV": {
+      "id": "XyLjagJqZV",
+      "from": {
+        "portId": "mj2yA460Jz",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "Ls5wNna7v6",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "j9NaobnzXZ": {
+      "id": "j9NaobnzXZ",
+      "from": {
+        "portId": "h1xDIJMRcn",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "Ykag0dJEud",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "gC8mgERL58": {
+      "id": "gC8mgERL58",
+      "from": {
+        "portId": "h1xDIJMRcn",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "m1XD4OGtLn",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "KdwLK4XVQq": {
+      "id": "KdwLK4XVQq",
+      "from": {
+        "portId": "HN578lNksc",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "giPR3zX8uW",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "7GTfFabGbs": {
+      "id": "7GTfFabGbs",
+      "from": {
+        "portId": "7r7hYcY4iU",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "hYbySusi3D",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "2FSviT79Ag": {
+      "id": "2FSviT79Ag",
+      "from": {
+        "portId": "MxYDIVbTbq",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "7JzOsqWioK",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "mXFjXDAVOp": {
+      "id": "mXFjXDAVOp",
+      "from": {
+        "portId": "oKmThrAT_v",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "330x6NnmfP",
+        "side": "inner"
+      },
+      "kind": "up",
+      "auto": false
+    },
+    "Q5Eaee0HQu": {
+      "id": "Q5Eaee0HQu",
+      "from": {
+        "portId": "cc2xqEAOzd",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "cF49yf3sfn",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "z_FCb_fDHA": {
+      "id": "z_FCb_fDHA",
+      "from": {
+        "portId": "cc2xqEAOzd",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "k5mIU-UWlY",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "BUxQ-7voMJ": {
+      "id": "BUxQ-7voMJ",
+      "from": {
+        "portId": "tYYMe9nRf7",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "qFfSmC1oE4",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "xfAF4O1USh": {
+      "id": "xfAF4O1USh",
+      "from": {
+        "portId": "tYYMe9nRf7",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "GBoIOg1Ep3",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "LECkq-pFO0": {
+      "id": "LECkq-pFO0",
+      "from": {
+        "portId": "tYYMe9nRf7",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "gmTiR2vXKj",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "t-v4-KQ-lA": {
+      "id": "t-v4-KQ-lA",
+      "from": {
+        "portId": "cjTWiUWyGS",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "m5JfwQVK5-",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "W7pAw_Fi3v": {
+      "id": "W7pAw_Fi3v",
+      "from": {
+        "portId": "dT6de5jGIT",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "lffabkxPL1",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "F7a6Q0cleM": {
+      "id": "F7a6Q0cleM",
+      "from": {
+        "portId": "eFXn0T9fM1",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "MDuPRQT8da",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "w4GwSLgwle": {
+      "id": "w4GwSLgwle",
+      "from": {
+        "portId": "wMpNVX3OqX",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "3jm3WKixko",
+        "side": "inner"
+      },
+      "kind": "up",
+      "auto": false
+    },
+    "HeDZp-W1DI": {
+      "id": "HeDZp-W1DI",
+      "from": {
+        "portId": "GCu6ASccDx",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "N82zQ3hn7j",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "4DBQkX2zXb": {
+      "id": "4DBQkX2zXb",
+      "from": {
+        "portId": "EXi5A0pueb",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "W-1RCCSN5F",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "-CnBI3EVn3": {
+      "id": "-CnBI3EVn3",
+      "from": {
+        "portId": "EXi5A0pueb",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "_7a_spa20k",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "OyIzBOCirp": {
+      "id": "OyIzBOCirp",
+      "from": {
+        "portId": "F90COunnLT",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "skuPRyLcu5",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "FWp5ByLBfC": {
+      "id": "FWp5ByLBfC",
+      "from": {
+        "portId": "6k7wCggV4g",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "Jt1jWStxWd",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "sbEV94cxzT": {
+      "id": "sbEV94cxzT",
+      "from": {
+        "portId": "rpVDwWunvv",
+        "side": "inner"
+      },
+      "to": {
+        "portId": "QchLWUiULL",
+        "side": "outer"
+      },
+      "kind": "down",
+      "auto": false
+    },
+    "-RLalDfp9q": {
+      "id": "-RLalDfp9q",
+      "from": {
+        "portId": "BJVq__TKrR",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "-YrnjkOIV5",
+        "side": "inner"
+      },
+      "kind": "up",
+      "auto": false
+    }
+  },
+  "terminals": {
+    "in": {
+      "x": 0,
+      "y": 165
+    },
+    "out": {
+      "x": 2728.999999999999,
+      "y": 178
+    }
+  },
+  "log": [
+    {
+      "id": "I4G0SKcoWt",
+      "at": "2026-10-03T14:16:32.700Z",
+      "actor": "claude-code",
+      "kind": "added",
+      "blockId": "LKuSAMsY9x",
+      "message": "「Plan and design」を追加"
+    },
+    {
+      "id": "QMp0qddPwc",
+      "at": "2026-10-03T14:16:32.841Z",
+      "actor": "claude-code",
+      "kind": "added",
+      "blockId": "9U6Ttz9459",
+      "message": "「API」を追加"
+    },
+    {
+      "id": "9HOR_omaZ4",
+      "at": "2026-10-03T14:16:32.986Z",
+      "actor": "claude-code",
+      "kind": "added",
+      "blockId": "1IuIajVK74",
+      "message": "「Web UI」を追加"
+    },
+    {
+      "id": "kB5Gd7T8Lh",
+      "at": "2026-10-03T14:16:33.138Z",
+      "actor": "claude-code",
+      "kind": "added",
+      "blockId": "PigmJAw7aB",
+      "message": "「Quality and release」を追加"
+    },
+    {
+      "id": "7eUc7z24v-",
+      "at": "2026-10-03T14:17:06.386Z",
+      "actor": "claude-code",
+      "kind": "split",
+      "blockId": "LKuSAMsY9x",
+      "message": "「Plan and design」を 4 個に分解: Write the requirements, Design the data model, Sketch the screens, Write the design doc"
+    },
+    {
+      "id": "wZXrg0GTiW",
+      "at": "2026-10-03T14:17:06.556Z",
+      "actor": "claude-code",
+      "kind": "split",
+      "blockId": "9U6Ttz9459",
+      "message": "「API」を 5 個に分解: Set up Workers and D1, Notes CRUD endpoints, Full-text search, Sign-in, Deploy the API"
+    },
+    {
+      "id": "3rrWmZttr4",
+      "at": "2026-10-03T14:17:06.719Z",
+      "actor": "claude-code",
+      "kind": "split",
+      "blockId": "1IuIajVK74",
+      "message": "「Web UI」を 4 個に分解: Editor screen, List and search screen, Sign-in screen, Build and bundle"
+    },
+    {
+      "id": "gPRxv15NHD",
+      "at": "2026-10-03T14:17:06.891Z",
+      "actor": "claude-code",
+      "kind": "split",
+      "blockId": "PigmJAw7aB",
+      "message": "「Quality and release」を 3 個に分解: End-to-end tests, User guide, Production deploy"
+    },
+    {
+      "id": "x14N7erYMj",
+      "at": "2026-10-03T14:17:15.042Z",
+      "actor": "claude-code",
+      "kind": "done",
+      "blockId": "4MuyfwLB_p",
+      "message": "「Write the requirements」完了 (Requirements)"
+    },
+    {
+      "id": "st-n1tpcZc",
+      "at": "2026-10-03T14:17:15.212Z",
+      "actor": "claude-code",
+      "kind": "done",
+      "blockId": "r2WcJjhcq8",
+      "message": "「Design the data model」完了 (Data model)"
+    },
+    {
+      "id": "VJYPHCotUY",
+      "at": "2026-10-03T14:17:15.372Z",
+      "actor": "claude-code",
+      "kind": "done",
+      "blockId": "BCGsXLuXg_",
+      "message": "「Sketch the screens」完了 (Screen sketches)"
+    },
+    {
+      "id": "S8GVvMKWcC",
+      "at": "2026-10-03T14:17:15.534Z",
+      "actor": "claude-code",
+      "kind": "done",
+      "blockId": "YT_k3omc9R",
+      "message": "「Write the design doc」完了 (Design doc)"
+    },
+    {
+      "id": "D2wjPsJdN9",
+      "at": "2026-10-03T14:17:15.685Z",
+      "actor": "claude-code",
+      "kind": "done",
+      "blockId": "JI7FRaAqFO",
+      "message": "「Set up Workers and D1」完了 (wrangler.toml)"
+    },
+    {
+      "id": "OivjxvvAaJ",
+      "at": "2026-10-03T14:17:15.844Z",
+      "actor": "claude-code",
+      "kind": "done",
+      "blockId": "iTmSCj4L-R",
+      "message": "「Notes CRUD endpoints」完了 (notes.ts)"
+    },
+    {
+      "id": "M1AGO5lfdm",
+      "at": "2026-10-03T14:17:15.997Z",
+      "actor": "claude-code",
+      "kind": "started",
+      "blockId": "Au-WjbJzxM",
+      "message": "「Full-text search」開始: Indexing titles and bodies with SQLite FTS5"
+    },
+    {
+      "id": "vUgD56xO-Z",
+      "at": "2026-10-03T14:17:16.163Z",
+      "actor": "claude-code",
+      "kind": "asked",
+      "blockId": "IF_61IKFyn",
+      "message": "「Sign-in」で判断待ち: Which sign-in method should ship first?"
+    },
+    {
+      "id": "AXdXQ1UMQs",
+      "at": "2026-10-03T14:17:16.322Z",
+      "actor": "claude-code",
+      "kind": "note",
+      "blockId": "X6Cmx-Ta6c",
+      "message": "「Editor screen」期日 2026-10-20"
+    },
+    {
+      "id": "PWRgnalhBD",
+      "at": "2026-10-03T14:17:30.566Z",
+      "actor": "claude-code",
+      "kind": "done",
+      "blockId": "LKuSAMsY9x",
+      "message": "「Plan and design」完了 (Design doc)"
+    }
+  ],
+  "agents": {
+    "claude-code": {
+      "lastSeen": "2026-10-03T14:17:30.566Z"
+    }
+  },
+  "nextKey": 22,
+  "inputGroups": []
+}

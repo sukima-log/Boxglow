@@ -138,6 +138,8 @@ When a person answers a question an agent asked (`ask`), the answer stays listed
 
 Boxglow's own development is managed with Boxglow too (that plan stays local); what we learned by using it with Claude Code is in [docs/dogfooding.md](docs/dogfooding.md), and the working agreement for agents is in [CLAUDE.md](CLAUDE.md).
 
+An English example lives in `examples/notes-app/boxglow.json` (a small notes app: 4 major boxes, 16 tasks, one in progress and one waiting for a decision). Open it from the web app's Home, or with the VS Code extension.
+
 ## Free and paid
 
 Boxglow is open core: everything that works with the one file on your machine (web app, CLI, Git workflow, members, parts, categories, dates, the planned VS Code extension) is MIT and stays free. Cloud sync, share links, team workspaces, Slack / JIRA connectors, a hosted MCP endpoint and a self-hosted edition are the paid product in preparation. The exact line is written down in [docs/MONETIZATION.md](docs/MONETIZATION.md); features already released under MIT will not move behind a paywall, and the paid product never stores your source or documents. To hear when it opens: https://boxglow.pages.dev/waitlist/
