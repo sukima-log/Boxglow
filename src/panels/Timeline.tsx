@@ -2,7 +2,7 @@
  * タイムライン: 判断待ち・作業中・ログを時系列で見る (上の帯の要約チップから開く)
  */
 import { useState } from "react";
-import { answerDecision, editDecisionAnswer, summarize, candidatesOf, reopenDecision, ancestorsOf } from "../model/graph";
+import { answerDecision, editDecisionAnswer, summarize, candidatesOf, reopenDecision, ancestorsOf, kindOf, portsOf } from "../model/graph";
 import { actorLabel, ACTIVITY_LABEL, agoText, shortTime } from "../model/report";
 import { ROOT_ID, type Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
@@ -139,14 +139,20 @@ export function Timeline({ project }: { project: Project }) {
       {(s.working.length > 0 || s.blocked.length > 0) && (
         <section className="flex flex-col gap-1">
           <span className="label">Working</span>
-          {[...s.working, ...s.blocked.map((b) => ({ ...b, since: project.blocks[b.block.id].activity?.since ?? "" }))].map((w) => (
-            <button key={w.block.id} className="tree-row text-left" onClick={() => jump(w.block.id)}>
-              <span className="tl-actor">{actorLabel(w.actor)}</span>
-              <span className="dec-key">{w.block.key}</span>
-              <span className="truncate"><b>{w.block.title}</b> {ACTIVITY_LABEL[project.blocks[w.block.id].activity!.state]} {w.note}</span>
-              <span className="ml-auto text-[11px] flex-none" style={{ color: "var(--text-muted)" }}>{w.since ? agoText(w.since) : ""}</span>
-            </button>
-          ))}
+          {[...s.working, ...s.blocked.map((b) => ({ ...b, since: project.blocks[b.block.id].activity?.since ?? "" }))].map((w) => {
+            // 「全体のどこで、何のために」: 箱の位置 (大項目 › 中項目) と、この作業が出すもの (出力の名前)
+            const where = ancestorsOf(project, w.block.id).filter((a) => a.id !== ROOT_ID && kindOf(a) !== "project").reverse().map((a) => a.title).join(" › ");
+            const outs = portsOf(project, w.block.id, "out").map((q) => q.name).join(", ");
+            return (
+              <button key={w.block.id} className="tree-row text-left flex-wrap" onClick={() => jump(w.block.id)}>
+                <span className="tl-actor">{actorLabel(w.actor)}</span>
+                <span className="dec-key">{w.block.key}</span>
+                <span className="truncate"><b>{w.block.title}</b> {ACTIVITY_LABEL[project.blocks[w.block.id].activity!.state]} {w.note}</span>
+                <span className="ml-auto text-[11px] flex-none" style={{ color: "var(--text-muted)" }}>{w.since ? agoText(w.since) : ""}</span>
+                <span className="basis-full text-[11px] truncate" style={{ color: "var(--text-muted)", paddingLeft: 4 }}>{where ? `${where} › ` : ""}{outs ? `出力: ${outs}` : ""}</span>
+              </button>
+            );
+          })}
         </section>
       )}
 

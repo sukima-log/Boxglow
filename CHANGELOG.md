@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Activity panel: each box in Working / Blocked now shows where it sits in the plan (major › middle item) and what it produces (its outputs), so you can tell at a glance where in the whole plan the agent is working and what for.
 - Published `boxglow@0.1.0` to npm (2026-10-03): `npx boxglow` works without a checkout. Runtime dependencies are only the MCP SDK and zod; the web app is shipped prebuilt in `dist/`.
 - `boxglow mcp`: MCP server (stdio) exposing the CLI as tools; `setup-agent` registers it in `.mcp.json`.
 - `boxglow serve`: local server for any browser (Firefox / Safari): bundled web app + `/api/project` read/write + SSE live reload (`?serve=1`).
