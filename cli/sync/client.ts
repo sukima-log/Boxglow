@@ -8,13 +8,13 @@
  *   - 状態用のロックを、1 回の同期の間持つ (同じ結び付けを扱う同期の処理は 1 つだけ)。
  */
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { commitFile, FileBusy, FileConflict, revisionOf } from "../file-store";
 import { basename } from "node:path";
 import {
-  baseSet, decide, pullNotWritten, pullRecovered, pullWritten, pushAccepted, pushRejected, recordPending, recoveryToken as engineRecoveryToken, SyncStateError
-, type Content, type Halt, type PendingPush, type Remote, type SyncState
+  baseSet, decide, previewRecovery, pullNotWritten, pullRecovered, pullWritten, pushAccepted, pushRejected, recordPending, recoveryToken as engineRecoveryToken, SyncStateError
+, type Content, type Halt, type PendingPush, type RecoveryOutcome, type Remote, type SyncState
 } from "../../src/sync/engine";
 import { bindingDir, hashOf, normalizeServer, StateStore, type Binding, type StoredState } from "./state-store";
 import { APP_VERSION, SAVE_PROTOCOL } from "../../src/model/version";
@@ -23,8 +23,12 @@ import { APP_VERSION, SAVE_PROTOCOL } from "../../src/model/version";
 export type SyncResult =
   /** 手元とサーバーがそろった (pulled = 受け取って手元に書いた回数, pushed = 送って受理された回数) */
   | { status: "synced"; pulled: number; pushed: number; revision: string | null }
-  /** 人に確かめる必要があって止まった */
-  | { status: "halted"; halt: Halt | { reason: "binding-mismatch"; expected: string; actual: string } }
+  /**
+   * 人に確かめる必要があって止まった。
+   * recovery = 受け取りの再開で止まったときの、選ぶための印と、2 つの続け方それぞれの「選んだ後の結果」
+   */
+  | { status: "halted"; halt: Halt | { reason: "binding-mismatch"; expected: string; actual: string }
+    ; recovery?: { token: string; applied: RecoveryOutcome; notApplied: RecoveryOutcome } }
   /** 他の処理が動いていて、今回は進められなかった (待てば直る)。what = "sync" (他の同期の処理) / "file" (計画のファイルが書き込み中) */
   | { status: "busy"; what: "sync" | "file" };
 
@@ -43,6 +47,12 @@ export interface SyncOptions {
   token?: string;
   /** 人が承認した「保護する項目の削除」の印 */
   approvedDeletion?: string;
+  /** 「消えた項目を基準から戻す」という人の選択の印 */
+  restoreDeletion?: string;
+  /** 競合への人の選択 (表示した競合の組の印と、どちらを採るか) */
+  resolution?: { token: string; prefer: "local" | "remote" };
+  /** 初めて結び付けるときに、手元とサーバーの中身が違った場合の人の選択 */
+  firstLink?: { token: string; prefer: "local" | "remote" };
   /** 止まっている「受け取りの再開」への人の選択: 印 (recoveryToken の値) と、反映済みとして続けるか */
   recover?: { token: string; applied: boolean };
   /** 今の時刻 (試験で差し替える) */
@@ -163,17 +173,34 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       }
       // ---- 読む: サーバー (やりかけの送りがあるときも取得する。履歴の世代が変わっていないかを、送り直しの前に確かめるため) ----
       const remote: Remote = await fetchRemote(remoteOptions);
-      const decision = decide({
+      const input = {
         state, local, remote, bindingId: basename(store.dir)
       , baseText: state.base ? store.getObject(state.base.hash) : null
-      , now: now(), hashOf, approvedDeletion: options.approvedDeletion
-      });
+      , now: now(), hashOf
+      , approvedDeletion: options.approvedDeletion, restoreDeletion: options.restoreDeletion
+      , resolution: options.resolution, firstLink: options.firstLink
+      };
+      const decision = decide(input);
       options.onStep?.(decision.kind);
       switch (decision.kind) {
         case "noop":
           return { status: "synced", pulled, pushed, revision: state.base?.revision ?? null };
         case "halt":
+          // 受け取りの再開で止まったときは、選ぶための印と、2 つの続け方それぞれの結果を添える (人に、過去の出来事を当てさせない)
+          if (decision.halt.reason === "recover-pull" && remote.kind === "present") {
+            return { status: "halted", halt: decision.halt
+            , recovery: { token: recoveryToken(state, local?.hash ?? null), ...previewRecovery(input, (hash) => store.getObject(hash)) } };
+          }
           return { status: "halted", halt: decision.halt };
+        case "edit-local":
+          // 手元だけを書き換える (消えた項目を戻す)。前提が違えば何もせず、次の判断で確かめ直す
+          try {
+            commitFile(file, decision.write.text, `"${decision.expectedLocal}"`);
+          } catch (e) {
+            if (e instanceof FileBusy) return { status: "busy", what: "file" };
+            if (!(e instanceof FileConflict)) throw e;
+          }
+          break;
         case "set-base":
           // 新しい基準が指す中身 (判断に使った、取得済みのサーバーの中身) を先に置く
           for (const c of decision.keep) store.putObject(c.text);
@@ -187,6 +214,8 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
           for (const c of decision.keep) store.putObject(c.text);
           save(recordPending(state, decision.epoch, decision.pending), binding);
           try {
+            // 初めての結び付けでサーバーの側を採るときは、置き換える前に、今の手元の中身を退避する
+            if (decision.backup && local !== null) copyFileSync(file, `${file}.before-sync-${local.hash.slice(0, 8)}.json`);
             commitFile(file, decision.write.text, local === null ? null : revisionOf(local.text));
           } catch (e) {
             // 「行われなかった」と確定できる失敗 (手元が先に変わった / 他が書き込み中): 操作を片付けて、やり直すか、今回は譲る

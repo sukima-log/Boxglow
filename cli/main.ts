@@ -308,7 +308,9 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  人 (--actor human) には要求しない。AI が off にするときは --context-token が要る
   version [--json]                               boxglow の版と、保存の取り決めの版を出す (--version でも可)
   sync [--server <URL>] [--project <ID>]           (試験中) 計画のファイルを同期サーバーとそろえる。初回は --server で結び付ける。止まったら理由と次の操作を表示
-                                                 --adopt <印> = 消えた設定の削除を採って送る / --recover <印> --applied|--not-applied = 途中で終わった受け取りを続ける
+                                                 --adopt <印> = 消えた設定の削除を採って送る / --restore <印> = 消えた設定を手元に戻す
+                                                 --resolve <印> --prefer local|remote = 競合を手元 / サーバーの値に決める / --link <印> --prefer local|remote = 初回に中身が違うときの選択
+                                                 --recover <印> --applied|--not-applied = 途中で終わった受け取りを続ける
   unlock [--remove --lock-token <印> --actor human]  残った保存ロックの状態 (持ち主・判定) を出す (読むだけ。AI も使える)。--remove は人が解除する:
                                                  この計画を開いている Boxglow を止めてから、表示された印を付けて実行する。持ち主が動いているロックは解除できない
   status [--brief] [--json]                     全体の状況 (Markdown)。--brief は全階層を省略し、判断・回答・活動・次の候補を表示
@@ -386,7 +388,9 @@ Usage (npx boxglow <command> ...):
                                                  People (--actor human) are not asked for it. An AI needs --context-token to turn it off
   version [--json]                               Print the boxglow version and the save-protocol version (--version also works)
   sync [--server <URL>] [--project <ID>]           (experimental) Bring the plan file in line with a sync server. Bind with --server the first time. When it stops, it prints why and what to do
-                                                 --adopt <token> = send the deletion of settings / --recover <token> --applied|--not-applied = continue an interrupted pull
+                                                 --adopt <token> = send the deletion of settings / --restore <token> = put the deleted settings back locally
+                                                 --resolve <token> --prefer local|remote = settle conflicts / --link <token> --prefer local|remote = choose a side on first link
+                                                 --recover <token> --applied|--not-applied = continue an interrupted pull
   unlock [--remove --lock-token <token> --actor human]  Show a leftover save lock (owner and verdict; read-only, agents may use it). --remove is for a person:
                                                  stop every Boxglow that has this plan open, then run it with the token shown. A lock whose owner is running cannot be removed
   status [--brief] [--json]                     Overall status (Markdown). --brief omits the tree; keeps decisions, answers, activity and next actions
@@ -1194,6 +1198,10 @@ if (argv[0] === "mcp") {
     , server: str(options.server)
     , project: str(options.project)
     , adopt: str(options.adopt)
+    , restore: str(options.restore)
+    , resolve: str(options.resolve)
+    , link: str(options.link)
+    , prefer: str(options.prefer)
     , recover: str(options.recover)
     , applied: !!options.applied
     , notApplied: !!options["not-applied"]

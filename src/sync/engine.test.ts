@@ -10,7 +10,8 @@ import { addBlock, createProject, defaultTaskParent, fromJSON, moveBlockToParent
 import type { Project } from "../model/types";
 import {
   baseSet, decide, PENDING_MAX_AGE_MS, protectedDeletions, pullRecovered, pullWritten, pullNotWritten, pushAccepted, pushRejected, recordPending, recoveryToken, SyncStateError
-, type Content, type Decision, type Pending, type PendingPull, type PendingPush, type Remote, type SyncState
+, describeChanges, previewRecovery
+, type Content, type Decision, type Pending, type PendingPull, type PendingPush, type Remote, type SyncInput, type SyncState
 } from "./engine";
 import { setActivity, moveBlock } from "../model/graph";
 
@@ -69,11 +70,11 @@ class Device {
   objects = new Map<string, string>();
   ops = 0;
   constructor(readonly name: string, readonly server: FakeServer) {}
-  decide(extra: { approvedDeletion?: string; now?: Date } = {}): Decision {
+  decide(extra: Partial<SyncInput> = {}): Decision {
     return decide({
       state: this.state, local: this.local, remote: this.server.remote(), bindingId: this.name
     , baseText: this.state.base ? this.objects.get(this.state.base.hash) ?? null : null
-    , now: extra.now ?? NOW, hashOf, approvedDeletion: extra.approvedDeletion
+    , now: NOW, hashOf, ...extra
     });
   }
   keep(c: Content) { this.objects.set(c.hash, c.text); }
@@ -82,7 +83,7 @@ class Device {
    * Input : crash = どこで落ちるか ("after-record" = 操作を記録した直後, "after-effect" = 送信 / 手元への書き込みの直後・状態を進める前)
    * Output: 実行した判断
    */
-  step(crash?: "after-record" | "after-effect", extra: { approvedDeletion?: string; now?: Date } = {}): Decision {
+  step(crash?: "after-record" | "after-effect", extra: Partial<SyncInput> = {}): Decision {
     const d = this.decide(extra);
     // 写しは、判断が返した中身をそのまま置く (サーバーから取り直さない)
     if (d.kind === "set-base") { for (const c of d.keep) this.keep(c); this.state = baseSet(this.state, d.epoch, d.base); }
@@ -106,6 +107,8 @@ class Device {
       this.state = pullWritten(this.state, d.pending);
     }
     if (d.kind === "finish-pull") this.state = pullWritten(this.state, d.pending);
+    // 手元だけを書き換える (前提の中身のままなら)
+    if (d.kind === "edit-local" && this.local?.hash === d.expectedLocal) this.local = d.write;
     return d;
   }
   /** 残っている送りの操作を送る (crash = true なら、サーバーが処理した直後・状態を進める前に落ちる) */
@@ -121,7 +124,7 @@ class Device {
   /** 手元に書く直前に 1 回だけ実行する処理 (試験で、割り込みを再現する) */
   beforeWrite: (() => void) | null = null;
   /** noop か halt になるまで進める (回りすぎたら失敗) */
-  sync(extra: { approvedDeletion?: string } = {}): Decision {
+  sync(extra: Partial<SyncInput> = {}): Decision {
     for (let i = 0; i < 20; i++) { const d = this.step(undefined, extra); if (d.kind === "noop" || d.kind === "halt") return d; }
     throw new Error("sync did not settle");
   }
@@ -623,3 +626,125 @@ describe("入れ子の知らない項目を、通常の操作で落とさない"
     expect(JSON.parse(toJSON(setActivity(q, a, "claude-code", "working", "交代"))).blocks[a].activity.futureActivity).toBeUndefined();
   });
 });
+
+describe("人の選択で進める場面", () => {
+  it("競合: 表示した項目だけを選んだ側に決める。競合していない変更は両方残る。選んでいる間に手元が変わったら、前の印では進まない", () => {
+    const { A, B, a, b } = twoDevices();
+    A.edit((p) => updateBlock(updateBlock(p, a, { title: "A の案" }), b, { description: "A だけの変更" })); A.sync();
+    B.edit((p) => updateBlock(p, a, { title: "B の案" }));
+    const d = B.sync();
+    if (d.kind !== "halt" || d.halt.reason !== "conflicts") throw new Error("expected conflicts");
+    const token = d.halt.token;
+    // 選んでいる間に、AI が手元の別の項目を変えた → 前の印では進まず、もう一度止まる (新しい印になる)
+    const C = new Device("B", B.server); C.local = B.local; C.state = B.state; C.objects = B.objects;
+    C.edit((p) => updateBlock(p, b, { title: "選んでいる間の編集" }));
+    const again = C.sync({ resolution: { token, prefer: "local" } });
+    expect(again.kind === "halt" && again.halt.reason === "conflicts" && again.halt.token !== token).toBe(true);
+    // そのままなら、手元の値に決められる
+    expect(B.sync({ resolution: { token, prefer: "local" } }).kind).toBe("noop");
+    A.sync();
+    for (const dev of [A, B]) { expect(dev.project.blocks[a].title).toBe("B の案"); expect(dev.project.blocks[b].description).toBe("A だけの変更"); }
+  });
+  it("競合: サーバーの値に決めることもできる (手元の、競合していない変更は残る)", () => {
+    const { A, B, a, b } = twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "A の案" })); A.sync();
+    B.edit((p) => updateBlock(updateBlock(p, a, { title: "B の案" }), b, { title: "B だけの変更" }));
+    const d = B.sync();
+    if (d.kind !== "halt" || d.halt.reason !== "conflicts") throw new Error("expected conflicts");
+    B.sync({ resolution: { token: d.halt.token, prefer: "remote" } }); A.sync();
+    for (const dev of [A, B]) { expect(dev.project.blocks[a].title).toBe("A の案"); expect(dev.project.blocks[b].title).toBe("B だけの変更"); }
+  });
+  it("消えた設定を戻す: 消えた項目だけが基準から戻り、同時に入っていた別の編集は残る。その後は確かめずに送れる", () => {
+    const { A, B, a } = twoDevices();
+    const d0 = JSON.parse(A.local!.text); d0.futureSetting = { mode: "strict" }; A.local = content(JSON.stringify(d0, null, 2) + "\n");
+    A.sync(); B.sync();
+    const d1 = JSON.parse(B.local!.text); delete d1.futureSetting; d1.blocks[a].title = "AI の編集"; B.local = content(JSON.stringify(d1, null, 2) + "\n");
+    const halted = B.sync();
+    if (halted.kind !== "halt" || halted.halt.reason !== "protected-deletion") throw new Error("expected a halt");
+    expect(B.sync({ restoreDeletion: halted.halt.approval }).kind).toBe("noop");
+    expect(JSON.parse(B.local!.text).futureSetting).toEqual({ mode: "strict" });
+    A.sync();
+    expect(A.project.blocks[a].title).toBe("AI の編集");
+    expect(JSON.parse(A.local!.text).futureSetting).toEqual({ mode: "strict" });
+  });
+  it("初めての結び付けで中身が違うとき: 選んだ側を採る。サーバーを採るなら手元の退避を求め、手元を採るならサーバーの今の版を前提に送る", () => {
+    const { p, a } = plan();
+    const server = new FakeServer();
+    const A = new Device("A", server); A.local = content(textOf(p)); A.sync();
+    const fresh = () => { const d = new Device("N", server); d.local = content(textOf(updateBlock(p, a, { title: "手元の中身" }))); return d; };
+    // サーバーの側を採る
+    const R = fresh();
+    const halted = R.sync();
+    if (halted.kind !== "halt" || halted.halt.reason !== "first-link") throw new Error("expected first-link");
+    const pull = R.decide({ firstLink: { token: halted.halt.token, prefer: "remote" } });
+    expect(pull.kind === "pull" && pull.backup).toBe(true);
+    expect(R.sync({ firstLink: { token: halted.halt.token, prefer: "remote" } }).kind).toBe("noop");
+    expect(R.project.blocks[a].title).toBe("A");
+    // 手元の側を採る
+    const L = fresh();
+    const h2 = L.sync();
+    if (h2.kind !== "halt" || h2.halt.reason !== "first-link") throw new Error("expected first-link");
+    expect(L.sync({ firstLink: { token: h2.halt.token, prefer: "local" } }).kind).toBe("noop");
+    A.sync();
+    expect(A.project.blocks[a].title).toBe("手元の中身");
+    // 古い印 (選んだ後でサーバーが進んだ) では進まない
+    const late = fresh(); late.edit((q) => updateBlock(q, a, { title: "さらに別" }));
+    const h3 = late.sync();
+    if (h3.kind !== "halt" || h3.halt.reason !== "first-link") throw new Error("expected first-link");
+    A.edit((q) => updateBlock(q, a, { description: "その間の更新" })); A.sync();
+    const stale = late.sync({ firstLink: { token: h3.halt.token, prefer: "local" } });
+    expect(stale.kind === "halt" && stale.halt.reason).toBe("first-link");
+  });
+  it("初めての結び付けで、手元にもサーバーにも計画が無ければ、何もしない", () => {
+    const d = new Device("N", new FakeServer());
+    expect(d.sync().kind).toBe("noop");
+    expect(d.state.base).toBeNull();
+  });
+});
+
+describe("復旧のときの見比べ", () => {
+  it("2 つの計画の違いを、ボックスの追加・削除・変わった項目として読める形にする (記録の日時は数えない)", () => {
+    const { p, a, b } = plan();
+    const changed = updateBlock(p, a, { title: "A 改", description: "説明" });
+    const lines = describeChanges(textOf(p), textOf(changed));
+    expect(lines).toEqual(["ボックス「A 改」の title, description が変わる"]);
+    const d = JSON.parse(textOf(p)); delete d.blocks[b]; d.futureSetting = 1;
+    const removed = describeChanges(textOf(p), JSON.stringify(d));
+    expect(removed).toContain("ボックス「B」が消える");
+    expect(removed).toContain("設定 futureSetting が加わる");
+    expect(describeChanges(textOf(p), textOf(p))).toEqual([]);
+  });
+  it("受け取りの再開: どちらを選んだら、手元とサーバーがどうなるかを示す。何も書かない・送らない", () => {
+    const { server, A, B, a, b } = twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "新" })); A.sync();
+    B.step("after-effect");                                              // B は「新」を書いた直後に落ちた
+    B.edit((p) => updateBlock(p, b, { description: "AI の追記" }));
+    A.edit((p) => updateBlock(p, a, { title: "A" })); A.sync();            // サーバーでは取り消された
+    const before = { local: B.local!.hash, state: B.state, head: server.head!.revision };
+    const input = { state: B.state, local: B.local, remote: server.remote(), bindingId: "B", baseText: null, now: NOW, hashOf };
+    const preview = previewRecovery(input, (hash) => B.objects.get(hash) ?? null);
+    // 反映済みとして続ける: サーバーの取り消しが手元に入り、AI の追記を送る
+    expect(preview.applied.next).toBe("pull");
+    expect(preview.applied.localChanges).toEqual(["ボックス「A」の title が変わる"]);
+    expect(preview.applied.remoteChanges).toEqual(["ボックス「B」の description が変わる"]);
+    // 反映されていないものとして続ける: 手元は変わらず、手元の「新」と AI の追記を送る (サーバーの取り消しを上書きする)
+    expect(preview.notApplied.next).toBe("push");
+    expect(preview.notApplied.localChanges).toEqual([]);
+    expect(preview.notApplied.remoteChanges.sort()).toEqual(["ボックス「B」の description が変わる", "ボックス「新」の title が変わる"]);
+    expect({ local: B.local!.hash, state: B.state, head: server.head!.revision }).toEqual(before);
+  });
+});
+
+describe("時刻の境界", () => {
+  it("残っている送りの操作は、ちょうど 21 日までは送り直し、それを 1 ミリ秒でも過ぎたら止まる。5 分以内の未来の日時は許す", () => {
+    const { A, a } = twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "A 改" }));
+    A.step("after-record");
+    const at = (ms: number) => A.decide({ now: new Date(NOW.getTime() + ms) }).kind;
+    expect(at(PENDING_MAX_AGE_MS)).toBe("resend");
+    expect(at(PENDING_MAX_AGE_MS + 1)).toBe("halt");
+    expect(at(-5 * 60 * 1000)).toBe("resend");
+    expect(at(-5 * 60 * 1000 - 1)).toBe("halt");
+  });
+});
+
