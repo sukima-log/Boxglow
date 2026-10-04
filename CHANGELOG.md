@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Reload button in the top bar (next to the save state): rereads the connected file right away instead of waiting for the automatic update. Shown for plans opened through `boxglow serve`, the VS Code extension or a directly opened local file; hidden for plans kept in the browser. Automatic updates are unchanged. With unsaved edits, the reread content is kept as a conflict, never written over them.
 - The VS Code extension (0.4.0) is on the Visual Studio Marketplace: https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode. The README now points to it.
 - Real-host VS Code checks (`e2e/vscode-host`) assert their expectations and fail the run when a step fails; each run uses its own test folder, and the Windows-lock check runs against a live writer that releases its own lock.
 - Merge: record timestamps (`descriptionUpdatedAt`, `statusChangedAt`, an agent's `lastSeen`) are no longer reported as conflicts; the later one is kept. Two people setting the same description a few milliseconds apart used to produce a conflict.

@@ -49,6 +49,53 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     const fifth=await nextSave(5);await reply({type:'saved',requestId:fifth.requestId,version:6});
     check('Save: late acknowledgement cannot clear timeout', (await state()).save==='unsaved');
     await page.context().close();
+
+    // ---- 手動の更新 (Reload) ----
+    {
+      const {page} = await open(browser,{vscode:true,lang:'en'});
+      await page.evaluate(text => window.postMessage({type:'load',text,version:1,name:'boxglow.json'},'*'),original);
+      await page.waitForFunction(() => window.boxglow.store.getState().source==='vscode');
+      const reply = m => page.evaluate(m=>window.postMessage(m,'*'),m);
+      const readies = () => page.evaluate(()=>window.__posted.filter(m=>m.type==='ready').length);
+      const toast = () => page.evaluate(()=>window.boxglow.store.getState().toast);
+      const description = () => page.evaluate(()=>window.boxglow.store.getState().project.description);
+      const withDescription = text => { const p = JSON.parse(original); p.description = text; return JSON.stringify(p, null, 2) + '\n'; };
+      const button = page.getByRole('button',{name:'Reload',exact:true});
+      check('Reload: button is shown for a plan connected to a file', await button.isVisible());
+      // 押すと、拡張へ読み直しを頼む。新しい中身が届いたら、画面に反映する
+      const before = await readies();
+      await button.click();
+      await page.waitForFunction(n => window.__posted.filter(m=>m.type==='ready').length>n, before);
+      check('Reload: asks the host for the current file', (await readies())===before+1);
+      check('Reload: button is disabled while waiting', await button.isDisabled());
+      await reply({type:'load',text:withDescription('Changed outside'),version:2,name:'boxglow.json'});
+      await page.waitForFunction(()=>!window.boxglow.store.getState().reloading);
+      check('Reload: shows the latest content', (await description())==='Changed outside' && (await toast())==='Loaded the latest content');
+      // 変わっていなければ、そう伝える
+      await button.click();
+      await reply({type:'load',text:withDescription('Changed outside'),version:2,name:'boxglow.json'});
+      await page.waitForFunction(()=>!window.boxglow.store.getState().reloading);
+      check('Reload: says so when nothing changed', (await toast())==='Up to date (the file has not changed)');
+      // 応答が無ければ、失敗として伝える (押せる状態に戻る)
+      await button.click();
+      await page.waitForFunction(()=>!window.boxglow.store.getState().reloading,null,{timeout:8000});
+      check('Reload: reports a missing response and can be pressed again', String(await toast()).startsWith('Could not load the latest content') && !(await button.isDisabled()));
+      // 未保存の編集があるときは、上書きせずに、競合として両方を残す
+      await page.evaluate(()=>window.boxglow.store.getState().apply(p=>({...p,description:'My unsaved edit'})));
+      await button.click();
+      await reply({type:'load',text:withDescription('Changed outside again'),version:3,name:'boxglow.json'});
+      await page.waitForFunction(()=>!window.boxglow.store.getState().reloading);
+      const s = await page.evaluate(()=>{const s=window.boxglow.store.getState();return {conflict:!!s.conflict,description:s.project.description};});
+      check('Reload: unsaved edits are kept as a conflict, not overwritten', s.conflict && s.description==='My unsaved edit');
+      await page.context().close();
+    }
+    {
+      // ブラウザ内の計画 (つながっているファイルが無い) には、ボタンを出さない
+      const {page} = await open(browser,{lang:'en',query:'?demo=1'});
+      await page.waitForFunction(() => !!window.boxglow.store.getState().project);
+      check('Reload: hidden for a plan kept in the browser', (await page.getByRole('button',{name:'Reload',exact:true}).count())===0);
+      await page.context().close();
+    }
   } finally { await browser.close(); }
   const {passed,failed}=result();console.log(`${passed}/${passed+failed} passed`);process.exitCode=failed?1:0;
 })().catch(e=>{console.error(e);process.exitCode=1;});

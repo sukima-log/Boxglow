@@ -1072,3 +1072,8 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 @media (prefers-reduced-motion: reduce) { .btn, .bg-block { transition: none; } }
 
 .modal-backdrop:has(.home-dialog) { background: radial-gradient(ellipse at top, var(--primary-soft), var(--bg-paper) 70%); }
+
+/* 手動の更新ボタン: 読み直している間だけ、矢印を回す (動きを減らす設定では回さない) */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.8s linear infinite; transform-origin: 50% 50%; }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }

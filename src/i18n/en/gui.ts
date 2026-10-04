@@ -49,5 +49,10 @@ export const gui: Record<string, string> = {
   "保存方式": "Save protocol",
   "接続先": "Peer",
   "接続先と画面のバージョンが異なるか、確認できません。CLI・拡張を更新し、画面を再読み込みしてください。": "The connected version differs or is unavailable. Update the CLI or extension and reload the view.",
-  "{file} に自動で保存します (変更後)。Save で今すぐ書きます": "Edits are saved automatically to {file}. Save writes immediately."
+  "{file} に自動で保存します (変更後)。Save で今すぐ書きます": "Edits are saved automatically to {file}. Save writes immediately.",
+  "最新です (ファイルに変更はありません)": "Up to date (the file has not changed)",
+  "最新の内容を読み込みました": "Loaded the latest content",
+  "最新の内容を読み込めませんでした: {error}": "Could not load the latest content: {error}",
+  "最新の内容を読み込む (ファイルを今すぐ読み直す)": "Load the latest content (reread the file now)",
+  "VS Code から応答がありません": "No response from VS Code",
 };

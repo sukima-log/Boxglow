@@ -61,6 +61,13 @@ interface State {
   setViewScope: (blockId: string | null) => void;
   /** 今すぐ保存する (Save ボタン。自動保存を待たずに書く) */
   saveNow: () => void;
+  /**
+   * 手動の更新: つながっているファイルを、今すぐ読み直して画面に反映する (自動の更新を待たずに取り直す)。
+   * ブラウザ内の計画 (つながっているファイルが無い) では、何もしない。未保存の編集があるときは、自動の更新と同じく、競合として両方を残す
+   */
+  reload: () => Promise<void>;
+  /** 手動の更新の最中か (ボタンを押せなくする) */
+  reloading: boolean;
   peerVersion: PeerVersion | null;
   saveError: string | null;
   /** VS Code の中で、保存できない理由 (拡張がファイルを直接読み書きできない窓など)。あれば閲覧専用にして、この文を帯に出す */
@@ -169,6 +176,13 @@ let epoch = 0;
 let inFlight = false;
 let inFlightText = "";
 let refreshExternal: (() => Promise<void>) | null = null;
+/**
+ * 手動の更新で呼ぶ「今すぐ読み直す」処理 (開き方ごとに差し替える。ブラウザ内の計画では null)。
+ * Output: なし。読めなかったら例外 (理由を画面に出す)
+ */
+let reloadNow: (() => Promise<void>) | null = null;
+/** VS Code の中: 読み直しを頼んだ後、拡張から中身が届くのを待っている処理 (届いたら呼ぶ) */
+let vscodeReloadWaiter: (() => void) | null = null;
 let messageHandler: ((ev: MessageEvent) => void) | null = null;
 const pendingSaves = new Map<string, { resolve: (version: number) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
 function saveToVsCode(text: string): Promise<number> {
@@ -252,7 +266,7 @@ export const useProjectStore = create<State>((set, get) => {
   };
   const canLeave = () => !["unsaved", "saving"].includes(get().saveState) || confirm(t("未保存の編集があります。必要なら先に JSON を書き出してください。編集を破棄して移動しますか？"));
   const stopWatching = () => {
-    epoch++; inFlight = false; inFlightText = ""; refreshExternal = null;
+    epoch++; inFlight = false; inFlightText = ""; refreshExternal = null; reloadNow = null; vscodeReloadWaiter = null;
     if (saveTimer) clearTimeout(saveTimer); saveTimer = null;
     if (watchTimer) clearInterval(watchTimer); watchTimer = null; fileHandle = null;
     serveEvents?.close(); serveEvents = null;
@@ -292,6 +306,22 @@ export const useProjectStore = create<State>((set, get) => {
       set({ viewScope: scope, selection: keepSel });
     }
   , saveNow: () => { if (saveTimer) clearTimeout(saveTimer); saveTimer = null; void persist(); }
+  , reloading: false
+  , reload: async () => {
+      // つながっているファイルが無い (ブラウザ内の計画)・すでに読み直している最中なら、何もしない
+      if (!reloadNow || get().reloading) return;
+      const before = get().project;
+      set({ reloading: true });
+      try {
+        await reloadNow();
+        // 競合になったときは、競合の帯が出るので、ここでは知らせない。それ以外は、変わったかどうかを短く知らせる
+        if (!get().conflict) set({ toast: get().project === before ? t("最新です (ファイルに変更はありません)") : t("最新の内容を読み込みました") });
+      } catch (e) {
+        set({ toast: t("最新の内容を読み込めませんでした: {error}", { error: e instanceof Error ? e.message : String(e) }) });
+      } finally {
+        set({ reloading: false });
+      }
+    }
   , peerVersion: null
   , readonlyReason: null
   , hostNotice: null
@@ -487,6 +517,14 @@ export const useProjectStore = create<State>((set, get) => {
         if (!fileHandle) return;
         try { const f = await fileHandle.getFile(); if (f.lastModified === fileLastModified) return; const text = await f.text(); if (generation !== epoch) return; acceptRemote(text); fileLastModified = f.lastModified; } catch { /* Try on the next poll. */ }
       }, WATCH_INTERVAL);
+      // 手動の更新: 更新時刻に関係なく、今のファイルを読み直す
+      reloadNow = async () => {
+        if (!fileHandle) return;
+        const f = await fileHandle.getFile();
+        const text = await f.text();
+        if (generation !== epoch) return;
+        acceptRemote(text); fileLastModified = f.lastModified;
+      };
       return true;
     }
 
@@ -532,6 +570,15 @@ export const useProjectStore = create<State>((set, get) => {
         } catch { /* Reconnect and the next event retry. */ }
       };
       refreshExternal = reload;
+      // 手動の更新: 自動の更新と同じ読み直しだが、読めなかったときは理由を伝える (自動の更新は、黙って次の通知を待つ)
+      reloadNow = async () => {
+        const read = ++sequence;
+        const response = await fetch(serveApi("api/project"), { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const text = await response.text();
+        if (generation !== epoch || read !== sequence) return;
+        acceptRemote(text, response.headers.get("etag") ?? "");
+      };
       serveEvents = new EventSource(serveApi("api/events"));
       serveEvents.addEventListener("change", () => { void reload(); });
       serveEvents.addEventListener("hello", () => { void reload(); });
@@ -561,6 +608,9 @@ export const useProjectStore = create<State>((set, get) => {
           return;
         }
         if ((msg.type !== "load" && msg.type !== "update") || typeof msg.text !== "string") return;
+        // 手動の更新で頼んだ読み直しの応答が届いた (この後の処理で、中身が画面に反映される)
+        const waiter = vscodeReloadWaiter; vscodeReloadWaiter = null;
+        queueMicrotask(() => waiter?.());
         if (typeof msg.version === "number" && msg.version < vscodeVersion) return;
         try {
           set({ peerVersion: { app: typeof msg.appVersion === "string" ? msg.appVersion : null, protocol: typeof msg.protocol === "number" ? msg.protocol : null, extension: typeof msg.extensionVersion === "string" ? msg.extensionVersion : undefined } });
@@ -574,6 +624,13 @@ export const useProjectStore = create<State>((set, get) => {
         } catch (e) { set({ saveError: String(e) }); }
       };
       window.addEventListener("message", messageHandler);
+      // 手動の更新: 拡張に、今のファイルの中身を送り直してもらう (最初の読み込みと同じ合図。拡張は、開いている文書の今の中身を返す)。
+      // 応答が届くまで待つ (届かなければ、3 秒で失敗として伝える)
+      reloadNow = () => new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => { vscodeReloadWaiter = null; reject(new Error(t("VS Code から応答がありません"))); }, 3000);
+        vscodeReloadWaiter = () => { clearTimeout(timer); resolve(); };
+        vscodeApi!.postMessage({ type: "ready" });
+      });
       vscodeApi.postMessage({ type: "ready" });
       // 拡張から中身が届かないまま時間が経ったら、その旨を Home 画面に出す
       // (黙って空の画面にすると、一覧にある「VS Code 内のコピー」をファイルだと思って開いてしまう)

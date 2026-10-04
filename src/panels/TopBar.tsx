@@ -118,6 +118,9 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
   const editMode = useProjectStore((s) => s.editMode);
   const setEditMode = useProjectStore((s) => s.setEditMode);
   const saveNow = useProjectStore((s) => s.saveNow);
+  const source = useProjectStore((s) => s.source);
+  const reload = useProjectStore((s) => s.reload);
+  const reloading = useProjectStore((s) => s.reloading);
   // 保存状態: 常に見える札にする (ファイルを開いているときは「どこに保存されるか」と「保存済みか」が分かるように)
   const saveLabel = readonly ? "Read only" : ephemeral ? "Sample (not saved)" : saveState === "saving" ? "Saving…" : saveState === "unsaved" ? "Unsaved" : "Saved";
   const saveTitle = readonly ? t("閲覧専用") : ephemeral ? t("サンプルは保存されません。Save で自分のプロジェクトとして保存") : fileName ? t("{file} に自動で保存します (変更後)。Save で今すぐ書きます", { file: fileName }) : t("このブラウザに自動で保存します");
@@ -142,6 +145,15 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
         {!ephemeral && <span className="save-chip__file">{fileName ?? t("ブラウザ内")}</span>}
         <span>{saveLabel}</span>
       </span>
+      {/* 手動の更新: つながっているファイルを、今すぐ読み直す (自動の更新を待たない)。ブラウザ内の計画には、読み直す先が無いので出さない */}
+      {!ephemeral && source !== "idb" && (
+        <button className="btn btn-ghost btn-sm" onClick={() => void reload()} disabled={reloading} title={t("最新の内容を読み込む (ファイルを今すぐ読み直す)")} aria-label="Reload">
+          <svg className={reloading ? "spin" : undefined} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M20 12a8 8 0 1 1-2.6-5.9" />
+            <path d="M20 4v5h-5" />
+          </svg>
+        </button>
+      )}
       {ephemeral && !readonly && <button className="btn btn-sm" onClick={copyToMine} title={t("自分のプロジェクトとして保存")}>Save</button>}
       {!ephemeral && !readonly && <button className="btn btn-sm" onClick={saveNow} disabled={saveState === "saved" || saveState === "saving"} title={saveTitle}>Save</button>}
       </div>
