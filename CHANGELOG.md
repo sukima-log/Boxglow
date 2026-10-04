@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.5.0 (2026-10-04)
+
+Keeping agent work on track: readiness, scope and fresher resume (implemented by Codex, reviewed by Claude Code). VS Code extension 0.4.0.
+**Update the CLI, `serve` and the VS Code extension together**: writers older than 0.5.0 read these plans but drop the plan-level settings (`workflowPolicy`, `focusBlockId`) when they save and do not record the new timestamps.
+
+- Readiness: `resume`, `status --brief` and the Next tab separate boxes that are ready from boxes waiting for inputs, and name the missing inputs. Starting a box with missing inputs warns by default; `start --reason` records why in the activity and the log.
+- Optional per-plan policy (`boxglow policy --start warn|reject --done warn|reject`, or "AI の作業確認" in the project panel): reject starting without inputs (a reason still allows it) and completing without a deliverable (existing output artifacts count; `set --status white` is checked too). The default stays `warn`, and actions by a person are never rejected.
+- Scope: a box can carry four optional fields — goal, non-goals, acceptance and when to consult before widening (`boxglow scope`, MCP `boxglow_scope`, the details panel). They lead the output of `context`. `boxglow focus <box>` puts one box and its descendants first in the candidate lists; other candidates stay visible. With the guard on, changing scope, focus or policy needs the context token.
+- Resume: current work, pending decisions and unread answers come first, then candidates, then handoffs. Handoff notes of completed boxes are counted, not shown (`resume --include-completed`). Descriptions and status changes are timestamped, so a note older than the last status change is marked. A Done box whose description still says things like "未コミット" or "awaiting review" is listed for a second look (the text is never changed automatically).
+- Review adjustments: the second-look hint no longer fires on feature or state names such as "作業中" / "In Progress"; descriptions without a recorded time are not labelled "unknown" in `show`, exports and the details panel; `resume` says when the focused box is already done.
+- The schema stays at v5; all new fields are optional and existing plans behave as before.
+
 ## 0.4.2 (2026-10-04)
 
 VS Code extension 0.3.2. The CLI is unchanged from 0.4.1.

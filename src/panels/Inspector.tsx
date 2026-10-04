@@ -4,6 +4,8 @@
  * 何も選んでいなければ何も出さない (App 側でパネルごと隠す)
  * 文言は日本語で書き t() で包む (英語は src/i18n/en/inspector.ts の辞書で引く)
  */
+import { WorkScopePanel, WorkflowSettings } from "./WorkScope";
+import { descriptionReminder, freshnessText } from "../model/workflow";
 import { isAcked as decisionIsAcked } from "../model/graph";
 import { useEffect, useMemo, useState } from "react";
 import { addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, disconnect, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, missingRequiredInputs, removeBlock, setCategory, setProgress, setSchedule, updateBlock, wireNetTabs } from "../model/graph";
@@ -54,6 +56,7 @@ function ProjectInspector({ project }: { project: Project }) {
   return (
     <div className="flex flex-col gap-4 p-3">
       <PanelHead title="Project" />
+      <WorkflowSettings project={project} />
       <input className="input font-head text-[16px]" value={project.name} disabled={readonly}
         onChange={(e) => apply((p) => ({ ...structuredClone(p), name: e.target.value }))} />
       <DebouncedText multiline className="input" placeholder={t("ゴール (何を達成したいか)")} value={project.description} disabled={readonly}
@@ -138,6 +141,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   const setToast = useProjectStore((s) => s.setToast);
   const meId = useProjectStore((s) => s.meId);
   const [aiOpen, setAiOpen] = useState(false);
+  const [scopeEditing, setScopeEditing] = useState(false);
   const [showPrompt, setShowPrompt] = useState<"plan" | "decompose" | "review" | null>(null);
   const [more, setMore] = useState(true);
   const [menu, setMenu] = useState(false);
@@ -160,6 +164,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   // 別のブロックを選んだら開いていたものを閉じる
   useEffect(() => {
     setAiOpen(false);
+    setScopeEditing(false);
     setShowPrompt(null);
     setMore(true);
     setMenu(false);
@@ -213,6 +218,8 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
             <button className="btn btn-ghost btn-sm" onClick={() => setMenu(!menu)} title="More">⋯</button>
             {menu && (
               <div className="card absolute right-0 mt-1 p-1 flex flex-col z-30" style={{ minWidth: 200 }}>
+                <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); setScopeEditing(true); }}>{t("作業範囲を編集")}</button>
+                <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); apply(p => ({ ...p, focusBlockId: p.focusBlockId === blockId ? undefined : blockId })); }}>{project.focusBlockId === blockId ? t("今回の範囲の優先を解除") : t("このボックスを今回の範囲にする")}</button>
                 {!isProject && <button className="btn btn-ghost btn-sm justify-start" onClick={saveAsTemplate}>Save as Part</button>}
                 <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); setShowPrompt("plan"); setTab("more"); }}>Show AI text</button>
                 <div style={{ borderTop: "1px solid var(--line-soft)", margin: "4px 0" }} />
@@ -226,6 +233,9 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
 
       <DebouncedText className="input font-head text-[16px]" value={b.title} disabled={readonly} placeholder={t("Title (何を作るか)")}
         onCommit={(v) => apply((p) => updateBlock(p, blockId, { title: v }))} />
+
+      <WorkScopePanel project={project} blockId={blockId} editing={scopeEditing} onClose={() => setScopeEditing(false)} />
+      {descriptionReminder(b) && <p className="text-[12px] description-reminder" style={{ color: "var(--accent)" }}>{descriptionReminder(b)}</p>}
 
       {/* タブ: 一度に 1 項目だけ見せる */}
       <div className="seg" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
@@ -325,8 +335,10 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         )}
         {/* AI への引き継ぎ: セッションをまたいで残すメモ (project.handoffs にボックスごとに 1 つ)。メモがあるときは開いた状態で出す。
             下のボタンは、判断・入出力も含めた引き継ぎ情報 (agentContext) を JSON でコピーする */}
-        <details className="text-[12px]" open={!!project.handoffs?.[blockId]}>
+        <details className="text-[12px]" open={!!project.handoffs?.[blockId] && b.status !== "white"}>
           <summary>{t("AI への引き継ぎ")}</summary>
+          {/* 引き継ぎが状態の変更より前のものだと分かったときだけ注記する (画面の文字を増やさない) */}
+          {project.handoffs?.[blockId]?.note && freshnessText(b, project.handoffs[blockId].at, "older") && <p className="my-2 text-[11px]">{freshnessText(b, project.handoffs[blockId].at, "older")}</p>}
           <p className="my-2">{t("セッションを越えて残す発見・次の手順・未解決事項。AI は context コマンドで判断と合わせて読み直します。")}</p>
           <DebouncedText multiline className="input" value={project.handoffs?.[blockId]?.note ?? ""} disabled={readonly} placeholder={t("発見 / 次の手順 / 未解決事項")}
             onCommit={(note) => apply((q) => ({ ...q, handoffs: { ...q.handoffs, [blockId]: { note, actor: "human", at: new Date().toISOString() } } }))} />
@@ -453,6 +465,8 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           <button className="btn btn-ghost btn-sm" onClick={() => setMore(!more)}>{more ? "▴" : "▾"}</button></div>
         {more && (
           <div className="flex flex-col gap-2">
+            {/* 説明が状態の変更より前のものだと分かったときだけ注記する */}
+            {b.description && freshnessText(b, b.descriptionUpdatedAt, "older") && <p className="text-[11px]">{freshnessText(b, b.descriptionUpdatedAt, "older")}</p>}
             <DebouncedText multiline className="input" placeholder={t("メモ (入力から出力をどう作るか)")} value={b.description} disabled={readonly}
               onCommit={(v) => apply((p) => updateBlock(p, blockId, { description: v }))} />
             <ArtifactsEditor artifacts={b.artifacts} readonly={readonly} addLabel="Link" onChange={(next) => apply((p) => updateBlock(p, blockId, { artifacts: next }))} />

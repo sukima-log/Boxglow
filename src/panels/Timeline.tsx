@@ -2,6 +2,7 @@
  * タイムライン: 判断待ち・作業中・ログを時系列で見る (上の帯の要約チップから開く)
  * 「再開」タブは、作業を再開するときに読み直すもの (AI 未確認の回答・引き継ぎメモ・次の候補) を 1 か所にまとめる
  */
+import { candidateGroups } from "../model/workflow";
 import { resumeSummary } from "../model/resume";
 import { useState } from "react";
 import { answerDecision, editDecisionAnswer, summarize, candidatesOf, reopenDecision, ancestorsOf, kindOf, portsOf, isAcked } from "../model/graph";
@@ -128,7 +129,8 @@ export function Timeline({ project }: { project: Project }) {
   const select = useProjectStore((s) => s.select);
   const focusBlock = useProjectStore((s) => s.focusBlock);
   const s = summarize(project);
-  const resume = resumeSummary(project); // 再開のまとめ (引き継ぎメモの一覧など。CLI の resume と同じモデル)
+  const [includeCompleted, setIncludeCompleted] = useState(false);
+  const resume = resumeSummary(project, { includeCompleted }); // 再開のまとめ (引き継ぎメモの一覧など。CLI の resume と同じモデル)
   const jump = (blockId: string) => {
     select({ blockId });
     focusBlock(blockId);
@@ -141,7 +143,7 @@ export function Timeline({ project }: { project: Project }) {
     { id: "decisions", label: "Decisions", count: s.decisions.length, help: t("判断待ち: あなたの回答で AI が進めます") }
   , { id: "answered", label: "Answered", count: s.answered.length, help: t("回答済み: AI がまだ読んでいない回答 (読まれるまで残り、編集できます)") }
   , { id: "working", label: "Working", count: active.length, help: t("作業中・詰まり・確認待ちのボックス") }
-  , { id: "next", label: "Next", count: s.next.length, help: t("未着手で、次に着手できるボックス") }
+  , { id: "next", label: "Next", count: s.next.length, help: t("未着手のボックス: 着手できる / 入力待ち") }
   , { id: "log", label: "Log", count: null, help: t("最近の記録 (新しい順)") }
   ];
   // 並びは「再開」が先頭だが、最初に開く優先順は 判断待ち → 回答済み → 再開 → 作業中 → 次の候補 (人の対応が要るものを先に)
@@ -169,20 +171,21 @@ export function Timeline({ project }: { project: Project }) {
         ))}
       </div>
 
-      {/* 再開: AI 未確認の回答 → 引き継ぎメモ (新しい順) → 次の候補 (5 件まで)。見るだけでは回答を確認済みにしない (ack は AI が行う) */}
-      {tab === "resume" && <section className="resume-section">
-        <p>{t("記録を読み直してから作業を再開します。ここを開くだけでは回答を確認済みにしません。")}</p>
-        <h3 className="label">{t("AI未確認の回答")} · {s.answered.length}</h3>
-        {s.answered.map(({ block, decision }) => <div key={decision.id} className="resume-card"><BlockRef project={project} blockId={block.id} onJump={jump} /><DecisionCard project={project} blockId={block.id} decisionId={decision.id} /></div>)}
+      {/* 再開: 現況 → 次の候補 (各組5件まで) → 未完了の引き継ぎ。完了メモは明示的に展開する。見るだけでは回答を確認済みにしない (ack は AI が行う) */}
+      {tab === "resume" && <section className="flex flex-col gap-2">
+        {active.length > 0 && <><h3 className="label">{t("作業中・確認待ち")}</h3>{active.map(w => <div key={w.block.id}><BlockRef project={project} blockId={w.block.id} onJump={jump} /><p className="text-[12px]">{w.note}</p></div>)}</>}
+        {s.decisions.length > 0 && <><h3 className="label">{t("判断待ち")}</h3>{s.decisions.map(({block, decision}) => <div key={decision.id}><BlockRef project={project} blockId={block.id} onJump={jump} /><DecisionCard project={project} blockId={block.id} decisionId={decision.id} /></div>)}</>}
+        {s.answered.length > 0 && <><h3 className="label">{t("AI未確認の回答")}</h3>{s.answered.map(({block, decision}) => <div key={decision.id}><BlockRef project={project} blockId={block.id} onJump={jump} /><DecisionCard project={project} blockId={block.id} decisionId={decision.id} /></div>)}</>}
+        <NextCandidates project={project} limit={5} onJump={jump} />
         <h3 className="label">{t("引き継ぎ（新しい順）")}</h3>
-        {resume.handoffs.length === 0 && empty(t("引き継ぎメモはまだありません。各タスクの「AI への引き継ぎ」に残せます。"))}
-        {resume.handoffs.map(({ blockId, note, actor, at, status }) => <div key={blockId} className="resume-card">
+        {resume.handoffs.length === 0 && !resume.completedHandoffCount && empty(t("引き継ぎメモはまだありません。各タスクの「AI への引き継ぎ」に残せます。"))}
+        {resume.completedHandoffCount > 0 && <button className="btn btn-ghost btn-sm" aria-expanded={includeCompleted} onClick={() => setIncludeCompleted(!includeCompleted)}>{t("完了済みの引き継ぎ ({n})", { n: resume.completedHandoffCount })}</button>}
+        {resume.handoffs.map(({ blockId, note, actor, freshnessText, status }) => <div key={blockId} className="resume-card">
           <BlockRef project={project} blockId={blockId} onJump={jump} />
-          <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{actorLabel(actor)} · {agoText(at)} · {STATUS_LABEL[status]}</div>
+          <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{actorLabel(actor)} · {STATUS_LABEL[status]} · {freshnessText}</div>
           <p className="whitespace-pre-wrap">{note}</p>
         </div>)}
-        <h3 className="label">{t("次の候補")}</h3>
-        {s.next.slice(0, 5).map((b) => <BlockRef key={b.id} project={project} blockId={b.id} onJump={jump} />)}
+        {resume.descriptionReminders.length > 0 && <details className="text-[12px]"><summary>{t("説明の見直し候補 ({n})", { n: resume.descriptionReminders.length })}</summary>{resume.descriptionReminders.map(x => <BlockRef key={x.blockId} project={project} blockId={x.blockId} onJump={jump} />)}</details>}
         <p className="text-[12px]">{t("CLI: boxglow resume → boxglow context B番号 で最新の判断を読みます。")}</p>
       </section>}
 
@@ -237,18 +240,7 @@ export function Timeline({ project }: { project: Project }) {
         </section>
       )}
 
-      {tab === "next" && (
-        <section className="flex flex-col gap-1">
-          <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("未着手のボックス (着手できるものから)")}</span>
-          {s.next.length === 0 && empty(t("未着手のボックスはありません"))}
-          {s.next.slice(0, 30).map((b) => (
-            <button key={b.id} className="tree-row text-left" onClick={() => jump(b.id)}>
-              <span className="dec-key">{b.key}</span>
-              <span className="truncate">{b.title}</span>
-            </button>
-          ))}
-        </section>
-      )}
+      {tab === "next" && <NextCandidates project={project} limit={30} onJump={jump} />}
 
       {tab === "log" && (
         <section>
@@ -264,4 +256,20 @@ export function Timeline({ project }: { project: Project }) {
       )}
     </div>
   );
+}
+
+
+/** Input: 計画、各組の最大件数、選択処理 / Output: 範囲別・準備状況別の候補。不足する入力も同じ一覧で読める。 */
+function NextCandidates({ project, limit, onJump }: { project: Project; limit: number; onJump: (id: string) => void }) {
+  const groups = candidateGroups(project, summarize(project).next);
+  return <section className="flex flex-col gap-2 next-candidates">
+    {project.focusBlockId && <p className="text-[12px]">{t("今回の範囲: {title}", { title: project.blocks[project.focusBlockId]?.title ?? "" })}</p>}
+    {!groups.length && <p className="text-[12px]">{t("未着手のボックスはありません")}</p>}
+    {groups.map(g => <div key={g.title}><h3 className="label">{g.title}</h3>
+      {g.items.slice(0, limit).map(b => <button key={b.blockId} className="tree-row text-left flex-wrap" onClick={() => onJump(b.blockId)}>
+        <span className="dec-key">{b.key}</span><span>{b.title}</span>
+        {b.missingInputs.length > 0 && <span className="basis-full text-[12px]" style={{ whiteSpace: "normal", color: "var(--text-muted)" }}>{t("必須の入力待ち: {names}", { names: b.missingInputs.join(", ") })}</span>}
+      </button>)}
+    </div>)}
+  </section>;
 }

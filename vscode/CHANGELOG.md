@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0
+
+- Follows boxglow 0.5.0: the details panel shows a box's scope (goal, non-goals, acceptance, when to consult) when it has one, the Next tab separates ready boxes from boxes waiting for inputs, and the project panel has the optional "AI の作業確認" policy. Update together with the CLI.
+
 ## 0.3.2
 
 - Opening a WSL file (`\\wsl.localhost\...`) from a Windows window: the plan is shown instead of an empty screen. If VS Code does not allow extensions to access that location, the editor is read-only and explains what to do (open the file in a WSL window, or add the host to `security.allowedUNCHosts` and restart). Previously the Home list could lead you to an old copy kept inside VS Code, whose edits never reached the file.

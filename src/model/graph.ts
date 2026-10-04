@@ -4,6 +4,8 @@
  * すべての関数は Project を受け取り、変更後の新しい Project を返す (引数は変更しない)。
  * 画面 (React) や保存 (IndexedDB) に依存しないので、単体テストで結線ルールを検証できる。
  */
+import { inFocus } from "./workflow";
+
 import { categoryOf } from "./categories";
 // 文言の言語切り替え (React に依存しない core を使う。CLI の束に React を入れないため)
 import { t } from "../i18n/core";
@@ -521,7 +523,7 @@ export function addBlock(
   if (args.actor) appendLog(q, { actor: args.actor, kind: "added", blockId: id, message: t("「{title}」を追加", { title: args.title }) });
   // 子を持ったら親は「分解中」。black のままの親だけ gray に上げる (white は人が決めたので触らない)
   const parent = q.blocks[args.parentId];
-  if (parent && parent.id !== ROOT_ID && parent.status === "black") parent.status = "gray";
+  if (parent && parent.id !== ROOT_ID && parent.status === "black") { parent.status = "gray"; parent.statusChangedAt = now(); }
   return { project: normalizePromotions(q), blockId: id };
 }
 
@@ -530,6 +532,10 @@ export function updateBlock(p: Project, blockId: string, patch: Partial<Omit<Blo
   const q = touch(p);
   const b = q.blocks[blockId];
   if (!b) return p;
+  // Input: 変更対象の属性 / Output: 実際の本文・状態変更だけに日時を付けた複製。
+  // 読み込みや同じ値の保存では日時を増やさず、旧記録の日時も捏造しない。
+  if (patch.description !== undefined && patch.description !== b.description) b.descriptionUpdatedAt = now();
+  if (patch.status !== undefined && patch.status !== b.status) b.statusChangedAt = now();
   Object.assign(b, patch);
   return q;
 }
@@ -565,6 +571,7 @@ export function removeBlock(p: Project, blockId: string): Project {
   for (const id of portIds) delete q.ports[id];
   for (const id of ids) delete q.blocks[id];
   // 消したボックスの引き継ぎメモも消す (持ち主のいないメモを計画に残さない)。1 つも無くなったら項目ごと外す
+  if (q.focusBlockId && ids.has(q.focusBlockId)) delete q.focusBlockId;
   if (q.handoffs) {
     const rest = Object.fromEntries(Object.entries(q.handoffs).filter(([id]) => !ids.has(id)));
     if (Object.keys(rest).length > 0) q.handoffs = rest;
@@ -927,7 +934,7 @@ export function setProgress(p: Project, blockId: string, value: number | null, a
   const q = touch(p);
   if (value === null) delete q.blocks[blockId].progress;
   else q.blocks[blockId].progress = Math.max(0, Math.min(100, Math.round(value)));
-  if (value !== null && b.status === "black" && value > 0) q.blocks[blockId].status = "gray";
+  if (value !== null && b.status === "black" && value > 0) { q.blocks[blockId].status = "gray"; q.blocks[blockId].statusChangedAt = now(); }
   appendLog(q, { actor, kind: "note", blockId, message: t("「{title}」の進捗 {value}", { title: b.title, value: value === null ? t("自動") : value + "%" }) });
   return q;
 }
@@ -1043,6 +1050,9 @@ export function fromJSON(text: string): Project {
   , inputGroups: Array.isArray(d.inputGroups) ? d.inputGroups : []
   };
   if (typeof d.contextGuard === "boolean") q.contextGuard = d.contextGuard;
+  // 任意項目なので v5 のまま読み書きできる。無い値は追加しない。
+  if (d.workflowPolicy) q.workflowPolicy = d.workflowPolicy;
+  if (typeof d.focusBlockId === "string" && q.blocks[d.focusBlockId]) q.focusBlockId = d.focusBlockId;
   if (d.handoffs && typeof d.handoffs === "object") q.handoffs = d.handoffs;
   if (d.lang === "en" || d.lang === "ja") q.lang = d.lang; // CLI の文言の言語 (無ければ ja 扱い)
   // 無いグループを指している入力は既定の入力ノードに戻す
@@ -1163,7 +1173,7 @@ export function setActivity(p: Project, blockId: string, actor: string, state: A
   const b = q.blocks[blockId];
   if (!b || blockId === ROOT_ID) return p;
   b.activity = { actor, state, note, since: now() };
-  if (state === "working" && b.status === "black") b.status = "gray";
+  if (state === "working" && b.status === "black") { b.status = "gray"; b.statusChangedAt = now(); }
   const kind: LogKind = state === "working" ? "started" : state === "blocked" ? "blocked" : "note";
   // 状態ごとに 1 文として訳す (英語は語順が変わるので、題名と状態を別々に訳してつなげない)
   const label = state === "working" ? t("「{title}」開始", { title: b.title })
@@ -1208,6 +1218,7 @@ export function finishBlock(
     for (const a of args.artifacts) q.ports[target.id].artifacts.push("id" in a && "kind" in a ? (a as Artifact) : createArtifact(a.title, a.url ?? ""));
   }
   q.blocks[blockId].activity = null;
+  if (q.blocks[blockId].status !== "white") q.blocks[blockId].statusChangedAt = now();
   q.blocks[blockId].status = "white";
   const arts = (args.artifacts ?? []).map((a) => a.title).join(", ");
   appendLog(q, { actor, kind: "done", blockId, message: `${t("「{title}」完了", { title: b.title })}${arts ? " (" + arts + ")" : ""}${args.note ? ": " + args.note : ""}` });
@@ -1407,7 +1418,7 @@ export function summarize(p: Project): Summary {
   const blocked = blocks.filter((b) => b.activity?.state === "blocked" || b.activity?.state === "waiting_review").map((b) => ({ block: b, actor: b.activity!.actor, note: b.activity!.note }));
   const leafBlack = blocks
     .filter((b) => b.status === "black" && !b.activity && childrenOf(p, b.id).length === 0)
-    .sort((a, b) => Number(missingRequiredInputs(p, a.id).length > 0) - Number(missingRequiredInputs(p, b.id).length > 0)); // 着手できるものを先に
+    .sort((a, b) => Number(inFocus(p, b.id)) - Number(inFocus(p, a.id)) || Number(missingRequiredInputs(p, a.id).length > 0) - Number(missingRequiredInputs(p, b.id).length > 0)); // 着手できるものを先に
   return {
     total: blocks.length
   , white: blocks.filter((b) => b.status === "white").length
@@ -1460,7 +1471,7 @@ export function splitBlock(
     const r = addBlock(q, { parentId, title: b.title, outputName: b.outputs?.[0] });
     q = r.project;
     made[b.title] = r.blockId;
-    if (b.description) q.blocks[r.blockId].description = b.description;
+    if (b.description) { q.blocks[r.blockId].description = b.description; q.blocks[r.blockId].descriptionUpdatedAt = now(); }
     if ((b.outputs ?? []).length > 1) errors.push(t("「{title}」の出力は 1 本にしました (下の階層を持たないボックスの出力は 1 本。{omitted} は省略)", { title: b.title, omitted: b.outputs!.slice(1).join(", ") }));
     for (const name of b.inputs ?? []) q = addPort(q, { blockId: r.blockId, direction: "in", name }).project;
   }
@@ -1505,7 +1516,7 @@ export function splitBlock(
     if (r.error) errors.push(t("結線できません: {from} -> {to} ({why})", { from: c.from, to: c.to, why: r.error }));
     q = r.project;
   }
-  if (q.blocks[parentId].status === "black") q.blocks[parentId].status = "gray";
+  if (q.blocks[parentId].status === "black") { q.blocks[parentId].status = "gray"; q.blocks[parentId].statusChangedAt = now(); }
   q.blocks[parentId].collapsed = false;
   appendLog(q, { actor, kind: "split", blockId: parentId, message: t("「{title}」を {count} 個に分解: {list}", { title: parent.title, count: spec.blocks.length, list: spec.blocks.map((b) => b.title).join(", ") }) });
   return { project: q, errors };
@@ -1570,6 +1581,7 @@ function instantiateNode(p: Project, parentId: string, node: TemplateNode, origi
   let q = r.project;
   const id = r.blockId;
   q.blocks[id].description = node.description;
+  if (node.description) q.blocks[id].descriptionUpdatedAt = now();
   q.blocks[id].template = origin;
   if (node.category) q.blocks[id].category = node.category;
   if (node.outputs[0]) q = updatePort(q, portsOf(q, id, "out")[0].id, { description: node.outputs[0].description });
@@ -1608,6 +1620,7 @@ function instantiateNode(p: Project, parentId: string, node: TemplateNode, origi
       const to = resolve(c.to, "in");
       if (from && to) q = connect(q, from, to).project;
     }
+    if (q.blocks[id].status !== "gray") q.blocks[id].statusChangedAt = now();
     q.blocks[id].status = "gray";
   }
   return { project: q, blockId: id };
@@ -1900,7 +1913,7 @@ export function moveBlockToParent(p: Project, blockId: string, newParentId: stri
   q.blocks[blockId].position = { x: Math.max(CHILD_PADDING.left, position.x), y: Math.max(childTop(q, newParentId), position.y) };
   // 新しい階層で、間のボックスを経由してつなぎ直す
   for (const pr of pending) routeConnect(q, pr.from, pr.to);
-  if (q.blocks[newParentId].status === "black") q.blocks[newParentId].status = "gray";
+  if (q.blocks[newParentId].status === "black") { q.blocks[newParentId].status = "gray"; q.blocks[newParentId].statusChangedAt = now(); }
   q.blocks[newParentId].collapsed = false;
   appendLog(q, { actor: "human", kind: "note", blockId, message: t("「{title}」を「{parent}」の中へ移動", { title: b.title, parent: np.title }) });
   return normalizePromotions(q);

@@ -1,9 +1,10 @@
 /**
  * 人と AI の両方が読める Markdown の報告 (CLI の status / show と、画面のタイムラインで使う)
  */
+import { candidateGroups, scopeEntries, freshnessText, descriptionReminder } from "./workflow";
 import { categoryOf } from "./categories";
 import { ROOT_ID, type Block, type Project } from "./types";
-import { candidatesOf, issueKeyOf, missingRequiredInputs, childrenOf, computeProgress, effectiveDescription, effectiveProgress, incomingEdges, isOverdue, outgoingEdges, pendingDecisions, portsOf, summarize } from "./graph";
+import { candidatesOf, issueKeyOf, childrenOf, computeProgress, effectiveDescription, effectiveProgress, incomingEdges, isOverdue, outgoingEdges, pendingDecisions, portsOf, summarize } from "./graph";
 import { t } from "../i18n/core";
 
 /**
@@ -134,10 +135,11 @@ export function statusReport(p: Project, options: { brief?: boolean } = {}): str
     lines.push("", t("階層は省略しています。全体は `boxglow status`、ボックスの詳細は `boxglow show <block>` で確認できます。"));
   }
   if (s.next.length > 0) {
-    lines.push("", "## " + t("次の候補 (未着手の New。必須の入力がそろっているものから)"));
-    for (const b of s.next.slice(0, 10)) {
-      const missing = missingRequiredInputs(p, b.id);
-      lines.push(`- ${b.key ?? ""} ${b.title}${missing.length > 0 ? "  " + t("(必須の入力待ち: {names})", { names: missing.map((q) => q.name).join(", ") }) : "  " + t("(着手できる)")}`);
+    lines.push("", "## " + t("次の候補 (今回の範囲を優先し、着手できる・入力待ちを区別)"));
+    if (p.focusBlockId) lines.push(t("今回の範囲: {title}", { title: p.blocks[p.focusBlockId]?.title ?? "" }));
+    for (const group of candidateGroups(p, s.next)) {
+      lines.push("### " + group.title);
+      for (const item of group.items.slice(0, 10)) lines.push("- " + (item.key ?? "") + " " + item.title + (item.missingInputs.length ? "  " + t("(必須の入力待ち: {names})", { names: item.missingInputs.join(", ") }) : "  " + t("(着手できる)")));
     }
   }
   lines.push("");
@@ -156,7 +158,11 @@ export function blockReport(p: Project, blockId: string): string {
   if (b.startDate || b.dueDate) lines.push(`- ${t("日程:")} ${b.startDate ? t("開始 {date}", { date: b.startDate }) : ""}${b.startDate && b.dueDate ? " / " : ""}${b.dueDate ? t("期日 {date}", { date: b.dueDate }) + (isOverdue(b) ? " " + t("(超過)") : "") : ""}`);
   if (b.estimateHours !== undefined || b.actualHours !== undefined) lines.push(`- ${t("時間:")} ${b.estimateHours !== undefined ? t("見積 {hours}h", { hours: b.estimateHours }) : ""}${b.estimateHours !== undefined && b.actualHours !== undefined ? " / " : ""}${b.actualHours !== undefined ? t("実績 {hours}h", { hours: b.actualHours }) : ""}`);
   if (b.activity) lines.push(`- ${t("活動:")} ${b.activity.actor} ${t(ACTIVITY_LABEL[b.activity.state])} ${b.activity.note} (${b.activity.since})`);
-  if (b.description) lines.push("", b.description);
+  for (const item of scopeEntries(b.scope)) lines.push("", "## " + item.label, item.text);
+  // 説明の日時は、分かるときだけ出す (日時の記録が無い古い説明に、毎回「不明」と付けない)
+  if (b.description) lines.push("", ...[freshnessText(b, b.descriptionUpdatedAt, "known")].filter(Boolean), b.description);
+  if (descriptionReminder(b)) lines.push("", descriptionReminder(b));
+  if (p.handoffs?.[blockId]) lines.push("", "## " + t("AI への引き継ぎ"), freshnessText(b, p.handoffs[blockId].at), p.handoffs[blockId].note);
   lines.push("", "## " + t("入力"));
   for (const q of portsOf(p, blockId, "in")) {
     const src = incomingEdges(p, { portId: q.id, side: "outer" }).map((e) => `${name(p.ports[e.from.portId].blockId)}.${p.ports[e.from.portId].name}${e.auto ? ` (${t("自動")})` : ""}`);

@@ -141,7 +141,26 @@ export interface TemplateOrigin {
 }
 
 /** ブロック (= タスク、またはプロジェクトの包み) */
+/** 今回の作業範囲。空欄は制約を増やさない (古い計画では項目自体が無い)。 */
+export interface WorkScope {
+  goal?: string;
+  nonGoals?: string;
+  acceptance?: string;
+  consult?: string;
+}
+
+/** AI の着手・完了確認。省略は warn (人の操作は拒否しない)。 */
+export interface WorkflowPolicy {
+  startWithoutInputs?: "warn" | "reject";
+  doneWithoutArtifacts?: "warn" | "reject";
+}
+
 export interface Block {
+  scope?: WorkScope;
+  /** 説明を実際に変えた日時。古い記録には推測で補わない。 */
+  descriptionUpdatedAt?: string;
+  /** New / In Progress / Done を最後に変えた日時。 */
+  statusChangedAt?: string;
   id: string;
   /** 人が読める短い ID (B1, B2, ...)。検索や CLI の指定に使う */
   key?: string;
@@ -212,6 +231,9 @@ export type Visibility = "private" | "link" | "public";
 
 /** プロジェクト (= ブロック図の全体。JSON 書き出しの単位) */
 export interface Project {
+  workflowPolicy?: WorkflowPolicy;
+  /** 今回優先するボックスの内部 id。この配下を候補一覧の先頭にする。 */
+  focusBlockId?: string;
   /** true なら、CLI / MCP で作業を記録するコマンドが最新のコンテキストの確認トークンを要求する (guard)。無い古い計画は要求しない */
   contextGuard?: boolean;
   /** 引き継ぎメモ (ボックスの id → 分かったこと・次の手順など)。件数に上限のある活動ログとは別に残る。無い古い計画もそのまま読める */

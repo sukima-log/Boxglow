@@ -1,6 +1,8 @@
 /**
  * 書き出し: AI に渡す Markdown と、図を共有する Mermaid
  */
+import { scopeEntries, freshnessText } from "./workflow";
+
 import { categoryOf } from "./categories";
 import { ROOT_ID, type Block, type Port, type Project } from "./types";
 import { t } from "../i18n/core";
@@ -78,8 +80,12 @@ function blockSection(p: Project, blockId: string, level: number, withChildren: 
       lines.push(`  - ${d.question}${d.answer !== undefined ? ` → ${d.answer}` : " " + t("(未回答)")}${c.rejected.length ? t("。残した候補: {list}", { list: c.rejected.join(" / ") }) : ""}${(d.history ?? []).length ? t("。以前の答え: {list}", { list: d.history!.map((h) => h.answer).join(" → ") }) : ""}`);
     }
   }
+  for (const item of scopeEntries(b.scope)) lines.push("", "**" + item.label + "**", item.text);
   if (b.description) {
     lines.push("");
+    // 人が読む文書では、状態の変更より前に書かれた説明だと分かったときだけ注記する
+    const stale = freshnessText(b, b.descriptionUpdatedAt, "older");
+    if (stale) lines.push(stale);
     lines.push(b.description);
   }
   const ins = portsOf(p, b.id, "in");
@@ -136,6 +142,11 @@ export function blockToPrompt(p: Project, blockId: string, ask: "plan" | "decomp
   lines.push("");
   lines.push(t("このタスクは「{chain}」の中の 1 ブロックです。ブロックは「入力から出力を作る作業」で、出力の成果物が確定したら完了 (WhiteBox) になります。", { chain: chain.join(" > ") }));
   lines.push("");
+  // Copy for AI / prompt でも親の制約を落とさず、対象の本文より先に示す。
+  for (const parent of [...ancestorsOf(p, blockId)].reverse()) {
+    const scope = scopeEntries(parent.scope);
+    if (scope.length) lines.push("## " + parent.title, ...scope.map(x => x.label + ": " + x.text), "");
+  }
   lines.push(blockSection(p, blockId, 2, false));
   const siblings = childrenOf(p, b.parentId ?? ROOT_ID).filter((s) => s.id !== blockId);
   if (siblings.length > 0) {

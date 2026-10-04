@@ -1,57 +1,59 @@
 /**
- * 作業の再開用の概要 (CLI の resume / MCP の boxglow_resume)
- * 引き継ぎメモ・AI がまだ確認していない回答・判断待ち・作業中・次の候補を 1 つにまとめる。
- * 読むだけ (回答を「確認済み」にはしない)。ボックスごとの詳しいコンテキストは context で読む
+ * 再開時は現在の状態を先に示し、完了済みの引き継ぎは履歴として扱う。
+ * 一覧を読むことは回答の確認にも、作業の開始にもならない。
  */
 import { summarize } from "./graph";
+import { candidateGroups, descriptionReminder, freshnessText, noteFreshness } from "./workflow";
 import type { Project } from "./types";
 import { t } from "../i18n/core";
 
-/**
- * 再開用の概要をデータで作る (resume --json の出力)
- * Input : project = 計画
- * Output: { project (名前), handoffs (引き継ぎ。新しい順), unreadAnswers (AI 未確認の回答), pendingDecisions (判断待ち),
- *           active (作業中・詰まり・確認待ち), next (次の候補。10 件まで), instructions (AI への注意) }
- */
-export function resumeSummary(project: Project) {
+/** Input: 計画、完了済みメモの展開指定 / Output: 現況→候補→引き継ぎの読み取り専用データ。 */
+export function resumeSummary(project: Project, options: { includeCompleted?: boolean } = {}) {
   const s = summarize(project);
-  // 引き継ぎメモ: ボックスが残っていて中身のあるものだけ。新しい順 (同じ時刻は id 順で安定させる)
-  const handoffs = Object.entries(project.handoffs ?? {})
+  const all = Object.entries(project.handoffs ?? {})
     .filter(([id, note]) => project.blocks[id] && note.note.trim())
-    .map(([blockId, note]) => ({ blockId, key: project.blocks[blockId].key, title: project.blocks[blockId].title, status: project.blocks[blockId].status, ...note }))
+    .map(([blockId, note]) => {
+      const b = project.blocks[blockId];
+      return { blockId, key: b.key, title: b.title, status: b.status, ...note,
+        freshness: noteFreshness(b, note.at), freshnessText: freshnessText(b, note.at), statusChangedAt: b.statusChangedAt };
+    })
     .sort((a, b) => b.at.localeCompare(a.at) || a.blockId.localeCompare(b.blockId));
+  const nextGroups = candidateGroups(project, s.next).map(g => ({ ...g, items: g.items.slice(0, 10) }));
   return {
-    project: project.name
-  , handoffs
-  , unreadAnswers: s.answered.map(({ block, decision }) => ({ blockId: block.id, key: block.key, title: block.title, question: decision.question, answer: decision.answer, answeredAt: decision.answeredAt }))
-  , pendingDecisions: s.decisions.map(({ block, decision }) => ({ key: block.key, title: block.title, question: decision.question }))
-  , active: [...s.working, ...s.blocked].map(({ block, actor, note }) => ({ key: block.key, title: block.title, actor, note }))
-  , next: s.next.slice(0, 10).map((b) => ({ key: b.key, title: b.title }))
-  , instructions: t("作業の前に boxglow context <block> を読み、guard 付きの変更にはその contextToken を使ってください。この概要は回答を確認済みにせず、操作を許可するものでもありません。")
+    project: project.name,
+    focus: project.focusBlockId ? { blockId: project.focusBlockId, title: project.blocks[project.focusBlockId]?.title } : undefined,
+    active: [...s.working, ...s.blocked].map(({ block, actor, note }) => ({ blockId: block.id, key: block.key, title: block.title, actor, note })),
+    pendingDecisions: s.decisions.map(({ block, decision }) => ({ key: block.key, title: block.title, question: decision.question })),
+    unreadAnswers: s.answered.map(({ block, decision }) => ({ blockId: block.id, key: block.key, title: block.title, question: decision.question, answer: decision.answer, answeredAt: decision.answeredAt })),
+    nextGroups,
+    // 既存の利用側が next を参照していても読めるよう、平らな一覧も残す。
+    next: nextGroups.flatMap(g => g.items),
+    handoffs: all.filter(h => h.status !== "white" || options.includeCompleted),
+    completedHandoffCount: all.filter(h => h.status === "white").length,
+    descriptionReminders: Object.values(project.blocks).filter(b => descriptionReminder(b)).map(b => ({ blockId: b.id, key: b.key, title: b.title, message: descriptionReminder(b), writtenAt: b.descriptionUpdatedAt })),
+    instructions: t("作業の前に boxglow context <block> を読み、guard 付きの変更にはその contextToken を使ってください。この概要は回答を確認済みにせず、操作を許可するものでもありません。"),
   };
 }
 
-/**
- * 再開用の概要を Markdown にする (resume の出力)
- * Input : project = 計画
- * Output: Markdown 文字列 (AI 未確認の回答 → 判断待ち → 引き継ぎ → 作業中 → 次の候補 の順)
- */
-export function resumeReport(project: Project): string {
-  const s = resumeSummary(project);
+/** Input: 計画、完了済みメモの展開指定 / Output: 現況を先頭に置いた Markdown。 */
+export function resumeReport(project: Project, options: { includeCompleted?: boolean } = {}): string {
+  const s = resumeSummary(project, options);
   return [
-    `# ${s.project} — ${t("再開")}`
-  , `## ${t("AI未確認の回答")}`
-  , ...s.unreadAnswers.map((a) => `- ${a.key} ${a.title}\n  ${a.question}\n  → ${a.answer}`)
-  , `## ${t("判断待ち")}`
-  , ...s.pendingDecisions.map((a) => `- ${a.key} ${a.title}: ${a.question}`)
-  , `## ${t("引き継ぎ（新しい順）")}`
-    // 状態の名前 (Done / In Progress / New) は status の階層の表記と同じ英語の用語
-  , ...s.handoffs.map((h) => `- ${h.key} ${h.title} (${h.actor}, ${h.at}, ${h.status === "white" ? "Done" : h.status === "gray" ? "In Progress" : "New"})\n${h.note}`)
-  , `## ${t("作業中・確認待ち")}`
-  , ...s.active.map((a) => `- ${a.key} ${a.title} (${a.actor}): ${a.note ?? ""}`)
-  , `## ${t("次の候補")}`
-  , ...s.next.map((a) => `- ${a.key} ${a.title}`)
-  , ""
-  , s.instructions
+    "# " + s.project + " — " + t("再開"),
+    // 今回の範囲のボックスが完了していたら、候補の優先がもう意味を持たないので、選び直しを促す
+    ...(s.focus ? [t("今回の範囲: {title}", { title: s.focus.title ?? "" }) + (project.blocks[s.focus.blockId]?.status === "white" ? " — " + t("完了済みです。focus で次の対象を選ぶか、focus none で解除してください") : "")] : []),
+    "## " + t("作業中・確認待ち"),
+    ...s.active.map(a => "- " + a.key + " " + a.title + " (" + a.actor + "): " + (a.note ?? "")),
+    "## " + t("判断待ち"),
+    ...s.pendingDecisions.map(a => "- " + a.key + " " + a.title + ": " + a.question),
+    "## " + t("AI未確認の回答"),
+    ...s.unreadAnswers.map(a => "- " + a.key + " " + a.title + "\n  " + a.question + "\n  → " + a.answer),
+    "## " + t("次の候補"),
+    ...s.nextGroups.flatMap(g => ["### " + g.title, ...g.items.map(a => "- " + a.key + " " + a.title + (a.missingInputs.length ? " — " + t("必須の入力待ち: {names}", { names: a.missingInputs.join(", ") }) : ""))]),
+    "## " + t("引き継ぎ（新しい順）"),
+    ...s.handoffs.map(h => "- " + h.key + " " + h.title + " (" + h.actor + ", " + (h.status === "white" ? "Done" : h.status === "gray" ? "In Progress" : "New") + ")\n  " + h.freshnessText + "\n" + h.note),
+    ...(!options.includeCompleted && s.completedHandoffCount ? [t("完了済みの引き継ぎ {n} 件。resume --include-completed で表示できます。", { n: s.completedHandoffCount })] : []),
+    ...(s.descriptionReminders.length ? [t("説明の見直し候補: {names} (show で確認)", { names: s.descriptionReminders.map(x => x.key ?? x.title).join(", ") })] : []),
+    "", s.instructions,
   ].join("\n");
 }

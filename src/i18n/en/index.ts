@@ -1,3 +1,4 @@
+import { workflow } from "./workflow";
 import { canvasReview } from "./canvasReview";
 import { gui } from "./gui";
 /**
@@ -13,4 +14,4 @@ import { cli } from "./cli";
 import { model } from "./model";
 import { report } from "./report";
 
-export const en: Record<string, string> = { ...common, ...inspector, ...parts, ...canvas, ...app, ...cli, ...model, ...report, ...gui, ...canvasReview };
+export const en: Record<string, string> = { ...common, ...inspector, ...parts, ...canvas, ...app, ...cli, ...model, ...report, ...gui, ...canvasReview, ...workflow };

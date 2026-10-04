@@ -43,7 +43,29 @@ export async function startMcp(run: Run): Promise<void> {
   const block = z.string().describe(t("ボックスの B 番号 (B12) か題名"));
 
   server.registerTool("boxglow_status", { description: t("計画の今の状況: 判断待ち・作業中・次の候補・階層の一覧 (セッションの最初に読む)"), inputSchema: { brief: z.boolean().optional().describe(t("階層の一覧を省く (判断・活動・次の候補は残す)")) }, annotations: { readOnlyHint: true } }, async ({ brief }) => safe(run, brief ? ["status", "--brief"] : ["status"]));
-  server.registerTool("boxglow_resume", { description: t("作業の再開用の概要: 引き継ぎメモ・AI 未確認の回答・作業中・次の候補 (回答は確認済みにならない)"), inputSchema: {}, annotations: { readOnlyHint: true } }, async () => safe(run, ["resume", "--json"]));
+  server.registerTool("boxglow_resume", { description: t("再開の概要: 現況・準備状況別の候補・未完了の引き継ぎ。完了した引き継ぎは指定した場合だけ読む"), inputSchema: { includeCompleted: z.boolean().optional() }, annotations: { readOnlyHint: true } }, async ({ includeCompleted }) => safe(run, ["resume", "--json", ...(includeCompleted ? ["--include-completed"] : [])]));
+  server.registerTool("boxglow_scope", {
+    description: t("今回達成すること・対象外・完了条件・相談条件。省略は表示、none で項目を消す"),
+    inputSchema: { block, contextToken: z.string().optional(), goal: z.string().optional(), nonGoals: z.string().optional(), acceptance: z.string().optional(), consult: z.string().optional() },
+  }, async a => {
+    const argv = ["scope", a.block];
+    for (const [key, flag] of [["goal","goal"],["nonGoals","non-goals"],["acceptance","acceptance"],["consult","consult"]] as const) {
+      // 空文字も「消す」として CLI に渡す。opt は空文字を省くため、ここだけ直接追加する。
+      if (a[key] !== undefined) argv.push("--" + flag, a[key]!);
+    }
+    opt(argv, "context-token", a.contextToken);
+    return safe(run, argv);
+  });
+  server.registerTool("boxglow_focus", {
+    description: t("今回優先するボックスとその配下を選ぶ。none で解除、省略は表示"),
+    inputSchema: { block: block.optional(), contextToken: z.string().optional() },
+  }, async a => safe(run, ["focus", ...(a.block ? [a.block] : []), ...(a.contextToken ? ["--context-token", a.contextToken] : [])]));
+  server.registerTool("boxglow_policy", {
+    description: t("AI の着手・完了確認を計画ごとに選ぶ。既定は警告、人の操作は拒否しない"),
+    inputSchema: { start: z.enum(["warn","reject"]).optional(), done: z.enum(["warn","reject"]).optional(), contextToken: z.string().optional() },
+  }, async a => {
+    const argv = ["policy"]; opt(argv, "start", a.start); opt(argv, "done", a.done); opt(argv, "context-token", a.contextToken); return safe(run, argv);
+  });
   server.registerTool("boxglow_context", { description: t("ボックスのコンテキストを読む: 親と入力元の判断・入出力の条件・引き継ぎメモ。guard 付きの変更に使う contextToken を返す (自分の操作でコンテキストが変わると、その操作の出力に新しい確認トークンが出る)"), inputSchema: { block }, annotations: { readOnlyHint: true } }, async ({ block: b }) => safe(run, ["context", b]));
   server.registerTool("boxglow_checkpoint", { description: t("中断や引き継ぎの前に、分かったこと・次の手順・未解決の点を計画に残す"), inputSchema: { block, note: z.string(), contextToken: z.string().optional() } }, async (a) => { const argv = ["checkpoint", a.block, "--note", a.note]; opt(argv, "context-token", a.contextToken); return safe(run, argv); });
   server.registerTool("boxglow_show", { description: t("ボックスの詳細 (入出力・線・判断・成果物)"), inputSchema: { block }, annotations: { readOnlyHint: true } }, async ({ block: b }) => safe(run, ["show", b]));
@@ -60,7 +82,7 @@ export async function startMcp(run: Run): Promise<void> {
   server.registerTool("boxglow_port", { description: t("ボックスに入力 / 出力を足す、名前を変える"), inputSchema: { block, in: z.array(z.string()).optional(), out: z.array(z.string()).optional(), rename: z.string().optional().describe(t("旧=新")) } }, async (a) => { const argv = ["port", a.block]; opt(argv, "in", a.in); opt(argv, "out", a.out); opt(argv, "rename", a.rename); return safe(run, argv); });
   server.registerTool("boxglow_move", { description: t("ボックスを別の親の中へ移す (線はつなぎ直される)"), inputSchema: { block, parent: z.string().describe(t("移す先のボックスか project")) } }, async ({ block: b, parent }) => safe(run, ["move", b, "--parent", parent]));
   server.registerTool("boxglow_remove", { description: t("ボックスを消す (中にボックスがあれば force)"), inputSchema: { block, force: z.boolean().optional() } }, async ({ block: b, force }) => { const argv = ["remove", b]; opt(argv, "force", force); return safe(run, argv); });
-  server.registerTool("boxglow_start", { description: t("作業を始める (作業中の札が付く)。同時に作業中にするボックスは 1〜2 個まで"), inputSchema: { block, contextToken: z.string().optional(), note: z.string().optional().describe(t("何をするか")) } }, async ({ block: b, note, contextToken }) => { const argv = ["start", b]; opt(argv, "note", note); opt(argv, "context-token", contextToken); return safe(run, argv); });
+  server.registerTool("boxglow_start", { description: t("作業を始める (作業中の札が付く)。同時に作業中にするボックスは 1〜2 個まで"), inputSchema: { block, contextToken: z.string().optional(), note: z.string().optional().describe(t("何をするか")), reason: z.string().optional().describe(t("入力待ちで開始する理由")) } }, async ({ block: b, note, reason, contextToken }) => { const argv = ["start", b]; opt(argv, "note", note); opt(argv, "reason", reason); opt(argv, "context-token", contextToken); return safe(run, argv); });
   server.registerTool("boxglow_done", { description: t("完了にする。成果物 (名前=パスか URL) を付ける。Git のファイルなら commit+path+blob が記録される"), inputSchema: { block, contextToken: z.string().optional(), artifact: z.array(z.string()).optional().describe(t("名前=パス または 名前=URL")), note: z.string().optional(), output: z.string().optional().describe(t("出力の名前を変えるとき")) } }, async (a) => { const argv = ["done", a.block]; opt(argv, "artifact", a.artifact); opt(argv, "note", a.note); opt(argv, "output", a.output); opt(argv, "context-token", a.contextToken); return safe(run, argv); });
   server.registerTool("boxglow_blocked", { description: t("詰まった (困っていることを書いて他のボックスへ移る)"), inputSchema: { block, contextToken: z.string().optional(), note: z.string() } }, async ({ block: b, note, contextToken }) => safe(run, ["blocked", b, "--note", note, ...(contextToken ? ["--context-token", contextToken] : [])]));
   server.registerTool("boxglow_ask", {

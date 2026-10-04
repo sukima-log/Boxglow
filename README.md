@@ -11,6 +11,30 @@ Tasks are boxes with inputs and outputs; a box goes New (BlackBox: dark, output 
 - CLI for agents: `npx boxglow` (status / start / done / split / ask / answer ...)
 - License: MIT
 
+## Agent workflow improvements (Unreleased)
+
+The current development build adds three optional workflow aids. Existing plans still load as schema v5; no strict checks are enabled automatically.
+
+- **Readiness:** CLI resume/status and the UI's Next list separate ready work from input waits and name missing inputs. start warns by default; --reason records why work can start early. done without output artifacts still warns. To opt in per plan, use policy --start reject --done reject (or choose Agent workflow checks in project settings). Human actions are never rejected. A start reason is allowed even in strict mode.
+- **Scope:** scope B12 --goal "Goal" --non-goals "Excluded" --acceptance "Checks" --consult "When to ask" records four optional fields. Read them at the start of context, or expand Current scope in the inspector. Edit through ⋯ → Edit work scope. focus B12 prioritizes that box and its descendants; focus none clears it. Read-only scope/focus/policy commands take no changing options.
+- **Resume:** current state comes first. Completed handoff notes show only a count unless --include-completed is requested. Descriptions and notes show when they were written and whether they predate the status change; legacy dates stay unknown. Done can suggest reviewing an outdated description, but never rewrites it.
+
+With guard enabled, scope/focus/policy writes require the latest --context-token and return a new token when the context changes. MCP has matching scope/focus/policy tools, start.reason and resume.includeCompleted. Strict completion accepts existing output artifacts or new --artifact values; reference material on the box does not count. Textual acceptance criteria remain a checklist for the agent/person, not an automatic test runner.
+
+**Compatibility:** workflowPolicy, focusBlockId, block.scope, descriptionUpdatedAt and statusChangedAt are optional. Old versions (0.4.2 and earlier) can read the plan but do not apply the new behavior; saving with them drops the new plan-level policy/focus fields. Use a supporting build for every writer, including running serve and the extension's bundled app. No release/version bump is included in this development change.
+
+### 日本語: 着手確認・今回の範囲・再開情報
+
+開発中の変更です。旧計画は形式 v5 のまま読め、厳格な確認は自動で有効になりません。
+
+- resume / status --brief / 画面の Next で、着手できる候補と入力待ちを分け、不足する入力名を表示します。start は既定で警告しつつ開始、--reason 付きなら理由を活動とログに残して警告なしで開始します。成果物なしの done も既定は警告です。
+- 計画ごとに policy --start reject --done reject を選ぶと拒否にできます。画面ではプロジェクト名 →「AI の作業確認」。人の操作は拒否せず、理由付きの開始は厳格設定でも可能です。各設定は warn で戻せます。
+- scope B12 --goal "達成すること" --non-goals "今回扱わないこと" --acceptance "完了条件" --consult "相談条件" で任意の4項目を記録します。context の先頭と詳細パネルから読め、画面の ⋯ →「作業範囲を編集」で編集できます。空欄は普段の画面に出しません。none または空文字で項目を消せます。
+- focus B12 は対象と配下を優先し、対象外は別の組に残します。focus none で解除できます。guard 有効時の scope/focus/policy 変更には最新の --context-token を付け、出力の新しいトークンを次に使います。
+- resume は現況を先に表示し、完了した引き継ぎは件数だけ出します。--include-completed または画面の展開ボタンで履歴を読めます。説明・引き継ぎの日時と状態変更との前後関係を示し、古い記録の日時は推測しません。
+- Done 後に説明の古い状況が残る可能性があるときは見直しを促します。本文は自動変更しません。完了条件の達成や成果物の品質を自動で証明するものではありません。
+- **旧版との併用:** 0.4.2以前は新しい制御を行わず、保存すると計画の確認設定・優先対象を落とします。新機能を使う計画の書き手は対応ビルドに揃えてください。今回は版番号変更・公開を含みません。
+
 ## Quick start with an AI agent
 
 ```bash

@@ -167,7 +167,7 @@ export function mergeProjects(base: Project | null, ours: Project, theirs: Proje
   const th = theirs as unknown as Dict; // (文言の t() と名前が重ならないよう th)
   const out: Dict = { ...o };
   // 単純な値
-  for (const k of ["name", "description", "visibility", "terminals", "contextGuard"]) out[k] = pick([k], b?.[k], o[k], th[k], r);
+  for (const k of ["name", "description", "visibility", "terminals", "contextGuard", "workflowPolicy", "focusBlockId"]) out[k] = pick([k], b?.[k], o[k], th[k], r);
   // id の辞書
   for (const k of ["blocks", "ports", "edges", "agents", "handoffs"]) {
     out[k] = mergeMap([k], b?.[k] as Record<string, Dict> | undefined, (o[k] ?? {}) as Record<string, Dict>, (th[k] ?? {}) as Record<string, Dict>, r);
@@ -183,6 +183,18 @@ export function mergeProjects(base: Project | null, ours: Project, theirs: Proje
   restoreDeleted(out, theirs, ours, explicitlyDeleted);
   // 持ち主のボックスが無い入出力・端の入出力が無い線は残さない (削除を選んだ側に、相手が変えた入出力だけが残る場合)
   const mergedBlocks = out.blocks as Record<string, Dict>;
+  // 本文・状態を選んだ側と、その記録日時を対応させる。別々に選ぶと鮮度が逆転して見えるため。
+  // Input: マージで選ばれた値 / Output: その値を記録した側の日時 (同じ値ならより新しい既知日時)。
+  for (const [id, box] of Object.entries(mergedBlocks)) {
+    for (const [field, date] of [["description", "descriptionUpdatedAt"], ["status", "statusChangedAt"]] as const) {
+      const left = ours.blocks[id], right = theirs.blocks[id];
+      const matching = [left, right].filter(b => b && b[field] === box[field]);
+      if (!matching.length) continue;
+      const times = matching.map(b => b[date]).filter((x): x is string => typeof x === "string").sort((a,b) => Date.parse(a) - Date.parse(b));
+      if (times.length) box[date] = times[times.length - 1]; else delete box[date];
+    }
+  }
+  if (out.focusBlockId && !mergedBlocks[out.focusBlockId as string]) delete out.focusBlockId;
   const mergedPorts = out.ports as Record<string, Dict>;
   const mergedEdges = out.edges as Record<string, Dict>;
   for (const [id, port] of Object.entries(mergedPorts)) if (!mergedBlocks[port.blockId as string]) delete mergedPorts[id];

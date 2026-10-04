@@ -46,7 +46,7 @@ export function contextReceipt(p: Project, id: string) {
   const context = agentContext(p, id);
   const forToken = {
     ...context
-  , blocks: context.blocks.map((b) => ({
+  , blocks: context.blocks.map(({ freshness: _freshness, ...b }) => ({
       ...b
     , artifacts: artifactsForToken(b.artifacts)
     , ports: b.ports.map((port) => ({ ...port, artifacts: artifactsForToken(port.artifacts) }))

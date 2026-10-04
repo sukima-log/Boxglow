@@ -35,3 +35,6 @@ node e2e/canvas.cjs
 node e2e/experience.cjs
 # 自分の計画 (boxglow.json があるときだけ): 交差の合計とタブ切り替えの速さ
 node e2e/own.cjs
+
+# 着手・範囲・再開情報の画面検査 (サンプルのみ)
+node e2e/workflow.cjs

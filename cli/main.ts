@@ -36,6 +36,8 @@ function categoryKeyOf(text: string): string {
 }
 import { dirname, join, resolve } from "node:path";
 import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, isInputNameLocked, normalizeInputNames, ackDecisions, isHumanActor } from "../src/model/graph";
+import { checkStart, checkDone, descriptionReminder, scopeEntries } from "../src/model/workflow";
+import type { WorkScope, WorkflowPolicy } from "../src/model/types";
 import type { Artifact } from "../src/model/types";
 import { blockToPrompt } from "../src/model/export";
 import { blockReport, logReport, statusReport } from "../src/model/report";
@@ -290,7 +292,13 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   init [--name <名前>] [--file <path>]           boxglow.json を作る
   setup-agent [--agent codex|claude-code|all] [--dir <path>]                     AI が自律的に使えるように設定する: AGENTS.md / CLAUDE.md に手順を追記、
                                                  Codex は AGENTS.md と .agents/skills、Claude Code は CLAUDE.md・スキル・フック・.mcp.json (既定: all)
-  resume [--json]                                作業の再開用の概要: 引き継ぎメモ・AI 未確認の回答・判断待ち・作業中・次の候補 (読むだけ。回答は確認済みにならない)
+  resume [--json] [--include-completed]           現況・着手できる候補・入力待ちを表示。完了済みの引き継ぎは件数のみ (指定で展開)
+  scope <block> [--goal <本文>] [--non-goals <本文>] [--acceptance <本文>] [--consult <本文>]
+                                                 今回達成すること / 対象外 / 完了条件 / 相談条件。省略は表示、none で項目を消す
+  focus [<block>|none]                           今回優先するボックスとその配下を指定 (候補内で着手可・入力待ちを区別)。省略は表示
+  policy [--start warn|reject] [--done warn|reject]  入力待ちの開始 / 成果物なしの完了。既定 warn。人の操作は拒否しない
+                                                 reject の start も --reason があれば通す。done は既存の出力成果物も数える。set --status white にも適用
+                                                 guard 有効時の scope 設定・focus 設定・policy 設定は --context-token が必要
   context <block>                                ボックスのコンテキスト (親と入力元の説明・判断・入出力の条件・引き継ぎ) と確認トークン contextToken を JSON で出す
   checkpoint <block> --note <メモ>               引き継ぎメモ (分かったこと・次の手順・未解決の点) を計画に残す。中断や引き継ぎの前に使う
   guard on|off                                   確認トークンの要求を有効 / 無効にする (setup-agent は有効にする)。有効な間、AI の start / done / set / split / artifact / ack /
@@ -316,7 +324,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   serve [--port 4174] [--open]                      ローカルサーバ: 同梱の Web アプリを http://localhost:4174/?serve=1 で配信し、boxglow.json を読み書き (Firefox / Safari でも使える)
   mcp [--file <path>]                               MCP サーバ (標準入出力)。Claude Code などから status / start / done / ask ... をツールとして使う (.mcp.json は setup-agent が書く)
   connect <題名.出力名> <題名[.入力名]>           結線 (受け側は題名だけでよい: 出力名と同じ名前の入力を作ってつなぐ。親子は自動で内側の面。最終成果物へは project)
-  start <block> [--note <何をするか>]            作業開始 (作業中になる)
+  start <block> [--note <何をするか>] [--reason <理由>]  入力待ちは既定で警告。理由を記録すると警告なしで開始
   done <block> [--artifact <題名>=<URL またはパス>]... [--output <出力名>] [--note]   完了 (成果物を付けて white)
                                                  パスが Git 管理下なら「コミット + パス + blob」で記録する (アップロードしない)
   artifact <block> <URL またはパス> [--title <題名>] [--output <出力名>]   成果物だけ付ける (完了にはしない)
@@ -360,7 +368,13 @@ Usage (npx boxglow <command> ...):
   init [--name <name>] [--file <path>]           Create boxglow.json
   setup-agent [--agent codex|claude-code|all] [--dir <path>]                     Set things up so AI can use Boxglow on its own: append the instructions to AGENTS.md / CLAUDE.md,
                                                  Codex: AGENTS.md and .agents/skills. Claude Code: CLAUDE.md, skill, hook and .mcp.json (default: all)
-  resume [--json]                                Overview for resuming work: handoff notes, answers not yet read by the AI, pending decisions, active work and next candidates (read-only; does not acknowledge answers)
+  resume [--json] [--include-completed]           Current work, ready/waiting candidates, then handoffs; completed notes are counted unless requested
+  scope <block> [--goal <text>] [--non-goals <text>] [--acceptance <text>] [--consult <text>]
+                                                 Goal / non-goals / acceptance / consult before expansion. No flags reads; none clears a field
+  focus [<block>|none]                           Prioritize this box and descendants, separating ready/waiting within each scope. No argument reads
+  policy [--start warn|reject] [--done warn|reject]  Missing-input starts / artifact-free completion; default warn. Human actions are never rejected
+                                                 A start reason overrides reject. Existing output artifacts count for done; set --status white also checks policy
+                                                 With guard on, scope/focus/policy writes require --context-token
   context <block>                                Print a box's context (descriptions, decisions, input/output contracts and handoff notes of its parents and input providers) and its contextToken as JSON
   checkpoint <block> --note <note>               Save a handoff note (findings, next steps, unresolved questions) in the plan. Use it before an interruption or a handoff
   guard on|off                                   Turn the context-token requirement on / off (setup-agent turns it on). While on, an AI's start / done / set / split / artifact / ack /
@@ -386,7 +400,7 @@ Usage (npx boxglow <command> ...):
   serve [--port 4174] [--open]                      Local server: serves the bundled web app at http://localhost:4174/?serve=1 and reads / writes boxglow.json (works in Firefox / Safari too)
   mcp [--file <path>]                               MCP server (stdio). Lets Claude Code and others use status / start / done / ask ... as tools (setup-agent writes .mcp.json)
   connect <title.output> <title[.input]>           Connect (the receiving side can be just a title: an input with the same name as the output is created and connected. Parent and child connect on the inner side automatically. Use project for the final deliverable)
-  start <block> [--note <what you will do>]      Start work (becomes Working)
+  start <block> [--note <what you will do>] [--reason <reason>]  Missing inputs warn by default; a recorded reason allows starting without a warning
   done <block> [--artifact <title>=<URL or path>]... [--output <output name>] [--note]   Finish (attach artifacts and turn it white)
                                                  If the path is tracked by Git, it is recorded as "commit + path + blob" (nothing is uploaded)
   artifact <block> <URL or path> [--title <title>] [--output <output name>]   Attach an artifact only (does not finish the box)
@@ -504,7 +518,7 @@ function main(argv: string[]): void {
   // 操作のあとに新しい確認トークンを添えるボックス (操作の前のトークンが正しいと確かめられたときだけ決まる)
   let tokenTarget: string | undefined;
   if (p.contextGuard && !isHumanActor(actor)) {
-    if (GUARDED_COMMANDS.includes(cmd)) {
+    if (GUARDED_COMMANDS.includes(cmd) || (cmd === "scope" && Object.keys(SCOPE_OPTIONS).some(k => options[k] !== undefined))) {
       const id = mustFind(p, rest[0]).id;
       requireContext(p, id, token, actor);
       tokenTarget = id;
@@ -513,6 +527,10 @@ function main(argv: string[]): void {
       // トークンが無い・古いときは返さない (人の変更を読まないまま新しいトークンを手に入れられないようにする)
       const b = findBlock(p, rest[0] ?? "").block;
       if (b && contextReceipt(p, b.id).contextToken === token) tokenTarget = b.id;
+    } else if ((cmd === "focus" && rest[0] !== undefined) || (cmd === "policy" && (options.start !== undefined || options.done !== undefined))) {
+      // 計画全体の規則を変える前にも、現在の指示を読んだことを照合する。
+      if (!isCurrentToken(p, token)) throw new Error(t("計画の設定を変える前に context を読み、--context-token を付けてください。"));
+      tokenTarget = Object.keys(p.blocks).find(id => contextReceipt(p, id).contextToken === token);
     } else if (cmd === "guard" && rest[0] === "off" && !isCurrentToken(p, token)) {
       // AI が古いトークンを通すために guard を外すのを防ぐ (人はトークン無しで外せる)
       throw new Error(t("AI が確認トークンの要求 (guard) を無効にするには --context-token <context で得た最新の確認トークン> が要ります。人が操作するときは --actor human を付けてください"));
@@ -531,6 +549,8 @@ function main(argv: string[]): void {
   }
 }
 
+/** Input: CLIの範囲フラグ / Output: 保存する WorkScope の項目名。 */
+const SCOPE_OPTIONS = { goal: "goal", "non-goals": "nonGoals", acceptance: "acceptance", consult: "consult" } as const;
 /** guard が有効な計画で、AI に確認トークンを要求するコマンド (作業を記録するもの) */
 const GUARDED_COMMANDS = ["start", "done", "set", "split", "artifact", "ack", "blocked", "review", "leave", "checkpoint"];
 /** 確認トークンは要求しないが、ボックスのコンテキストを変えるコマンド (最新のトークンを付けて実行すると、新しいトークンを返す) */
@@ -544,6 +564,49 @@ const CONTEXT_CHANGING_COMMANDS = ["ask", "decision", "answer", "reopen"];
  */
 function runCommand(cmd: string, rest: string[], options: ReturnType<typeof parseArgs>["options"], actor: string, path: string, p: Project, AGENTS_SNIPPET: () => string, SKILL_MD: () => string): void {
   switch (cmd) {
+    case "scope": {
+      const b = mustFind(p, rest[0]);
+      const patch: WorkScope = { ...b.scope };
+      let changed = false;
+      for (const [flag, key] of Object.entries(SCOPE_OPTIONS)) {
+        if (options[flag] === undefined) continue;
+        const value = str(options[flag]);
+        if (value === undefined) throw new Error(t("範囲の本文、または none を指定してください。"));
+        if (!value.trim() || value === "none") delete patch[key];
+        else patch[key] = value.trim();
+        changed = true;
+      }
+      if (changed) {
+        p = updateBlock(p, b.id, { scope: Object.keys(patch).length ? patch : undefined });
+        save(path, p);
+      }
+      out(scopeEntries(p.blocks[b.id].scope).map(x => x.label + ": " + x.text).join("\n") || t("今回の範囲は未設定です"));
+      return;
+    }
+    case "focus": {
+      if (rest[0] !== undefined) {
+        if (rest[0] === "none") delete p.focusBlockId;
+        else p.focusBlockId = mustFind(p, rest[0]).id;
+        save(path, p);
+      }
+      out(p.focusBlockId ? t("今回の範囲: {title}", { title: p.blocks[p.focusBlockId].title }) : t("今回の範囲は未設定です"));
+      return;
+    }
+    case "policy": {
+      const patch: WorkflowPolicy = { ...p.workflowPolicy };
+      for (const [flag, key] of [["start", "startWithoutInputs"], ["done", "doneWithoutArtifacts"]] as const) {
+        if (options[flag] === undefined) continue;
+        const value = str(options[flag]);
+        if (value !== "warn" && value !== "reject") throw new Error(t("確認方法は warn または reject を指定してください。"));
+        patch[key] = value;
+      }
+      if (options.start !== undefined || options.done !== undefined) {
+        p.workflowPolicy = patch;
+        save(path, p);
+      }
+      out(JSON.stringify({ startWithoutInputs: patch.startWithoutInputs ?? "warn", doneWithoutArtifacts: patch.doneWithoutArtifacts ?? "warn" }, null, 2));
+      return;
+    }
     case "context": {
       // ボックスのコンテキストと確認トークンを JSON で出す (読むだけ)
       out(JSON.stringify(contextReceipt(p, mustFind(p, rest[0]).id), null, 2));
@@ -569,7 +632,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     }
     case "resume": {
       // 再開用の概要 (読むだけ。回答を確認済みにはしない)
-      out(options.json ? JSON.stringify(resumeSummary(p), null, 2) : resumeReport(p));
+      out(options.json ? JSON.stringify(resumeSummary(p, { includeCompleted: !!options["include-completed"] }), null, 2) : resumeReport(p, { includeCompleted: !!options["include-completed"] }));
       return;
     }
     case "status": {
@@ -875,8 +938,15 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     }
     case "start": {
       const b = mustFind(p, rest[0]);
+      const reason = str(options.reason)?.trim() ?? "";
+      if (options.reason !== undefined && !reason) throw new Error(t("開始する理由を --reason で記録してください。"));
+      const check = checkStart(p, b.id, actor, reason);
+      if (check.error) throw new Error(check.error);
+      if (check.warning) out(check.warning);
       p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
-      save(path, setActivity(p, b.id, actor, "working", str(options.note) ?? ""));
+      // 理由は活動とログの両方に残る。警告を消すだけの一時オプションにはしない。
+      const note = [str(options.note), reason ? t("入力待ちで開始する理由: {reason}", { reason }) : ""].filter(Boolean).join("\n");
+      save(path, setActivity(p, b.id, actor, "working", note));
       out(t("開始: 「{title}」({actor})", { title: b.title, actor }));
       return;
     }
@@ -904,13 +974,19 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     case "done": {
       const b = mustFind(p, rest[0]);
       p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
-      const artifacts = list(options.artifact).map((s) => artifactFrom(s));
+      const specs = list(options.artifact);
+      if (specs.some(s => !s.trim() || (s.includes("=") && !s.slice(s.indexOf("=") + 1).trim()))) throw new Error(t("成果物のパスまたは URL を指定してください。"));
+      const artifacts = specs.map((s) => artifactFrom(s));
+      const check = checkDone(p, b.id, artifacts.length, actor);
+      if (check.error) throw new Error(check.error);
       const r = finishBlock(p, b.id, actor, { artifacts, outputName: str(options.output), note: str(options.note) });
       if (r.error) throw new Error(r.error);
       save(path, r.project);
       out(t("完了: 「{title}」", { title: b.title }) + `${artifacts.length ? t(" 成果物: ") + artifacts.map((a) => a.title + (a.kind === "git" ? ` (git ${a.path} @ ${(a.commit ?? "").slice(0, 7)})` : "")).join(", ") : ""}`);
       // 成果物の無い完了は「何ができたか」が後から分からない。具体的な物 (ファイル・URL・コミット) を付けるよう促す
-      if (artifacts.length === 0) out(t("注意: 成果物が付いていません。--artifact \"<名前>=<パスまたは URL>\" で、人が後から開ける具体的な物を付けてください"));
+      if (check.warning) out(check.warning);
+      const reminder = descriptionReminder(r.project.blocks[b.id]);
+      if (reminder) out(reminder);
       return;
     }
     case "artifact": {
@@ -1043,6 +1119,10 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     case "set": {
       const b = mustFind(p, rest[0]);
       p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
+      if (str(options.status) === "white") {
+        const check = checkDone(p, b.id, 0, actor);
+        if (check.error) throw new Error(check.error);
+      }
       if (str(options.status)) p = setStatus(p, b.id, str(options.status) as "black" | "gray" | "white", actor);
       if (str(options.progress) !== undefined) p = setProgress(p, b.id, str(options.progress) === "auto" ? null : Number(str(options.progress)), actor);
       const sched: { startDate?: string | null; dueDate?: string | null; estimateHours?: number | null; actualHours?: number | null } = {};
@@ -1056,7 +1136,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       if (Object.keys(sched).length > 0) p = setSchedule(p, b.id, sched, actor);
       const patch: { title?: string; description?: string } = {};
       if (str(options.title)) patch.title = str(options.title);
-      if (str(options.note)) patch.description = str(options.note);
+      if (str(options.note) !== undefined) patch.description = str(options.note) === "none" ? "" : str(options.note);
       if (Object.keys(patch).length > 0) p = updateBlock(p, b.id, patch);
       if (str(options.category) !== undefined) p = setCategory(p, b.id, str(options.category) === "none" ? null : categoryKeyOf(str(options.category)!));
       if (str(options.repo) !== undefined) p = updateBlock(p, b.id, { repo: str(options.repo) === "none" ? undefined : str(options.repo) });

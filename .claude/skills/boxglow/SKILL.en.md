@@ -63,3 +63,19 @@ npx boxglow done B12 --artifact "<name>=<path>" --context-token <new context tok
 - When resuming, read `npx boxglow resume`, and check a box that has a handoff note with `context` before continuing. Handoff notes stay in the plan, independent of the chat history and the activity-log limit
 - With MCP, use `boxglow_context` and the `contextToken` argument of each tool
 - If "Another Boxglow writer holds the file lock" persists after waiting and retrying, show the output of `npx boxglow unlock` (owner and verdict) to a person and ask them to remove it. Never add `--actor human` yourself or delete the lock folder directly
+
+
+### Readiness, current scope, and fresh resume information
+
+- Read current activity, pending decisions, and unread answers first. Candidates are grouped by current scope / other candidates, then ready / waiting for inputs, with missing input names. A waiting candidate is not ready.
+- Four optional scope fields are available: goal, non-goals, acceptance, and consult (when to consult before expanding scope). Read the target and parent scopes at the start of context before starting and finishing. Textual acceptance criteria are not automatically evaluated.
+- Use scope B12 --goal "Goal" --non-goals "Excluded" --acceptance "Checks" --consult "When to ask". scope B12 only reads; none or an empty string clears a field. In the inspector, use ⋯ → Edit work scope. Only populated fields appear in the collapsed scope section.
+- focus B12 prioritizes that box and its descendants; focus reads the selection, and focus none clears it. Other candidates remain in a separate group. Being listed does not authorize expanding scope or publishing.
+- Missing required inputs warn on start by default but still allow the start. Supply --reason "Why starting early is appropriate" to proceed without a warning and save the reason in both activity and the log. Artifact-free done also remains warning-only by default. Existing output artifacts or --artifact count; reference material on the box does not.
+- Only enable strict checks when selected for the plan: policy --start reject --done reject. Each can return to warn. A recorded start reason also overrides reject. The artifact requirement also applies to set --status white. Human operations (UI / --actor human) are never rejected. Do not impersonate a human or weaken policy to bypass rejection.
+- With guard enabled, scope writes, focus selection/clearing, and policy writes require --context-token. These changes print a new token: use it next. Read-only forms need no token.
+- resume hides completed handoff bodies and shows their count. Request resume --include-completed only when history is needed; context / show can still read individual notes.
+- descriptionUpdatedAt dates description changes; statusChangedAt dates status changes; handoffs use their existing at field. Notes predating a status change are marked. Unknown legacy dates stay unknown, and recency does not establish truth.
+- After Done, CLI, inspector, and resume flag descriptions that may still describe an earlier state. Text is never rewritten automatically. Review it, then update with set B12 --note "Current description" (none clears it) or Notes in the UI.
+- MCP: boxglow_scope / boxglow_focus / boxglow_policy, reason on boxglow_start, and includeCompleted on boxglow_resume. Pass contextToken for writes.
+- All data fields are optional; schema v5 is unchanged. Old versions (0.4.2 and earlier) do not enforce these checks and drop workflowPolicy / focusBlockId when saving. Align all writers (CLI, serve, web app, bundled extension app) to a supporting build before using these settings. Check build time as well as version.
