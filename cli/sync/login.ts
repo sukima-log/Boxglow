@@ -8,7 +8,7 @@
 import { hostname } from "node:os";
 import { t } from "../../src/i18n/core";
 import { APP_VERSION } from "../../src/model/version";
-import { CredentialsBusy, CredentialsUnsafe, readCredentials, removeCredentials, resolveToken, saveCredentials, withCredentialsLock } from "./credentials";
+import { CredentialsBusy, CredentialsSaveFailed, CredentialsUnsafe, inspectCredentials, removeCredentials, resolveToken, saveCredentials, withCredentialsLock } from "./credentials";
 import { normalizeServer } from "./state-store";
 
 export interface LoginOptions {
@@ -52,6 +52,14 @@ export async function runLogin(o: LoginOptions): Promise<number> {
   const server = normalizeServer(o.server);
   try {
     return await withCredentialsLock(server, async () => {
+      // 保存済みの資格情報が「在るが、安全に読めない」なら、始めない (誰のものか確かめられないまま、置き換えない)
+      const stored = inspectCredentials(server);
+      if (stored.kind === "unusable") {
+        out(t("保存済みの資格情報がありますが、安全に読めません: {reason}", { reason: stored.reason }));
+        out(t("誰のサインインかを確かめられないので、置き換えません。ファイルを確かめて、直すか、消してから、もう一度実行してください: {path}", { path: stored.path }));
+        return 1;
+      }
+      const previous = stored.kind === "valid" ? stored.credentials : null;
       // ---- 手順を始める ----
       let started: { device_code: string; user_code: string; verification_uri: string; interval: number; expires_in: number };
       try {
@@ -100,7 +108,6 @@ export async function runLogin(o: LoginOptions): Promise<number> {
         return 1;
       }
       // ---- 保存する。すでに別の利用者でサインイン済みなら、黙って置き換えない ----
-      const previous = readCredentials(server);
       if (previous && previous.account !== issued.account) {
         const revoked = await revoke(server, issued.token, doFetch);
         out(t("このサーバーには、すでに {current} としてサインインしています。{next} に替えるには、先に boxglow logout を実行してください", { current: previous.login, next: issued.login }));
@@ -110,12 +117,13 @@ export async function runLogin(o: LoginOptions): Promise<number> {
       try {
         saveCredentials({ server, account: issued.account, login: issued.login, token: issued.token, createdAt: new Date().toISOString() });
       } catch (e) {
-        if (!(e instanceof CredentialsUnsafe)) throw e;
-        // 保存できなかった: 新しいトークンは、使い続ける前提にしない (取り消しを試みる)
+        // 保存できなかった (権限の確認の失敗でも、ふつうのファイル操作の失敗でも): 新しいトークンは、使い続ける前提にしない。取り消しを試みる
         const revoked = await revoke(server, issued.token, doFetch);
-        const detail = e as CredentialsUnsafe & { restored?: boolean; backup?: string };
-        out(t("資格情報を、安全に保存できませんでした: {reason}", { reason: e.reason }));
-        if (detail.restored === false && detail.backup) out(t("今までの資格情報を、元の場所に戻せませんでした。控えはここにあります: {path}", { path: detail.backup }));
+        const failed = e instanceof CredentialsSaveFailed ? e : null;
+        out(t("資格情報を、安全に保存できませんでした: {reason}", { reason: failed ? failed.reason : e instanceof Error ? e.message : String(e) }));
+        if (failed && !failed.restored) out(failed.backup
+          ? t("今までの資格情報を、元の場所に戻せませんでした。控えはここにあります: {path}", { path: failed.backup })
+          : t("資格情報の置き場に、今回のファイルが残っているかもしれません。確かめてください"));
         out(revoked ? t("今回発行されたトークンは、取り消しました。") : t("今回発行されたトークンを、サーバー側で取り消せませんでした (まだ有効かもしれません)。"));
         out(t("保存せずに使うには、トークンを環境変数 BOXGLOW_TOKEN で渡してください"));
         return 1;
@@ -143,7 +151,14 @@ export async function runLogout(o: Pick<LoginOptions, "server" | "out" | "fetch"
   const server = normalizeServer(o.server);
   try {
     return await withCredentialsLock(server, async () => {
-      const saved = readCredentials(server);
+      const stored = inspectCredentials(server);
+      // 「在るが、安全に読めない」は、サインアウトできたとも、サインインしていないとも言わない (ファイルもトークンも残っている)
+      if (stored.kind === "unusable") {
+        out(t("保存済みの資格情報がありますが、安全に読めません: {reason}", { reason: stored.reason }));
+        out(t("サインアウトは、できていません (ファイルが残っていて、サーバー側のトークンも有効なままかもしれません)。ファイルを確かめてください: {path}", { path: stored.path }));
+        return 1;
+      }
+      const saved = stored.kind === "valid" ? stored.credentials : null;
       if (!saved) { out(t("このサーバーには、サインインしていません")); }
       else {
         const revoked = serverProblem(server) === null && await revoke(server, saved.token, doFetch);
@@ -155,7 +170,12 @@ export async function runLogout(o: Pick<LoginOptions, "server" | "out" | "fetch"
     });
   } catch (e) {
     if (e instanceof CredentialsBusy) { out(t("ほかの boxglow login / logout が動いています。終わってから、もう一度実行してください")); return 1; }
-    if (e instanceof CredentialsUnsafe) { out(t("このサーバーには、サインインしていません")); return 0; }
+    // 置き場のフォルダを確かめられない: サインインしていない、とは言わない
+    if (e instanceof CredentialsUnsafe) {
+      out(t("資格情報の置き場を、安全に確かめられません: {reason}", { reason: e.reason }));
+      out(t("サインアウトは、できていません (資格情報のファイルが残っているかもしれません)"));
+      return 1;
+    }
     throw e;
   }
 }

@@ -74,58 +74,106 @@ export async function withCredentialsLock<T>(server: string, fn: () => Promise<T
   try { return await fn(); } finally { unlock(); }
 }
 
+/** 保存済みの資格情報の状態: 無い / 使える / 在るが、安全に読めない・形が合わない */
+export type StoredCredentials =
+  | { kind: "absent" }
+  | { kind: "valid"; credentials: Credentials }
+  /** ファイルは在るが、使えない (ほかの利用者から読める・リンク・JSON でない・別のサーバーのもの・読み取りの失敗)。「サインインしていない」とは扱わない */
+  | { kind: "unusable"; path: string; reason: string };
+
 /**
- * 保存済みの資格情報を読む
+ * 保存済みの資格情報の状態を調べる
  * Input : server = サーバーの場所
- * Output: 資格情報。無ければ null。中のサーバーが違う・形が合わない・ほかの利用者から読める置き場なら null (別のサーバーのトークンや、漏れたかもしれないトークンを送らない)
+ * Output: StoredCredentials。使えないファイルからは、トークンを取り出さない (送らない)
+ */
+export function inspectCredentials(server: string): StoredCredentials {
+  const path = credentialsPath(server);
+  // (リンクも「在る」として扱う。existsSync は、切れたリンクを「無い」と答えるので、lstat で確かめる)
+  try { lstatSync(path); } catch (e) { if ((e as NodeJS.ErrnoException).code === "ENOENT") return { kind: "absent" }; return { kind: "unusable", path, reason: String(e) }; }
+  try {
+    if (process.platform !== "win32") {
+      const reason = unsafeReason(dir(), "dir") ?? unsafeReason(path, "file");
+      if (reason) return { kind: "unusable", path, reason };
+    }
+    const value = JSON.parse(readFileSync(path, "utf8")) as Partial<Credentials>;
+    if (value.server !== normalizeServer(server)) return { kind: "unusable", path, reason: "the file belongs to another server" };
+    if (typeof value.token !== "string" || typeof value.account !== "string" || typeof value.login !== "string") return { kind: "unusable", path, reason: "the file is not a credentials file" };
+    return { kind: "valid", credentials: { server: value.server, account: value.account, login: value.login, token: value.token, createdAt: String(value.createdAt ?? "") } };
+  } catch (e) { return { kind: "unusable", path, reason: e instanceof Error ? e.message : String(e) }; }
+}
+
+/**
+ * 保存済みの資格情報を読む (同期に使うトークンを決めるとき用)
+ * Input : server = サーバーの場所
+ * Output: 使える資格情報。無い・使えないなら null (別のサーバーのトークンや、漏れたかもしれないトークンを送らない)。
+ *         「無い」と「在るが使えない」を分けたいときは inspectCredentials を使う
  */
 export function readCredentials(server: string): Credentials | null {
-  const path = credentialsPath(server);
-  if (!existsSync(path)) return null;
-  try {
-    if (process.platform !== "win32" && (unsafeReason(dir(), "dir") || unsafeReason(path, "file"))) return null;
-    const value = JSON.parse(readFileSync(path, "utf8")) as Partial<Credentials>;
-    if (value.server !== normalizeServer(server) || typeof value.token !== "string" || typeof value.account !== "string" || typeof value.login !== "string") return null;
-    return { server: value.server, account: value.account, login: value.login, token: value.token, createdAt: String(value.createdAt ?? "") };
-  } catch { return null; }
+  const stored = inspectCredentials(server);
+  return stored.kind === "valid" ? stored.credentials : null;
+}
+
+/**
+ * 資格情報の保存に失敗した (権限の確認の失敗でも、ふつうのファイル操作の失敗でも、この形で伝える)
+ *   restored = 今までの資格情報が、置き場に在る状態か (もともと無かった場合も true)
+ *   backup   = 戻せなかったときの、控えの場所
+ *   unsafe   = 置いたファイルの権限が不適切だと確かめた (確かめられなかった、ではなく)
+ */
+export class CredentialsSaveFailed extends Error {
+  constructor(readonly reason: string, readonly restored: boolean, readonly backup: string | null, readonly unsafe: boolean) { super(`could not store credentials: ${reason}`); }
 }
 
 /**
  * 資格情報を保存する (ロックの中で呼ぶ)
- * Input : credentials = 保存する資格情報
- * Output: なし。保存の成功は、置いた後の確認まで通った時点。
- *         失敗 (CredentialsUnsafe など) のときは、今までの資格情報が置き場に残っている (戻せなかったときだけ、例外の restored が false)
+ * Input : credentials = 保存する資格情報, hooks.afterPlace = 新しいファイルを置いた直後 (最後の確認の前) に呼ぶ (試験で、その時点の失敗を作るために使う)
+ * Output: なし。保存の成功は、置いた後の確認まで通った時点 (その後の、控えの片付けの失敗は、失敗として扱わない)。
+ *         失敗は、どの段でも CredentialsSaveFailed (今までの資格情報を戻せたかどうかを含む)
  */
-export function saveCredentials(credentials: Credentials): void {
-  ensureDir();
+export function saveCredentials(credentials: Credentials, hooks: { afterPlace?: () => void } = {}): void {
   const path = credentialsPath(credentials.server);
   const op = randomUUID();
   const temp = `${path}.${op}.tmp`, prev = `${path}.prev-${op}`;
   const text = JSON.stringify({ ...credentials, server: normalizeServer(credentials.server) }, null, 2) + "\n";
-  // 1) 排他の作成 (既に在れば失敗) で空の一時ファイルを作り、開いたまま、本人だけのものであることを確かめる。確かめてから、同じ口に書く
-  const fd = openSync(temp, "wx", 0o600);
+  const message = (e: unknown) => e instanceof CredentialsUnsafe ? e.reason : e instanceof Error ? e.message : String(e);
+  const quiet = (fn: () => void) => { try { fn(); } catch { /* 片付けの失敗は、結果を変えない */ } };
+  // ---- 置き換える前 (ここまでの失敗では、今までの資格情報は、そのまま在る) ----
   try {
-    const st = fstatSync(fd);
-    if ((st.mode & 0o077) !== 0 || (typeof process.getuid === "function" && st.uid !== process.getuid())) throw new CredentialsUnsafe(`${temp} is not private`);
-    writeSync(fd, text);
-    fsyncSync(fd);
+    ensureDir();
+    // 1) 排他の作成 (既に在れば失敗) で空の一時ファイルを作り、開いたまま、本人だけのものであることを確かめる。確かめてから、同じ口に書く
+    const fd = openSync(temp, "wx", 0o600);
+    try {
+      const st = fstatSync(fd);
+      if ((st.mode & 0o077) !== 0 || (typeof process.getuid === "function" && st.uid !== process.getuid())) throw new CredentialsUnsafe(`${temp} is not private`);
+      writeSync(fd, text);
+      fsyncSync(fd);
+    } finally { closeSync(fd); }
   } catch (e) {
-    closeSync(fd); rmSync(temp, { force: true });
-    throw e;
+    quiet(() => rmSync(temp, { force: true }));
+    throw new CredentialsSaveFailed(message(e), true, null, false);
   }
-  closeSync(fd);
   // 2) 今までの資格情報を、控えとして残す (同じ中身への、別の名前)。それから、新しいファイルを改名で置く
-  const hadPrevious = existsSync(path);
+  let hadPrevious = false;
   try {
+    hadPrevious = existsSync(path);
     if (hadPrevious) linkSync(path, prev);
     renameSync(temp, path);
   } catch (e) {
-    rmSync(temp, { force: true }); rmSync(prev, { force: true });
-    throw e;
+    quiet(() => rmSync(temp, { force: true })); quiet(() => rmSync(prev, { force: true }));
+    throw new CredentialsSaveFailed(message(e), true, null, false);
   }
   // 3) 置いた後の確認。ここまで通って、保存の成功
-  const reason = (() => { try { return unsafeReason(path, "file") ?? (readFileSync(path, "utf8") === text ? null : "the stored file is not what was written"); } catch (e) { return String(e); } })();
-  if (reason === null) { rmSync(prev, { force: true }); return; }
+  let reason: string | null, unsafe = false;
+  try {
+    hooks.afterPlace?.();
+    reason = unsafeReason(path, "file");
+    unsafe = reason !== null;
+    if (reason === null && readFileSync(path, "utf8") !== text) reason = "the stored file is not what was written";
+  } catch (e) { reason = message(e); }
+  if (reason === null) {
+    // (控えの片付けに失敗しても、保存は成功している。新しい資格情報を、失敗として取り消させない)
+    quiet(() => rmSync(prev, { force: true }));
+    return;
+  }
   // 失敗: 置き場に在るのが、自分の置いたものであることを確かめてから、控えを戻す (ロックの中なので、ほかの login は割り込まない)
   let restored = false;
   try {
@@ -134,10 +182,7 @@ export function saveCredentials(credentials: Credentials): void {
       restored = true;
     }
   } catch { /* 戻せなかった (下で、そのことを伝える) */ }
-  const error = new CredentialsUnsafe(reason) as CredentialsUnsafe & { restored: boolean; backup?: string };
-  error.restored = restored;
-  if (!restored && hadPrevious) error.backup = prev;
-  throw error;
+  throw new CredentialsSaveFailed(reason, restored, !restored && hadPrevious ? prev : null, unsafe);
 }
 
 /** 保存済みの資格情報を消す (ロックの中で呼ぶ)。Output: 消したら true */

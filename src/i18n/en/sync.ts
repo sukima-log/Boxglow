@@ -145,4 +145,10 @@ export const sync: Record<string, string> = {
   "サーバーが利用者を確かめられませんでした。やりかけの操作は残してあります": "The server could not verify who you are. The unfinished operation is kept",
   "boxglow {cmd} が知らない指定です: {list}": "Unknown option for boxglow {cmd}: {list}",
   "サーバーが決まっていません。--server <URL> を指定してください": "No server given. Use --server <URL>",
+  "保存済みの資格情報がありますが、安全に読めません: {reason}": "There are stored credentials, but they cannot be read safely: {reason}",
+  "誰のサインインかを確かめられないので、置き換えません。ファイルを確かめて、直すか、消してから、もう一度実行してください: {path}": "It is not possible to tell whose sign-in this is, so it will not be replaced. Check the file, fix or delete it, then run again: {path}",
+  "資格情報の置き場に、今回のファイルが残っているかもしれません。確かめてください": "The file written just now may remain in the credentials folder. Please check",
+  "サインアウトは、できていません (ファイルが残っていて、サーバー側のトークンも有効なままかもしれません)。ファイルを確かめてください: {path}": "Not signed out (the file remains and the token may still be valid on the server). Check the file: {path}",
+  "資格情報の置き場を、安全に確かめられません: {reason}": "The credentials folder cannot be verified as private: {reason}",
+  "サインアウトは、できていません (資格情報のファイルが残っているかもしれません)": "Not signed out (a credentials file may remain)",
 };

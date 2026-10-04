@@ -10,7 +10,7 @@ import { addBlock, createProject, defaultTaskParent, fromJSON, toJSON } from "..
 import { setLang } from "../../src/i18n/core";
 import { syncOnce, SyncAuthError } from "./client";
 import { runSyncCommand } from "./command";
-import { credentialsPath, CredentialsUnsafe, modeOf, readCredentials, resolveToken, saveCredentials, withCredentialsLock } from "./credentials";
+import { credentialsPath, CredentialsSaveFailed, CredentialsUnsafe, inspectCredentials, modeOf, readCredentials, resolveToken, saveCredentials, withCredentialsLock } from "./credentials";
 import { runLogin, runLogout, runWhoami, serverProblem } from "./login";
 import { TestSyncServer } from "./test-server";
 
@@ -213,3 +213,130 @@ describe("logout / whoami / 同期での利用", () => {
     expect(shown).not.toContain("tok-acc-alice-1");
   });
 });
+
+// ---- Codex のレビュー 23 ----
+describe("R23-04: 発行の後の保存の失敗 (権限の確認でも、ふつうのファイル操作でも) では、発行済みのトークンの取り消しを試みる", () => {
+  it("トークンが発行された後に、ふつうのファイル操作が失敗しても、そのトークンを取り消す。今までの資格情報は残る", async () => {
+    expect(await login(approve(ALICE))).toBe(0);
+    const path = credentialsPath(server.url);
+    const before = readFileSync(path, "utf8");
+    lines = [];
+    // 引き換えを待っている間に、置き場のフォルダを書き込めなくする (一時ファイルの作成が EACCES で失敗する)
+    const code = await login((n, c) => { if (n === 1) { server.deviceCodes.set(c, ALICE); chmodSync(dirname(path), 0o500); } });
+    chmodSync(dirname(path), 0o700);
+    expect(code).toBe(1);
+    expect(server.issued.has("tok-acc-alice-2")).toBe(true);                // 発行はされた
+    expect(server.revoked.has("tok-acc-alice-2")).toBe(true);               // …が、取り消した
+    expect(server.revoked.has("tok-acc-alice-1")).toBe(false);              // 今までのトークンは、取り消していない
+    expect(readFileSync(path, "utf8")).toBe(before);
+    expect(lines.join("\n")).toContain("取り消しました");
+  });
+
+  it("取り消しの通信も失敗したら、「取り消した」とは表示しない (まだ有効かもしれない、と伝える)", async () => {
+    const path = credentialsPath(server.url);
+    let polls = 0;
+    // サーバーへの DELETE だけを失敗させる
+    const flaky = (async (...args: Parameters<typeof fetch>) => {
+      if ((args[1] as RequestInit | undefined)?.method === "DELETE") throw new Error("offline");
+      return fetch(...args);
+    }) as typeof fetch;
+    const code = await runLogin({ server: server.url, out, fetch: flaky, sleep: async () => {
+      polls++;
+      if (polls === 1) { server.deviceCodes.set([...server.deviceCodes.keys()].at(-1)!, ALICE); chmodSync(dirname(path), 0o500); }
+    } });
+    chmodSync(dirname(path), 0o700);
+    expect(code).toBe(1);
+    expect(server.revoked.size).toBe(0);
+    const shown = lines.join("\n");
+    expect(shown).toContain("まだ有効かもしれません");
+    expect(shown).not.toContain("取り消しました。");
+  });
+
+  it("置いた後の確認で、ほかの利用者から読める権限だと分かったら、今までの資格情報を戻して、失敗として伝える", async () => {
+    const cred = (token: string) => ({ server: server.url, account: "acc-alice", login: "alice", token, createdAt: "2026-10-04T00:00:00.000Z" });
+    await withCredentialsLock(server.url, async () => { saveCredentials(cred("old-token")); });
+    const path = credentialsPath(server.url);
+    let failed: unknown = null;
+    await withCredentialsLock(server.url, async () => {
+      try { saveCredentials(cred("new-token"), { afterPlace: () => chmodSync(path, 0o644) }); } catch (e) { failed = e; }
+    });
+    expect(failed).toBeInstanceOf(CredentialsSaveFailed);
+    expect(failed).toMatchObject({ restored: true, backup: null, unsafe: true });
+    expect(readCredentials(server.url)!.token).toBe("old-token");           // 今までのものが、戻っている
+    expect(modeOf(path)).toBe(0o600);
+    expect(readdirSync(dirname(path)).filter((f) => f.includes(".prev-") || f.includes(".tmp"))).toEqual([]);
+    // 今までの資格情報が無い場合は、置いたファイルを消す (権限の不適切なトークンを、置き場に残さない)
+    rmSync(path);
+    await withCredentialsLock(server.url, async () => {
+      try { saveCredentials(cred("first-token"), { afterPlace: () => chmodSync(path, 0o644) }); } catch (e) { failed = e; }
+    });
+    expect(failed).toMatchObject({ restored: true, unsafe: true });
+    expect(existsSync(path)).toBe(false);
+  });
+
+  it("保存に成功した後の、控えの片付けの失敗は、失敗として扱わない (新しいトークンを取り消さない)", async () => {
+    expect(await login(approve(ALICE))).toBe(0);
+    expect(await login(approve(ALICE))).toBe(0);
+    expect(readCredentials(server.url)!.token).toBe("tok-acc-alice-2");
+    expect(server.revoked.has("tok-acc-alice-2")).toBe(false);
+  });
+});
+
+describe("R23-05: 資格情報が「無い」と「在るが、安全に読めない」を分ける", () => {
+  it("調べた結果は、無い / 使える / 使えない (理由つき) の 3 つ", async () => {
+    expect(inspectCredentials(server.url)).toEqual({ kind: "absent" });
+    await login(approve(ALICE));
+    expect(inspectCredentials(server.url).kind).toBe("valid");
+    const path = credentialsPath(server.url);
+    chmodSync(path, 0o644);
+    expect(inspectCredentials(server.url)).toMatchObject({ kind: "unusable", path });
+    chmodSync(path, 0o600);
+    writeFileSync(path, "{ not json");
+    expect(inspectCredentials(server.url)).toMatchObject({ kind: "unusable" });
+  });
+
+  for (const [name, damage] of [
+    ["ほかの利用者から読める権限", (path: string) => chmodSync(path, 0o644)]
+  , ["JSON として読めない中身", (path: string) => writeFileSync(path, "{ broken")]
+  ] as const) {
+    it(`保存済みの資格情報が使えない (${name}) とき、別の利用者の login は、黙って置き換えない。発行もしない`, async () => {
+      expect(await login(approve(ALICE))).toBe(0);
+      const path = credentialsPath(server.url);
+      damage(path);
+      const before = readFileSync(path, "utf8");
+      lines = [];
+      expect(await login(approve(BOB))).toBe(1);
+      expect(readFileSync(path, "utf8")).toBe(before);                      // 置き換えていない
+      expect(server.issued.size).toBe(1);                                   // 手順も始めていない (新しいトークンは発行されていない)
+      expect(lines.join("\n")).toContain(path);
+    });
+  }
+
+  it("logout: 資格情報が使えない・置き場を確かめられないときは、「サインインしていません」とも「サインアウトしました」とも言わず、失敗として終わる", async () => {
+    expect(await login(approve(ALICE))).toBe(0);
+    const path = credentialsPath(server.url);
+    // 置き場のフォルダが、ほかの利用者から見える
+    chmodSync(dirname(path), 0o750);
+    lines = [];
+    expect(await runLogout({ server: server.url, out })).toBe(1);
+    expect(existsSync(path)).toBe(true);
+    expect(server.revoked.size).toBe(0);
+    let shown = lines.join("\n");
+    expect(shown).not.toContain("サインインしていません");
+    expect(shown).not.toContain("サインアウトしました");
+    chmodSync(dirname(path), 0o700);
+    // ファイルが、ほかの利用者から読める
+    chmodSync(path, 0o644);
+    lines = [];
+    expect(await runLogout({ server: server.url, out })).toBe(1);
+    expect(existsSync(path)).toBe(true);
+    shown = lines.join("\n");
+    expect(shown).toContain(path);
+    expect(shown).not.toContain("サインインしていません");
+    // 直せば、サインアウトできる
+    chmodSync(path, 0o600);
+    expect(await runLogout({ server: server.url, out })).toBe(0);
+    expect([...server.revoked]).toEqual(["tok-acc-alice-1"]);
+  });
+});
+
