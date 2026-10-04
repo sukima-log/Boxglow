@@ -1,5 +1,10 @@
 /** 英語の辞書 (gui: 詳細パネルの注意欄・Activity の「再開」タブ・競合の比較ダイアログ・バージョン表示)。キー = ソースの日本語の文 */
 export const gui: Record<string, string> = {
+  "この窓からは保存できません (閲覧専用)。VS Code が、拡張による {host} へのアクセスを許可していないためです。WSL の窓 (左下に「WSL: ...」と出る窓) でこのファイルを開いてください。この窓のまま使うなら、設定 security.allowedUNCHosts に {host} を追加して VS Code を再起動します": "This window cannot save (read-only): VS Code does not allow extensions to access {host}. Open this file in a WSL window (the one showing \"WSL: ...\" at the bottom left). To keep using this window, add {host} to the security.allowedUNCHosts setting and restart VS Code",
+  "この窓からは保存できません (閲覧専用)。VS Code が、拡張による {host} へのアクセスを許可していないためです。設定 security.allowedUNCHosts に {host} を追加して VS Code を再起動してください": "This window cannot save (read-only): VS Code does not allow extensions to access {host}. Add {host} to the security.allowedUNCHosts setting and restart VS Code",
+  "この窓からは保存できません (閲覧専用)。拡張がファイルを読めませんでした: {message}": "This window cannot save (read-only): the extension could not read the file: {message}",
+  "VS Code からファイルの中身を受け取れていません。下の一覧の計画は VS Code 内のコピーで、開いても boxglow.json には保存されません。拡張を最新にして窓を読み込み直すか、WSL のファイルは WSL の窓で開いてください": "The file has not arrived from VS Code. The plans listed below are copies kept inside VS Code; opening one does not save to boxglow.json. Update the extension and reload the window, or open WSL files in a WSL window",
+  "VS Code の中では、この一覧は VS Code 内のコピーです。開いて編集しても boxglow.json には保存されず、AI にも届きません。": "Inside VS Code, this list holds copies kept inside VS Code. Editing one does not save to boxglow.json and does not reach the AI.",
   "回答待ち {n}": "Awaiting answers: {n}",
   "AI未確認 {n}": "Unacknowledged: {n}",
   "Status で確認": "View in Status",

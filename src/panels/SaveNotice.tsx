@@ -93,15 +93,16 @@ function ConflictDialog({ onClose }: { onClose: () => void }) {
  * Output: 帯の JSX。保存の失敗も無く、閲覧専用のファイルでもなければ何も出さない (null)
  */
 export function SaveNotice() {
-  const { project, source, saveError, conflict, resolveConflict, previewConflict, saveNow } = useProjectStore();
+  const { project, source, saveError, conflict, resolveConflict, previewConflict, saveNow, readonlyReason } = useProjectStore();
   // 比較ダイアログを開いているか
   const [compare, setCompare] = useState(false);
   // 出すのは 2 つの場合だけ: 保存に失敗している (saveError)、または直接開いたファイル (source = "file"。閲覧専用) を見ている
-  if (!project || (!saveError && source !== "file")) return null;
+  // (VS Code の中で、拡張がファイルを読み書きできない窓も閲覧専用。理由と対処を出す)
+  if (!project || (!saveError && source !== "file" && !readonlyReason)) return null;
   // 人が選ぶ必要のある競合の数 (0 なら選ばずにそのまま統合できる)
   const conflicts = previewConflict()?.conflicts.filter((item) => !item.automatic).length ?? 0;
   return <div className="save-notice" role={saveError ? "alert" : "status"}>
-    <span>{saveError ?? t("このファイルは閲覧専用です。共同編集は npx boxglow serve --open または VS Code 拡張で開いてください。")}</span>
+    <span>{saveError ?? readonlyReason ?? t("このファイルは閲覧専用です。共同編集は npx boxglow serve --open または VS Code 拡張で開いてください。")}</span>
     {saveError && <div className="flex flex-wrap gap-2 mt-2">
       <button className="btn btn-sm" onClick={() => downloadText("boxglow-unsaved.json", toJSON(project), "application/json")}>{t("手元の編集を JSON で退避")}</button>
       {conflict ? <>

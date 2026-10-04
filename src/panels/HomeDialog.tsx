@@ -26,6 +26,10 @@ export function HomeDialog() {
   const openSample = useProjectStore((s) => s.openSample);
   const setToast = useProjectStore((s) => s.setToast);
   const openLocalFile = useProjectStore((s) => s.openLocalFile);
+  // VS Code の中で、拡張からファイルをまだ受け取れていないときの案内
+  const hostNotice = useProjectStore((s) => s.hostNotice);
+  // VS Code の拡張の中で動いているか (一覧の計画がファイルとは別のコピーであることを明示するため)
+  const inVsCode = typeof window !== "undefined" && !!window.acquireVsCodeApi;
   const [name, setName] = useState("");
   const [last, setLast] = useState<FileSystemFileHandle | null>(null);
   // 「自分の計画で始める」の引き出しを利用者が開閉した結果 (null = まだ触っていない → 下の hasOwn に従う)
@@ -84,6 +88,8 @@ export function HomeDialog() {
         </div>
 
         {/* 最初の案内: 初めて来た人向けの見出しと、主な操作「サンプルを試す」1 つだけ (説明の札や流れ図は置かない: 文字を減らす) */}
+        {/* VS Code の中: 拡張からファイルが届いていないとき、または一覧のコピーを開こうとしているときに、ファイルとは別物だと明示する */}
+        {hostNotice && <p className="save-notice" role="alert">{hostNotice}</p>}
         <section className="home-welcome">
           <h2>{t("AI と進める仕事に、見通しを。")}</h2>
           <p>{t("何ができた？ 何を決めれば進める？ ボックスと線で、次の一歩が見えてきます。")}</p>
@@ -129,6 +135,7 @@ export function HomeDialog() {
         </details>
         <section aria-labelledby="home-projects">
           <h2 id="home-projects" className="label mb-1">{t("このブラウザに保存した計画")}</h2>
+          {inVsCode && <p className="home-description">{t("VS Code の中では、この一覧は VS Code 内のコピーです。開いて編集しても boxglow.json には保存されず、AI にも届きません。")}</p>}
           {projects.length === 0 ? <p className="home-description">{t("保存した計画はここから再開できます。")}</p> : (
             <div className="home-projects">
               {projects.map((m) => <div key={m.id} className="flex items-center gap-2 tree-row">

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2
+
+- Opening a WSL file (`\\wsl.localhost\...`) from a Windows window: the plan is shown instead of an empty screen. If VS Code does not allow extensions to access that location, the editor is read-only and explains what to do (open the file in a WSL window, or add the host to `security.allowedUNCHosts` and restart). Previously the Home list could lead you to an old copy kept inside VS Code, whose edits never reached the file.
+- The Home list says its plans are copies kept inside VS Code.
+
 ## 0.3.1
 
 - Save lock follows boxglow 0.4.1: a lock is recovered automatically only when its owner is confirmed gone (same host, OS and process-ID space). A VS Code window on Windows and a CLI in WSL no longer mistake each other's live lock for a dead one. Update together with the CLI and reload the window.

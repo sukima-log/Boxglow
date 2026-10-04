@@ -55,6 +55,27 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('画面: 実行時のエラーが無い',errors.length===0,errors.join(';'));
     await page.context().close();
 
+    // VS Code の中: 拡張からファイルが届かないとき (Windows の窓で WSL のファイルを開き、拡張が読めない場合など)、
+    // 黙って空の画面にせず、Home に「届いていない・一覧はファイルと別のコピー」と出す
+    const lost=await open(browser,{vscode:true});
+    check('VS Code: Home の一覧がファイルとは別のコピーだと明示する',await lost.page.getByText('VS Code の中では、この一覧は VS Code 内のコピーです',{exact:false}).isVisible());
+    await lost.page.waitForFunction(()=>!!window.boxglow.store.getState().hostNotice,null,{timeout:8000});
+    check('VS Code: ファイルが届かないときは、その旨を Home に出す',await lost.page.getByText('VS Code からファイルの中身を受け取れていません',{exact:false}).isVisible());
+    // 拡張がファイルを直接読み書きできない窓: 計画は表示し、閲覧専用にして理由を帯に出す (保存の要求は送らない)
+    const sample=fs.readFileSync(path.join(ROOT,'examples/notes-app/boxglow.json'),'utf8');
+    const reason='この窓からは保存できません (閲覧専用)。確認用の理由';
+    await lost.page.evaluate(([text,readonlyReason])=>window.postMessage({type:'load',text,version:1,name:'boxglow.json',appVersion:'0.4.2',extensionVersion:'0.3.2',protocol:1,readonlyReason},'*'),[sample,reason]);
+    await lost.page.waitForFunction(()=>window.boxglow.store.getState().source==='vscode');
+    check('VS Code: 読み書きできない窓では閲覧専用にして理由を出す',await lost.page.getByText(reason,{exact:true}).isVisible() && await lost.page.evaluate(()=>window.boxglow.store.getState().readonly===true && window.boxglow.store.getState().hostNotice===null));
+    await lost.page.evaluate(()=>{window.__posted.length=0;window.boxglow.store.getState().apply(p=>({...p,name:'変更してみる'}));});
+    await lost.page.waitForTimeout(1500);
+    check('VS Code: 閲覧専用の間は、拡張へ保存の要求を送らない',await lost.page.evaluate(()=>window.__posted.filter(m=>m.type==='save').length===0));
+    // 読み書きできるようになった (設定を直して開き直した) ら、閲覧専用を外す
+    await lost.page.evaluate(text=>window.postMessage({type:'update',text,version:2,name:'boxglow.json',appVersion:'0.4.2',extensionVersion:'0.3.2',protocol:1,readonlyReason:null},'*'),sample);
+    await lost.page.waitForFunction(()=>window.boxglow.store.getState().readonly===false,null,{timeout:5000}).catch(()=>{});
+    check('VS Code: 読み書きできるようになれば閲覧専用を外す',await lost.page.evaluate(()=>window.boxglow.store.getState().readonly===false && window.boxglow.store.getState().readonlyReason===null));
+    await lost.page.context().close();
+
     const second=await open(browser,{vscode:true,query:'?lang=en',lang:'en'});const p=second.page;
     const original=fs.readFileSync(path.join(ROOT,'examples/notes-app/boxglow.json'),'utf8');
     await p.evaluate(text=>window.postMessage({type:'load',text,version:1,name:'boxglow.json',appVersion:'0.3.0',extensionVersion:'0.2.2',protocol:1},'*'),original);

@@ -63,6 +63,10 @@ interface State {
   saveNow: () => void;
   peerVersion: PeerVersion | null;
   saveError: string | null;
+  /** VS Code の中で、保存できない理由 (拡張がファイルを直接読み書きできない窓など)。あれば閲覧専用にして、この文を帯に出す */
+  readonlyReason: string | null;
+  /** VS Code の中で、拡張からファイルの中身をまだ受け取れていないときの案内 (Home 画面に出す)。受け取れたら null */
+  hostNotice: string | null;
   conflict: { text: string; revision: string; paths: string[] } | null;
   previewConflict: () => MergeResult | null;
   resolveConflict: (choice: "merge" | "remote", choices?: ConflictChoices, revision?: string) => boolean;
@@ -289,6 +293,8 @@ export const useProjectStore = create<State>((set, get) => {
     }
   , saveNow: () => { if (saveTimer) clearTimeout(saveTimer); saveTimer = null; void persist(); }
   , peerVersion: null
+  , readonlyReason: null
+  , hostNotice: null
   , saveError: null
   , conflict: null
   , previewConflict: () => {
@@ -445,7 +451,7 @@ export const useProjectStore = create<State>((set, get) => {
       if (!canLeave()) return;
       stopWatching();
       baseText = toJSON(p) + "\n";
-      set({ project: p, ephemeral, source: "idb", readonly: (new URLSearchParams(location.search).get("readonly") === "1" || new URLSearchParams(location.search).get("view") === "article"), fileName: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: ephemeral ? "none" : "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+      set({ readonlyReason: null, project: p, ephemeral, source: "idb", readonly: (new URLSearchParams(location.search).get("readonly") === "1" || new URLSearchParams(location.search).get("view") === "article"), fileName: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: ephemeral ? "none" : "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(ephemeral ? null : p.id);
     }
 
@@ -558,6 +564,9 @@ export const useProjectStore = create<State>((set, get) => {
         if (typeof msg.version === "number" && msg.version < vscodeVersion) return;
         try {
           set({ peerVersion: { app: typeof msg.appVersion === "string" ? msg.appVersion : null, protocol: typeof msg.protocol === "number" ? msg.protocol : null, extension: typeof msg.extensionVersion === "string" ? msg.extensionVersion : undefined } });
+          // 拡張がファイルを直接読み書きできない窓では、閲覧専用にする (理由は帯に出す)。読み書きできるようになれば戻る
+          const readonlyReason = typeof msg.readonlyReason === "string" ? msg.readonlyReason : null;
+          set({ readonlyReason, readonly: readonlyReason !== null, hostNotice: null });
           if (get().source !== "vscode") {
             const p = fromJSON(msg.text); baseText = msg.text; vscodeVersion = msg.version ?? 0;
             set({ project: p, ephemeral: false, source: "vscode", fileName: msg.name ?? "boxglow.json", past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
@@ -566,6 +575,12 @@ export const useProjectStore = create<State>((set, get) => {
       };
       window.addEventListener("message", messageHandler);
       vscodeApi.postMessage({ type: "ready" });
+      // 拡張から中身が届かないまま時間が経ったら、その旨を Home 画面に出す
+      // (黙って空の画面にすると、一覧にある「VS Code 内のコピー」をファイルだと思って開いてしまう)
+      set({ hostNotice: null });
+      setTimeout(() => {
+        if (generation === epoch && get().source !== "vscode") set({ hostNotice: t("VS Code からファイルの中身を受け取れていません。下の一覧の計画は VS Code 内のコピーで、開いても boxglow.json には保存されません。拡張を最新にして窓を読み込み直すか、WSL のファイルは WSL の窓で開いてください") });
+      }, 4000);
     }
 
   , importJSON: async (text) => {

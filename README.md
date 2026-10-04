@@ -115,6 +115,8 @@ Before removing, stop every Boxglow that has the plan open (CLI, `serve`, VS Cod
 
 **Upgrading from 0.4.0**: update the CLI, `serve` and the VS Code extension together and restart any that are still running. 0.4.0 takes over locks by elapsed time and does not read the new owner fields, so mixing 0.4.0 and 0.4.1 writers on one plan is not safe.
 
+**VS Code on Windows with a plan inside WSL**: open the folder in a WSL window (Remote - WSL), where the extension runs inside WSL. A Windows window that opens `\\wsl.localhost\...` shows the plan read-only unless `security.allowedUNCHosts` contains `wsl.localhost`, because VS Code blocks extensions from that location; with the host allowed, saving works and locks taken on the other side are respected (never taken over, since Windows and WSL cannot check each other's processes).
+
 ## MCP server
 
 `npx boxglow mcp` is a stdio MCP server exposing the CLI as tools (`boxglow_status`, `boxglow_show`, `boxglow_add`, `boxglow_split`, `boxglow_connect`, `boxglow_start`, `boxglow_done`, `boxglow_blocked`, `boxglow_ask`, `boxglow_answer`, `boxglow_set`, `boxglow_export`, `boxglow_validate`, `boxglow_run`, ...). `setup-agent` writes the registration into `.mcp.json`:

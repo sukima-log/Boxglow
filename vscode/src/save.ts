@@ -28,6 +28,30 @@ export interface SaveDocument {
 }
 
 /**
+ * 拡張 (Node 側) が、このファイルのある場所を直接読み書きできるかを確かめる
+ * VS Code は、拡張がネットワーク形式の場所 (\\\\ホスト名\\... の UNC パス) を読み書きするのを、許可したホスト以外は止める。
+ * Windows の窓で WSL のファイル (\\\\wsl.localhost\\...) を開いたときがこれに当たる。
+ * 止められていると、保存のロックも照合もできないので、安全に保存できない (画面は閲覧専用にして理由を見せる)
+ * Input : path = ファイルのパス
+ * Output: 読み書きできるなら null。できないなら、利用者に見せる理由と対処の文 (今の言語)
+ */
+export function diskAccess(path: string): string | null {
+  try {
+    readFileSync(path, "utf8");
+    return null;
+  } catch (e) {
+    const err = e as NodeJS.ErrnoException;
+    if (err.code === "ERR_UNC_HOST_NOT_ALLOWED") {
+      const host = /^[\\/]{2}([^\\/]+)/.exec(path)?.[1] ?? "";
+      return host.toLowerCase().startsWith("wsl")
+        ? t("この窓からは保存できません (閲覧専用)。VS Code が、拡張による {host} へのアクセスを許可していないためです。WSL の窓 (左下に「WSL: ...」と出る窓) でこのファイルを開いてください。この窓のまま使うなら、設定 security.allowedUNCHosts に {host} を追加して VS Code を再起動します", { host })
+        : t("この窓からは保存できません (閲覧専用)。VS Code が、拡張による {host} へのアクセスを許可していないためです。設定 security.allowedUNCHosts に {host} を追加して VS Code を再起動してください", { host });
+    }
+    return t("この窓からは保存できません (閲覧専用)。拡張がファイルを読めませんでした: {message}", { message: err.message ?? String(e) });
+  }
+}
+
+/**
  * 改行を LF にそろえる (比べるとき用)
  * 画面は LF の文字列を送るが、VS Code は挿入した文字列の改行をドキュメントの改行 (CRLF のファイルなら CRLF) に合わせる。
  * そのまま比べると、CRLF のファイルでは「置き換えた直後のドキュメント」と「要求の中身」が必ず食い違い、毎回競合になる

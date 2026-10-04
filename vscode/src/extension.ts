@@ -12,7 +12,7 @@
 import * as vscode from "vscode";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { saveDocument } from "./save";
+import { saveDocument, diskAccess } from "./save";
 import { FileConflict } from "../../cli/file-store";
 import { rewriteIndexHtml } from "./html";
 import { APP_VERSION, SAVE_PROTOCOL } from "../../src/model/version";
@@ -58,14 +58,23 @@ class BoxglowEditorProvider implements vscode.CustomTextEditorProvider {
     panel.webview.html = rewriteIndexHtml(html, (rel) => panel.webview.asWebviewUri(vscode.Uri.joinPath(media, rel)).toString(), panel.webview.cspSource, nonce);
 
     // 拡張が最後に確かめたディスクの中身 (保存のとき、ディスクがここから変わっていたら競合にする)
-    let diskBase = document.isDirty ? readFileSync(document.uri.fsPath, "utf8") : document.getText();
+    /**
+     * ディスクの中身を読む。読めない場所 (VS Code が拡張のアクセスを許可していない UNC パスなど) では null
+     * (読めないことを理由に、画面へ計画を送るのをやめない。送らないと画面が空になり、利用者がファイルと無関係のコピーを開いてしまう)
+     */
+    const readDisk = (): string | null => { try { return readFileSync(document.uri.fsPath, "utf8"); } catch { return null; } };
+    let diskBase = document.isDirty ? readDisk() ?? document.getText() : document.getText();
     // 保存の処理中か (処理中は自分の編集による update を送らず、次の保存の要求も断る)
     let saving = false;
     const send = (type: "load" | "update") => {
       // ドキュメントがディスクと同じ (外の変更を VS Code が読み直した後など) なら、照合の基準を今の中身に進める
-      if (!document.isDirty && !saving && readFileSync(document.uri.fsPath, "utf8") === document.getText()) diskBase = document.getText();
+      if (!document.isDirty && !saving && readDisk() === document.getText()) diskBase = document.getText();
+      // 計画の言語で、保存できない理由を作る
+      setLang(langOf(document.getText()));
       void panel.webview.postMessage({
         type
+        // 拡張がファイルを直接読み書きできない窓では、閲覧専用にして理由を見せる (null なら保存できる)
+      , readonlyReason: diskAccess(document.uri.fsPath)
       , appVersion: APP_VERSION
       , protocol: SAVE_PROTOCOL
       , extensionVersion: this.context.extension.packageJSON.version
@@ -107,7 +116,9 @@ class BoxglowEditorProvider implements vscode.CustomTextEditorProvider {
         // 改行だけの違い (CRLF のファイル) は「ディスクが変わった」とみなさない
         const lf = (value: string) => value.replace(/\r\n/g, "\n");
         const text = lf(disk) !== lf(diskBase) ? disk : document.getText();
-        void panel.webview.postMessage({ type: "save-error", requestId: msg.requestId, error: e instanceof Error ? e.message : String(e), conflict, text, version: document.version });
+        // ファイルのある場所を拡張が読み書きできないときは、その理由と対処を返す (英語の内部エラーのままにしない)
+        const error = diskAccess(document.uri.fsPath) ?? (e instanceof Error ? e.message : String(e));
+        void panel.webview.postMessage({ type: "save-error", requestId: msg.requestId, error, conflict, text, version: document.version });
         if (conflict) diskBase = disk;
       } finally { saving = false; }
     });

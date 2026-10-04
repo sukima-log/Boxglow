@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.4.2 (2026-10-04)
+
+VS Code extension 0.3.2. The CLI is unchanged from 0.4.1.
+
+- VS Code, Windows window opening a WSL file (`\\wsl.localhost\...`): VS Code blocks extensions from that location unless the host is allowed. The extension used to stop before sending the plan, leaving an empty screen whose Home list offered an old copy kept inside VS Code; edits to that copy never reached the file. Now the plan is always shown; when the extension cannot read or write the location the editor is read-only and says why and what to do (open the file in a WSL window, or add the host to `security.allowedUNCHosts`).
+- VS Code: the Home list says its plans are copies kept inside VS Code, and reports when the file has not arrived from the extension.
+- New check `e2e/vscode-host/run.sh`: runs the extension's load, save and lock code inside a real VS Code extension host on Windows against a WSL file, then the CLI in WSL. Verified in both directions: a lock left by a WSL writer stops a save from Windows, and a lock left by a Windows writer stops the CLI in WSL until a person removes it.
+
 ## 0.4.1 (2026-10-04)
 
 Save lock, reviewed together with Codex. **Update the CLI, `serve` and the VS Code extension together and restart running ones**: 0.4.0 takes over locks by elapsed time, so mixing 0.4.0 and 0.4.1 writers on one plan is not safe.
