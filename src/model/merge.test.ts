@@ -249,7 +249,9 @@ describe("統合した結果の検査", () => {
     expect(projectProblem(ours)).toBeNull();
     expect(projectProblem(theirs)).toBeNull();
     const r = mergeProjects(p, ours, theirs);
-    expect(r.conflicts.filter((c) => !c.automatic)).toEqual([]);
+    // ボックスの項目には競合が出ない (親を変えたのは別々のボックスなので、別々の項目の変更として合わさる)。
+    // 操作した人の「最後に見た時刻」(agents.*.lastSeen) は、2 つの操作の時刻が 1 ミリ秒でも違えば競合に数えられるので、ここでは見ない
+    expect(r.conflicts.filter((c) => !c.automatic && c.segments[0] === "blocks")).toEqual([]);
     expect(projectProblem(r.project)).not.toBeNull();
   });
   it("CLI の merge (Git 用) は、壊れた結果を書かずに失敗し、自分の側のファイルをそのまま残す", () => {
