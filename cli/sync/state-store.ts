@@ -27,6 +27,12 @@ export interface Binding {
   remoteId: string;
   /** 結び付けたときの、計画のファイルの中の ID (同じパスに別の計画が置かれたことに気づくため) */
   planId: string;
+  /**
+   * 初めての受け取りの途中だけ持つ、仮の ID: これから手元に書く計画の ID。
+   * 書けたと確かめたら planId に移す。書かなかったと分かったら捨てる (planId は、受け取りの前のまま)。
+   * 書く前に planId を書き換えてしまうと、「書かなかった」場合に、手元の計画 (別の ID) と食い違って先へ進めなくなる
+   */
+  pendingPlanId?: string;
 }
 
 /** state.json の中身 */
@@ -149,6 +155,19 @@ function writeAtomic(path: string, text: string): void {
   const temp = `${path}.${randomUUID()}.tmp`;
   writeFileSync(temp, text, { encoding: "utf8", mode: 0o600 });
   try { renameSync(temp, path); } catch (e) { try { rmSync(temp, { force: true }); } catch { /* 一時ファイルが残っても、状態としては読まれない */ } throw e; }
+}
+
+/**
+ * 計画のファイル 1 つにつき 1 つの「同期のロック」を取る (サーバーに関係なく、ファイルの実体のパスで決まる)
+ * 同じファイルを扱う同期を、サーバーが違っても 1 つに絞る。「別のサーバーに結び付いていないか」の確認と、新しい結び付けの作成の間に、
+ * 別の同期が割り込まないようにするため (割り込めると、同じファイルが 2 つのサーバーに結び付く)
+ * Input : file = 計画のファイルの実体のパス
+ * Output: ロックを外す関数。ほかの同期が動いていれば null (待たない)
+ */
+export function lockFileSync(file: string): (() => void) | null {
+  const root = join(configDir(), "sync");
+  mkdirSync(root, { recursive: true, mode: 0o700 });
+  try { return lockFile(join(root, `file-${hashOf(file).slice(0, 32)}`), { waitMs: 0 }); } catch (e) { if (e instanceof FileBusy) return null; throw e; }
 }
 
 /** 結び付け 1 つ分の状態の読み書き (状態用のロックを持っている間だけ使う) */

@@ -727,8 +727,8 @@ describe("復旧のときの見比べ", () => {
     const before = { local: B.local!.hash, state: B.state, head: server.head!.revision };
     const input = { state: B.state, local: B.local, remote: server.remote(), bindingId: "B", baseText: null, now: NOW, hashOf };
     const preview = previewRecovery(input, (hash) => B.objects.get(hash) ?? null);
-    // 反映済みとして続ける: サーバーの取り消しが手元に入り、AI の追記を送る
-    expect(preview.applied.next).toBe("pull");
+    // 反映済みとして続ける: サーバーの取り消しが手元に入り、そのあと AI の追記を送る
+    expect(preview.applied.next).toBe("push");
     expect(preview.applied.localChanges).toEqual(["ボックス「A」の title が変わる"]);
     expect(preview.applied.remoteChanges).toEqual(["ボックス「B」の description が変わる"]);
     // 反映されていないものとして続ける: 手元は変わらず、手元の「新」と AI の追記を送る (サーバーの取り消しを上書きする)
@@ -749,5 +749,56 @@ describe("時刻の境界", () => {
     expect(at(PENDING_MAX_AGE_MS + 1)).toBe("halt");
     expect(at(-5 * 60 * 1000)).toBe("resend");
     expect(at(-5 * 60 * 1000 - 1)).toBe("halt");
+  });
+});
+
+// ---- Codex のレビュー 12 の反例 ----
+describe("復旧の見比べは、実際の同期と同じところまで進める", () => {
+  it("受け取りの次に「消えた設定の確認」で止まる場合は、「送る」と表示せず、その理由で止まると示す。実際の動きと一致する", () => {
+    const { server, A, B, a, b } = twoDevices();
+    const d0 = JSON.parse(A.local!.text); d0.futureSetting = 1; A.local = content(JSON.stringify(d0, null, 2) + "\n");
+    A.sync(); B.sync();
+    A.edit((p) => updateBlock(p, a, { title: "R1" })); A.sync();
+    B.step("after-effect");                                              // B は R1 を書いた直後に落ちた
+    const d1 = JSON.parse(B.local!.text); delete d1.futureSetting; d1.blocks[b].title = "別の編集"; B.local = content(JSON.stringify(d1, null, 2) + "\n");
+    A.edit((p) => updateBlock(p, a, { description: "R2" })); A.sync();     // サーバーはさらに進んだ
+    const input = { state: B.state, local: B.local, remote: server.remote(), bindingId: "B", baseText: null, now: NOW, hashOf };
+    const preview = previewRecovery(input, (hash) => B.objects.get(hash) ?? null);
+    expect(preview.applied.next).toBe("protected-deletion");
+    expect(preview.applied.remoteChanges).toEqual([]);
+    expect(preview.applied.localChanges).toEqual(["ボックス「R1」の description が変わる"]);
+    // 実際に「反映済み」を選んで進めても、同じところで止まり、何も送らない
+    const head = server.head!.revision;
+    B.state = pullRecovered(B.state, { token: recoveryToken(B.state, B.local!.hash, remoteMark(server.remote()), hashOf), applied: true }, B.local!.hash, remoteMark(server.remote()), hashOf);
+    const actual = B.sync();
+    expect(actual.kind === "halt" && actual.halt.reason).toBe("protected-deletion");
+    expect(server.head!.revision).toBe(head);
+    expect(B.project.blocks[a].description).toBe("R2");
+  });
+  it("送るかどうかは、違いの一覧の件数ではなく判断で決める (記録だけが違う場合も「送る」と示す)", () => {
+    const { server, A, B, a } = twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "新" })); A.sync();
+    B.step("after-effect");
+    // 手元の違いは、一覧に出さない項目 (ログ) だけ
+    const d = JSON.parse(B.local!.text); d.log.push({ id: "x1", at: NOW.toISOString(), actor: "human", kind: "note", message: "記録だけ" }); B.local = content(JSON.stringify(d, null, 2) + "\n");
+    const preview = previewRecovery({ state: B.state, local: B.local, remote: server.remote(), bindingId: "B", baseText: null, now: NOW, hashOf }, (hash) => B.objects.get(hash) ?? null);
+    expect(preview.applied).toEqual({ next: "push", localChanges: [], remoteChanges: [] });
+  });
+});
+
+describe("初回の選択の印", () => {
+  it("同じ手元・同じ版の番号でも、別の計画 (結び付けの印が違う)・別の中身・別の世代には使えない", () => {
+    const { p, a } = plan();
+    const local = content(textOf(updateBlock(p, a, { title: "手元" })));
+    const seen = content(textOf(updateBlock(p, a, { title: "見た計画" }))), unseen = content(textOf(updateBlock(p, a, { title: "見ていない計画" })));
+    const ask = (bindingId: string, remote: Content, epoch = "e1", firstLink?: { token: string; prefer: "local" | "remote" }) =>
+      decide({ state: { generation: 0, epoch: null, base: null, pending: null }, local, remote: { kind: "present", epoch, revision: "e1.1", content: remote }, bindingId, baseText: null, now: NOW, hashOf, firstLink });
+    const halted = ask("dir:seen", seen);
+    if (halted.kind !== "halt" || halted.halt.reason !== "first-link") throw new Error("expected first-link");
+    const choice = { token: halted.halt.token, prefer: "local" as const };
+    expect(ask("dir:seen", seen, "e1", choice).kind).toBe("push");
+    for (const other of [ask("dir:unseen", unseen, "e1", choice), ask("dir:seen", unseen, "e1", choice), ask("dir:seen", seen, "e2", choice)]) {
+      expect(other.kind === "halt" && other.halt.reason).toBe("first-link");
+    }
   });
 });

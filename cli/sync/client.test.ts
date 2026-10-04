@@ -144,7 +144,7 @@ describe("途中で失敗したときの再開", () => {
     // 止まった結果には、選ぶための印と、2 つの続け方それぞれの「選んだ後の結果」が付いている
     if (stopped.status !== "halted" || !stopped.recovery) throw new Error("expected a recovery preview");
     expect(stopped.recovery.token).toBe(recoveryToken(B.store().read()!, createHash("sha256").update(before).digest("hex"), { epoch: "e1", revision: server.project("plan-1")!.head!.revision }));
-    expect(stopped.recovery.applied).toMatchObject({ next: "pull", localChanges: ["ボックス「A」の title が変わる"], remoteChanges: ["ボックス「B」の description が変わる"] });
+    expect(stopped.recovery.applied).toMatchObject({ next: "push", localChanges: ["ボックス「A」の title が変わる"], remoteChanges: ["ボックス「B」の description が変わる"] });
     expect(stopped.recovery.notApplied.next).toBe("push");
     expect(await B.sync({ recover: { token: stopped.recovery.token, applied: true } })).toMatchObject({ status: "synced" });
     await A.sync();
@@ -472,4 +472,123 @@ describe("複数のプロセスを同時に動かす", () => {
     expect(bindingsOf(X.file).bindings.map((b) => b.remoteId)).toEqual(["x-plan"]);
     expect(bindingsOf(Y.file).bindings.map((b) => b.remoteId)).toEqual(["y-plan"]);
   }, 60_000);
+});
+
+// ---- Codex のレビュー 12 の反例 (V01〜V06) ----
+describe("初回の選択と結び付け", () => {
+  /** サーバーに計画 1 つ (ID = id) を置く。中身は題名だけ違う */
+  const seed = async (id: string, title: string) => {
+    const d = new Device("seed-" + id);
+    let p = createProject("初回の選択の試験"); const pj = defaultTaskParent(p); p = addBlock(p, { parentId: pj, title }).project;
+    d.write(fromJSON(toJSON(p)));
+    expect(await d.sync({ remoteId: id })).toMatchObject({ status: "synced" });
+    return d;
+  };
+  it("ある計画を見て得た選択の印は、別の計画には使えない (見ていない計画を上書きしない)", async () => {
+    await seed("seen", "見た計画"); await seed("unseen", "見ていない計画");
+    const C = new Device("c"); C.write(fromJSON(toJSON(createProject("手元の計画"))));
+    const r = await C.sync({ remoteId: "seen" });
+    if (r.status !== "halted" || r.halt.reason !== "first-link") throw new Error("expected first-link");
+    const before = server.project("unseen")!.head!.text;
+    const wrong = await C.sync({ remoteId: "unseen", firstLink: { token: r.halt.token, prefer: "local" } });
+    expect(wrong.status).toBe("halted");
+    expect(server.project("unseen")!.head!.text).toBe(before);
+  });
+  it("選択つきで実行したのに、選択待ちの状態に当たらなかったら (対象の指定が抜けた)、新しい計画を作らずに止まる", async () => {
+    await seed("seen", "見た計画");
+    const C = new Device("c"); C.write(fromJSON(toJSON(createProject("手元の計画"))));
+    const r = await C.sync({ remoteId: "seen" });
+    if (r.status !== "halted" || r.halt.reason !== "first-link") throw new Error("expected first-link");
+    expect(r.target).toMatchObject({ server: server.url, remoteId: "seen" });   // 表示するコマンドに付ける対象
+    const count = server.projects.size;
+    const missed = await C.sync({ firstLink: { token: r.halt.token, prefer: "remote" } }); // --project が抜けた
+    expect(missed).toMatchObject({ status: "halted", halt: { reason: "choice-not-applied", choice: "firstLink" } });
+    expect(server.projects.size).toBe(count);
+    expect(fromJSON(readFileSync(C.file, "utf8")).name).toBe("手元の計画");
+  });
+  it("計画の ID が違う初回の受け取りの途中で、手元が別の計画に書き換えられたら、書かずに、初回の選択に戻る", async () => {
+    await seed("seen", "見た計画");
+    const C = new Device("c"); C.write(fromJSON(toJSON(createProject("手元の計画"))));
+    const r = await C.sync({ remoteId: "seen" });
+    if (r.status !== "halted" || r.halt.reason !== "first-link") throw new Error("expected first-link");
+    // 受け取ると決めた直後 (手元に書く前) に、手元のファイルが別の計画に書き換えられた → 前提が違うので、書き込みは行われない
+    await C.sync({ remoteId: "seen", firstLink: { token: r.halt.token, prefer: "remote" }, onStep: (kind) => {
+      if (kind === "pull") C.write(fromJSON(toJSON(createProject("割り込んだ別の計画"))));
+    } });
+    expect(fromJSON(readFileSync(C.file, "utf8")).name).toBe("割り込んだ別の計画");   // 上書きしていない
+    expect(C.store().read()?.binding.pendingPlanId).toBeUndefined();              // 仮の ID は捨てられている
+    // 結び付けは成立していないので、今の手元の計画について、改めて初回の選択になる
+    const again = await C.sync({ remoteId: "seen" });
+    expect(again.status === "halted" && again.halt.reason).toBe("first-link");
+  });
+  it("受け取りを記録した後・書く前に落ちた場合も、「反映されていない」を選べば、結び付けの ID は元のままで、初回の選択に戻る", async () => {
+    await seed("seen", "見た計画");
+    const C = new Device("c"); C.write(fromJSON(toJSON(createProject("手元の計画"))));
+    const mine = fromJSON(readFileSync(C.file, "utf8")).id;
+    const r = await C.sync({ remoteId: "seen" });
+    if (r.status !== "halted" || r.halt.reason !== "first-link") throw new Error("expected first-link");
+    // 記録の直後に落ちたことにする: 状態の置き場を、受け取りを記録した直後の形にする (書き込みは行われていない)
+    const store = C.store(); const unlock = store.lock()!;
+    const remoteText = server.project("seen")!.head!.text;
+    const hash = store.putObject(remoteText);
+    store.write({ version: 1, generation: 1, epoch: "e1", base: null
+    , pending: { kind: "pull", hash, expectedLocal: createHash("sha256").update(readFileSync(C.file, "utf8")).digest("hex"), remote: { hash, revision: "e1.1" }, at: new Date().toISOString() }
+    , binding: { file: C.file, server: server.url, remoteId: "seen", planId: mine, pendingPlanId: fromJSON(remoteText).id } }, null);
+    unlock();
+    const stopped = await C.sync();
+    if (stopped.status !== "halted" || !stopped.recovery) throw new Error("expected a recovery halt");
+    expect(stopped.recovery.notApplied.next).toBe("first-link");           // 見比べの表示と…
+    const after = await C.sync({ recover: { token: stopped.recovery.token, applied: false } });
+    expect(after.status === "halted" && after.halt.reason).toBe("first-link"); // …実際の動きが一致する
+    expect(C.store().read()!.binding).toMatchObject({ planId: mine });
+    expect(C.store().read()!.binding.pendingPlanId).toBeUndefined();
+    // 「反映済み」を選んだ場合は、書く予定だった計画の ID が確定する (こちらは手元が違うので、次の確認で止まる)
+  });
+  it("同じファイルを、別々のサーバーへ同時に結び付けようとしても、成立するのは片方だけ", async () => {
+    const second = new TestSyncServer(); const url = await second.start();
+    try {
+      const C = new Device("c"); C.write(fromJSON(toJSON(createProject("手元の計画"))));
+      process.env.BOXGLOW_CONFIG_DIR = C.config;
+      // 片方の最初の取得を待たせている間に、もう片方を始める
+      let release: () => void = () => {};
+      const gate = new Promise<void>((done) => { release = done; });
+      const slowFetch = (async (...args: Parameters<typeof fetch>) => { await gate; return fetch(...args); }) as typeof fetch;
+      const first = syncOnce({ file: C.file, server: server.url, fetch: slowFetch });
+      const other = await syncOnce({ file: C.file, server: url });
+      expect(other).toEqual({ status: "busy", what: "sync" });              // 同じファイルの同期が動いている間は、進めない
+      release();
+      expect(await first).toMatchObject({ status: "synced" });
+      expect(await syncOnce({ file: C.file, server: url })).toMatchObject({ status: "halted", halt: { reason: "bound-elsewhere" } });
+      expect(bindingsOf(C.file).bindings.map((b) => b.server)).toEqual([server.url]);
+      expect(second.puts).toBe(0);
+    } finally { await second.stop(); }
+  });
+  it("状態を読めない結び付けがあるときは、別のサーバーを指定しても、新しい結び付けを作らない", async () => {
+    const { A } = await twoDevices();
+    writeFileSync(join(A.store().dir, "state.json"), "{ 壊れた");
+    const second = new TestSyncServer(); const url = await second.start();
+    try {
+      process.env.BOXGLOW_CONFIG_DIR = A.config;
+      const r = await syncOnce({ file: A.file, server: url });
+      expect(r).toMatchObject({ status: "halted", halt: { reason: "unreadable-bindings" } });
+      expect(second.puts).toBe(0);
+    } finally { await second.stop(); }
+  });
+  it("設定を戻した後で別の理由で止まったときは、「何も変えていない」とは報告しない (手元の編集を数える)", async () => {
+    const { A, B, a } = await twoDevices();
+    const withSetting = JSON.parse(readFileSync(A.file, "utf8")); withSetting.futureSetting = 1;
+    writeFileSync(A.file, JSON.stringify(withSetting, null, 2) + "\n");
+    await A.sync(); await B.sync();
+    const dropped = JSON.parse(readFileSync(B.file, "utf8")); delete dropped.futureSetting; dropped.blocks[a].title = "B の案";
+    writeFileSync(B.file, JSON.stringify(dropped, null, 2) + "\n");
+    const r = await B.sync();
+    if (r.status !== "halted" || r.halt.reason !== "protected-deletion") throw new Error("expected a halt");
+    // 設定を戻す実行の途中で、サーバーが競合する値へ進む
+    let moved = false;
+    const result = await B.sync({ restoreDeletion: r.halt.approval, onStep: (kind) => {
+      if (kind === "edit-local" && !moved) { moved = true; const d = JSON.parse(server.project("plan-1")!.head!.text); d.blocks[a].title = "サーバーの案"; server.put("plan-1", JSON.stringify(d, null, 2) + "\n", { "x-boxglow-op": "race", "x-boxglow-epoch": "e1", "if-match": `"${server.project("plan-1")!.head!.revision}"` }); }
+    } });
+    expect(result).toMatchObject({ status: "halted", halt: { reason: "conflicts" }, edited: 1, pulled: 0, pushed: 0 });
+    expect(JSON.parse(readFileSync(B.file, "utf8")).futureSetting).toBe(1);
+  });
 });
