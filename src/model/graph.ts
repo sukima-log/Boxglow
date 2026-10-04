@@ -1017,6 +1017,16 @@ export function toJSON(p: Project): string {
 }
 
 /**
+ * fromJSON が意味を知っている、計画の直下の項目の名前。
+ * ここに無い項目は「この版が知らない項目」として、読み込んだ値のまま持ち続ける (検証も変換もしない)。
+ * updatedAt / version は、以前の版がファイルに書いていた項目で、今は持たない (toJSON でも書かない)
+ */
+export const KNOWN_PROJECT_KEYS: ReadonlySet<string> = new Set([
+  "schemaVersion", "id", "name", "description", "createdAt", "visibility", "members", "blocks", "ports", "edges", "terminals"
+, "log", "agents", "nextKey", "inputGroups", "contextGuard", "workflowPolicy", "focusBlockId", "handoffs", "lang", "updatedAt", "version"
+]);
+
+/**
  * JSON 文字列から読み込む (形式の最低限の検証つき)
  * Output: Project。形式が合わなければ例外 (日本語のメッセージ)
  */
@@ -1055,6 +1065,12 @@ export function fromJSON(text: string): Project {
   if (typeof d.focusBlockId === "string" && q.blocks[d.focusBlockId]) q.focusBlockId = d.focusBlockId;
   if (d.handoffs && typeof d.handoffs === "object") q.handoffs = d.handoffs;
   if (d.lang === "en" || d.lang === "ja") q.lang = d.lang; // CLI の文言の言語 (無ければ ja 扱い)
+  // この版が知らない直下の項目 (新しい版が足した設定など) は、そのまま持ち続ける。
+  // 落とすと、古い版で一度保存しただけで新しい版の設定が消え、Git や同期でほかの人・端末にまで配られてしまう
+  // (ボックス・入出力・線の中の知らない項目は、d.blocks などを丸ごと引き継いでいるので、もともと残る)
+  for (const [key, value] of Object.entries(d as Record<string, unknown>)) {
+    if (!KNOWN_PROJECT_KEYS.has(key) && !(key in q)) (q as unknown as Record<string, unknown>)[key] = value;
+  }
   // 無いグループを指している入力は既定の入力ノードに戻す
   for (const x of Object.values(q.ports)) if (x.groupId && !q.inputGroups!.some((gp) => gp.id === x.groupId)) delete x.groupId;
   // 版 1 (活動・判断の項目が無い) からの移行: 足りない項目を補う

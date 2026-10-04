@@ -10,6 +10,7 @@ import { startServe } from "./serve";
 import { commitFile, describeLock, FileConflict, inspectLock, lockTokenOf, removeLock, revisionOf, sleepSync } from "./file-store";
 import { contextReceipt, isCurrentToken, requireContext } from "./context";
 import { setupAgent } from "./setup-agent";
+import { projectProblem } from "../src/model/validate-file";
 import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
 import { resumeSummary, resumeReport } from "../src/model/resume";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -757,6 +758,10 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       if (!ours || !theirs) throw new Error(t("ours / theirs が読めません"));
       const r = mergeProjects(base, ours, theirs);
       let q = r.project;
+      // 競合が 0 件でも、合わせた結果が壊れた計画になることがある (互いを相手の中へ移した、など)。
+      // 壊れた計画は書かずに、自分の側のファイルをそのまま残して失敗にする (Git は競合として扱う)
+      const problem = projectProblem(q);
+      if (problem) throw new Error(t("マージした結果が計画として正しくないため、書き込みませんでした (自分の側のファイルはそのままです): {problem}", { problem }));
       // 両側で同じ項目を変えていた箇所は、相手の値をログに残す (後から見直せるように)
       // 片方が削除・片方が変更の箇所は、変更された側を残したことを記録する (ボックスの中身を丸ごとログに書くと長いので、場所だけ)
       const kept = r.conflicts.filter((c) => !c.automatic && (c.ours === undefined || c.theirs === undefined));

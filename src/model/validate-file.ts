@@ -62,3 +62,20 @@ export function validateProjectText(text: string): Project {
   }
   return fromJSON(text);
 }
+
+/**
+ * 計画 (読み込んだ後のオブジェクト) が、保存してよい形かを確かめる
+ * 統合 (mergeProjects) の結果は、競合が 0 件でも壊れた計画になることがある
+ * (例: 片方が A を B の中へ、もう片方が B を A の中へ移した → 別々の項目の変更として合わさり、親子が循環する)。
+ * 統合の結果を書く前に、これで確かめる
+ * Input : project = 計画
+ * Output: 問題が無ければ null。あれば、その説明の文 (今の言語)
+ */
+export function projectProblem(project: Project): string | null {
+  try {
+    validateProjectText(JSON.stringify(project));
+    return null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}

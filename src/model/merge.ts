@@ -160,6 +160,16 @@ function restoreDeleted(out: Dict, deleter: Project, keeper: Project, explicitly
  *         choices = 競合した項目ごとの選択 (省略時は既定: ふつうは ours、削除と変更がぶつかった項目は変更された側)
  * Output: { project, merged, conflicts }
  */
+/**
+ * mergeProjects が、名前を挙げて個別に合わせている直下の項目 (下の「知らない項目」の処理からは除く)。
+ * schemaVersion / id / createdAt は ours のまま、updatedAt / version は今は持たない項目
+ */
+const MERGED_ELSEWHERE: ReadonlySet<string> = new Set([
+  "name", "description", "visibility", "terminals", "contextGuard", "workflowPolicy", "focusBlockId", "lang"
+, "blocks", "ports", "edges", "agents", "handoffs", "members", "inputGroups", "log", "nextKey"
+, "schemaVersion", "id", "createdAt", "updatedAt", "version"
+]);
+
 export function mergeProjects(base: Project | null, ours: Project, theirs: Project, choices: ConflictChoices = {}): MergeResult {
   const r: MergeContext = { project: ours, merged: 0, conflicts: [], choices };
   const b = (base ?? undefined) as unknown as Dict | undefined;
@@ -167,7 +177,18 @@ export function mergeProjects(base: Project | null, ours: Project, theirs: Proje
   const th = theirs as unknown as Dict; // (文言の t() と名前が重ならないよう th)
   const out: Dict = { ...o };
   // 単純な値
-  for (const k of ["name", "description", "visibility", "terminals", "contextGuard", "workflowPolicy", "focusBlockId"]) out[k] = pick([k], b?.[k], o[k], th[k], r);
+  // (lang が漏れていたので、相手だけが言語を変えた場合に取り込まれなかった。ここに足した)
+  for (const k of ["name", "description", "visibility", "terminals", "contextGuard", "workflowPolicy", "focusBlockId", "lang"]) {
+    const value = pick([k], b?.[k], o[k], th[k], r);
+    if (value !== undefined) out[k] = value; else delete out[k];
+  }
+  // この版が知らない直下の項目 (新しい版が足した設定など) も、丸ごと 1 つの値として 3 方向で合わせる。
+  // 名前を列挙した項目だけを合わせていると、知らない項目は ours の値のままになり、相手の変更が黙って失われる
+  for (const k of new Set([...Object.keys(o), ...Object.keys(th), ...Object.keys(b ?? {})])) {
+    if (MERGED_ELSEWHERE.has(k)) continue;
+    const value = pick([k], b?.[k], o[k], th[k], r);
+    if (value !== undefined) out[k] = value; else delete out[k];
+  }
   // id の辞書
   for (const k of ["blocks", "ports", "edges", "agents", "handoffs"]) {
     out[k] = mergeMap([k], b?.[k] as Record<string, Dict> | undefined, (o[k] ?? {}) as Record<string, Dict>, (th[k] ?? {}) as Record<string, Dict>, r);

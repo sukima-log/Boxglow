@@ -42,6 +42,7 @@ export const cli: Record<string, string> = {
 , "整列: 「{title}」の中": "Layout: inside \"{title}\""
 , "整列: 全体": "Layout: everything"
 , "merge <base> <ours> <theirs> の 3 つを指定してください": "Specify all three: merge <base> <ours> <theirs>"
+, "マージした結果が計画として正しくないため、書き込みませんでした (自分の側のファイルはそのままです): {problem}": "The merged result is not a valid plan, so nothing was written (your side of the file is unchanged): {problem}"
 , "ours / theirs が読めません": "Cannot read ours / theirs"
 , "マージで両側が変更: {path} (採用: {ours} / 相手: {theirs})": "Changed on both sides in merge: {path} (kept: {ours} / theirs: {theirs})"
 , "マージ: 相手の変更 {count} 件を取り込み": "Merge: took {count} change(s) from theirs"

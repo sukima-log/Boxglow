@@ -3,8 +3,13 @@
  * 片方がボックスを削除し、もう片方が変更していたら、変更されたボックスを残して記録する
  */
 import { describe, expect, it } from "vitest";
-import { addBlock, createProject, defaultTaskParent, portsOf, updateBlock, removeBlock, fromJSON, toJSON } from "./graph";
+import { addBlock, createProject, defaultTaskParent, portsOf, updateBlock, removeBlock, fromJSON, toJSON, moveBlockToParent } from "./graph";
 import { mergeProjects } from "./merge";
+import { projectProblem } from "./validate-file";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 
 function base() {
   let p = createProject("team");
@@ -176,4 +181,90 @@ it("keeps handoff text, author and timestamp together", () => {
   const conflicts = mergeProjects(p, ours, theirs).conflicts;
   expect(conflicts).toHaveLength(1);
   expect(mergeProjects(p, ours, theirs, { [conflicts[0].id]: "theirs" }).project.handoffs![a]).toEqual(theirs.handoffs![a]);
+});
+
+// 新しい版が足した項目を、古い版が「知らない項目」として落とさないこと。
+// 落とすと、古い版で一度保存しただけで設定が消え、Git や同期でほかの人・端末にまで配られる (0.5.0 で起きた制限)
+describe("この版が知らない項目を保つ", () => {
+  /** 計画の文字列に、直下とボックスの中の「知らない項目」を足す */
+  const withUnknown = (text: string, blockId: string, top: unknown, inBlock: unknown): string => {
+    const d = JSON.parse(text);
+    d.futureSetting = top;
+    d.blocks[blockId].futureField = inBlock;
+    return JSON.stringify(d);
+  };
+  it("読み込み → 書き出しで、直下の項目もボックスの中の項目も残る。ボックスを更新しても残る", () => {
+    const { p, a } = base();
+    const loaded = fromJSON(withUnknown(toJSON(p), a, { mode: "strict", list: [1, 2] }, "keep me"));
+    const saved = JSON.parse(toJSON(updateBlock(loaded, a, { title: "A 改" })));
+    expect(saved.futureSetting).toEqual({ mode: "strict", list: [1, 2] });
+    expect(saved.blocks[a].futureField).toBe("keep me");
+    expect(saved.blocks[a].title).toBe("A 改");
+    // 今は持たない古い項目 (updatedAt / version) は、今までどおり書かない
+    expect(toJSON(fromJSON(JSON.stringify({ ...JSON.parse(toJSON(p)), updatedAt: "x", version: 3 })))).not.toContain("updatedAt");
+  });
+  it("知っている項目に不正な値が入っていても、知らない項目として素通ししない (今までどおり無視する)", () => {
+    const { p } = base();
+    const loaded = fromJSON(JSON.stringify({ ...JSON.parse(toJSON(p)), lang: "fr", contextGuard: "yes" }));
+    expect(loaded.lang).toBeUndefined();
+    expect(loaded.contextGuard).toBeUndefined();
+  });
+  it("統合: 相手だけが変えた「知らない直下の項目」と言語 (lang) を取り込む", () => {
+    const { p, a } = base();
+    const before = fromJSON(withUnknown(toJSON({ ...p, lang: "ja" }), a, 1, "x"));
+    const theirs = fromJSON(withUnknown(toJSON({ ...p, lang: "en" }), a, 2, "y"));
+    const r = mergeProjects(before, before, theirs);
+    const out = r.project as unknown as Record<string, unknown>;
+    expect(out.futureSetting).toBe(2);
+    expect(r.project.lang).toBe("en");
+    expect((r.project.blocks[a] as unknown as Record<string, unknown>).futureField).toBe("y");
+    expect(r.conflicts).toEqual([]);
+  });
+  it("統合: 知らない直下の項目を、両方が別の値にしたら競合として出す。片方が消して片方がそのままなら消える", () => {
+    const { p, a } = base();
+    const before = fromJSON(withUnknown(toJSON(p), a, 1, "x"));
+    const ours = fromJSON(withUnknown(toJSON(p), a, 2, "x"));
+    const theirs = fromJSON(withUnknown(toJSON(p), a, 3, "x"));
+    const r = mergeProjects(before, ours, theirs);
+    expect(r.conflicts.map((c) => c.path)).toEqual(["futureSetting"]);
+    expect((r.project as unknown as Record<string, unknown>).futureSetting).toBe(2); // 既定は自分の側
+    expect((mergeProjects(before, ours, theirs, { [JSON.stringify(["futureSetting"])]: "theirs" }).project as unknown as Record<string, unknown>).futureSetting).toBe(3);
+    // 相手が項目を消し、自分は変えていない → 消える
+    const removed = fromJSON(toJSON(p));
+    expect("futureSetting" in (mergeProjects(before, before, removed).project as unknown as Record<string, unknown>)).toBe(false);
+  });
+});
+
+// 統合の結果は、競合が 0 件でも壊れた計画になることがある。書く前に確かめて、壊れていれば書かない
+describe("統合した結果の検査", () => {
+  /** 片方が A を B の中へ、もう片方が B を A の中へ移した計画を作る (それぞれは正しい計画) */
+  const crossMoves = () => {
+    const { p, a, b } = base();
+    const ours = moveBlockToParent(p, a, b, { x: 40, y: 80 });
+    const theirs = moveBlockToParent(p, b, a, { x: 40, y: 80 });
+    return { p, ours, theirs };
+  };
+  it("互いを相手の中へ移した変更は、競合 0 件で合わさるが、親子が循環するので問題として検出する", () => {
+    const { p, ours, theirs } = crossMoves();
+    expect(projectProblem(ours)).toBeNull();
+    expect(projectProblem(theirs)).toBeNull();
+    const r = mergeProjects(p, ours, theirs);
+    expect(r.conflicts.filter((c) => !c.automatic)).toEqual([]);
+    expect(projectProblem(r.project)).not.toBeNull();
+  });
+  it("CLI の merge (Git 用) は、壊れた結果を書かずに失敗し、自分の側のファイルをそのまま残す", () => {
+    const { p, ours, theirs } = crossMoves();
+    const dir = mkdtempSync(join(tmpdir(), "boxglow-merge-"));
+    try {
+      const files = { base: join(dir, "base.json"), ours: join(dir, "ours.json"), theirs: join(dir, "theirs.json") };
+      writeFileSync(files.base, toJSON(p)); writeFileSync(files.ours, toJSON(ours)); writeFileSync(files.theirs, toJSON(theirs));
+      const before = readFileSync(files.ours, "utf8");
+      const run = spawnSync(process.execPath, ["bin/boxglow.js", "merge", files.base, files.ours, files.theirs, "--lang", "ja"], { encoding: "utf8" });
+      expect(run.status).toBe(1);
+      expect(run.stderr).toContain("書き込みませんでした");
+      expect(readFileSync(files.ours, "utf8")).toBe(before);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
