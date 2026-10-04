@@ -50,6 +50,14 @@ export type ClientHalt =
 
 /** サーバーとの通信の失敗 (やりかけの操作は残したまま。後でやり直せる) */
 export class SyncNetworkError extends Error {}
+/** サーバーが利用者を確かめられなかった (トークンが無い・無効・権限が無い)。待っても直らないので、通信の失敗とは分ける */
+export class SyncAuthError extends SyncNetworkError {
+  constructor(readonly status: number) { super(`not authorized (${status})`); }
+}
+/** 応答の状態コードが「利用者を確かめられない」なら、その旨の例外を投げる */
+function rejectUnauthorized(res: Response): void {
+  if (res.status === 401 || res.status === 403) throw new SyncAuthError(res.status);
+}
 
 /** 同期の指定 */
 export interface SyncOptions {
@@ -94,6 +102,7 @@ async function fetchRemote(o: { server: string; remoteId: string; token?: string
   try {
     res = await o.fetch(`${o.server}/v1/projects/${encodeURIComponent(o.remoteId)}`, { headers: headers(o.token) });
   } catch (e) { throw new SyncNetworkError(String(e)); }
+  rejectUnauthorized(res);
   const epoch = res.headers.get("x-boxglow-epoch");
   if (!epoch) throw new SyncNetworkError(`unexpected response ${res.status} (no epoch)`);
   if (res.status === 404) return { kind: "absent", epoch };
@@ -113,6 +122,7 @@ async function fetchRemote(o: { server: string; remoteId: string; token?: string
 export async function fetchHeads(o: { server: string; token?: string; fetch?: typeof fetch }): Promise<{ epoch: string; heads: Map<string, { revision: string | null; deleted: boolean }> }> {
   let res: Response;
   try { res = await (o.fetch ?? fetch)(`${normalizeServer(o.server)}/v1/projects`, { headers: headers(o.token) }); } catch (e) { throw new SyncNetworkError(String(e)); }
+  rejectUnauthorized(res);
   const epoch = res.headers.get("x-boxglow-epoch");
   if (res.status !== 200 || !epoch) throw new SyncNetworkError(`unexpected response ${res.status}`);
   const list = await res.json() as { id: string; revision: string | null; deleted: boolean }[];
@@ -147,6 +157,7 @@ async function sendPush(o: { server: string; remoteId: string; token?: string; f
     , body: text
     });
   } catch (e) { throw new SyncNetworkError(String(e)); }
+  rejectUnauthorized(res);
   if (res.status === 200 || res.status === 201) {
     const revision = unquote(res.headers.get("etag"));
     if (!revision) throw new SyncNetworkError("no ETag");

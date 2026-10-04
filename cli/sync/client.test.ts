@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addBlock, createProject, defaultTaskParent, fromJSON, toJSON, updateBlock } from "../../src/model/graph";
 import type { Project } from "../../src/model/types";
-import { recoveryToken, syncOnce, SyncNetworkError, type SyncOptions, type SyncResult } from "./client";
+import { recoveryToken, syncOnce, SyncAuthError, SyncNetworkError, type SyncOptions, type SyncResult } from "./client";
 import { bindingDir, bindingsOf, StateStore, SyncStateUnreadable } from "./state-store";
 import { TestSyncServer } from "./test-server";
 
@@ -592,3 +592,15 @@ describe("初回の選択と結び付け", () => {
     expect(JSON.parse(readFileSync(B.file, "utf8")).futureSetting).toBe(1);
   });
 });
+
+describe("利用者を確かめられないとき", () => {
+  it("サーバーが 401 を返したら、通信の失敗とは別の例外にする (待っても直らないので、案内を分ける)。やりかけの操作は残る", async () => {
+    const { A, a } = await twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "A 改" }));
+    const denied = (async () => new Response("{}", { status: 401, headers: { "x-boxglow-epoch": "e1" } })) as typeof fetch;
+    await expect(A.sync({ fetch: denied })).rejects.toBeInstanceOf(SyncAuthError);
+    expect(A.project.blocks[a].title).toBe("A 改");
+    expect(await A.sync()).toMatchObject({ status: "synced", pushed: 1 });
+  });
+});
+

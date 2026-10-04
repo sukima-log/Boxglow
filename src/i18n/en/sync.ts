@@ -86,4 +86,5 @@ export const sync: Record<string, string> = {
   "同期の状態を読めないフォルダがあるため、この計画がすでに結び付いているかを確かめられません。新しい結び付けは作りません (フォルダは消さずに、中身を確かめてください): {list}": "Some sync state folders cannot be read, so it cannot be verified whether this plan is already bound. No new binding is created (do not delete the folders; check their content): {list}",
   "--link の選択は、今の状態には当てはまりません (同期の対象が、選択を表示したときと違う可能性があります)。何もしていません。表示されたコマンドを、--server・--project・--file を付けたまま実行してください": "The --link choice does not apply to the current state (the sync target may differ from when the choice was shown). Nothing was done. Run the command as shown, keeping --server, --project and --file",
   "--resolve の選択は、今の状態には当てはまりません (競合がもう無い、または対象が違います)。何もしていません。boxglow sync でもう一度確かめてください": "The --resolve choice does not apply to the current state (the conflict is gone, or the target differs). Nothing was done. Check again with boxglow sync",
+  "サーバーが利用者を確かめられませんでした (トークンが無い、または無効です)。環境変数 BOXGLOW_TOKEN を確かめてください。やりかけの操作は残してあります": "The server could not verify who you are (the token is missing or invalid). Check the BOXGLOW_TOKEN environment variable. The unfinished operation is kept",
 };

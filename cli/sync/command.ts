@@ -14,7 +14,7 @@
  */
 import { t } from "../../src/i18n/core";
 import { readFileSync } from "node:fs";
-import { syncOnce, SyncNetworkError, type SyncResult } from "./client";
+import { syncOnce, SyncAuthError, SyncNetworkError, type SyncResult } from "./client";
 import { bindingsOf, hashOf, SyncStateUnreadable } from "./state-store";
 import { bindingsFor, lockWatch, SyncWatcher, type WatchEvent } from "./watch";
 import type { RecoveryOutcome } from "../../src/sync/engine";
@@ -71,6 +71,7 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
     , recover: o.recover ? { token: o.recover, applied: !!o.applied } : undefined
     });
   } catch (e) {
+    if (e instanceof SyncAuthError) { out(t("サーバーが利用者を確かめられませんでした (トークンが無い、または無効です)。環境変数 BOXGLOW_TOKEN を確かめてください。やりかけの操作は残してあります")); return 1; }
     if (e instanceof SyncNetworkError) { out(t("サーバーと通信できませんでした (やりかけの操作は残してあります。もう一度 boxglow sync を実行すると、続きから進みます): {message}", { message: e.message })); return 1; }
     if (e instanceof SyncStateUnreadable) { out(t("同期の状態のファイルを読めません。自動では直しません (消すと、やりかけの操作と前回そろえた中身の記録を失います): {path} ({problem})", { path: e.path, problem: e.problem })); return 1; }
     throw e;
