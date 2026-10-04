@@ -224,12 +224,13 @@ export async function runWatchCommand(o: SyncCommandOptions, out: (text: string)
   const onEvent = (e: WatchEvent) => {
     if (e.kind === "synced") out(`[${stamp()}] ${e.file}: ` + t("同期しました (受け取り {pulled} 回、送り {pushed} 回)。サーバーの版: {revision}", { pulled: e.pulled, pushed: e.pushed, revision: e.revision ?? "-" }));
     else if (e.kind === "network") out(`[${stamp()}] ` + t("サーバーと通信できません。{seconds} 秒後にやり直します: {message}", { seconds: Math.round(e.retryInMs / 1000), message: e.message }));
-    else if (e.kind === "error") out(`[${stamp()}] ${e.file}: ` + t("この計画の同期を止めています: {message}", { message: e.message }));
+    else if (e.kind === "error") out(`[${stamp()}] ${e.file ? e.file + ": " : ""}` + t("この計画の同期を止めています: {message}", { message: e.message }));
     else { out(`[${stamp()}] ${e.file}:`); describeHalt(e.result, e.file, (line) => out("  " + line)); out("  " + t("(上のコマンドは、その計画のフォルダで、別の端末画面から実行してください。常時の同期は動かしたままで構いません)")); }
   };
   const watcher = new SyncWatcher({ server, token: process.env.BOXGLOW_TOKEN, onEvent });
-  out(t("常時の同期を始めました (Ctrl+C で終了)。サーバー: {server}、計画: {count} 件", { server, count: bindingsFor(server).length }));
-  const timer = setInterval(() => { void watcher.tick(); }, 1000);
+  out(t("常時の同期を始めました (Ctrl+C で終了)。サーバー: {server}、計画: {count} 件", { server, count: bindingsFor(server).states.length }));
+  // (tick は例外を投げない作りだが、万一の失敗でも、処理の全体を落とさない)
+  const timer = setInterval(() => { watcher.tick().catch((e) => out(`[${stamp()}] ` + String(e))); }, 1000);
   try {
     await (stop ?? new Promise<void>((done) => { process.once("SIGINT", () => done()); process.once("SIGTERM", () => done()); }));
   } finally {
@@ -237,7 +238,7 @@ export async function runWatchCommand(o: SyncCommandOptions, out: (text: string)
     lock.unlock();
   }
   // 終わるときに、まだ送っていない変更が残っている計画を知らせる
-  const unsent = bindingsFor(server).filter((s) => { try { return hashOf(readFileSync(s.binding.file, "utf8")) !== s.base?.hash; } catch { return false; } });
+  const unsent = bindingsFor(server).states.map((s) => s.state).filter((s) => { try { return hashOf(readFileSync(s.binding.file, "utf8")) !== s.base?.hash; } catch { return false; } });
   out(t("常時の同期を終えました。"));
   for (const s of unsent) out(t("まだ送っていない変更があります: {file} (boxglow sync で送れます)", { file: s.binding.file }));
   return 0;

@@ -416,11 +416,12 @@ export function baseSet(state: SyncState, epoch: string, base: Base): SyncState 
  * 止まっている「受け取りの再開」の印: やりかけの操作・状態の世代・今の手元の中身・サーバーの今の位置に結び付ける
  * (表示のあとで、状態・手元・サーバーのどれかが変わっていたら、前の印では進めない)
  * Input : state = 受け取りの操作が残っている状態, localHash = 今の手元の中身のハッシュ (ファイルが無ければ null),
- *         remote = サーバーの今の位置 (履歴の世代と最新の版), hashOf
+ *         remote = サーバーの今の位置 (履歴の世代と最新の版),
+ *         bindingId = 結び付けの印 (中身・日時・世代がまったく同じでも、別の結び付けで得た印は使えないようにする), hashOf
  * Output: 印 (短い文字列)
  */
-export function recoveryToken(state: SyncState, localHash: string | null, remote: RemoteMark, hashOf: (text: string) => string): string {
-  return hashOf(JSON.stringify([state.generation, state.pending, localHash, remote.epoch, remote.revision])).slice(0, 16);
+export function recoveryToken(state: SyncState, localHash: string | null, remote: RemoteMark, bindingId: string, hashOf: (text: string) => string): string {
+  return hashOf(JSON.stringify(["recover", bindingId, state.generation, state.pending, localHash, remote.epoch, remote.revision])).slice(0, 16);
 }
 
 /** 復旧の印に入れる、サーバーの今の位置 (履歴の世代と、最新の版。計画が無ければ版は null) */
@@ -436,11 +437,11 @@ export const remoteMark = (remote: Remote): RemoteMark => ({ epoch: remote.epoch
  * Output: applied なら基準を R に進めた状態、そうでなければ基準を変えずに操作を消した状態。
  *         印が今の状態と合わなければ SyncStateError (表示のあとで変わっている。表示し直してから選んでもらう)
  */
-export function pullRecovered(state: SyncState, choice: { token: string; applied: boolean }, localHash: string | null, remote: RemoteMark, hashOf: (text: string) => string): SyncState {
+export function pullRecovered(state: SyncState, choice: { token: string; applied: boolean }, localHash: string | null, remote: RemoteMark, bindingId: string, hashOf: (text: string) => string): SyncState {
   if (state.pending?.kind !== "pull") throw new SyncStateError("no pending pull");
   // サーバーの履歴の世代が変わっているときは、人の選択があっても操作を消さない (世代の違う基準へ進めない)
   if (state.epoch !== null && remote.epoch !== state.epoch) throw new SyncStateError("the server history changed");
-  if (choice.token !== recoveryToken(state, localHash, remote, hashOf)) throw new SyncStateError("the recovery choice was made for a different state");
+  if (choice.token !== recoveryToken(state, localHash, remote, bindingId, hashOf)) throw new SyncStateError("the recovery choice was made for a different state");
   return choice.applied ? pullWritten(state, state.pending) : pullNotWritten(state, state.pending);
 }
 
@@ -487,7 +488,7 @@ export interface RecoveryOutcome {
    * どこまで進むか: "push" = 手元の変更をサーバーへ送るところまで進む, "none" = 送るものは無く、そろう,
    * それ以外 = その理由で、送る前にもう一度止まる (手元への書き込みは、止まる前に行われることがある)
    */
-  next: "push" | "none" | Halt["reason"];
+  next: "push" | "none" | Halt["reason"] | "binding-mismatch";
   /** 手元のファイルに入る変更 (手元が変わらないなら空) */
   localChanges: string[];
   /** サーバーへ送ることになる変更 (next が "push" のときだけ。一覧が空でも、記録だけの変更を送ることがある) */

@@ -21,7 +21,9 @@ import { APP_VERSION, SAVE_PROTOCOL } from "../../src/model/version";
 /** 同期の結果 */
 export type SyncResult =
   /** 手元とサーバーがそろった (pulled = 受け取って手元に書いた回数, pushed = 送って受理された回数) */
-  | { status: "synced"; pulled: number; pushed: number; edited: number; revision: string | null }
+  | { status: "synced"; pulled: number; pushed: number; edited: number; revision: string | null
+      /** 「そろった」と確かめたときの、手元の中身のハッシュ (ファイルが無ければ null)。この後でファイルが変わっていたら、その変更はまだ送られていない */
+    ; localHash: string | null }
   /**
    * 人に確かめる必要があって止まった。
    * recovery = 受け取りの再開で止まったときの、選ぶための印と、2 つの続け方それぞれの「選んだ後の結果」
@@ -31,7 +33,9 @@ export type SyncResult =
       /** 止まる前に、この実行で行ったこと (受け取って手元に書いた回数、送って受理された回数、手元だけを書き換えた回数) */
     ; pulled: number; pushed: number; edited: number
       /** 表示するコマンドに付ける、同期の対象 (サーバー・サーバー側の計画の ID・ファイル) */
-    ; target: { server: string; remoteId: string; file: string } }
+    ; target: { server: string; remoteId: string; file: string }
+      /** 止まると判断したときの、手元の中身のハッシュ (まだ読んでいなければ undefined) */
+    ; localHash?: string | null }
   /** 他の処理が動いていて、今回は進められなかった (待てば直る)。what = "sync" (他の同期の処理) / "file" (計画のファイルが書き込み中) */
   | { status: "busy"; what: "sync" | "file" };
 
@@ -88,9 +92,12 @@ export interface SyncOptions {
 }
 
 /** 止まっている「受け取りの再開」の印: やりかけの操作と、今の手元の中身に結び付ける (表示のあとで手元が変わったら、選び直しになる) */
-export function recoveryToken(state: SyncState, localHash: string | null, remote: RemoteMark): string {
-  return engineRecoveryToken(state, localHash, remote, hashOf);
+export function recoveryToken(state: SyncState, localHash: string | null, remote: RemoteMark, bindingId: string): string {
+  return engineRecoveryToken(state, localHash, remote, bindingId, hashOf);
 }
+
+/** 印に使う「結び付けの印」: 結び付けのフォルダ (サーバーの場所とファイルで決まる) と、サーバー側の計画の ID */
+export const bindingIdOf = (dir: string, remoteId: string): string => `${basename(dir)}:${remoteId}`;
 
 /**
  * サーバーの今の状態を取得する
@@ -110,7 +117,8 @@ async function fetchRemote(o: { server: string; remoteId: string; token?: string
   if (res.status !== 200) throw new SyncNetworkError(`unexpected response ${res.status}`);
   const revision = unquote(res.headers.get("etag"));
   if (!revision) throw new SyncNetworkError("no ETag");
-  const text = await res.text();
+  let text: string;
+  try { text = await res.text(); } catch (e) { throw new SyncNetworkError(`could not read the response body: ${String(e)}`); }
   return { kind: "present", epoch, revision, content: { hash: hashOf(text), text } };
 }
 
@@ -125,8 +133,17 @@ export async function fetchHeads(o: { server: string; token?: string; fetch?: ty
   rejectUnauthorized(res);
   const epoch = res.headers.get("x-boxglow-epoch");
   if (res.status !== 200 || !epoch) throw new SyncNetworkError(`unexpected response ${res.status}`);
-  const list = await res.json() as { id: string; revision: string | null; deleted: boolean }[];
-  return { epoch, heads: new Map(list.map((p) => [p.id, { revision: p.revision, deleted: !!p.deleted }])) };
+  // 本文の受信の失敗 (ヘッダの後で接続が切れた) や、形の合わない本文も、通信の失敗として扱う (呼び出し側が、間隔を置いてやり直せるように)
+  let list: unknown;
+  try { list = await res.json(); } catch (e) { throw new SyncNetworkError(`could not read the response body: ${String(e)}`); }
+  if (!Array.isArray(list)) throw new SyncNetworkError("unexpected response body (not a list)");
+  const heads = new Map<string, { revision: string | null; deleted: boolean }>();
+  for (const item of list as unknown[]) {
+    const p = item as { id?: unknown; revision?: unknown; deleted?: unknown };
+    if (typeof p?.id !== "string" || (p.revision !== null && typeof p.revision !== "string") || typeof p.deleted !== "boolean" || heads.has(p.id)) throw new SyncNetworkError("unexpected response body (bad list item)");
+    heads.set(p.id, { revision: p.revision as string | null, deleted: p.deleted });
+  }
+  return { epoch, heads };
 }
 
 /** 要求に付ける共通のヘッダ (トークン、クライアントの版と保存の取り決めの版) */
@@ -181,8 +198,10 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
   let pulled = 0, pushed = 0, edited = 0;
   // 表示するコマンドに付ける対象 (結び付けが決まったら、その ID に置き換える)
   const target = { server, remoteId: options.remoteId ?? "", file };
+  // 最後に読んだ手元の中身のハッシュ (結果に入れる。常時の同期が、「確かめた後で変わった編集」に気づくために使う)
+  let lastLocal: string | null | undefined;
   const halted = (halt: Halt | ClientHalt, extra: { recovery?: { token: string; applied: RecoveryOutcome; notApplied: RecoveryOutcome } } = {}): SyncResult =>
-    ({ status: "halted", halt, pulled, pushed, edited, target, ...extra });
+    ({ status: "halted", halt, pulled, pushed, edited, target, localHash: lastLocal, ...extra });
   // 同じファイルを扱う同期は、サーバーが違っても 1 つだけ (下の「別のサーバーに結び付いていないか」の確認と、結び付けの作成の間に割り込ませない)
   const unlockFile = lockFileSync(file);
   if (!unlockFile) return { status: "busy", what: "sync" };
@@ -215,6 +234,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       const localText = existsSync(file) ? readFileSync(file, "utf8") : null;
       const local: Content | null = localText === null ? null : { hash: hashOf(localText), text: localText };
       const planId = localText === null ? null : planIdOf(localText);
+      lastLocal = local?.hash ?? null;
       // 結び付け: 初めてなら作る (サーバー側の ID は手元で決める)。同じパスに別の計画が置かれていたら、同期しない
       const binding: Binding = stored?.binding ?? { file, server, remoteId: options.remoteId ?? randomUUID(), planId: planId ?? "" };
       // (初めての結び付けで選択待ちのあいだは、まだ状態が無いので、ここには来ない。
@@ -234,7 +254,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       // サーバーを取得してから照合する: 印は、表示したときの状態・手元・サーバーの位置に結び付いている。どれかが変わっていたら進めない
       if (state.pending?.kind === "pull" && options.recover && round === 0) {
         try {
-          const next = pullRecovered(state, options.recover, local?.hash ?? null, remoteMark(remote), hashOf);
+          const next = pullRecovered(state, options.recover, local?.hash ?? null, remoteMark(remote), bindingIdOf(store.dir, binding.remoteId), hashOf);
           save(next, options.recover.applied ? written(binding) : notWritten(binding));
           continue;
         } catch (e) {
@@ -244,7 +264,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       }
       const input = {
         // (印は、サーバーの場所・ファイル・サーバー側の計画の ID に結び付ける。ある計画を見て得た選択を、別の計画には使えない)
-        state, local, remote, bindingId: `${basename(store.dir)}:${binding.remoteId}`
+        state, local, remote, bindingId: bindingIdOf(store.dir, binding.remoteId)
       , baseText: state.base ? store.getObject(state.base.hash) : null
       , now: now(), hashOf
       , approvedDeletion: options.approvedDeletion, restoreDeletion: options.restoreDeletion
@@ -261,11 +281,19 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       }
       switch (decision.kind) {
         case "noop":
-          return { status: "synced", pulled, pushed, edited, revision: state.base?.revision ?? null };
+          return { status: "synced", pulled, pushed, edited, revision: state.base?.revision ?? null, localHash: local?.hash ?? null };
         case "halt":
           // 受け取りの再開で止まったときは、選ぶための印と、2 つの続け方それぞれの結果を添える (人に、過去の出来事を当てさせない)
           if (decision.halt.reason === "recover-pull" && remote.kind === "present") {
-            return halted(decision.halt, { recovery: { token: recoveryToken(state, local?.hash ?? null, remoteMark(remote)), ...previewRecovery(input, (hash) => store.getObject(hash)) } });
+            const preview = previewRecovery(input, (hash) => store.getObject(hash));
+            // 実行の側の確認 (計画の ID の食い違い) も、見比べに反映する。
+            // 「反映済み」を選ぶと、初めての受け取りなら仮の ID が確定し、基準ができる。そのとき手元が別の計画なら、送る前に止まる。
+            // 「反映されていない」を選んだ場合は、基準がもともと在るときだけ、結び付けの ID と手元を比べる
+            const mismatch = (id: string, baseExists: boolean): boolean => baseExists && planId !== null && id !== "" && planId !== id;
+            const stop = (outcome: RecoveryOutcome): RecoveryOutcome => ({ next: "binding-mismatch", localChanges: outcome.localChanges, remoteChanges: [] });
+            const applied = mismatch(binding.pendingPlanId ?? binding.planId, true) ? stop(preview.applied) : preview.applied;
+            const notApplied = mismatch(binding.planId, state.base !== null) ? stop(preview.notApplied) : preview.notApplied;
+            return halted(decision.halt, { recovery: { token: recoveryToken(state, local?.hash ?? null, remoteMark(remote), bindingIdOf(store.dir, binding.remoteId)), applied, notApplied } });
           }
           return halted(decision.halt);
         case "edit-local":

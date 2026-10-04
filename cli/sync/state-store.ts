@@ -61,6 +61,8 @@ export function stateProblem(value: unknown): string | null {
   if (value.epoch !== null && !text(value.epoch)) return "epoch";
   const b = value.binding;
   if (!obj(b) || !text(b.file) || !text(b.server) || !text(b.remoteId) || typeof b.planId !== "string") return "binding";
+  // 仮の ID は、初めての受け取りの操作が残っている間だけ持つ
+  if (b.pendingPlanId !== undefined && (typeof b.pendingPlanId !== "string" || !obj(value.pending) || value.pending.kind !== "pull")) return "pending plan id";
   const base = value.base;
   if (base !== null && (!obj(base) || !text(base.hash) || !text(base.revision))) return "base";
   const p = value.pending;

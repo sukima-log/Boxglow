@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addBlock, createProject, defaultTaskParent, fromJSON, toJSON, updateBlock } from "../../src/model/graph";
 import type { Project } from "../../src/model/types";
-import { recoveryToken, syncOnce, SyncAuthError, SyncNetworkError, type SyncOptions, type SyncResult } from "./client";
+import { bindingIdOf, recoveryToken, syncOnce, SyncAuthError, SyncNetworkError, type SyncOptions, type SyncResult } from "./client";
 import { bindingDir, bindingsOf, StateStore, SyncStateUnreadable } from "./state-store";
 import { TestSyncServer } from "./test-server";
 
@@ -143,7 +143,7 @@ describe("途中で失敗したときの再開", () => {
     expect(readFileSync(B.file, "utf8")).toBe(before);
     // 止まった結果には、選ぶための印と、2 つの続け方それぞれの「選んだ後の結果」が付いている
     if (stopped.status !== "halted" || !stopped.recovery) throw new Error("expected a recovery preview");
-    expect(stopped.recovery.token).toBe(recoveryToken(B.store().read()!, createHash("sha256").update(before).digest("hex"), { epoch: "e1", revision: server.project("plan-1")!.head!.revision }));
+    expect(stopped.recovery.token).toBe(recoveryToken(B.store().read()!, createHash("sha256").update(before).digest("hex"), { epoch: "e1", revision: server.project("plan-1")!.head!.revision }, bindingIdOf(B.store().dir, "plan-1")));
     expect(stopped.recovery.applied).toMatchObject({ next: "push", localChanges: ["ボックス「A」の title が変わる"], remoteChanges: ["ボックス「B」の description が変わる"] });
     expect(stopped.recovery.notApplied.next).toBe("push");
     expect(await B.sync({ recover: { token: stopped.recovery.token, applied: true } })).toMatchObject({ status: "synced" });
@@ -601,5 +601,27 @@ describe("利用者を確かめられないとき", () => {
     await expect(A.sync({ fetch: denied })).rejects.toBeInstanceOf(SyncAuthError);
     expect(A.project.blocks[a].title).toBe("A 改");
     expect(await A.sync()).toMatchObject({ status: "synced", pushed: 1 });
+  });
+});
+
+describe("復旧の見比べと、計画の ID の確認", () => {
+  it("「反映済み」を選ぶと計画の ID の食い違いで止まる場合は、見比べにもそう表示する (実際の動きと一致する)", async () => {
+    // サーバーの計画 (別の ID) を、初回の選択で採って書いた直後に落ちる → 手元を、元の計画 (自分の ID) に戻す
+    const seedDevice = new Device("seed"); seedDevice.write(fromJSON(toJSON(createProject("サーバーの計画"))));
+    await seedDevice.sync({ remoteId: "seen" });
+    const C = new Device("c"); C.write(fromJSON(toJSON(createProject("手元の計画"))));
+    const mine = readFileSync(C.file, "utf8");
+    const r = await C.sync({ remoteId: "seen" });
+    if (r.status !== "halted" || r.halt.reason !== "first-link") throw new Error("expected first-link");
+    await expect(C.sync({ remoteId: "seen", firstLink: { token: r.halt.token, prefer: "remote" }, onStep: (kind) => { if (kind === "pull:written") throw new Error("crash"); } })).rejects.toThrow("crash");
+    writeFileSync(C.file, mine);
+    const stopped = await C.sync();
+    if (stopped.status !== "halted" || !stopped.recovery) throw new Error("expected a recovery halt");
+    expect(stopped.recovery.applied.next).toBe("binding-mismatch");
+    expect(stopped.recovery.applied.remoteChanges).toEqual([]);
+    const versions = server.project("seen")!.versions.length;
+    const actual = await C.sync({ recover: { token: stopped.recovery.token, applied: true } });
+    expect(actual.status === "halted" && actual.halt.reason).toBe("binding-mismatch");
+    expect(server.project("seen")!.versions.length).toBe(versions);       // 送っていない
   });
 });
