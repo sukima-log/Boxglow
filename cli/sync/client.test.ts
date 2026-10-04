@@ -603,4 +603,3 @@ describe("利用者を確かめられないとき", () => {
     expect(await A.sync()).toMatchObject({ status: "synced", pushed: 1 });
   });
 });
-
