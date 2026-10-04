@@ -15,7 +15,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { FileBusy, lockFile } from "../file-store";
-import { fetchHeads, syncOnce, SyncNetworkError, type SyncResult } from "./client";
+import { fetchHeads, syncOnce, SyncAuthError, SyncNetworkError, type SyncResult } from "./client";
 import { bindingDir, configDir, hashOf, normalizeServer, StateStore, type Binding, type StoredState } from "./state-store";
 
 /** 手元の変更をまとめる時間 (ms): 最後の変更からこれだけ静かなら送る */
@@ -36,6 +36,8 @@ export type WatchEvent =
   | { kind: "synced"; file: string; pulled: number; pushed: number; revision: string | null }
   | { kind: "halted"; file: string; result: Extract<SyncResult, { status: "halted" }> }
   | { kind: "network"; message: string; retryInMs: number }
+  /** サーバーが利用者を確かめられない (トークンが無い・無効)。全部の計画に効くので、直るまで待つ (1 回だけ知らせる) */
+  | { kind: "auth" }
   | { kind: "error"; file: string; message: string };
 
 /** 計画 1 つ分の見張りの状態 */
@@ -202,13 +204,14 @@ export class SyncWatcher {
           if (w.checkedHash !== undefined && contentHash(w.binding.file) !== w.checkedHash && w.firstChangeAt === null) { this.markChanged(w, at); changed = true; }
         }
         this.retryMs = 0;
+        this.authNotified = false;
         this.quietPolls = changed ? 0 : this.quietPolls + 1;
         const interval = this.quietPolls >= IDLE_AFTER ? IDLE_POLL_MS : POLL_MS;
         // ばらつきを入れる (±10%)。たくさんの端末が、同じ瞬間に確かめに来ないように
         this.nextPollAt = at + interval * (0.9 + 0.2 * this.random());
       } catch (e) {
         if (!(e instanceof SyncNetworkError)) throw e;
-        this.backOff(at, e.message);
+        this.fail(at, e);
         return;
       }
     }
@@ -259,6 +262,20 @@ export class SyncWatcher {
     }
   }
 
+  /** 「利用者を確かめられない」を知らせ済みか (同じことを繰り返し知らせない) */
+  private authNotified = false;
+
+  /** 通信の失敗: やり直しの間隔を延ばす (最初 5 秒、倍々で 60 秒まで)。利用者を確かめられない場合は、1 回だけ知らせて、長い間隔で待つ */
+  private fail(at: number, e: SyncNetworkError): void {
+    if (e instanceof SyncAuthError) {
+      this.retryMs = RETRY_MAX_MS;
+      this.blockedUntil = at + this.retryMs;
+      if (!this.authNotified) { this.authNotified = true; this.options.onEvent?.({ kind: "auth" }); }
+      return;
+    }
+    this.backOff(at, e.message);
+  }
+
   /** 通信の失敗: やり直しの間隔を延ばす (最初 5 秒、倍々で 60 秒まで) */
   private backOff(at: number, message: string): void {
     this.retryMs = this.retryMs === 0 ? RETRY_MS : Math.min(this.retryMs * 2, RETRY_MAX_MS);
@@ -276,7 +293,7 @@ export class SyncWatcher {
     try {
       result = await syncOnce({ file, server: this.options.server, token: this.options.token, fetch: this.options.fetch, now: () => new Date(this.wall()) });
     } catch (e) {
-      if (e instanceof SyncNetworkError) { this.backOff(at, e.message); return false; }
+      if (e instanceof SyncNetworkError) { this.fail(at, e); return false; }
       // 状態が読めないなど: この計画は止めておき、ほかの計画は続ける
       w.halted = { hash: contentHash(file), head: w.head }; w.remoteAhead = false; w.firstChangeAt = w.lastChangeAt = null;
       const message = e instanceof Error ? e.message : String(e);

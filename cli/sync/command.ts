@@ -14,7 +14,7 @@
  */
 import { t } from "../../src/i18n/core";
 import { readFileSync } from "node:fs";
-import { syncOnce, SyncAuthError, SyncNetworkError, type SyncResult } from "./client";
+import { syncOnce, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
 import { bindingsOf, hashOf, SyncStateUnreadable } from "./state-store";
 import { bindingsFor, lockWatch, SyncWatcher, type WatchEvent } from "./watch";
 import type { RecoveryOutcome } from "../../src/sync/engine";
@@ -71,6 +71,7 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
     , recover: o.recover ? { token: o.recover, applied: !!o.applied } : undefined
     });
   } catch (e) {
+    if (e instanceof SyncRejectedError) { out(t("サーバーが、この計画の同期を受け付けませんでした (待っても直りません)。やりかけの操作は残してあります: {status} {detail}", { status: e.status, detail: rejectionHint(e.status) })); return 2; }
     if (e instanceof SyncAuthError) { out(t("サーバーが利用者を確かめられませんでした (トークンが無い、または無効です)。環境変数 BOXGLOW_TOKEN を確かめてください。やりかけの操作は残してあります")); return 1; }
     if (e instanceof SyncNetworkError) { out(t("サーバーと通信できませんでした (やりかけの操作は残してあります。もう一度 boxglow sync を実行すると、続きから進みます): {message}", { message: e.message })); return 1; }
     if (e instanceof SyncStateUnreadable) { out(t("同期の状態のファイルを読めません。自動では直しません (消すと、やりかけの操作と前回そろえた中身の記録を失います): {path} ({problem})", { path: e.path, problem: e.problem })); return 1; }
@@ -224,6 +225,7 @@ export async function runWatchCommand(o: SyncCommandOptions, out: (text: string)
   const onEvent = (e: WatchEvent) => {
     if (e.kind === "synced") out(`[${stamp()}] ${e.file}: ` + t("同期しました (受け取り {pulled} 回、送り {pushed} 回)。サーバーの版: {revision}", { pulled: e.pulled, pushed: e.pushed, revision: e.revision ?? "-" }));
     else if (e.kind === "network") out(`[${stamp()}] ` + t("サーバーと通信できません。{seconds} 秒後にやり直します: {message}", { seconds: Math.round(e.retryInMs / 1000), message: e.message }));
+    else if (e.kind === "auth") out(`[${stamp()}] ` + t("サーバーが利用者を確かめられません (トークンが無い、または無効です)。常時の同期を止めずに待ちます。トークンを直してから、起動し直してください"));
     else if (e.kind === "error") out(`[${stamp()}] ${e.file ? e.file + ": " : ""}` + t("この計画の同期を止めています: {message}", { message: e.message }));
     else { out(`[${stamp()}] ${e.file}:`); describeHalt(e.result, e.file, (line) => out("  " + line)); out("  " + t("(上のコマンドは、その計画のフォルダで、別の端末画面から実行してください。常時の同期は動かしたままで構いません)")); }
   };
@@ -242,6 +244,14 @@ export async function runWatchCommand(o: SyncCommandOptions, out: (text: string)
   out(t("常時の同期を終えました。"));
   for (const s of unsent) out(t("まだ送っていない変更があります: {file} (boxglow sync で送れます)", { file: s.binding.file }));
   return 0;
+}
+
+/** サーバーが断った理由の、短い説明 (状態コードから) */
+function rejectionHint(status: number): string {
+  if (status === 413) return t("計画が大きすぎます");
+  if (status === 426) return t("この版の Boxglow は古く、サーバーが受け付けません。更新してください");
+  if (status === 400) return t("サーバーが、計画として正しくないと判断しました");
+  return t("要求の形が合いません");
 }
 
 /** コマンドの引数として表示する値を、空白などがあっても 1 つの引数になるように引用符で囲む */

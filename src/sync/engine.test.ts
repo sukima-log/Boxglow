@@ -13,7 +13,8 @@ import {
 , describeChanges, previewRecovery, remoteMark
 , type Content, type Decision, type Pending, type PendingPull, type PendingPush, type Remote, type SyncInput, type SyncState
 } from "./engine";
-import { setActivity, moveBlock } from "../model/graph";
+import { setActivity, moveBlock, removeBlock } from "../model/graph";
+import { projectProblem } from "../model/validate-file";
 
 const hashOf = (text: string): string => createHash("sha256").update(text).digest("hex");
 const content = (text: string): Content => ({ hash: hashOf(text), text });
@@ -804,5 +805,73 @@ describe("初回の選択の印", () => {
     for (const other of [ask("dir:unseen", unseen, "e1", choice), ask("dir:seen", unseen, "e1", choice), ask("dir:seen", seen, "e2", choice)]) {
       expect(other.kind === "halt" && other.halt.reason).toBe("first-link");
     }
+  });
+});
+
+// ---- Codex のレビュー 14 ----
+describe("親の削除と、その中のボックスの編集がぶつかったとき", () => {
+  /** 親 P の中に子 C がある計画を 2 台に配る。A は P ごと消し、B は C の題名を変える */
+  const setup = () => {
+    let p = createProject("親と子");
+    const pj = defaultTaskParent(p);
+    const parent = addBlock(p, { parentId: pj, title: "親 P" }); p = parent.project;
+    const child = addBlock(p, { parentId: parent.blockId, title: "子 C" }); p = child.project;
+    const other = addBlock(p, { parentId: pj, title: "無関係 X" }); p = other.project;
+    const server = new FakeServer();
+    const A = new Device("A", server), B = new Device("B", server);
+    A.local = content(textOf(fromJSON(toJSON(p)))); A.sync(); B.sync();
+    A.edit((q) => removeBlock(q, parent.blockId)); A.sync();
+    B.edit((q) => updateBlock(updateBlock(q, child.blockId, { title: "子 C (編集)" }), other.blockId, { description: "競合していない変更" }));
+    const halted = B.sync();
+    if (halted.kind !== "halt" || halted.halt.reason !== "conflicts") throw new Error("expected conflicts, got " + JSON.stringify(halted).slice(0, 200));
+    return { A, B, token: halted.halt.token, parent: parent.blockId, child: child.blockId, other: other.blockId };
+  };
+  /** 計画が正しい形で、入出力と線が、残っているボックスだけを指している */
+  const consistent = (p: Project) => {
+    expect(projectProblem(p)).toBeNull();
+    for (const port of Object.values(p.ports)) expect(p.blocks[port.blockId]).toBeDefined();
+    for (const b of Object.values(p.blocks)) if (b.parentId) expect(p.blocks[b.parentId]).toBeDefined();
+  };
+  it("手元 (編集) の側に決めると、子は編集した内容で残り、親も入出力も戻る。競合していない変更も残る", () => {
+    const { A, B, token, parent, child, other } = setup();
+    expect(B.sync({ resolution: { token, prefer: "local" } }).kind).toBe("noop");
+    A.sync();
+    for (const d of [A, B]) {
+      expect(d.project.blocks[child].title).toBe("子 C (編集)");
+      expect(d.project.blocks[parent]).toBeDefined();
+      expect(d.project.blocks[other].description).toBe("競合していない変更");
+      expect(Object.values(d.project.ports).some((x) => x.blockId === child)).toBe(true);
+      consistent(d.project);
+    }
+    expect(A.local!.hash).toBe(B.local!.hash);
+  });
+  it("サーバー (削除) の側に決めると、親も子も、その入出力も消える。競合していない変更は残る", () => {
+    const { A, B, token, parent, child, other } = setup();
+    expect(B.sync({ resolution: { token, prefer: "remote" } }).kind).toBe("noop");
+    A.sync();
+    for (const d of [A, B]) {
+      expect(d.project.blocks[child]).toBeUndefined();
+      expect(d.project.blocks[parent]).toBeUndefined();
+      expect(Object.values(d.project.ports).some((x) => x.blockId === child || x.blockId === parent)).toBe(false);
+      expect(d.project.blocks[other].description).toBe("競合していない変更");
+      consistent(d.project);
+    }
+    expect(A.local!.hash).toBe(B.local!.hash);
+  });
+});
+
+describe("やりかけの送りと、消された計画", () => {
+  it("送りの応答を失った後でサーバーの計画が消されていたら、送り直さずに止まる。操作と、送る予定の写しは残る", () => {
+    const { server, A, a } = twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "A 改" }));
+    A.step("after-effect");                                   // サーバーは受理したが、応答を失った
+    server.deleted = true;
+    const puts = server.ops.size;
+    const d = A.sync();
+    expect(d.kind === "halt" && d.halt.reason).toBe("remote-deleted");
+    expect(A.state.pending?.kind).toBe("push");
+    expect(A.objects.has((A.state.pending as PendingPush).hash)).toBe(true);
+    expect(server.ops.size).toBe(puts);
+    expect(A.project.blocks[a].title).toBe("A 改");
   });
 });

@@ -58,6 +58,15 @@ export class SyncNetworkError extends Error {}
 export class SyncAuthError extends SyncNetworkError {
   constructor(readonly status: number) { super(`not authorized (${status})`); }
 }
+/**
+ * サーバーが、この計画の要求を断った (待っても、送り直しても直らない: 大きすぎる・クライアントが古い・計画として不正・操作の食い違い)。
+ * 通信の失敗とは分ける (通信の失敗として扱うと、同じ要求を送り続け、常時の同期ではほかの計画まで止めてしまう)
+ */
+export class SyncRejectedError extends Error {
+  constructor(readonly status: number, readonly detail: string) { super(`the server rejected the request (${status}): ${detail}`); }
+}
+/** 待っても直らない、計画ごとの拒否の状態コード */
+const TERMINAL_STATUS = new Set([400, 413, 422, 426, 428]);
 /** 応答の状態コードが「利用者を確かめられない」なら、その旨の例外を投げる */
 function rejectUnauthorized(res: Response): void {
   if (res.status === 401 || res.status === 403) throw new SyncAuthError(res.status);
@@ -87,8 +96,13 @@ export interface SyncOptions {
   now?: () => Date;
   /** 通信の関数 (試験で差し替える) */
   fetch?: typeof fetch;
-  /** 1 手ごとに呼ばれる (試験で、途中に割り込むために使う) */
-  onStep?: (kind: string) => void;
+  /**
+   * 処理の境目ごとに呼ばれる (試験で、途中に割り込む・止める・落とすために使う。待つこともできる)。
+   * 境目: "local:read" = 手元を読んだ直後 (サーバーを取得する前), 判断の種類 (pull / push / noop など) = 判断した直後,
+   *       "pull:recorded" = 受け取りの操作を記録した直後 (手元に書く前), "pull:written" = 手元に書いた直後 (基準を進める前),
+   *       "push:sent" = サーバーが応答した直後 (状態を進める前)
+   */
+  onStep?: (kind: string) => void | Promise<void>;
 }
 
 /** 止まっている「受け取りの再開」の印: やりかけの操作と、今の手元の中身に結び付ける (表示のあとで手元が変わったら、選び直しになる) */
@@ -156,10 +170,11 @@ const unquote = (etag: string | null): string | null => etag ? etag.replace(/^W\
 /**
  * やりかけの送りの操作を送る (初めて送るときも、送り直すときも同じ要求)
  * Output: { accepted: 版 } / { rejected: true } (前提の版が違う。受理されないことが確定) / { history: 世代 } (サーバーの履歴の世代が違う)
- *         通信できない・想定外の応答は SyncNetworkError (操作は残したまま)
+ *         / { deleted: true } (サーバーで計画が消されている)。
+ *         通信できない・想定外の応答は SyncNetworkError、サーバーが断った (待っても直らない) は SyncRejectedError (どちらも、操作は残したまま)
  */
 async function sendPush(o: { server: string; remoteId: string; token?: string; fetch: typeof fetch; epoch: string | null }, pending: PendingPush, text: string):
-  Promise<{ accepted: string } | { rejected: true } | { history: string }> {
+  Promise<{ accepted: string } | { rejected: true } | { history: string } | { deleted: true }> {
   let res: Response;
   try {
     res = await o.fetch(`${o.server}/v1/projects/${encodeURIComponent(o.remoteId)}`, {
@@ -182,7 +197,12 @@ async function sendPush(o: { server: string; remoteId: string; token?: string; f
   }
   if (res.status === 412) return { rejected: true };
   if (res.status === 409) return { history: res.headers.get("x-boxglow-epoch") ?? "" };
-  throw new SyncNetworkError(`unexpected response ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  // 取得と送信の間に、サーバーで計画が消された
+  if (res.status === 410) return { deleted: true };
+  let detail = "";
+  try { detail = (await res.text()).slice(0, 200); } catch { /* 本文が読めなくても、状態コードで分類する */ }
+  if (TERMINAL_STATUS.has(res.status)) throw new SyncRejectedError(res.status, detail);
+  throw new SyncNetworkError(`unexpected response ${res.status}: ${detail}`);
 }
 
 /**
@@ -235,6 +255,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       const local: Content | null = localText === null ? null : { hash: hashOf(localText), text: localText };
       const planId = localText === null ? null : planIdOf(localText);
       lastLocal = local?.hash ?? null;
+      await options.onStep?.("local:read");
       // 結び付け: 初めてなら作る (サーバー側の ID は手元で決める)。同じパスに別の計画が置かれていたら、同期しない
       const binding: Binding = stored?.binding ?? { file, server, remoteId: options.remoteId ?? randomUUID(), planId: planId ?? "" };
       // (初めての結び付けで選択待ちのあいだは、まだ状態が無いので、ここには来ない。
@@ -271,7 +292,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       , resolution: options.resolution, firstLink: options.firstLink
       };
       const decision = decide(input);
-      options.onStep?.(decision.kind);
+      await options.onStep?.(decision.kind);
       // 人の選択 (初回の選択・競合の解決) が渡されたのに、最初の判断がそれを使わなかった場合は、何もせずに止まる。
       // 選択なしの同期として進めると、選んだつもりの内容と違うことが起きる (例: 対象の指定が抜けて、新しい計画を作ってしまう)
       if (round === 0 && decision.kind !== "halt") {
@@ -290,7 +311,8 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
             // 「反映済み」を選ぶと、初めての受け取りなら仮の ID が確定し、基準ができる。そのとき手元が別の計画なら、送る前に止まる。
             // 「反映されていない」を選んだ場合は、基準がもともと在るときだけ、結び付けの ID と手元を比べる
             const mismatch = (id: string, baseExists: boolean): boolean => baseExists && planId !== null && id !== "" && planId !== id;
-            const stop = (outcome: RecoveryOutcome): RecoveryOutcome => ({ next: "binding-mismatch", localChanges: outcome.localChanges, remoteChanges: [] });
+            // (ID の確認は、次の書き込みより前に止める。その続け方では、手元のファイルもサーバーも変わらない)
+            const stop = (_outcome: RecoveryOutcome): RecoveryOutcome => ({ next: "binding-mismatch", localChanges: [], remoteChanges: [] });
             const applied = mismatch(binding.pendingPlanId ?? binding.planId, true) ? stop(preview.applied) : preview.applied;
             const notApplied = mismatch(binding.planId, state.base !== null) ? stop(preview.notApplied) : preview.notApplied;
             return halted(decision.halt, { recovery: { token: recoveryToken(state, local?.hash ?? null, remoteMark(remote), bindingIdOf(store.dir, binding.remoteId)), applied, notApplied } });
@@ -326,6 +348,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
           // 書かなかったと分かったときは捨てる (結び付けの ID は、受け取りの前のまま)
           const pullBinding: Binding = state.base === null ? { ...binding, pendingPlanId: planIdOf(decision.write.text) ?? "" } : binding;
           save(recordPending(state, decision.epoch, decision.pending), pullBinding);
+          await options.onStep?.("pull:recorded");
           try {
             commitFile(file, decision.write.text, local === null ? null : revisionOf(local.text));
           } catch (e) {
@@ -334,7 +357,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
             if (e instanceof FileBusy) { save(pullNotWritten(stored!, decision.pending), notWritten(pullBinding)); return { status: "busy", what: "file" }; }
             throw e; // それ以外は、書けたかどうか分からない。操作を残したまま (次の実行で、人に確かめる)
           }
-          options.onStep?.("pull:written"); // (試験用: 手元に書いた直後・基準を進める前)
+          await options.onStep?.("pull:written");
           save(pullWritten(stored!, decision.pending), written(pullBinding));
           pulled++;
           break;
@@ -350,8 +373,10 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
           const text = store.getObject(pending.hash);
           if (text === null) throw new Error("the content of a pending push is missing from the sync state folder");
           const result = await sendPush({ ...remoteOptions, epoch: stored!.epoch }, pending, text);
-          options.onStep?.("push:sent"); // (試験用: サーバーが応答した直後・状態を進める前)
+          await options.onStep?.("push:sent");
           if ("history" in result) return halted({ reason: "history-changed", expected: stored!.epoch ?? "", actual: result.history });
+          // サーバーで計画が消されていた: 操作と送る予定の写しは残したまま止まる (送り直さない・作り直さない)
+          if ("deleted" in result) return halted({ reason: "remote-deleted" });
           if ("accepted" in result) { save(pushAccepted(stored!, pending.opId, result.accepted), stored!.binding); pushed++; }
           else save(pushRejected(stored!, pending.opId), stored!.binding);
           break;

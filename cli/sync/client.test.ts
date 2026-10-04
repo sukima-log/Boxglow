@@ -2,15 +2,17 @@
  * 同期の実行 (cli/sync/client.ts) の試験: 実際のファイル・実際の状態の置き場・実際の HTTP (試験用のサーバー) を使う。
  * 2 つのフォルダを 2 台の端末に見立て (設定フォルダも別々にする)、送受信・統合・途中で落ちた場合の再開・止まる場面を確かめる
  */
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { spawn } from "node:child_process";
+import { fork, spawn, type ChildProcess } from "node:child_process";
+import { build } from "esbuild";
+import { lockFile } from "../file-store";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addBlock, createProject, defaultTaskParent, fromJSON, toJSON, updateBlock } from "../../src/model/graph";
 import type { Project } from "../../src/model/types";
-import { bindingIdOf, recoveryToken, syncOnce, SyncAuthError, SyncNetworkError, type SyncOptions, type SyncResult } from "./client";
+import { bindingIdOf, recoveryToken, syncOnce, SyncAuthError, SyncRejectedError, SyncNetworkError, type SyncOptions, type SyncResult } from "./client";
 import { bindingDir, bindingsOf, StateStore, SyncStateUnreadable } from "./state-store";
 import { TestSyncServer } from "./test-server";
 
@@ -624,4 +626,176 @@ describe("復旧の見比べと、計画の ID の確認", () => {
     expect(actual.status === "halted" && actual.halt.reason).toBe("binding-mismatch");
     expect(server.project("seen")!.versions.length).toBe(versions);       // 送っていない
   });
+});
+
+// ---- Codex のレビュー 14 ----
+describe("サーバーが断ったとき (待っても直らない)", () => {
+  it("取得と送信の間に計画が消されたら、止まる。操作は残り、送り直しを繰り返さない", async () => {
+    const { A, a } = await twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "A 改" }));
+    const r = await A.sync({ onStep: (kind) => { if (kind === "push") server.project("plan-1")!.deleted = true; } });
+    expect(r.status === "halted" && r.halt.reason).toBe("remote-deleted");
+    expect(A.store().read()!.pending?.kind).toBe("push");
+    const puts = server.puts;
+    const again = await A.sync();
+    expect(again.status === "halted" && again.halt.reason).toBe("remote-deleted");
+    expect(server.puts).toBe(puts);                                       // 送り直していない
+    expect(A.project.blocks[a].title).toBe("A 改");
+  });
+  it("大きすぎる・クライアントが古い、などの拒否は、通信の失敗とは別の例外にする (同じ要求を送り続けない)", async () => {
+    const { A, a } = await twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "A 改" }));
+    const refuse = (status: number) => (async (...args: Parameters<typeof fetch>) =>
+      (args[1] as RequestInit | undefined)?.method === "PUT" ? new Response("{}", { status, headers: { "x-boxglow-epoch": "e1" } }) : fetch(...args)) as typeof fetch;
+    for (const status of [413, 426, 400]) {
+      const error = await A.sync({ fetch: refuse(status) }).then(() => null, (e: unknown) => e);
+      expect(error).toBeInstanceOf(SyncRejectedError);
+      expect(error).not.toBeInstanceOf(SyncNetworkError);
+    }
+    expect(await A.sync()).toMatchObject({ status: "synced", pushed: 1 });   // サーバーが受け付ければ、残っていた操作で進む
+  });
+});
+
+describe("初めての受け取りの、仮の ID の扱い", () => {
+  /** サーバーに別の ID の計画があり、手元にも計画がある。初回の選択でサーバーを採る直前までを用意する */
+  const prepared = async () => {
+    const seed = new Device("seed"); seed.write(fromJSON(toJSON(createProject("サーバーの計画")))); await seed.sync({ remoteId: "seen" });
+    const C = new Device("c"); C.write(fromJSON(toJSON(createProject("手元の計画"))));
+    const mine = readFileSync(C.file, "utf8");
+    const r = await C.sync({ remoteId: "seen" });
+    if (r.status !== "halted" || r.halt.reason !== "first-link") throw new Error("expected first-link");
+    return { C, mine, choice: { token: r.halt.token, prefer: "remote" as const } };
+  };
+  it("手元のファイルがほかの書き手に使われていて書けなかったら (書かなかったと確定)、操作も仮の ID も片付けて、後でやり直せる", async () => {
+    const { C, mine, choice } = await prepared();
+    let unlock: (() => void) | undefined;
+    const r = await C.sync({ remoteId: "seen", firstLink: choice, onStep: (kind) => { if (kind === "pull:recorded") unlock = lockFile(C.file); } });
+    unlock!();
+    expect(r).toEqual({ status: "busy", what: "file" });
+    const state = C.store().read()!;
+    expect(state.pending).toBeNull();
+    expect(state.binding.pendingPlanId).toBeUndefined();
+    expect(readFileSync(C.file, "utf8")).toBe(mine);
+    // やり直すと、もう一度、初回の選択になる (結び付けは、まだ成立していない)
+    const again = await C.sync({ remoteId: "seen" });
+    expect(again.status === "halted" && again.halt.reason).toBe("first-link");
+  });
+  it("書けたかどうか分からない失敗では、操作と仮の ID を残す。「反映されていない」を選べば初回の選択に戻り、「反映済み」を選べば ID が確定する", async () => {
+    for (const applied of [false, true]) {
+      rmSync(join(root, "c"), { recursive: true, force: true }); rmSync(join(root, "c-config"), { recursive: true, force: true }); rmSync(join(root, "seed"), { recursive: true, force: true }); rmSync(join(root, "seed-config"), { recursive: true, force: true });
+      server.projects.clear();
+      const { C, mine, choice } = await prepared();
+      // 書き込みの手順が、想定外のエラーで失敗する: 操作を記録した直後に、ファイルの場所をフォルダに置き換える
+      await expect(C.sync({ remoteId: "seen", firstLink: choice, onStep: (kind) => {
+        if (kind === "pull:recorded") { rmSync(C.file); mkdirSync(C.file); }
+      } })).rejects.toThrow();
+      let state = C.store().read()!;
+      expect(state.pending?.kind).toBe("pull");
+      expect(state.binding.pendingPlanId).toBe(fromJSON(server.project("seen")!.head!.text).id);
+      // ファイルを元に戻して (書き込みは行われていなかった)、復旧の選択へ
+      rmSync(C.file, { recursive: true }); writeFileSync(C.file, mine);
+      const stopped = await C.sync();
+      if (stopped.status !== "halted" || !stopped.recovery) throw new Error("expected a recovery halt");
+      const after = await C.sync({ recover: { token: stopped.recovery.token, applied } });
+      state = C.store().read()!;
+      expect(state.binding.pendingPlanId).toBeUndefined();
+      if (applied) {
+        // 「反映済み」: サーバーの計画の ID が確定する。手元は別の計画なので、次の確認で止まる (見比べの表示どおり)
+        expect(stopped.recovery.applied.next).toBe("binding-mismatch");
+        expect(after.status === "halted" && after.halt.reason).toBe("binding-mismatch");
+        expect(state.binding.planId).toBe(fromJSON(server.project("seen")!.head!.text).id);
+      } else {
+        expect(stopped.recovery.notApplied.next).toBe("first-link");
+        expect(after.status === "halted" && after.halt.reason).toBe("first-link");
+        expect(state.binding.planId).toBe(fromJSON(mine).id);
+      }
+      expect(readFileSync(C.file, "utf8")).toBe(mine);                    // どちらも、手元の計画は書き換えていない
+    }
+  });
+});
+
+// 実際の子プロセスを、処理の境目で止めて、親が順序を決める (たまたま重なることに頼らない)
+describe("子プロセスを境目で止めて、順序を固定する", () => {
+  let childScript = "";
+  let cache = "";
+  beforeAll(async () => {
+    // 依存 (zod など) も 1 つのファイルにまとめる (子プロセスは、一時フォルダから起動するので、node_modules を探せない)
+    cache = mkdtempSync(join(tmpdir(), "boxglow-sync-child-"));
+    childScript = join(cache, "test-child.mjs");
+    await build({ entryPoints: ["cli/sync/test-child.ts"], bundle: true, platform: "node", format: "esm", outfile: childScript, logLevel: "warning" });
+  });
+  afterAll(() => { if (cache) rmSync(cache, { recursive: true, force: true }); });
+
+  type Message = { phase?: string; done?: SyncResult; error?: string };
+  /** 同期の子プロセスを起動する (この端末の設定フォルダで) */
+  const start = (d: Device, remoteId = ""): ChildProcess =>
+    fork(childScript, [d.file, server.url, remoteId], { env: { ...process.env, BOXGLOW_CONFIG_DIR: d.config }, stdio: ["ignore", "ignore", "inherit", "ipc"] });
+  /** 子から、次の知らせを 1 つ受け取る */
+  const next = (child: ChildProcess) => new Promise<Message>((resolve) => {
+    // 子が知らせを送らずに終わった場合 (起動に失敗したなど) も、待ち続けずに結果として返す
+    const onExit = (code: number | null) => resolve({ error: `the child exited (${code})` });
+    child.once("exit", onExit);
+    child.once("message", (m) => { child.off("exit", onExit); resolve(m as Message); });
+  });
+  /** 指定した境目に着くまで進める (途中の境目は、そのまま通す)。Output: 着いたら true、その前に終わったら結果 */
+  const runTo = async (child: ChildProcess, phase: string): Promise<true | Message> => {
+    for (;;) {
+      const m = await next(child);
+      if (m.phase === phase) return true;
+      if (m.phase === undefined) return m;
+      child.send("go");
+    }
+  };
+  /** 最後まで進めて、結果を受け取る */
+  const finish = async (child: ChildProcess): Promise<Message> => {
+    child.send("go");
+    for (;;) { const m = await next(child); if (m.phase === undefined) return m; child.send("go"); }
+  };
+
+  it("手元を読んだ後・サーバーを取得する前に入った編集は、失われず、次の同期で送られる", async () => {
+    const { A, a, b } = await twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "読まれた編集" }));
+    const child = start(A);
+    expect(await runTo(child, "local:read")).toBe(true);
+    A.edit((p) => updateBlock(p, b, { title: "読んだ後の編集" }));            // 子が止まっている間に、別の書き手が書いた
+    const result = await finish(child);
+    expect(result.done).toMatchObject({ status: "synced" });
+    expect(A.project.blocks[b].title).toBe("読んだ後の編集");                // 手元から消えていない
+    await A.sync();
+    const head = fromJSON(server.project("plan-1")!.head!.text);
+    expect(head.blocks[a].title).toBe("読まれた編集"); expect(head.blocks[b].title).toBe("読んだ後の編集");
+  }, 60_000);
+
+  it("受け取りを記録した直後 (書く前) に強制終了 → 次の同期は止まって確かめる。書いた直後に強制終了 → 次の同期は、確かめずに続ける", async () => {
+    const { A, B, a } = await twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "新" })); await A.sync();
+    // 書く前
+    let child = start(B);
+    expect(await runTo(child, "pull:recorded")).toBe(true);
+    child.kill("SIGKILL"); await new Promise((r) => child.once("exit", r));
+    expect(B.project.blocks[a].title).toBe("A");
+    const stopped = await B.sync();
+    if (stopped.status !== "halted" || !stopped.recovery) throw new Error("expected a recovery halt");
+    expect(await B.sync({ recover: { token: stopped.recovery.token, applied: false } })).toMatchObject({ status: "synced", pulled: 1 });
+    expect(B.project.blocks[a].title).toBe("新");
+    // 書いた直後
+    A.edit((p) => updateBlock(p, a, { title: "さらに新" })); await A.sync();
+    child = start(B);
+    expect(await runTo(child, "pull:written")).toBe(true);
+    child.kill("SIGKILL"); await new Promise((r) => child.once("exit", r));
+    expect(B.project.blocks[a].title).toBe("さらに新");
+    expect(await B.sync()).toMatchObject({ status: "synced", pulled: 0, pushed: 0 });
+    expect(B.store().read()!.base).toEqual(A.store().read()!.base);
+  }, 60_000);
+
+  it("同じ計画の同期が 2 つ重なったら、後から来たほうは待たずに busy を返し、先のほうは最後まで進む", async () => {
+    const { A, a } = await twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "A 改" }));
+    const first = start(A);
+    expect(await runTo(first, "local:read")).toBe(true);                    // 先の同期が、ロックを持ったまま止まっている
+    const second = start(A);
+    expect((await runTo(second, "never")) as Message).toMatchObject({ done: { status: "busy", what: "sync" } });
+    expect((await finish(first)).done).toMatchObject({ status: "synced", pushed: 1 });
+    expect(fromJSON(server.project("plan-1")!.head!.text).blocks[a].title).toBe("A 改");
+  }, 60_000);
 });

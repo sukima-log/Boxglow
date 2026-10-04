@@ -87,4 +87,10 @@ export const sync: Record<string, string> = {
   "--link の選択は、今の状態には当てはまりません (同期の対象が、選択を表示したときと違う可能性があります)。何もしていません。表示されたコマンドを、--server・--project・--file を付けたまま実行してください": "The --link choice does not apply to the current state (the sync target may differ from when the choice was shown). Nothing was done. Run the command as shown, keeping --server, --project and --file",
   "--resolve の選択は、今の状態には当てはまりません (競合がもう無い、または対象が違います)。何もしていません。boxglow sync でもう一度確かめてください": "The --resolve choice does not apply to the current state (the conflict is gone, or the target differs). Nothing was done. Check again with boxglow sync",
   "サーバーが利用者を確かめられませんでした (トークンが無い、または無効です)。環境変数 BOXGLOW_TOKEN を確かめてください。やりかけの操作は残してあります": "The server could not verify who you are (the token is missing or invalid). Check the BOXGLOW_TOKEN environment variable. The unfinished operation is kept",
+  "サーバーが、この計画の同期を受け付けませんでした (待っても直りません)。やりかけの操作は残してあります: {status} {detail}": "The server refused to sync this plan (waiting will not help). The unfinished operation is kept: {status} {detail}",
+  "計画が大きすぎます": "the plan is too large",
+  "この版の Boxglow は古く、サーバーが受け付けません。更新してください": "this Boxglow is too old for the server; update it",
+  "サーバーが、計画として正しくないと判断しました": "the server found the plan invalid",
+  "要求の形が合いません": "the request was malformed",
+  "サーバーが利用者を確かめられません (トークンが無い、または無効です)。常時の同期を止めずに待ちます。トークンを直してから、起動し直してください": "The server cannot verify who you are (the token is missing or invalid). Continuous sync keeps waiting; fix the token and start it again",
 };

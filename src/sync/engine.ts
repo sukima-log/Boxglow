@@ -213,6 +213,8 @@ export function decide(input: SyncInput): Decision {
     // サーバーの履歴の世代が、操作を記録したときと違っていたら、送り直さない (操作は残したまま、人に確かめる)。
     // 特に「新しく作る」操作は前提の版を持たないので、世代を見ないと、復旧後の別の履歴の上に作ってしまう
     if (state.epoch !== null && remote.epoch !== state.epoch) return halt({ reason: "history-changed", expected: state.epoch, actual: remote.epoch });
+    // サーバーで計画が消されていたら、送り直しても受理されない。操作と送る予定の写しは残したまま、止まる (勝手に作り直さない・捨てない)
+    if (remote.kind === "deleted") return halt({ reason: "remote-deleted" });
     // 日時が読めない・未来・古すぎる操作は、自動では送り直さない
     // (サーバーの記録が消えていると、受理済みの操作を「断られた」と読み違えるおそれがある)
     const at = Date.parse(state.pending.at);
