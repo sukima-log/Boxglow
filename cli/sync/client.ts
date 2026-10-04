@@ -63,14 +63,14 @@ export class SyncAuthError extends SyncNetworkError {
   constructor(readonly status: number) { super(`not authorized (${status})`); }
 }
 /**
- * サーバーが、この計画の要求を断った (待っても、送り直しても直らない: 大きすぎる・クライアントが古い・計画として不正・操作の食い違い)。
+ * サーバーが、この計画の要求を断った (待っても、送り直しても直らない: 大きすぎる・クライアントが古い・計画として不正・操作の食い違い・保存の上限)。
  * 通信の失敗とは分ける (通信の失敗として扱うと、同じ要求を送り続け、常時の同期ではほかの計画まで止めてしまう)
  */
 export class SyncRejectedError extends Error {
   constructor(readonly status: number, readonly detail: string) { super(`the server rejected the request (${status}): ${detail}`); }
 }
 /** 待っても直らない、計画ごとの拒否の状態コード */
-const TERMINAL_STATUS = new Set([400, 413, 422, 426, 428]);
+const TERMINAL_STATUS = new Set([400, 413, 422, 426, 428, 507]);
 /** 応答の状態コードが「利用者を確かめられない」なら、その旨の例外を投げる */
 function rejectUnauthorized(res: Response): void {
   if (res.status === 401 || res.status === 403) throw new SyncAuthError(res.status);

@@ -267,6 +267,7 @@ function rejectionHint(status: number): string {
   if (status === 413) return t("計画が大きすぎます");
   if (status === 426) return t("この版の Boxglow は古く、サーバーが受け付けません。更新してください");
   if (status === 400) return t("サーバーが、計画として正しくないと判断しました");
+  if (status === 507) return t("保存の上限 (計画の数、または保存量) に届いています。履歴の整理か、使っていない計画の削除が要ります");
   return t("要求の形が合いません");
 }
 
