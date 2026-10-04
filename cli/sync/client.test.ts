@@ -275,4 +275,3 @@ describe("boxglow sync コマンド", () => {
     expect(r.stdout).toContain("boxglow sync --server");
   }, 30_000);
 });
-
