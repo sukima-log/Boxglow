@@ -13,7 +13,7 @@
  */
 import { t } from "../../src/i18n/core";
 import { syncOnce, SyncNetworkError, type SyncResult } from "./client";
-import { bindingsOf } from "./state-store";
+import { bindingsOf, SyncStateUnreadable } from "./state-store";
 import type { RecoveryOutcome } from "../../src/sync/engine";
 
 /** sync コマンドの引数 (main.ts が解釈したオプションから作る) */
@@ -41,11 +41,17 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
   // サーバー: 指定 > 環境変数 > そのファイルの結び付け (1 つだけのとき)
   let server = o.server ?? process.env.BOXGLOW_SERVER;
   if (!server) {
-    const bound = bindingsOf(o.file);
+    const { bindings: bound, unreadable } = bindingsOf(o.file);
     if (bound.length === 1) server = bound[0].server;
-    else if (bound.length === 0) { out(t("同期先が決まっていません。初めて結び付けるときは boxglow sync --server <URL> を指定してください")); return 1; }
+    else if (bound.length === 0) {
+      out(t("同期先が決まっていません。初めて結び付けるときは boxglow sync --server <URL> を指定してください"));
+      // 読めない状態のフォルダがあるときは、「結び付けが無い」と決めつけずに知らせる
+      if (unreadable.length > 0) out(t("同期の状態を読めないフォルダがあります (この計画の結び付けかもしれません。消さずに、中身を確かめてください): {list}", { list: unreadable.join(", ") }));
+      return 1;
+    }
     else { out(t("この計画は複数のサーバーに結び付いています。--server <URL> で選んでください: {list}", { list: bound.map((b) => b.server).join(", ") })); return 1; }
   }
+  if (!server) return 1;
   if (o.recover && o.applied === o.notApplied) { out(t("--recover には --applied (反映済みとして続ける) か --not-applied (反映されていないものとして続ける) のどちらかを付けてください")); return 1; }
   if ((o.resolve || o.link) && o.prefer !== "local" && o.prefer !== "remote") { out(t("--resolve / --link には --prefer local (手元を採る) か --prefer remote (サーバーを採る) を付けてください")); return 1; }
   const prefer = o.prefer as "local" | "remote";
@@ -61,6 +67,7 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
     });
   } catch (e) {
     if (e instanceof SyncNetworkError) { out(t("サーバーと通信できませんでした (やりかけの操作は残してあります。もう一度 boxglow sync を実行すると、続きから進みます): {message}", { message: e.message })); return 1; }
+    if (e instanceof SyncStateUnreadable) { out(t("同期の状態のファイルを読めません。自動では直しません (消すと、やりかけの操作と前回そろえた中身の記録を失います): {path} ({problem})", { path: e.path, problem: e.problem })); return 1; }
     throw e;
   }
   if (result.status === "synced") {
@@ -75,7 +82,11 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
   }
   // ---- 止まった: 理由と、次にできることを表示する ----
   const halt = result.halt;
-  out(t("同期を止めました。手元のファイルもサーバーも変えていません。"));
+  // 止まる前に行ったことを、そのまま伝える (1 回の実行は何手か進むので、受け取りを書いた後で止まることがある)
+  out(t("同期を止めました。"));
+  if (result.pulled > 0) out(t("止まる前に、サーバーの変更を手元のファイルに書きました ({count} 回)。", { count: result.pulled }));
+  if (result.pushed > 0) out(t("止まる前に、手元の変更をサーバーへ送りました ({count} 回)。", { count: result.pushed }));
+  if (result.pulled === 0 && result.pushed === 0) out(t("この実行では、手元のファイルもサーバーも変えていません。"));
   switch (halt.reason) {
     case "conflicts":
       out(t("手元とサーバーで、同じ項目が別の値に変わっています ({count} 件):", { count: halt.conflicts.length }));
@@ -144,7 +155,13 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
       out(t("手元の計画のファイルがありません: {file}", { file: o.file }));
       break;
     case "base-missing":
-      out(t("同期の状態のフォルダから、前回そろえた中身の写しが見つかりません。結び付け直しが必要です"));
+      out(t("同期の状態のフォルダから、前回そろえた中身の写しが見つかりません (または壊れています)。自動では続けられません。状態の記録はそのまま残して止まっています (消さないでください)"));
+      break;
+    case "binding-target":
+      out(t("この計画は、サーバー側の計画 {bound} に結び付いています。指定された {requested} とは違うので、何もしていません。結び付け済みの計画と同期するなら、--project を付けずに実行してください", { bound: halt.bound, requested: halt.requested }));
+      break;
+    case "bound-elsewhere":
+      out(t("この計画のファイルは、すでに別のサーバーに結び付いています: {server} (1 つのファイルを、2 つのサーバーへは結び付けません)", { server: halt.server }));
       break;
     case "binding-mismatch":
       out(t("このパスには、結び付けたときとは別の計画が置かれています (結び付けた計画の ID: {expected}、今の計画の ID: {actual})。同期しません", { expected: halt.expected, actual: halt.actual }));

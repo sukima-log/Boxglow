@@ -1193,6 +1193,10 @@ if (argv[0] === "mcp") {
     setLang(explicitLang(options) ?? "ja");
     const file = locateFile(str(options.file));
     try { setLang(explicitLang(options) ?? load(file).lang ?? "ja"); } catch { /* 読めない計画でも、止まった理由は表示する */ }
+    // 知らない指定 (まだ無い --watch など) を、黙って「1 回の同期」として実行しない
+    const known = new Set(["file", "lang", "actor", "server", "project", "adopt", "restore", "resolve", "link", "prefer", "recover", "applied", "not-applied"]);
+    const unknown = Object.keys(options).filter((k) => !known.has(k));
+    if (unknown.length > 0) { out(t("boxglow sync が知らない指定です: {list}", { list: unknown.map((k) => "--" + k).join(", ") })); process.exitCode = 1; return; }
     process.exitCode = await runSyncCommand({
       file
     , server: str(options.server)

@@ -8,6 +8,7 @@
  * 本番のサーバー (別のリポジトリ) も、同じ約束を守る
  */
 import { createHash } from "node:crypto";
+import { validateProjectText } from "../../src/model/validate-file";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 interface StoredProject {
@@ -82,21 +83,27 @@ export class TestSyncServer {
     const op = typeof headers["x-boxglow-op"] === "string" ? headers["x-boxglow-op"] : "";
     const ifMatch = typeof headers["if-match"] === "string" ? headers["if-match"].replace(/^"|"$/g, "") : null;
     const create = headers["if-none-match"] === "*";
-    if (!op || (!create && ifMatch === null)) return { status: 428, body: { code: "precondition-required" } };
-    // (1) 履歴の世代: クライアントが控えている世代が今と違えば、412 とは別の応答にする
+    // 履歴の世代 (クライアントが操作を記録したときの世代) も必須。無い要求は受け付けない
     const epoch = typeof headers["x-boxglow-epoch"] === "string" ? headers["x-boxglow-epoch"] : null;
-    if (epoch !== null && epoch !== this.epoch) return { status: 409, body: { code: "history-changed" } };
-    try { JSON.parse(text); } catch { return { status: 400, body: { code: "invalid" } }; }
+    if (!op || epoch === null || (!create && ifMatch === null)) return { status: 428, body: { code: "precondition-required" } };
+    // (1) 履歴の世代と、対象の計画: 世代が今と違えば、412 とは別の応答にする。消した計画には、何も受け付けない (消した ID は二度と使わない)
+    if (epoch !== this.epoch) return { status: 409, body: { code: "history-changed" } };
     const project: StoredProject = this.projects.get(id) ?? { head: null, deleted: false, seq: 0, ops: new Map(), versions: [] };
+    if (project.deleted) return { status: 410, body: { code: "deleted" } };
+    // 受け取る中身は、計画として検査する (JSON であるだけでは足りない)
+    try { validateProjectText(text); } catch (e) { return { status: 400, body: { code: "invalid", message: e instanceof Error ? e.message : String(e) } }; }
     const hash = createHash("sha256").update(text).digest("hex");
     const request = JSON.stringify([hash, create ? null : ifMatch]);
     // (2) 同じ操作の結果が既にあれば、今の版との照合より先に、その結果を返す (違う要求なら断る)
     const done = project.ops.get(op);
     if (done) return done.request === request ? { status: 200, body: { revision: done.revision }, revision: done.revision } : { status: 422, body: { code: "operation-mismatch" } };
-    // 消した ID は二度と使わない
-    if (project.deleted) return { status: 410, body: { code: "deleted" } };
-    // (3) 前提の版を確かめる
+    // (3) 前提の版を確かめる (同じ中身の送信でも省かない)
     if ((project.head?.revision ?? null) !== (create ? null : ifMatch)) return { status: 412, body: { code: "revision-mismatch" } };
+    // 最新と同じ中身なら、新しい版を作らずに受理する (操作の結果は「今の版」)
+    if (project.head && createHash("sha256").update(project.head.text).digest("hex") === hash) {
+      project.ops.set(op, { request, revision: project.head.revision });
+      return { status: 200, body: { revision: project.head.revision }, revision: project.head.revision };
+    }
     // (4) 確定する: 最新の版・履歴・操作の結果を一緒に
     const revision = `${this.epoch}.${++project.seq}`;
     project.head = { revision, text };

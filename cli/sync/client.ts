@@ -8,15 +8,14 @@
  *   - 状態用のロックを、1 回の同期の間持つ (同じ結び付けを扱う同期の処理は 1 つだけ)。
  */
 import { randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, readFileSync, realpathSync } from "node:fs";
-import { resolve } from "node:path";
+import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { commitFile, FileBusy, FileConflict, revisionOf } from "../file-store";
 import { basename } from "node:path";
 import {
-  baseSet, decide, previewRecovery, pullNotWritten, pullRecovered, pullWritten, pushAccepted, pushRejected, recordPending, recoveryToken as engineRecoveryToken, SyncStateError
-, type Content, type Halt, type PendingPush, type RecoveryOutcome, type Remote, type SyncState
+  baseSet, decide, previewRecovery, pullNotWritten, pullRecovered, pullWritten, pushAccepted, pushRejected, recordPending, recoveryToken as engineRecoveryToken, remoteMark, SyncStateError
+, type Content, type Halt, type PendingPush, type RecoveryOutcome, type Remote, type RemoteMark, type SyncState
 } from "../../src/sync/engine";
-import { bindingDir, hashOf, normalizeServer, StateStore, type Binding, type StoredState } from "./state-store";
+import { bindingDir, bindingsOf, hashOf, normalizeServer, realFile, StateStore, type Binding, type StoredState } from "./state-store";
 import { APP_VERSION, SAVE_PROTOCOL } from "../../src/model/version";
 
 /** 同期の結果 */
@@ -27,10 +26,21 @@ export type SyncResult =
    * 人に確かめる必要があって止まった。
    * recovery = 受け取りの再開で止まったときの、選ぶための印と、2 つの続け方それぞれの「選んだ後の結果」
    */
-  | { status: "halted"; halt: Halt | { reason: "binding-mismatch"; expected: string; actual: string }
-    ; recovery?: { token: string; applied: RecoveryOutcome; notApplied: RecoveryOutcome } }
+  | { status: "halted"; halt: Halt | ClientHalt
+    ; recovery?: { token: string; applied: RecoveryOutcome; notApplied: RecoveryOutcome }
+      /** 止まる前に、この実行で行ったこと (受け取って手元に書いた回数、送って受理された回数) */
+    ; pulled: number; pushed: number }
   /** 他の処理が動いていて、今回は進められなかった (待てば直る)。what = "sync" (他の同期の処理) / "file" (計画のファイルが書き込み中) */
   | { status: "busy"; what: "sync" | "file" };
+
+/** 実行の側 (結び付けの確認) で止まる理由 */
+export type ClientHalt =
+  /** 同じパスに、結び付けたときとは別の計画 (ID が違う) が置かれている */
+  | { reason: "binding-mismatch"; expected: string; actual: string }
+  /** 指定したサーバー側の計画の ID が、この結び付けの ID と違う (指定と違う計画へ、黙って書かない) */
+  | { reason: "binding-target"; bound: string; requested: string }
+  /** この計画のファイルは、すでに別のサーバーに結び付いている (1 つのファイルの結び付けは 1 つだけ) */
+  | { reason: "bound-elsewhere"; server: string };
 
 /** サーバーとの通信の失敗 (やりかけの操作は残したまま。後でやり直せる) */
 export class SyncNetworkError extends Error {}
@@ -64,8 +74,8 @@ export interface SyncOptions {
 }
 
 /** 止まっている「受け取りの再開」の印: やりかけの操作と、今の手元の中身に結び付ける (表示のあとで手元が変わったら、選び直しになる) */
-export function recoveryToken(state: SyncState, localHash: string | null): string {
-  return engineRecoveryToken(state, localHash, hashOf);
+export function recoveryToken(state: SyncState, localHash: string | null, remote: RemoteMark): string {
+  return engineRecoveryToken(state, localHash, remote, hashOf);
 }
 
 /**
@@ -136,13 +146,21 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
   const now = options.now ?? (() => new Date());
   const doFetch = options.fetch ?? fetch;
   const server = normalizeServer(options.server);
-  const file = existsSync(options.file) ? realpathSync(options.file) : resolve(options.file);
+  const file = realFile(options.file);
+  // 1 つのファイルの結び付けは 1 つだけ: 別のサーバーに結び付いているファイルを、新しいサーバーへ結び付けない
+  // (2 つのサーバーへ同時に結び付けると、片方から受け取った変更をもう片方へ送ることになる。その扱いは決めていない)
+  const elsewhere = bindingsOf(file).bindings.find((b) => b.server !== server);
+  if (elsewhere) return { status: "halted", halt: { reason: "bound-elsewhere", server: elsewhere.server }, pulled: 0, pushed: 0 };
   const store = new StateStore(bindingDir(file, server));
   const unlock = store.lock();
   if (!unlock) return { status: "busy", what: "sync" };
   try {
     let stored = store.read();
     let pulled = 0, pushed = 0;
+    // 指定したサーバー側の計画の ID が、結び付け済みの ID と違うなら、通信も書き込みもせずに止まる
+    if (stored && options.remoteId !== undefined && options.remoteId !== stored.binding.remoteId) {
+      return { status: "halted", halt: { reason: "binding-target", bound: stored.binding.remoteId, requested: options.remoteId }, pulled, pushed };
+    }
     // 状態を書く (世代の照合つき)。書いた後の状態を覚え直す
     const save = (next: SyncState, binding: Binding) => {
       const value: StoredState = { ...next, version: 1, binding };
@@ -156,23 +174,27 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       const planId = localText === null ? null : planIdOf(localText);
       // 結び付け: 初めてなら作る (サーバー側の ID は手元で決める)。同じパスに別の計画が置かれていたら、同期しない
       const binding: Binding = stored?.binding ?? { file, server, remoteId: options.remoteId ?? randomUUID(), planId: planId ?? "" };
-      if (stored && planId !== null && binding.planId !== "" && planId !== binding.planId) {
-        return { status: "halted", halt: { reason: "binding-mismatch", expected: binding.planId, actual: planId } };
+      // (初めての結び付けで選択待ちのあいだは、まだ状態が無いので、ここには来ない。
+      //  初めての受け取りを記録した後は、書く予定の計画の ID が固定されている。受け取りを書けたか分からない場面では、手元が別の ID でも、
+      //  ここでは止めずに「受け取りの再開」の確認に任せる)
+      if (stored && planId !== null && binding.planId !== "" && planId !== binding.planId && stored.pending?.kind !== "pull") {
+        return { status: "halted", halt: { reason: "binding-mismatch", expected: binding.planId, actual: planId }, pulled, pushed };
       }
       const state: SyncState = stored ?? { generation: 0, epoch: null, base: null, pending: null };
       const remoteOptions = { server, remoteId: binding.remoteId, token: options.token, fetch: doFetch };
-      // ---- 止まっている「受け取りの再開」に、人の選択が渡されたら進める (印が今の状態と合うときだけ) ----
+      // ---- 読む: サーバー (やりかけの送りがあるときも取得する。履歴の世代が変わっていないかを、送り直しの前に確かめるため) ----
+      const remote: Remote = await fetchRemote(remoteOptions);
+      // ---- 止まっている「受け取りの再開」に、人の選択が渡されたら進める ----
+      // サーバーを取得してから照合する: 印は、表示したときの状態・手元・サーバーの位置に結び付いている。どれかが変わっていたら進めない
       if (state.pending?.kind === "pull" && options.recover && round === 0) {
         try {
-          save(pullRecovered(state, options.recover, local?.hash ?? null, hashOf), binding);
+          save(pullRecovered(state, options.recover, local?.hash ?? null, remoteMark(remote), hashOf), binding);
           continue;
         } catch (e) {
-          // 表示のあとで状態や手元が変わっていて、印が合わない。進めずに、今の状態でもう一度止まって表示し直す
+          // 印が合わない・履歴の世代が変わっている。操作を残したまま、今の状態でもう一度止まって表示し直す
           if (!(e instanceof SyncStateError)) throw e;
         }
       }
-      // ---- 読む: サーバー (やりかけの送りがあるときも取得する。履歴の世代が変わっていないかを、送り直しの前に確かめるため) ----
-      const remote: Remote = await fetchRemote(remoteOptions);
       const input = {
         state, local, remote, bindingId: basename(store.dir)
       , baseText: state.base ? store.getObject(state.base.hash) : null
@@ -188,10 +210,10 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
         case "halt":
           // 受け取りの再開で止まったときは、選ぶための印と、2 つの続け方それぞれの結果を添える (人に、過去の出来事を当てさせない)
           if (decision.halt.reason === "recover-pull" && remote.kind === "present") {
-            return { status: "halted", halt: decision.halt
-            , recovery: { token: recoveryToken(state, local?.hash ?? null), ...previewRecovery(input, (hash) => store.getObject(hash)) } };
+            return { status: "halted", halt: decision.halt, pulled, pushed
+            , recovery: { token: recoveryToken(state, local?.hash ?? null, remoteMark(remote)), ...previewRecovery(input, (hash) => store.getObject(hash)) } };
           }
-          return { status: "halted", halt: decision.halt };
+          return { status: "halted", halt: decision.halt, pulled, pushed };
         case "edit-local":
           // 手元だけを書き換える (消えた項目を戻す)。前提が違えば何もせず、次の判断で確かめ直す
           try {
@@ -204,7 +226,8 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
         case "set-base":
           // 新しい基準が指す中身 (判断に使った、取得済みのサーバーの中身) を先に置く
           for (const c of decision.keep) store.putObject(c.text);
-          save(baseSet(state, decision.epoch, decision.base), { ...binding, planId: binding.planId || planId || "" });
+          // 初めての結び付けなら、この時点の手元の計画の ID を、結び付けに固定する
+          save(baseSet(state, decision.epoch, decision.base), state.base === null ? { ...binding, planId: planId ?? "" } : binding);
           break;
         case "finish-pull":
           save(pullWritten(state, decision.pending), binding);
@@ -212,7 +235,11 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
         case "pull": {
           // 写しを先に置く (書く中身と、新しい基準になるサーバーの中身) → 操作を記録 → 手元に書く → 基準を進める
           for (const c of decision.keep) store.putObject(c.text);
-          save(recordPending(state, decision.epoch, decision.pending), binding);
+          // 初めての結び付けなら、これから手元に書く中身 (検査済み) の計画の ID を、操作の記録と一緒に結び付けへ固定する。
+          // 書いた直後に落ちて、次の実行が「書けていた」として続ける場合にも、ID が空のまま残らない
+          // (空のままだと、同じパスに別の計画が置かれても気づけず、既存の同期先へ別の計画を送ってしまう)
+          const pullBinding: Binding = state.base === null ? { ...binding, planId: planIdOf(decision.write.text) ?? "" } : binding;
+          save(recordPending(state, decision.epoch, decision.pending), pullBinding);
           try {
             // 初めての結び付けでサーバーの側を採るときは、置き換える前に、今の手元の中身を退避する
             if (decision.backup && local !== null) copyFileSync(file, `${file}.before-sync-${local.hash.slice(0, 8)}.json`);
@@ -224,7 +251,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
             throw e; // それ以外は、書けたかどうか分からない。操作を残したまま (次の実行で、人に確かめる)
           }
           options.onStep?.("pull:written"); // (試験用: 手元に書いた直後・基準を進める前)
-          save(pullWritten(stored!, decision.pending), { ...binding, planId: binding.planId || planIdOf(decision.write.text) || "" });
+          save(pullWritten(stored!, decision.pending), pullBinding);
           pulled++;
           break;
         }
@@ -234,13 +261,13 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
           if (decision.kind === "push") {
             store.putObject(decision.content.text);
             pending = { kind: "push", opId: randomUUID(), hash: decision.content.hash, expected: decision.expected, at: now().toISOString() };
-            save(recordPending(state, decision.epoch, pending), { ...binding, planId: binding.planId || planId || "" });
+            save(recordPending(state, decision.epoch, pending), state.base === null ? { ...binding, planId: planId ?? "" } : binding);
           } else pending = decision.pending;
           const text = store.getObject(pending.hash);
           if (text === null) throw new Error("the content of a pending push is missing from the sync state folder");
           const result = await sendPush({ ...remoteOptions, epoch: stored!.epoch }, pending, text);
           options.onStep?.("push:sent"); // (試験用: サーバーが応答した直後・状態を進める前)
-          if ("history" in result) return { status: "halted", halt: { reason: "history-changed", expected: stored!.epoch ?? "", actual: result.history } };
+          if ("history" in result) return { status: "halted", halt: { reason: "history-changed", expected: stored!.epoch ?? "", actual: result.history }, pulled, pushed };
           if ("accepted" in result) { save(pushAccepted(stored!, pending.opId, result.accepted), stored!.binding); pushed++; }
           else save(pushRejected(stored!, pending.opId), stored!.binding);
           break;

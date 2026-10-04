@@ -10,7 +10,7 @@ import { addBlock, createProject, defaultTaskParent, fromJSON, moveBlockToParent
 import type { Project } from "../model/types";
 import {
   baseSet, decide, PENDING_MAX_AGE_MS, protectedDeletions, pullRecovered, pullWritten, pullNotWritten, pushAccepted, pushRejected, recordPending, recoveryToken, SyncStateError
-, describeChanges, previewRecovery
+, describeChanges, previewRecovery, remoteMark
 , type Content, type Decision, type Pending, type PendingPull, type PendingPush, type Remote, type SyncInput, type SyncState
 } from "./engine";
 import { setActivity, moveBlock } from "../model/graph";
@@ -269,7 +269,7 @@ describe("途中で落ちたときの再開", () => {
     const head = server.head!.revision;
     expect(B.project.blocks[a].title).toBe("新");                         // 止まっている間、何も書かない・送らない
     // 人が「反映済みとして続ける」を選ぶ (印は、表示したときの状態と手元の中身に結び付いている)
-    B.state = pullRecovered(B.state, { token: recoveryToken(B.state, B.local!.hash, hashOf), applied: true }, B.local!.hash, hashOf);
+    B.state = pullRecovered(B.state, { token: recoveryToken(B.state, B.local!.hash, remoteMark(B.server.remote()), hashOf), applied: true }, B.local!.hash, remoteMark(B.server.remote()), hashOf);
     B.sync(); A.sync();
     for (const dev of [A, B]) { expect(dev.project.blocks[a].title).toBe("A"); expect(dev.project.blocks[b].description).toBe("AI の追記"); }
     expect(server.head!.revision).not.toBe(head);
@@ -508,11 +508,15 @@ describe("状態を進める関数は、操作が合わないと進めない", (
   });
   it("復旧の選択は、表示したときの状態・手元の中身のときだけ有効 (状態や手元が変わっていたら進めない)", () => {
     const pulling = recordPending(idle, "e1", pull);
-    const token = recoveryToken(pulling, "local-1", hashOf);
-    expect(() => pullRecovered(pulling, { token, applied: true }, "local-2", hashOf)).toThrow(SyncStateError);
-    expect(() => pullRecovered({ ...pulling, generation: pulling.generation + 2 }, { token, applied: true }, "local-1", hashOf)).toThrow(SyncStateError);
-    expect(pullRecovered(pulling, { token, applied: true }, "local-1", hashOf).base).toEqual(pull.remote);
-    expect(pullRecovered(pulling, { token, applied: false }, "local-1", hashOf).base).toEqual(idle.base);
+    const at = { epoch: "e1", revision: "e1.2" };
+    const token = recoveryToken(pulling, "local-1", at, hashOf);
+    expect(() => pullRecovered(pulling, { token, applied: true }, "local-2", at, hashOf)).toThrow(SyncStateError);
+    expect(() => pullRecovered({ ...pulling, generation: pulling.generation + 2 }, { token, applied: true }, "local-1", at, hashOf)).toThrow(SyncStateError);
+    // 表示のあとでサーバーが進んだ・履歴の世代が変わった場合も、前の印では進めない (操作は残る)
+    expect(() => pullRecovered(pulling, { token, applied: true }, "local-1", { epoch: "e1", revision: "e1.3" }, hashOf)).toThrow(SyncStateError);
+    expect(() => pullRecovered(pulling, { token: recoveryToken(pulling, "local-1", { epoch: "e2", revision: "e2.1" }, hashOf), applied: true }, "local-1", { epoch: "e2", revision: "e2.1" }, hashOf)).toThrow(SyncStateError);
+    expect(pullRecovered(pulling, { token, applied: true }, "local-1", at, hashOf).base).toEqual(pull.remote);
+    expect(pullRecovered(pulling, { token, applied: false }, "local-1", at, hashOf).base).toEqual(idle.base);
   });
 });
 
@@ -578,7 +582,7 @@ describe("受け取りの途中の割り込み", () => {
     B.edit((p) => updateBlock(p, b, { description: "無関係な編集" }));
     const d = B.sync();
     expect(d.kind === "halt" && d.halt.reason).toBe("recover-pull");
-    B.state = pullRecovered(B.state, { token: recoveryToken(B.state, B.local!.hash, hashOf), applied: false }, B.local!.hash, hashOf);
+    B.state = pullRecovered(B.state, { token: recoveryToken(B.state, B.local!.hash, remoteMark(B.server.remote()), hashOf), applied: false }, B.local!.hash, remoteMark(B.server.remote()), hashOf);
     B.sync();
     expect(B.project.blocks[a].title).toBe("A 改");
     expect(B.project.blocks[b].description).toBe("無関係な編集");

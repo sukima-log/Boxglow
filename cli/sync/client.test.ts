@@ -3,7 +3,7 @@
  * 2 つのフォルダを 2 台の端末に見立て (設定フォルダも別々にする)、送受信・統合・途中で落ちた場合の再開・止まる場面を確かめる
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
@@ -11,7 +11,7 @@ import { join } from "node:path";
 import { addBlock, createProject, defaultTaskParent, fromJSON, toJSON, updateBlock } from "../../src/model/graph";
 import type { Project } from "../../src/model/types";
 import { recoveryToken, syncOnce, SyncNetworkError, type SyncOptions, type SyncResult } from "./client";
-import { bindingDir, StateStore } from "./state-store";
+import { bindingDir, bindingsOf, StateStore, SyncStateUnreadable } from "./state-store";
 import { TestSyncServer } from "./test-server";
 
 let server: TestSyncServer;
@@ -143,7 +143,7 @@ describe("途中で失敗したときの再開", () => {
     expect(readFileSync(B.file, "utf8")).toBe(before);
     // 止まった結果には、選ぶための印と、2 つの続け方それぞれの「選んだ後の結果」が付いている
     if (stopped.status !== "halted" || !stopped.recovery) throw new Error("expected a recovery preview");
-    expect(stopped.recovery.token).toBe(recoveryToken(B.store().read()!, createHash("sha256").update(before).digest("hex")));
+    expect(stopped.recovery.token).toBe(recoveryToken(B.store().read()!, createHash("sha256").update(before).digest("hex"), { epoch: "e1", revision: server.project("plan-1")!.head!.revision }));
     expect(stopped.recovery.applied).toMatchObject({ next: "pull", localChanges: ["ボックス「A」の title が変わる"], remoteChanges: ["ボックス「B」の description が変わる"] });
     expect(stopped.recovery.notApplied.next).toBe("push");
     expect(await B.sync({ recover: { token: stopped.recovery.token, applied: true } })).toMatchObject({ status: "synced" });
@@ -267,6 +267,14 @@ describe("boxglow sync コマンド", () => {
     expect(done.status).toBe(0);
     expect(B.project.blocks[a].title).toBe("B の案");
   }, 30_000);
+  it("まだ無い指定 (--watch など) は、黙って 1 回の同期として実行せずに断る", async () => {
+    const { A } = await twoDevices();
+    const puts = server.puts;
+    const r = await run(A, "--watch");
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain("--watch");
+    expect(server.puts).toBe(puts);
+  }, 30_000);
   it("結び付けの無い計画で、サーバーの指定なしに実行すると、結び付け方を案内して失敗する", async () => {
     const lone = new Device("lone");
     lone.write(fromJSON(toJSON(createProject("まだ結び付けていない"))));
@@ -274,4 +282,194 @@ describe("boxglow sync コマンド", () => {
     expect(r.status).toBe(1);
     expect(r.stdout).toContain("boxglow sync --server");
   }, 30_000);
+});
+
+// ---- Codex のレビュー 11 の反例 (U01〜U09) ----
+describe("結び付けを取り違えない", () => {
+  it("初めての受け取りが途中で終わっても、計画の ID は結び付けに固定されている。後で同じパスに別の計画を置いても、送らない", async () => {
+    const { A } = await twoDevices();
+    const C = new Device("c");
+    await expect(C.sync({ remoteId: "plan-1", onStep: (kind) => { if (kind === "pull:written") throw new Error("crash"); } })).rejects.toThrow("crash");
+    expect(await C.sync()).toMatchObject({ status: "synced" });           // 書けていたので、基準を進めるだけ
+    expect(C.store().read()!.binding.planId).toBe(A.project.id);
+    C.write(fromJSON(toJSON(createProject("別の計画"))));
+    const r = await C.sync();
+    expect(r.status === "halted" && r.halt.reason).toBe("binding-mismatch");
+    expect(server.project("plan-1")!.versions.length).toBe(1);
+  });
+  it("結び付けた後で、違う --project を指定したら、指定と違う計画へ黙って書かずに止まる", async () => {
+    const { A, a } = await twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "A 改" }));
+    const r = await A.sync({ remoteId: "another-plan" });
+    expect(r).toMatchObject({ status: "halted", halt: { reason: "binding-target", bound: "plan-1", requested: "another-plan" } });
+    expect(server.project("plan-1")!.versions.length).toBe(1);
+    expect(server.project("another-plan")).toBeUndefined();
+  });
+  it("1 つのファイルを、2 つのサーバーへは結び付けない", async () => {
+    const { A } = await twoDevices();
+    const second = new TestSyncServer(); const url = await second.start();
+    try {
+      process.env.BOXGLOW_CONFIG_DIR = A.config;
+      const r = await syncOnce({ file: A.file, server: url });
+      expect(r).toMatchObject({ status: "halted", halt: { reason: "bound-elsewhere", server: server.url } });
+      expect(second.puts).toBe(0);
+    } finally { await second.stop(); }
+  });
+  it("まだ無いファイルを、シンボリックリンクのフォルダ経由で受け取っても、次の実行は同じ結び付けを使う (計画を二重に作らない)", async () => {
+    await twoDevices();
+    const real = join(root, "real"); mkdirSync(real);
+    symlinkSync(real, join(root, "alias"), "dir");
+    process.env.BOXGLOW_CONFIG_DIR = join(root, "alias-config");
+    const viaAlias = join(root, "alias", "boxglow.json");
+    expect(await syncOnce({ file: viaAlias, server: server.url, remoteId: "plan-1" })).toMatchObject({ status: "synced", pulled: 1 });
+    expect(await syncOnce({ file: viaAlias, server: server.url })).toMatchObject({ status: "synced", pulled: 0, pushed: 0 });
+    expect(await syncOnce({ file: join(real, "boxglow.json"), server: server.url })).toMatchObject({ status: "synced", pulled: 0, pushed: 0 });
+    expect(server.projects.size).toBe(1);
+    expect(bindingsOf(viaAlias).bindings.length).toBe(1);
+  });
+});
+
+describe("復旧の選択は、サーバーを確かめてから", () => {
+  /** B が受け取りを書いた直後に落ち、その後で手元が変わって、復旧待ちになった状態を作る */
+  const waiting = async () => {
+    const { A, B, a, b } = await twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "新" })); await A.sync();
+    await expect(B.sync({ onStep: (kind) => { if (kind === "pull:written") throw new Error("crash"); } })).rejects.toThrow("crash");
+    B.edit((p) => updateBlock(p, b, { description: "AI の追記" }));
+    const stopped = await B.sync();
+    if (stopped.status !== "halted" || !stopped.recovery) throw new Error("expected a recovery halt");
+    return { A, B, a, token: stopped.recovery.token };
+  };
+  it("表示のあとでサーバーの履歴の世代が変わったら、前の印で進めない。やりかけの操作は残る", async () => {
+    const { B, token } = await waiting();
+    server.epoch = "e2";
+    const r = await B.sync({ recover: { token, applied: true } });
+    expect(r.status).toBe("halted");
+    expect(B.store().read()!.pending?.kind).toBe("pull");
+  });
+  it("表示のあとでサーバーが進んだら、前の印で進めず、新しい印で表示し直す", async () => {
+    const { A, B, a, token } = await waiting();
+    A.edit((p) => updateBlock(p, a, { title: "さらに変更" })); await A.sync();
+    const r = await B.sync({ recover: { token, applied: true } });
+    if (r.status !== "halted" || !r.recovery) throw new Error("expected a recovery halt");
+    expect(r.recovery.token).not.toBe(token);
+    expect(B.store().read()!.pending?.kind).toBe("pull");
+    expect(await B.sync({ recover: { token: r.recovery.token, applied: true } })).toMatchObject({ status: "synced" });
+  });
+});
+
+describe("状態の置き場", () => {
+  it("state.json のやりかけの操作が読めない形なら、「同期済み」にせず、読めないと知らせる", async () => {
+    const { A } = await twoDevices();
+    const path = join(A.store().dir, "state.json");
+    const state = JSON.parse(readFileSync(path, "utf8"));
+    for (const broken of [{ ...state, pending: { kind: "unexpected", hash: "missing" } }, { ...state, base: { hash: 1 } }, { ...state, generation: "3" }, { ...state, binding: { file: A.file } }]) {
+      writeFileSync(path, JSON.stringify(broken));
+      await expect(A.sync()).rejects.toBeInstanceOf(SyncStateUnreadable);
+    }
+    writeFileSync(path, JSON.stringify(state));
+    expect(await A.sync()).toMatchObject({ status: "synced" });
+  });
+  it("結び付けは、各フォルダの state.json から見つける (索引のファイルに頼らない)。読めない状態のフォルダは、無いものとせずに知らせる", async () => {
+    const { A } = await twoDevices();
+    process.env.BOXGLOW_CONFIG_DIR = A.config;
+    expect(bindingsOf(A.file).bindings.map((b) => b.remoteId)).toEqual(["plan-1"]);
+    expect(existsSync(join(A.config, "sync", "bindings.json"))).toBe(false);
+    writeFileSync(join(A.store().dir, "state.json"), "{ 壊れた");
+    process.env.BOXGLOW_CONFIG_DIR = A.config;
+    const found = bindingsOf(A.file);
+    expect(found.bindings).toEqual([]);
+    expect(found.unreadable.length).toBe(1);
+  });
+  it("壊れた写しが既にあっても、置き直して、返したハッシュの中身を読み戻せる", async () => {
+    const { A } = await twoDevices();
+    const store = A.store();
+    const hash = store.putObject("写しの中身\n");
+    writeFileSync(join(store.dir, "objects", hash), "壊れた");
+    expect(store.getObject(hash)).toBeNull();
+    expect(store.putObject("写しの中身\n")).toBe(hash);
+    expect(store.getObject(hash)).toBe("写しの中身\n");
+  });
+  it("受け取りを書いた後で別の確認で止まったときは、「何も変えていない」とは報告しない (行ったことを数える)", async () => {
+    const { A, B, a, b } = await twoDevices();
+    const withSetting = JSON.parse(readFileSync(A.file, "utf8")); withSetting.futureSetting = 1;
+    writeFileSync(A.file, JSON.stringify(withSetting, null, 2) + "\n");
+    await A.sync(); await B.sync();
+    A.edit((p) => updateBlock(p, a, { description: "サーバー側の変更" })); await A.sync();
+    const local = JSON.parse(readFileSync(B.file, "utf8")); delete local.futureSetting; local.blocks[b].title = "手元の変更";
+    writeFileSync(B.file, JSON.stringify(local, null, 2) + "\n");
+    const r = await B.sync();
+    expect(r).toMatchObject({ status: "halted", halt: { reason: "protected-deletion" }, pulled: 1, pushed: 0 });
+    expect(B.project.blocks[a].description).toBe("サーバー側の変更");   // 統合した結果は、手元に書かれている
+  });
+});
+
+describe("試験用のサーバーの約束", () => {
+  const put = (text: string, headers: Record<string, string>) => server.put("contract", text, headers);
+  it("同じ中身の送信は版を増やさない (前提の版は確かめる)。世代の指定と、計画としての検査が必須", async () => {
+    const { A } = await twoDevices();
+    const text = readFileSync(A.file, "utf8");
+    const project = () => server.project("contract")!;
+    expect(put(text, { "x-boxglow-op": "op1", "x-boxglow-epoch": "e1", "if-none-match": "*" }).status).toBe(201);
+    // 同じ中身・正しい前提・新しい操作: 今の版を結果にして、履歴は増やさない
+    expect(put(text, { "x-boxglow-op": "op2", "x-boxglow-epoch": "e1", "if-match": '"e1.1"' })).toMatchObject({ status: 200, revision: "e1.1" });
+    expect(project().versions.length).toBe(1);
+    // 同じ中身でも、前提の版が古ければ断る
+    const changed = text.replace("同期の試験", "同期の試験 2");
+    expect(put(changed, { "x-boxglow-op": "op3", "x-boxglow-epoch": "e1", "if-match": '"e1.1"' }).status).toBe(200);
+    expect(put(changed, { "x-boxglow-op": "op4", "x-boxglow-epoch": "e1", "if-match": '"e1.1"' }).status).toBe(412);
+    // 世代の指定が無い・計画として不正な中身は受け付けない
+    expect(put(text, { "x-boxglow-op": "op5", "if-match": '"e1.2"' }).status).toBe(428);
+    expect(put("{}", { "x-boxglow-op": "op6", "x-boxglow-epoch": "e1", "if-match": '"e1.2"' }).status).toBe(400);
+    // 消した計画には、前に受理した操作の送り直しも受け付けない
+    project().deleted = true;
+    expect(put(text, { "x-boxglow-op": "op1", "x-boxglow-epoch": "e1", "if-none-match": "*" }).status).toBe(410);
+  });
+});
+
+// 実際に複数のプロセスを同時に動かす (順序は固定していない。何度か繰り返して、変更の取りこぼしと状態の食い違いが無いことを確かめる)
+describe("複数のプロセスを同時に動かす", () => {
+  /** CLI を非同期に実行する (args[0] がコマンド) */
+  const cli = (d: Device, ...args: string[]) => new Promise<number | null>((done) => {
+    const child = spawn(process.execPath, ["bin/boxglow.js", ...args, "--file", d.file, "--lang", "ja", "--actor", "human"]
+    , { stdio: "ignore", env: { ...process.env, BOXGLOW_CONFIG_DIR: d.config, BOXGLOW_SERVER: "", BOXGLOW_TOKEN: "", BOXGLOW_FILE: "" } });
+    child.on("exit", (status) => done(status));
+  });
+  it("同じ結び付けの sync を 3 つ同時に動かしても、状態は読める形のまま、手元とサーバーがそろう", async () => {
+    const { A, B, a } = await twoDevices();
+    B.edit((p) => updateBlock(p, a, { title: "B 改" })); await B.sync();
+    A.edit((p) => updateBlock(p, a, { description: "A の説明" }));
+    const codes = await Promise.all([cli(A, "sync"), cli(A, "sync"), cli(A, "sync")]);
+    expect(codes.every((c) => c === 0)).toBe(true);
+    await cli(A, "sync");
+    const state = A.store().read()!;
+    expect(state.pending).toBeNull();
+    expect(readFileSync(A.file, "utf8")).toBe(server.project("plan-1")!.head!.text);
+    expect(A.project.blocks[a]).toMatchObject({ title: "B 改", description: "A の説明" });
+  }, 60_000);
+  it("sync の最中に CLI が手元を書き換えることを繰り返しても、どの変更も消えない", async () => {
+    const { A, B, a, b } = await twoDevices();
+    for (let i = 1; i <= 4; i++) {
+      B.edit((p) => updateBlock(p, b, { title: `B の ${i} 回目` })); await B.sync();
+      // A では、同期と、CLI での書き込み (進捗の記録) を同時に走らせる
+      const codes = await Promise.all([cli(A, "sync"), cli(A, "set", a, "--progress", String(i * 10)), cli(A, "sync")]);
+      expect(codes[1]).toBe(0);
+    }
+    await cli(A, "sync"); await cli(A, "sync");
+    await B.sync();
+    for (const d of [A, B]) { expect(d.project.blocks[b].title).toBe("B の 4 回目"); expect(d.project.blocks[a].progress).toBe(40); }
+    expect(A.store().read()!.pending).toBeNull();
+    expect(readFileSync(A.file, "utf8")).toBe(readFileSync(B.file, "utf8"));
+  }, 120_000);
+  it("同じ設定フォルダで、別々の計画の sync を同時に動かしても、両方の結び付けが残る", async () => {
+    const shared = join(root, "shared-config");
+    const X = new Device("x"), Y = new Device("y");
+    (X as { config: string }).config = shared; (Y as { config: string }).config = shared;
+    X.write(fromJSON(toJSON(createProject("計画 X")))); Y.write(fromJSON(toJSON(createProject("計画 Y"))));
+    const codes = await Promise.all([cli(X, "sync", "--server", server.url, "--project", "x-plan"), cli(Y, "sync", "--server", server.url, "--project", "y-plan")]);
+    expect(codes).toEqual([0, 0]);
+    process.env.BOXGLOW_CONFIG_DIR = shared;
+    expect(bindingsOf(X.file).bindings.map((b) => b.remoteId)).toEqual(["x-plan"]);
+    expect(bindingsOf(Y.file).bindings.map((b) => b.remoteId)).toEqual(["y-plan"]);
+  }, 60_000);
 });
