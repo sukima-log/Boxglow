@@ -225,4 +225,3 @@ export async function runWatchCommand(o: SyncCommandOptions, out: (text: string)
   for (const s of unsent) out(t("まだ送っていない変更があります: {file} (boxglow sync で送れます)", { file: s.binding.file }));
   return 0;
 }
-
