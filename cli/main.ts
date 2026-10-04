@@ -11,6 +11,8 @@ import { commitFile, describeLock, FileConflict, inspectLock, lockTokenOf, remov
 import { contextReceipt, isCurrentToken, requireContext } from "./context";
 import { setupAgent } from "./setup-agent";
 import { runSyncCommand, runWatchCommand } from "./sync/command";
+import { runLogin, runLogout, runWhoami } from "./sync/login";
+import { bindingsOf } from "./sync/state-store";
 import { projectProblem } from "../src/model/validate-file";
 import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
 import { resumeSummary, resumeReport } from "../src/model/resume";
@@ -313,6 +315,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  --resolve <印> --prefer local|remote = 競合を手元 / サーバーの値に決める / --link <印> --prefer local|remote = 初回に中身が違うときの選択
                                                  --recover <印> --applied|--not-applied = 途中で終わった受け取りを続ける
                                                  --account <利用者の ID> = 利用者の記録が無い結び付けを、表示された利用者のものとして続ける
+  login [--server <URL>] [--name <端末の名前>]   (試験中) 同期サーバーにサインインする (GitHub のアカウント。表示されたコードを、ブラウザで入力する)
+  logout [--server <URL>] / whoami [--server <URL>]  サインアウトする (サーバー側のトークンも取り消す) / 今の利用者・端末・保存量を出す
   unlock [--remove --lock-token <印> --actor human]  残った保存ロックの状態 (持ち主・判定) を出す (読むだけ。AI も使える)。--remove は人が解除する:
                                                  この計画を開いている Boxglow を止めてから、表示された印を付けて実行する。持ち主が動いているロックは解除できない
   status [--brief] [--json]                     全体の状況 (Markdown)。--brief は全階層を省略し、判断・回答・活動・次の候補を表示
@@ -395,6 +399,8 @@ Usage (npx boxglow <command> ...):
                                                  --resolve <token> --prefer local|remote = settle conflicts / --link <token> --prefer local|remote = choose a side on first link
                                                  --recover <token> --applied|--not-applied = continue an interrupted pull
                                                  --account <account id> = continue a binding that has no account recorded, as the account shown
+  login [--server <URL>] [--name <device name>]  (experimental) Sign in to a sync server (GitHub account; enter the code shown in your browser)
+  logout [--server <URL>] / whoami [--server <URL>]  Sign out (also revokes the token on the server) / show the current account, devices and storage
   unlock [--remove --lock-token <token> --actor human]  Show a leftover save lock (owner and verdict; read-only, agents may use it). --remove is for a person:
                                                  stop every Boxglow that has this plan open, then run it with the token shown. A lock whose owner is running cannot be removed
   status [--brief] [--json]                     Overall status (Markdown). --brief omits the tree; keeps decisions, answers, activity and next actions
@@ -1188,6 +1194,22 @@ if (argv[0] === "mcp") {
   if (str(options.actor)) process.env.BOXGLOW_ACTOR = str(options.actor)!; // 記録者の名前 (各ツールの実行に引き継ぐ)
   if (str(options.lang)) process.env.BOXGLOW_LANG = str(options.lang)!; // ツールの説明の言語 (各コマンドの文言は計画の言語)
   startMcp(runCli).catch((e) => { console.error(`[boxglow mcp] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });
+} else if (argv[0] === "login" || argv[0] === "logout" || argv[0] === "whoami") {
+  // 同期サーバーへのサインイン (通信と、利用者の操作を待つので、ほかのコマンドとは別扱い)
+  const { options } = parseArgs(argv.slice(1));
+  (async () => {
+    setLang(explicitLang(options) ?? "ja");
+    const known = new Set(["server", "lang", "file", "name"]);
+    const unknown = Object.keys(options).filter((k) => !known.has(k));
+    if (unknown.length > 0) { console.log(t("boxglow {cmd} が知らない指定です: {list}", { cmd: argv[0], list: unknown.map((k) => "--" + k).join(", ") })); process.exitCode = 1; return; }
+    // サーバー: 指定 > 環境変数 > 計画のファイルの結び付け (1 つだけのとき)
+    let server = str(options.server) ?? process.env.BOXGLOW_SERVER;
+    if (!server) { try { const bound = bindingsOf(locateFile(str(options.file))).bindings; if (bound.length === 1) server = bound[0].server; } catch { /* 計画のファイルが無い場所でも使える */ } }
+    if (!server) { console.log(t("サーバーが決まっていません。--server <URL> を指定してください")); process.exitCode = 1; return; }
+    const out = (text: string) => console.log(text);
+    process.exitCode = argv[0] === "login" ? await runLogin({ server, out, deviceName: str(options.name) })
+      : argv[0] === "logout" ? await runLogout({ server, out }) : await runWhoami({ server, out });
+  })().catch((e) => { console.error(`[boxglow ${argv[0]}] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });
 } else if (argv[0] === "sync") {
   // 同期 (通信を待つので、ほかのコマンドとは別扱い)
   const { options } = parseArgs(argv.slice(1));

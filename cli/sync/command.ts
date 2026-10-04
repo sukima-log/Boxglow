@@ -17,6 +17,8 @@ import { t } from "../../src/i18n/core";
 import { readFileSync } from "node:fs";
 import { syncOnce, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
 import { bindingsOf, hashOf, SyncStateUnreadable } from "./state-store";
+import { resolveToken } from "./credentials";
+import { authHint } from "./login";
 import { bindingsFor, lockWatch, SyncWatcher, type WatchEvent } from "./watch";
 import type { RecoveryOutcome } from "../../src/sync/engine";
 
@@ -66,7 +68,7 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
   let result: SyncResult;
   try {
     result = await syncOnce({
-      file: o.file, server, remoteId: o.project, token: process.env.BOXGLOW_TOKEN
+      file: o.file, server, remoteId: o.project, token: resolveToken(server)?.token
     , approvedDeletion: o.adopt
     , restoreDeletion: o.restore
     , resolution: o.resolve ? { token: o.resolve, prefer } : undefined
@@ -80,7 +82,8 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
       out(t("手元のファイルを直してから、もう一度 boxglow sync を実行してください。断られた送信は送り直さず、サーバーで受理済みか・取り消すかを確定させてから、今の手元の内容で送り直します"));
       return 2;
     }
-    if (e instanceof SyncAuthError) { out(t("サーバーが利用者を確かめられませんでした (トークンが無い、または無効です)。環境変数 BOXGLOW_TOKEN を確かめてください。やりかけの操作は残してあります")); return 1; }
+    // 使ったトークンの出どころ (環境変数 / 保存済みのサインイン / 無し) に合わせて、直し方を案内する
+    if (e instanceof SyncAuthError) { out(t("サーバーが利用者を確かめられませんでした。やりかけの操作は残してあります")); out(authHint(resolveToken(server)?.source ?? null, e.status)); return 1; }
     if (e instanceof SyncNetworkError) { out(t("サーバーと通信できませんでした (やりかけの操作は残してあります。もう一度 boxglow sync を実行すると、続きから進みます): {message}", { message: e.message })); return 1; }
     if (e instanceof SyncStateUnreadable) { out(t("同期の状態のファイルを読めません。自動では直しません (消すと、やりかけの操作と前回そろえた中身の記録を失います): {path} ({problem})", { path: e.path, problem: e.problem })); return 1; }
     throw e;
@@ -245,7 +248,7 @@ export async function runWatchCommand(o: SyncCommandOptions, out: (text: string)
     else if (e.kind === "error") out(`[${stamp()}] ${e.file ? e.file + ": " : ""}` + t("この計画の同期を止めています: {message}", { message: e.message }));
     else { out(`[${stamp()}] ${e.file}:`); describeHalt(e.result, e.file, (line) => out("  " + line)); out("  " + t("(上のコマンドは、その計画のフォルダで、別の端末画面から実行してください。常時の同期は動かしたままで構いません)")); }
   };
-  const watcher = new SyncWatcher({ server, token: process.env.BOXGLOW_TOKEN, onEvent });
+  const watcher = new SyncWatcher({ server, token: resolveToken(server)?.token, onEvent });
   out(t("常時の同期を始めました (Ctrl+C で終了)。サーバー: {server}、計画: {count} 件", { server, count: bindingsFor(server).states.length }));
   // (tick は例外を投げない作りだが、万一の失敗でも、処理の全体を落とさない)
   const timer = setInterval(() => { watcher.tick().catch((e) => out(`[${stamp()}] ` + String(e))); }, 1000);

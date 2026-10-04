@@ -40,6 +40,13 @@ export class TestSyncServer {
   settles = 0;
   /** true にすると、次の「操作の確定」を処理した後、応答を返さずに接続を切る。1 回で false に戻る */
   dropNextSettleResponse = false;
+  /** サインインの手順: device_code → 状態 ("pending" / "slow_down" / "denied" / "not-invited"、または許可された利用者) */
+  deviceCodes = new Map<string, "pending" | "slow_down" | "denied" | "not-invited" | { account: string; login: string }>();
+  /** 発行したトークン → 利用者 (発行していないトークンは、文字列そのものを利用者の ID として扱う) */
+  issued = new Map<string, { account: string; login: string }>();
+  /** 取り消したトークン */
+  revoked = new Set<string>();
+  private codes = 0;
   /** 中身の大きさの上限 (バイト)。超えた PUT は、操作の照合より前に 413 で断る (本番のサーバーと同じ順) */
   maxBytes = Infinity;
   /** true にすると、次の PUT を処理した後、応答を返さずに接続を切る (応答の紛失の再現)。1 回で false に戻る */
@@ -72,13 +79,49 @@ export class TestSyncServer {
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    // 利用者: トークンの文字列を、そのまま利用者の ID として扱う (試験用)
-    const account = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1] ?? "test";
+    // ---- サインインの手順 (認証なしで呼べる) ----
+    const plain = (status: number, body: unknown) => { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+    if (req.method === "POST" && req.url === "/v1/auth/device") {
+      const code = "dc" + String(++this.codes).padStart(38, "0");
+      this.deviceCodes.set(code, "pending");
+      plain(200, { device_code: code, user_code: "TEST-" + this.codes, verification_uri: "https://github.com/login/device", interval: 1, expires_in: 900 });
+      return;
+    }
+    if (req.method === "POST" && req.url === "/v1/auth/device/token") {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      const state = this.deviceCodes.get(String((JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { device_code?: unknown }).device_code));
+      if (state === undefined) plain(400, { code: "incorrect_device_code" });
+      else if (state === "pending") plain(200, { status: "pending" });
+      else if (state === "slow_down") plain(200, { status: "slow_down", interval: 2 });
+      else if (state === "denied") plain(400, { code: "access_denied" });
+      else if (state === "not-invited") plain(403, { code: "not-invited", login: "stranger", waitlist: "https://example.test/waitlist" });
+      else {
+        const token = `tok-${state.account}-${this.issued.size + 1}`;
+        this.issued.set(token, state);
+        plain(200, { status: "ok", token, account: state.account, login: state.login });
+      }
+      return;
+    }
+    // 利用者: 発行したトークンなら、その利用者。それ以外は、トークンの文字列を、そのまま利用者の ID として扱う (試験用)
+    const bearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
+    if (bearer !== undefined && this.revoked.has(bearer)) { plain(401, { code: "unauthorized" }); return; }
+    const account = bearer === undefined ? "test" : this.issued.get(bearer)?.account ?? bearer;
     const projects = this.space(account);
     const send = (status: number, body = "", headers: Record<string, string> = {}) => {
       res.writeHead(status, { "x-boxglow-epoch": this.epoch, "x-boxglow-account": account, "content-type": "application/json; charset=utf-8", ...headers });
       res.end(body);
     };
+    if (req.method === "GET" && req.url === "/v1/me") {
+      send(200, JSON.stringify({ account, login: this.issued.get(bearer ?? "")?.login ?? account, devices: [{ name: "this", current: true }]
+      , usage: { projects: projects.size, contentBytes: 1_500_000 }, limits: { projects: 10, contentBytes: 200_000_000 } }));
+      return;
+    }
+    if (req.method === "DELETE" && req.url === "/v1/tokens/current") {
+      if (bearer !== undefined) this.revoked.add(bearer);
+      send(200, JSON.stringify({ revoked: true }));
+      return;
+    }
     // 一覧: 全部の計画の最新の版 (常時の同期は、これ 1 回で、どの計画が進んだかを確かめる)
     if (req.method === "GET" && req.url === "/v1/projects") {
       this.lists++;
