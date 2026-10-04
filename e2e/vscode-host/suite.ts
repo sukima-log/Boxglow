@@ -9,6 +9,8 @@
  * Output: 同じフォルダの out/result-<phase>.json = { steps: { 名前: { ok, value | message } } }
  */
 import * as fs from "node:fs";
+import { strict as assert } from "node:assert";
+import { execFileSync } from "node:child_process";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as vscode from "vscode";
@@ -20,7 +22,7 @@ import { setLang } from "../../src/i18n/core";
 interface Step { ok: boolean; value?: unknown; message?: string }
 
 export async function run(): Promise<void> {
-  const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8")) as { target: string; phase: string };
+  const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8")) as { target: string; phase: string; distro: string; linuxTarget: string; node: string; cli: string };
   const steps: Record<string, Step> = {};
   /** 1 件の確認を実行して結果を控える (例外は失敗として記録し、次の確認へ進む) */
   const step = async (name: string, fn: () => unknown) => {
@@ -32,12 +34,25 @@ export async function run(): Promise<void> {
 
   await step("環境", () => ({ platform: process.platform, host: os.hostname(), vscode: vscode.version, allowedUNCHosts: vscode.workspace.getConfiguration("security").get("allowedUNCHosts") }));
   // 拡張が実際に登録されていて、図のエディタで開けるか (webview の中身までは、ここからは見えない)
-  await step("拡張が有効", () => vscode.extensions.getExtension("sukima.boxglow-vscode")?.packageJSON.version ?? "(見つからない)");
-  await step("保存できない理由 (diskAccess)", () => diskAccess(target));
+  await step("拡張が有効", async () => {
+    const extension = vscode.extensions.getExtension("sukima.boxglow-vscode");
+    assert.ok(extension, "Boxglow extension must be present");
+    await extension.activate();
+    assert.equal(extension.isActive, true);
+    return extension.packageJSON.version;
+  });
+  await step("保存できない理由 (diskAccess)", () => {
+    const reason = diskAccess(target);
+    if (cfg.phase === "blocked") assert.match(reason ?? "", /閲覧専用/);
+    else assert.equal(reason, null);
+    return reason;
+  });
 
   if (cfg.phase === "blocked") {
     // 許可されていない窓: ロックは取れない (例外になる)。奪うことも、空のロックを残すこともない
-    await step("ロックの取得は失敗する", () => { try { lockFile(target)(); return "取得できてしまった"; } catch (e) { return `失敗: ${(e as NodeJS.ErrnoException).code}`; } });
+    await step("ロックの取得は失敗する", () => {
+      assert.throws(() => lockFile(target)(), { code: "ERR_UNC_HOST_NOT_ALLOWED" });
+    });
   } else {
     const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(target));
     /** 拡張 (extension.ts) と同じ形の、保存先の操作 */
@@ -58,9 +73,13 @@ export async function run(): Promise<void> {
       const before = doc.getText();
       try {
         await saveDocument(adapter, { text: renamed("奪って保存した"), baseText: before, version: doc.version }, before);
-        return "保存できてしまった";
+        assert.fail("A WSL writer lock must prevent saving");
       } catch (e) {
         const status = inspectLock(target);
+        assert.ok(e instanceof FileBusy);
+        assert.equal(status?.owner?.token, "wsl-writer");
+        assert.equal(status?.verdict, "unknown");
+        assert.equal(fs.readFileSync(target, "utf8"), before);
         return { busy: e instanceof FileBusy, verdict: status?.verdict, reason: status?.reason, owner: status?.owner?.token, diskUnchanged: fs.readFileSync(target, "utf8") === before };
       } finally {
         fs.rmSync(lock, { recursive: true, force: true });
@@ -70,6 +89,9 @@ export async function run(): Promise<void> {
     await step("拡張の保存が WSL のファイルに届く", async () => {
       const before = doc.getText();
       const version = await saveDocument(adapter, { text: renamed("Windows の窓から保存"), baseText: before, version: doc.version }, before);
+      assert.equal(JSON.parse(fs.readFileSync(target, "utf8")).name, "Windows の窓から保存");
+      assert.equal(doc.isDirty, false);
+      assert.equal(fs.existsSync(lock), false);
       return { version, onDisk: JSON.parse(fs.readFileSync(target, "utf8")).name, lockLeft: fs.existsSync(lock) };
     });
     // 3) 図のエディタとして開ける (拡張の読み込み処理が例外にならない)
@@ -77,14 +99,32 @@ export async function run(): Promise<void> {
       await vscode.commands.executeCommand("vscode.openWith", vscode.Uri.file(target), "boxglow.editor");
       await new Promise((r) => setTimeout(r, 3000));
       const input = vscode.window.tabGroups.activeTabGroup.activeTab?.input as { viewType?: string } | undefined;
-      return input?.viewType ?? "(不明)";
+      assert.equal(input?.viewType, "boxglow.editor");
+      return input.viewType;
     });
-    // 4) Windows 側がロックを取ったまま終了した状態を残す (このあと WSL 側の CLI が「確かめられない」として奪わないことを確かめる)
-    await step("Windows 側のロックを残す", () => {
-      lockFile(target); // 解放しない
-      return JSON.parse(fs.readFileSync(path.join(lock, "owner.json"), "utf8"));
+    // Windows の生きた書き手を WSL の CLI が奪わないことを確かめる。
+    // 取得した本人が finally で解放する。人を装った解除や、終了後の放置は不要。
+    await step("Windows のロックを WSL の CLI が奪わない", () => {
+      const release = lockFile(target);
+      const before = fs.readFileSync(target, "utf8");
+      try {
+        const owner = JSON.parse(fs.readFileSync(path.join(lock, "owner.json"), "utf8"));
+        assert.equal(owner.platform, "win32");
+        assert.throws(() => execFileSync("wsl.exe", ["-d", cfg.distro, "--", cfg.node, cfg.cli,
+          "add", "must not be written", "--file", cfg.linuxTarget, "--actor", "codex"],
+          { timeout: 30000, windowsHide: true, stdio: "pipe" }), (error: unknown) => {
+          const failure = error as { status?: number; stderr?: Buffer };
+          assert.equal(failure.status, 1);
+          assert.match(String(failure.stderr), /ロック|書き込み中|lock|busy/i);
+          return true;
+        });
+        assert.equal(fs.readFileSync(target, "utf8"), before);
+        assert.equal(JSON.parse(fs.readFileSync(path.join(lock, "owner.json"), "utf8")).token, owner.token);
+        return { platform: owner.platform, preserved: true };
+      } finally { release(); }
     });
   }
   fs.mkdirSync(path.join(__dirname, "out"), { recursive: true });
-  fs.writeFileSync(path.join(__dirname, "out", `result-${cfg.phase}.json`), JSON.stringify({ steps }, null, 2));
+  fs.writeFileSync(path.join(__dirname, "out", `result-${cfg.phase}.json`), JSON.stringify({ ok: Object.values(steps).every((step) => step.ok), steps }, null, 2));
+  assert.ok(Object.values(steps).every((step) => step.ok), "VS Code host checks failed; see result JSON");
 }

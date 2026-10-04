@@ -53,7 +53,7 @@ npx boxglow done "Build it" --artifact "app=src/App.tsx"                    # de
 
 Recommended flow for a new project: the agent reads the brief (README, request) and creates 3-7 top-level boxes with concrete outputs, asks the human to confirm the split (`ask`), and only then decomposes the box it starts (`split`). Decisions keep the candidates that were not chosen; `reopen` lets you change course later without losing the history.
 
-Then run `npx boxglow setup-agent` once. It installs agent instructions and skills and enables the context guard described below. Claude Code also receives a SessionStart hook and `.mcp.json`; Codex MCP registration is separate. Open `npx boxglow serve --open` or the VS Code custom editor to edit the same repository file as the agent.
+Then run `npx boxglow setup-agent` once. It installs agent instructions and skills and enables the context guard described below. Claude Code also receives a SessionStart hook and `.mcp.json`; Codex MCP registration is separate. Open `npx boxglow serve --open` or the [VS Code extension](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode) to edit the same repository file as the agent.
 
 ### Remember decisions across sessions
 
@@ -153,7 +153,9 @@ The server finds `boxglow.json` like the CLI does (current directory upwards, or
 
 ## VS Code extension
 
-`vscode/` holds a VS Code extension that opens `boxglow.json` as the same diagram inside the editor (custom editor "Boxglow"; right-click the file or use the editor title button / command *Boxglow: Open boxglow.json as a diagram*). The diagram follows the file when the CLI or an agent writes it, edits in the diagram are written back, and light / dark follow the VS Code theme. Build it with `npm run build:vscode` (bundles the web app into `vscode/media/`) and package with `cd vscode && npm run package` (`.vsix`, install via *Extensions: Install from VSIX...*).
+Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.4.0 goes with boxglow 0.5.0).
+
+`vscode/` holds the extension's source. It opens `boxglow.json` as the same diagram inside the editor (custom editor "Boxglow"; right-click the file or use the editor title button / command *Boxglow: Open boxglow.json as a diagram*). The diagram follows the file when the CLI or an agent writes it, edits in the diagram are written back, and light / dark follow the VS Code theme. To build it yourself: `npm run build:vscode` (bundles the web app into `vscode/media/`), then `cd vscode && npm run package` (`.vsix`, install via *Extensions: Install from VSIX...*).
 
 ## Several repositories, one plan
 
