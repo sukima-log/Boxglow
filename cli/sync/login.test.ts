@@ -375,13 +375,14 @@ describe("R24-01: 壊れた資格情報のファイルの中身を、画面に�
 });
 
 describe("配布する入口 (bin/boxglow.js) を、サブプロセスで通す", () => {
-  /** CLI を実行する。Output: 終了コードと標準出力 */
+  /** CLI を実行する。Output: 終了コードと、出力 (標準出力と標準エラー出力の両方。どちらにもトークンが出ないことを確かめるため) */
   const run = (args: string[], env: Record<string, string> = {}) => new Promise<{ status: number | null; stdout: string }>((done) => {
     const child = spawn(process.execPath, ["bin/boxglow.js", ...args, "--lang", "ja"]
     , { env: { ...process.env, BOXGLOW_CONFIG_DIR: join(root, "cli-config"), BOXGLOW_SERVER: "", BOXGLOW_TOKEN: "", ...env } });
     let stdout = "";
     child.stdout.on("data", (c: Buffer) => { stdout += c.toString(); });
-    child.on("exit", (status) => done({ status, stdout }));
+    child.stderr.on("data", (c: Buffer) => { stdout += c.toString(); });
+    child.on("close", (status) => done({ status, stdout }));
   });
 
   it("login → whoami → sync → logout。トークンは、どの出力にも出ない", async () => {
