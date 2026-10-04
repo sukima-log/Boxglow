@@ -68,4 +68,11 @@ export const sync: Record<string, string> = {
   "この計画は、サーバー側の計画 {bound} に結び付いています。指定された {requested} とは違うので、何もしていません。結び付け済みの計画と同期するなら、--project を付けずに実行してください": "This plan is bound to the server plan {bound}. That differs from the requested {requested}, so nothing was done. To sync with the bound plan, run without --project",
   "この計画のファイルは、すでに別のサーバーに結び付いています: {server} (1 つのファイルを、2 つのサーバーへは結び付けません)": "This plan file is already bound to another server: {server} (one file is not bound to two servers)",
   "boxglow sync が知らない指定です: {list}": "boxglow sync does not know these options: {list}",
+  "この端末では、すでに常時の同期が動いています。そちらが、この計画も受け持ちます (動いていないのに残っているときは: boxglow unlock --file {path})": "A continuous sync is already running on this machine; it covers this plan too (if none is running and the lock was left behind: boxglow unlock --file {path})",
+  "サーバーと通信できません。{seconds} 秒後にやり直します: {message}": "Cannot reach the server. Retrying in {seconds} s: {message}",
+  "この計画の同期を止めています: {message}": "Sync of this plan is stopped: {message}",
+  "(上のコマンドは、その計画のフォルダで、別の端末画面から実行してください。常時の同期は動かしたままで構いません)": "(run the command above from that plan's folder in another terminal; the continuous sync can keep running)",
+  "常時の同期を始めました (Ctrl+C で終了)。サーバー: {server}、計画: {count} 件": "Continuous sync started (Ctrl+C to stop). Server: {server}, plans: {count}",
+  "常時の同期を終えました。": "Continuous sync stopped.",
+  "まだ送っていない変更があります: {file} (boxglow sync で送れます)": "There are unsent changes: {file} (send them with boxglow sync)",
 };

@@ -99,6 +99,20 @@ async function fetchRemote(o: { server: string; remoteId: string; token?: string
   return { kind: "present", epoch, revision, content: { hash: hashOf(text), text } };
 }
 
+/**
+ * 全部の計画の最新の版を、1 回の要求で取得する (常時の同期が、どの計画が進んだかを確かめるのに使う)
+ * Input : server・token・fetch
+ * Output: { epoch = サーバーの履歴の世代, heads = 計画の ID → { revision (まだ無ければ null), deleted } }。通信できなければ SyncNetworkError
+ */
+export async function fetchHeads(o: { server: string; token?: string; fetch?: typeof fetch }): Promise<{ epoch: string; heads: Map<string, { revision: string | null; deleted: boolean }> }> {
+  let res: Response;
+  try { res = await (o.fetch ?? fetch)(`${normalizeServer(o.server)}/v1/projects`, { headers: headers(o.token) }); } catch (e) { throw new SyncNetworkError(String(e)); }
+  const epoch = res.headers.get("x-boxglow-epoch");
+  if (res.status !== 200 || !epoch) throw new SyncNetworkError(`unexpected response ${res.status}`);
+  const list = await res.json() as { id: string; revision: string | null; deleted: boolean }[];
+  return { epoch, heads: new Map(list.map((p) => [p.id, { revision: p.revision, deleted: !!p.deleted }])) };
+}
+
 /** 要求に付ける共通のヘッダ (トークン、クライアントの版と保存の取り決めの版) */
 function headers(token?: string): Record<string, string> {
   return { ...(token ? { authorization: `Bearer ${token}` } : {}), "x-boxglow-version": APP_VERSION, "x-boxglow-protocol": String(SAVE_PROTOCOL) };

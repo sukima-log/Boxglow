@@ -10,7 +10,7 @@ import { startServe } from "./serve";
 import { commitFile, describeLock, FileConflict, inspectLock, lockTokenOf, removeLock, revisionOf, sleepSync } from "./file-store";
 import { contextReceipt, isCurrentToken, requireContext } from "./context";
 import { setupAgent } from "./setup-agent";
-import { runSyncCommand } from "./sync/command";
+import { runSyncCommand, runWatchCommand } from "./sync/command";
 import { projectProblem } from "../src/model/validate-file";
 import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
 import { resumeSummary, resumeReport } from "../src/model/resume";
@@ -307,7 +307,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  blocked / review / leave / checkpoint は --context-token <context で得た contextToken> が要る (読んだ後に指示・回答・引き継ぎが変わっていたら拒否)。
                                                  人 (--actor human) には要求しない。AI が off にするときは --context-token が要る
   version [--json]                               boxglow の版と、保存の取り決めの版を出す (--version でも可)
-  sync [--server <URL>] [--project <ID>]           (試験中) 計画のファイルを同期サーバーとそろえる。初回は --server で結び付ける。止まったら理由と次の操作を表示
+  sync [--server <URL>] [--project <ID>] [--watch]  (試験中) 計画のファイルを同期サーバーとそろえる。初回は --server で結び付ける。止まったら理由と次の操作を表示
+                                                 --watch = 常時の同期 (Ctrl+C で終了。この端末の、同じサーバーに結び付いた計画すべてを受け持つ)
                                                  --adopt <印> = 消えた設定の削除を採って送る / --restore <印> = 消えた設定を手元に戻す
                                                  --resolve <印> --prefer local|remote = 競合を手元 / サーバーの値に決める / --link <印> --prefer local|remote = 初回に中身が違うときの選択
                                                  --recover <印> --applied|--not-applied = 途中で終わった受け取りを続ける
@@ -387,7 +388,8 @@ Usage (npx boxglow <command> ...):
                                                  blocked / review / leave / checkpoint need --context-token <contextToken from context> (rejected if instructions, answers or handoff notes changed after reading).
                                                  People (--actor human) are not asked for it. An AI needs --context-token to turn it off
   version [--json]                               Print the boxglow version and the save-protocol version (--version also works)
-  sync [--server <URL>] [--project <ID>]           (experimental) Bring the plan file in line with a sync server. Bind with --server the first time. When it stops, it prints why and what to do
+  sync [--server <URL>] [--project <ID>] [--watch]  (experimental) Bring the plan file in line with a sync server. Bind with --server the first time. When it stops, it prints why and what to do
+                                                 --watch = keep syncing (Ctrl+C to stop; covers every plan on this machine bound to the same server)
                                                  --adopt <token> = send the deletion of settings / --restore <token> = put the deleted settings back locally
                                                  --resolve <token> --prefer local|remote = settle conflicts / --link <token> --prefer local|remote = choose a side on first link
                                                  --recover <token> --applied|--not-applied = continue an interrupted pull
@@ -1194,10 +1196,10 @@ if (argv[0] === "mcp") {
     const file = locateFile(str(options.file));
     try { setLang(explicitLang(options) ?? load(file).lang ?? "ja"); } catch { /* 読めない計画でも、止まった理由は表示する */ }
     // 知らない指定 (まだ無い --watch など) を、黙って「1 回の同期」として実行しない
-    const known = new Set(["file", "lang", "actor", "server", "project", "adopt", "restore", "resolve", "link", "prefer", "recover", "applied", "not-applied"]);
+    const known = new Set(["file", "lang", "actor", "watch", "server", "project", "adopt", "restore", "resolve", "link", "prefer", "recover", "applied", "not-applied"]);
     const unknown = Object.keys(options).filter((k) => !known.has(k));
     if (unknown.length > 0) { out(t("boxglow sync が知らない指定です: {list}", { list: unknown.map((k) => "--" + k).join(", ") })); process.exitCode = 1; return; }
-    process.exitCode = await runSyncCommand({
+    process.exitCode = await (options.watch ? runWatchCommand : runSyncCommand)({
       file
     , server: str(options.server)
     , project: str(options.project)

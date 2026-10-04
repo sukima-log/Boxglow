@@ -267,12 +267,12 @@ describe("boxglow sync コマンド", () => {
     expect(done.status).toBe(0);
     expect(B.project.blocks[a].title).toBe("B の案");
   }, 30_000);
-  it("まだ無い指定 (--watch など) は、黙って 1 回の同期として実行せずに断る", async () => {
+  it("知らない指定は、黙って 1 回の同期として実行せずに断る", async () => {
     const { A } = await twoDevices();
     const puts = server.puts;
-    const r = await run(A, "--watch");
+    const r = await run(A, "--push-all");
     expect(r.status).toBe(1);
-    expect(r.stdout).toContain("--watch");
+    expect(r.stdout).toContain("--push-all");
     expect(server.puts).toBe(puts);
   }, 30_000);
   it("結び付けの無い計画で、サーバーの指定なしに実行すると、結び付け方を案内して失敗する", async () => {

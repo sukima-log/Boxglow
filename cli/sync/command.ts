@@ -9,11 +9,14 @@
  *   boxglow sync --link <印> --prefer local|remote                    初めて結び付けるときに中身が違った場合に、どちらを採るかを決める
  *   boxglow sync --recover <印> --applied | --not-applied             止まっていた「受け取りの再開」を、人の選択で進める
  * 止まったとき (競合・確認が要る場面) は、理由と次の操作を表示して、終了コード 2 で終わる。通信の失敗は終了コード 1 (もう一度実行すれば続きから)。
- * まだ無いもの: 常時の同期 (--watch)、競合を 1 件ずつ選ぶ操作、サインイン (login)
+ *   boxglow sync --watch                                              常時の同期 (Ctrl+C で終了)。この端末の、同じサーバーに結び付いた計画すべてを受け持つ
+ * まだ無いもの: 競合を 1 件ずつ選ぶ操作、サインイン (login)
  */
 import { t } from "../../src/i18n/core";
+import { readFileSync } from "node:fs";
 import { syncOnce, SyncNetworkError, type SyncResult } from "./client";
-import { bindingsOf, SyncStateUnreadable } from "./state-store";
+import { bindingsOf, hashOf, SyncStateUnreadable } from "./state-store";
+import { bindingsFor, lockWatch, SyncWatcher, type WatchEvent } from "./watch";
 import type { RecoveryOutcome } from "../../src/sync/engine";
 
 /** sync コマンドの引数 (main.ts が解釈したオプションから作る) */
@@ -30,6 +33,8 @@ export interface SyncCommandOptions {
   recover?: string;
   applied?: boolean;
   notApplied?: boolean;
+  /** 常時の同期 (終了するまで動き続ける) */
+  watch?: boolean;
 }
 
 /**
@@ -80,7 +85,17 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
     out(result.what === "file" ? t("計画のファイルが書き込み中のため、今回は進めませんでした。少し待ってからもう一度実行してください") : t("この計画の同期が、ほかで動いています。終わってからもう一度実行してください"));
     return 0;
   }
-  // ---- 止まった: 理由と、次にできることを表示する ----
+  describeHalt(result, o.file, out);
+  return 2;
+}
+
+/**
+ * 止まったときの表示: 理由と、次にできること (1 回の同期と、常時の同期の両方から使う)
+ * Input : result = 止まった結果, file = 計画のファイル, out = 出力の関数
+ * Output: なし (out に書く)
+ */
+export function describeHalt(result: Extract<SyncResult, { status: "halted" }>, file: string, out: (text: string) => void): void {
+  const o = { file };
   const halt = result.halt;
   // 止まる前に行ったことを、そのまま伝える (1 回の実行は何手か進むので、受け取りを書いた後で止まることがある)
   out(t("同期を止めました。"));
@@ -167,5 +182,47 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
       out(t("このパスには、結び付けたときとは別の計画が置かれています (結び付けた計画の ID: {expected}、今の計画の ID: {actual})。同期しません", { expected: halt.expected, actual: halt.actual }));
       break;
   }
-  return 2;
 }
+
+/**
+ * 常時の同期 (boxglow sync --watch) を実行する。終了の合図 (Ctrl+C) まで動き続ける
+ * Input : o = 引数 (初めての計画なら、先に 1 回の同期で結び付ける), out = 出力の関数,
+ *         stop = 終了の合図を受け取る Promise (省略時は SIGINT / SIGTERM)
+ * Output: 終了コード
+ */
+export async function runWatchCommand(o: SyncCommandOptions, out: (text: string) => void, stop?: Promise<void>): Promise<number> {
+  // まず 1 回同期する (初めてなら結び付ける。止まった場合は理由を表示して、見張りは続ける)
+  const first = await runSyncCommand({ ...o, watch: false }, out);
+  if (first === 1) return 1;
+  const bound = bindingsOf(o.file).bindings;
+  const server = o.server ?? process.env.BOXGLOW_SERVER ?? bound[0]?.server;
+  if (!server) return 1;
+  // 同じ端末・同じサーバーの常時の同期は 1 つだけ (確認の要求を、計画の数だけ倍にしないため)
+  const lock = lockWatch(server);
+  if (!lock.unlock) {
+    out(t("この端末では、すでに常時の同期が動いています。そちらが、この計画も受け持ちます (動いていないのに残っているときは: boxglow unlock --file {path})", { path: lock.path }));
+    return 0;
+  }
+  const stamp = () => new Date().toTimeString().slice(0, 8);
+  const onEvent = (e: WatchEvent) => {
+    if (e.kind === "synced") out(`[${stamp()}] ${e.file}: ` + t("同期しました (受け取り {pulled} 回、送り {pushed} 回)。サーバーの版: {revision}", { pulled: e.pulled, pushed: e.pushed, revision: e.revision ?? "-" }));
+    else if (e.kind === "network") out(`[${stamp()}] ` + t("サーバーと通信できません。{seconds} 秒後にやり直します: {message}", { seconds: Math.round(e.retryInMs / 1000), message: e.message }));
+    else if (e.kind === "error") out(`[${stamp()}] ${e.file}: ` + t("この計画の同期を止めています: {message}", { message: e.message }));
+    else { out(`[${stamp()}] ${e.file}:`); describeHalt(e.result, e.file, (line) => out("  " + line)); out("  " + t("(上のコマンドは、その計画のフォルダで、別の端末画面から実行してください。常時の同期は動かしたままで構いません)")); }
+  };
+  const watcher = new SyncWatcher({ server, token: process.env.BOXGLOW_TOKEN, onEvent });
+  out(t("常時の同期を始めました (Ctrl+C で終了)。サーバー: {server}、計画: {count} 件", { server, count: bindingsFor(server).length }));
+  const timer = setInterval(() => { void watcher.tick(); }, 1000);
+  try {
+    await (stop ?? new Promise<void>((done) => { process.once("SIGINT", () => done()); process.once("SIGTERM", () => done()); }));
+  } finally {
+    clearInterval(timer);
+    lock.unlock();
+  }
+  // 終わるときに、まだ送っていない変更が残っている計画を知らせる
+  const unsent = bindingsFor(server).filter((s) => { try { return hashOf(readFileSync(s.binding.file, "utf8")) !== s.base?.hash; } catch { return false; } });
+  out(t("常時の同期を終えました。"));
+  for (const s of unsent) out(t("まだ送っていない変更があります: {file} (boxglow sync で送れます)", { file: s.binding.file }));
+  return 0;
+}
+

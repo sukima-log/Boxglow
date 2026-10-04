@@ -1,6 +1,7 @@
 /**
  * 試験用の同期サーバー (メモリの中だけ。サインイン無し、localhost だけ)
  * 同期のクライアント (cli/sync/client.ts) が前提にしている約束を、そのまま実装した最小のもの:
+ *   GET /v1/projects      -> 200 計画の一覧 [{ id, revision, deleted }] (全部の計画の最新の版を 1 回で確かめるため)
  *   GET /v1/projects/:id  -> 200 中身 (ETag = 版) / 404 まだ無い / 410 消されている。どの応答にも x-boxglow-epoch (履歴の世代)
  *   PUT /v1/projects/:id  <- 中身。If-Match: "<版>" (置き換え) か If-None-Match: * (作成)、x-boxglow-op (操作 ID) が必須
  *        200 / 201 受理 (ETag = 新しい版) / 412 前提の版が違う / 409 履歴の世代が違う / 410 消されている / 428 前提なし / 422 同じ操作 ID で違う要求
@@ -29,6 +30,8 @@ export class TestSyncServer {
   dropNextPutResponse = false;
   /** 受け取った PUT の数 (送り直しの確認用) */
   puts = 0;
+  /** 受け取った一覧の要求の数 (確認を 1 回にまとめているかの確認用) */
+  lists = 0;
   private server: Server | null = null;
   url = "";
 
@@ -51,6 +54,12 @@ export class TestSyncServer {
       res.writeHead(status, { "x-boxglow-epoch": this.epoch, "content-type": "application/json; charset=utf-8", ...headers });
       res.end(body);
     };
+    // 一覧: 全部の計画の最新の版 (常時の同期は、これ 1 回で、どの計画が進んだかを確かめる)
+    if (req.method === "GET" && req.url === "/v1/projects") {
+      this.lists++;
+      send(200, JSON.stringify([...this.projects.entries()].map(([id, p]) => ({ id, revision: p.head?.revision ?? null, deleted: p.deleted }))));
+      return;
+    }
     const match = /^\/v1\/projects\/([^/]+)$/.exec(req.url ?? "");
     if (!match) { send(404, JSON.stringify({ code: "not-found" })); return; }
     const id = decodeURIComponent(match[1]);
