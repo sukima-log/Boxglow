@@ -77,7 +77,7 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
   } catch (e) {
     if (e instanceof SyncRejectedError) { out(t("サーバーが、この計画の同期を受け付けませんでした (待っても直りません)。やりかけの操作は残してあります: {status} {detail}", { status: e.status, detail: rejectionHint(e.status) }));
       // 手元を直すだけでは、残った操作の中身は変わらない。次の実行で、その操作を片付けてから、今の中身で送り直すことを伝える
-      out(t("手元のファイルを直してから、もう一度 boxglow sync を実行してください。断られた送信は送り直さず、サーバーに届いていたかを確かめて片付けてから、今の手元の内容で送り直します"));
+      out(t("手元のファイルを直してから、もう一度 boxglow sync を実行してください。断られた送信は送り直さず、サーバーで受理済みか・取り消すかを確定させてから、今の手元の内容で送り直します"));
       return 2;
     }
     if (e instanceof SyncAuthError) { out(t("サーバーが利用者を確かめられませんでした (トークンが無い、または無効です)。環境変数 BOXGLOW_TOKEN を確かめてください。やりかけの操作は残してあります")); return 1; }

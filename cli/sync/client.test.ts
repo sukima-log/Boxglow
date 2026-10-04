@@ -995,7 +995,8 @@ describe("サーバーに断られた送りからの復帰 (状態のファイ�
     await expect(A.sync()).rejects.toBeInstanceOf(SyncRejectedError);
     A.edit((p) => updateBlock(p, a, { description: "短くした" }));
     const pending = A.store().read()!.pending;
-    for (const body of ["{}", "[]", "null", "not json", JSON.stringify({ revision: 5 })]) {
+    // (「記録が無い」だけの答え { revision: null } も、片付ける根拠にしない。サーバーが「今後も受理しない」と確定した答えだけを使う)
+    for (const body of ["{}", "[]", "null", "not json", JSON.stringify({ revision: 5 }), JSON.stringify({ revision: null }), JSON.stringify({ revision: "", cancelled: true })]) {
       const broken = (async (...args: Parameters<typeof fetch>) => String(args[0]).includes("/ops/")
         ? new Response(body, { status: 200, headers: { "x-boxglow-epoch": "e1", "x-boxglow-account": "test" } }) : fetch(...args)) as typeof fetch;
       await expect(A.sync({ fetch: broken })).rejects.toBeInstanceOf(SyncNetworkError);
@@ -1003,9 +1004,82 @@ describe("サーバーに断られた送りからの復帰 (状態のファイ�
     }
     // サーバーの履歴の世代が変わっていたら、答えを使わない
     const otherEpoch = (async (...args: Parameters<typeof fetch>) => String(args[0]).includes("/ops/")
-      ? new Response(JSON.stringify({ revision: null }), { status: 200, headers: { "x-boxglow-epoch": "e2", "x-boxglow-account": "test" } }) : fetch(...args)) as typeof fetch;
+      ? new Response(JSON.stringify({ code: "history-changed" }), { status: 409, headers: { "x-boxglow-epoch": "e2", "x-boxglow-account": "test" } }) : fetch(...args)) as typeof fetch;
     const r = await A.sync({ fetch: otherEpoch });
     expect(r.status === "halted" && r.halt.reason).toBe("history-changed");
     expect(A.store().read()!.pending).toEqual(pending);
   });
 });
+
+// ---- Codex のレビュー 16 (R16-01) ----
+describe("断られた送りを片付けるときは、サーバーに結果を確定させる (遅れた古い送信が、後から成立しない)", () => {
+  /** 送りを 1 回、サーバーに届かないまま失敗させる fetch (要求は控えておき、後から「遅れて届いた」ことにできる) */
+  function delaying() {
+    const held: { url: string; init: RequestInit }[] = [];
+    const delay = (async (...args: Parameters<typeof fetch>) => {
+      const init = args[1] as RequestInit | undefined;
+      if (held.length === 0 && init?.method === "PUT") { held.push({ url: String(args[0]), init }); throw new Error("connection lost"); }
+      return fetch(...args);
+    }) as typeof fetch;
+    return { held, delay };
+  }
+
+  it("未受理と確定させた後で、遅れていた古い送信が届いても受理されない。手元で取り消した編集は、戻ってこない", async () => {
+    const { A, a } = await twoDevices();
+    const base = readFileSync(A.file, "utf8");
+    A.edit((p) => updateBlock(p, a, { title: "取り消す編集" }));
+    const { held, delay } = delaying();
+    await expect(A.sync({ fetch: delay })).rejects.toBeInstanceOf(SyncNetworkError);    // 古い送信は、まだ届いていない
+    server.maxBytes = 10;
+    await expect(A.sync()).rejects.toBeInstanceOf(SyncRejectedError);                   // 送り直しは断られる
+    writeFileSync(A.file, base);                                                        // 利用者が編集を取り消す
+    expect(await A.sync()).toMatchObject({ status: "synced", pushed: 0 });
+    expect(A.store().read()!.pending).toBeNull();
+    // 古い送信が、今になって届く (上限は戻っている。前提の版も合っている)
+    server.maxBytes = Infinity;
+    const late = await fetch(held[0].url, held[0].init);
+    expect(late.status).toBe(422);
+    expect(server.project("plan-1")!.versions.length).toBe(1);
+    expect(await A.sync()).toMatchObject({ status: "synced", pulled: 0 });
+    expect(readFileSync(A.file, "utf8")).toBe(base);                                    // 取り消しは保たれている
+  });
+  it("古い送信が先に受理されていたら、その版を基準にする。後の取り消しも、送られて残る", async () => {
+    const { A, B, a } = await twoDevices();
+    const base = readFileSync(A.file, "utf8");
+    A.edit((p) => updateBlock(p, a, { title: "取り消す編集" }));
+    const { held, delay } = delaying();
+    await expect(A.sync({ fetch: delay })).rejects.toBeInstanceOf(SyncNetworkError);
+    server.maxBytes = 10;
+    await expect(A.sync()).rejects.toBeInstanceOf(SyncRejectedError);
+    // 確定より先に、古い送信が届いて受理される
+    server.maxBytes = Infinity;
+    expect((await fetch(held[0].url, held[0].init)).status).toBe(200);
+    expect(fromJSON(server.project("plan-1")!.head!.text).blocks[a].title).toBe("取り消す編集");
+    writeFileSync(A.file, base);                                                        // 利用者が編集を取り消す
+    expect(await A.sync()).toMatchObject({ status: "synced", pushed: 2 });              // 受理の確認 1 + 取り消しの送り 1
+    expect(server.project("plan-1")!.head!.text).toBe(base);
+    expect(server.project("plan-1")!.versions.length).toBe(3);
+    expect(await B.sync()).toMatchObject({ status: "synced" });
+    expect(B.project.blocks[a].title).toBe("A");
+  });
+  it("確定の応答だけを失っても、やり直せば同じ結果で片付く (操作は、答えを得るまで残る)", async () => {
+    const { A, a } = await twoDevices();
+    const base = readFileSync(A.file, "utf8");
+    A.edit((p) => updateBlock(p, a, { title: "取り消す編集" }));
+    const { held, delay } = delaying();
+    await expect(A.sync({ fetch: delay })).rejects.toBeInstanceOf(SyncNetworkError);
+    server.maxBytes = 10;
+    await expect(A.sync()).rejects.toBeInstanceOf(SyncRejectedError);
+    writeFileSync(A.file, base);
+    server.dropNextSettleResponse = true;
+    await expect(A.sync()).rejects.toBeInstanceOf(SyncNetworkError);
+    expect(A.store().read()!.pending).toMatchObject({ kind: "push", rejected: { status: 413 } });   // 答えを得ていないので、残っている
+    expect(await A.sync()).toMatchObject({ status: "synced", pushed: 0 });
+    expect(server.settles).toBe(2);
+    server.maxBytes = Infinity;
+    expect((await fetch(held[0].url, held[0].init)).status).toBe(422);
+    expect(await A.sync()).toMatchObject({ status: "synced", pulled: 0 });
+    expect(readFileSync(A.file, "utf8")).toBe(base);
+  });
+});
+

@@ -2,7 +2,9 @@
  * 試験用の同期サーバー (メモリの中だけ。サインイン無し、localhost だけ)
  * 同期のクライアント (cli/sync/client.ts) が前提にしている約束を、そのまま実装した最小のもの:
  *   GET /v1/projects      -> 200 計画の一覧 [{ id, revision, deleted }] (全部の計画の最新の版を 1 回で確かめるため)
- *   GET /v1/projects/:id/ops/:op -> 200 { revision } (その操作が受理されていれば版、受理されていなければ null。拒否された送信の後始末に使う)
+ *   GET /v1/projects/:id/ops/:op -> 200 { revision } (その操作が受理されていれば版、記録が無ければ null。表示と調査用)
+ *   POST /v1/projects/:id/ops/:op/settle -> 操作の結果を確定させる (x-boxglow-epoch が必須。違えば 409): 受理済みなら { revision }、
+ *        未受理なら「今後も受理しない」と記録して { revision: null, cancelled: true }。記録した操作 ID の PUT は、後から届いても 422 で断る
  *   GET /v1/projects/:id  -> 200 中身 (ETag = 版) / 404 まだ無い / 410 消されている。どの応答にも x-boxglow-epoch (履歴の世代)
  *   PUT /v1/projects/:id  <- 中身。If-Match: "<版>" (置き換え) か If-None-Match: * (作成)、x-boxglow-op (操作 ID) が必須
  *        200 / 201 受理 (ETag = 新しい版) / 412 前提の版が違う / 409 履歴の世代が違う / 410 消されている / 428 前提なし / 422 同じ操作 ID で違う要求
@@ -32,6 +34,12 @@ export class TestSyncServer {
   projects = new Map<string, StoredProject>();
   /** 利用者の ID → その利用者の計画 (既定の利用者は projects と同じもの) */
   accounts = new Map<string, Map<string, StoredProject>>([["test", this.projects]]);
+  /** 利用者の ID → 「受理しない」と確定した操作 (計画の ID と操作 ID の組) */
+  cancelled = new Map<string, Set<string>>();
+  /** 受け取った「操作の確定」の要求の数 */
+  settles = 0;
+  /** true にすると、次の「操作の確定」を処理した後、応答を返さずに接続を切る。1 回で false に戻る */
+  dropNextSettleResponse = false;
   /** 中身の大きさの上限 (バイト)。超えた PUT は、操作の照合より前に 413 で断る (本番のサーバーと同じ順) */
   maxBytes = Infinity;
   /** true にすると、次の PUT を処理した後、応答を返さずに接続を切る (応答の紛失の再現)。1 回で false に戻る */
@@ -77,6 +85,24 @@ export class TestSyncServer {
       send(200, JSON.stringify([...projects.entries()].map(([id, p]) => ({ id, revision: p.head?.revision ?? null, deleted: p.deleted }))));
       return;
     }
+    // 操作の結果を確定させる: 受理済みならその版。未受理なら、その操作 ID を今後も受理しないと記録する (割り込まれない 1 つの処理)
+    const settleMatch = /^\/v1\/projects\/([^/]+)\/ops\/([^/]+)\/settle$/.exec(req.url ?? "");
+    if (settleMatch && req.method === "POST") {
+      this.settles++;
+      const epoch = req.headers["x-boxglow-epoch"];
+      if (typeof epoch !== "string") { send(428, JSON.stringify({ code: "precondition-required" })); return; }
+      if (epoch !== this.epoch) { send(409, JSON.stringify({ code: "history-changed" })); return; }
+      const id = decodeURIComponent(settleMatch[1]), op = decodeURIComponent(settleMatch[2]);
+      const done = projects.get(id)?.ops.get(op);
+      if (!done) {
+        let set = this.cancelled.get(account);
+        if (!set) { set = new Set(); this.cancelled.set(account, set); }
+        set.add(JSON.stringify([id, op]));
+      }
+      if (this.dropNextSettleResponse) { this.dropNextSettleResponse = false; req.socket.destroy(); return; }
+      send(200, JSON.stringify(done ? { revision: done.revision } : { revision: null, cancelled: true }));
+      return;
+    }
     // 操作の結果の問い合わせ: 受理されていれば、その版。受理されていなければ null
     const opMatch = /^\/v1\/projects\/([^/]+)\/ops\/([^/]+)$/.exec(req.url ?? "");
     if (opMatch && req.method === "GET") {
@@ -100,7 +126,7 @@ export class TestSyncServer {
       const text = Buffer.concat(chunks).toString("utf8");
       this.puts++;
       if (Buffer.byteLength(text) > this.maxBytes) { send(413, JSON.stringify({ code: "too-large" })); return; }
-      const result = this.put(id, text, req.headers, projects);
+      const result = this.put(id, text, req.headers, projects, account);
       if (this.dropNextPutResponse) { this.dropNextPutResponse = false; req.socket.destroy(); return; }
       send(result.status, JSON.stringify(result.body), result.revision ? { etag: `"${result.revision}"` } : {});
       return;
@@ -110,10 +136,10 @@ export class TestSyncServer {
 
   /**
    * 置き換え・作成を確定する (同期の処理。途中で他の要求が割り込まない)
-   * Input : id = 計画の ID, text = 中身, headers = 要求のヘッダ, projects = 利用者の名前空間 (省くと既定の利用者)
+   * Input : id = 計画の ID, text = 中身, headers = 要求のヘッダ, projects = 利用者の名前空間 (省くと既定の利用者), account = 利用者の ID
    * Output: 応答の状態コード・本文・(受理なら) 版
    */
-  put(id: string, text: string, headers: IncomingMessage["headers"], projects = this.projects): { status: number; body: unknown; revision?: string } {
+  put(id: string, text: string, headers: IncomingMessage["headers"], projects = this.projects, account = "test"): { status: number; body: unknown; revision?: string } {
     const op = typeof headers["x-boxglow-op"] === "string" ? headers["x-boxglow-op"] : "";
     const ifMatch = typeof headers["if-match"] === "string" ? headers["if-match"].replace(/^"|"$/g, "") : null;
     const create = headers["if-none-match"] === "*";
@@ -131,6 +157,8 @@ export class TestSyncServer {
     // (2) 同じ操作の結果が既にあれば、今の版との照合より先に、その結果を返す (違う要求なら断る)
     const done = project.ops.get(op);
     if (done) return done.request === request ? { status: 200, body: { revision: done.revision }, revision: done.revision } : { status: 422, body: { code: "operation-mismatch" } };
+    // 「受理しない」と確定した操作は、適用しない (確定の後で届いた、遅れた要求)
+    if (this.cancelled.get(account)?.has(JSON.stringify([id, op]))) return { status: 422, body: { code: "operation-cancelled" } };
     // (3) 前提の版を確かめる (同じ中身の送信でも省かない)
     if ((project.head?.revision ?? null) !== (create ? null : ifMatch)) return { status: 412, body: { code: "revision-mismatch" } };
     // 最新と同じ中身なら、新しい版を作らずに受理する (操作の結果は「今の版」)

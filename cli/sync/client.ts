@@ -154,26 +154,29 @@ async function fetchRemote(o: { server: string; remoteId: string; token?: string
 }
 
 /**
- * 送りの操作を、サーバーが受理したかを問い合わせる (断られた送信の後始末に使う。中身は送らない)
- * Input : server・remoteId・token・fetch, opId = 操作 ID
- * Output: { epoch = サーバーの履歴の世代, account = 利用者の ID, revision = 受理されていれば、その版。受理されていなければ null }。
- *         通信できない・想定外の応答は SyncNetworkError (操作は残したまま)
+ * 送りの操作の結果を、サーバーに確定させる (断られた送信の後始末に使う。中身は送らない)
+ * 「受理の記録が無い」と聞くだけでは足りない: 遅れている古い送信が、その後で受理されることがある。
+ * そこで、未受理ならサーバーに「この操作 ID を今後も受理しない」と記録させ、その答えを得てから操作を片付ける
+ * Input : server・remoteId・token・fetch・epoch (操作を記録したときの履歴の世代), opId = 操作 ID
+ * Output: { account = 利用者の ID, revision = 受理済みなら、その版。null なら「今後も受理しない」と確定した } / { history: 世代 } (履歴の世代が違う)。
+ *         通信できない・想定外の応答は SyncNetworkError (操作は残したまま。やり直せば同じ答えが返る)
  */
-async function fetchOperation(o: { server: string; remoteId: string; token?: string; fetch: typeof fetch }, opId: string): Promise<{ epoch: string; account: string; revision: string | null }> {
+async function settleOperation(o: { server: string; remoteId: string; token?: string; fetch: typeof fetch; epoch: string }, opId: string): Promise<{ account: string; revision: string | null } | { history: string }> {
   let res: Response;
   try {
-    res = await o.fetch(`${o.server}/v1/projects/${encodeURIComponent(o.remoteId)}/ops/${encodeURIComponent(opId)}`, { headers: headers(o.token) });
+    res = await o.fetch(`${o.server}/v1/projects/${encodeURIComponent(o.remoteId)}/ops/${encodeURIComponent(opId)}/settle`, { method: "POST", headers: { ...headers(o.token), "x-boxglow-epoch": o.epoch } });
   } catch (e) { throw new SyncNetworkError(String(e)); }
   rejectUnauthorized(res);
-  const epoch = res.headers.get("x-boxglow-epoch");
-  if (res.status !== 200 || !epoch) throw new SyncNetworkError(`unexpected response ${res.status}`);
+  if (res.status === 409) return { history: res.headers.get("x-boxglow-epoch") ?? "" };
+  if (res.status !== 200) throw new SyncNetworkError(`unexpected response ${res.status}`);
   const account = accountOf(res);
   let body: unknown;
   try { body = await res.json(); } catch (e) { throw new SyncNetworkError(`could not read the response body: ${String(e)}`); }
-  const revision = (body as { revision?: unknown } | null)?.revision;
-  // 「受理していない」は、明示の null だけ。項目が無い・形が違う応答を「受理していない」と読まない (受理済みの操作を捨てないため)
-  if (revision !== null && (typeof revision !== "string" || revision === "")) throw new SyncNetworkError("unexpected response body (operation)");
-  return { epoch, account, revision };
+  const answer = body as { revision?: unknown; cancelled?: unknown } | null;
+  if (typeof answer?.revision === "string" && answer.revision !== "") return { account, revision: answer.revision };
+  // 「今後も受理しない」は、サーバーがそう確定したと明示した答えだけ。項目が無い・形が違う答えを、そうは読まない (受理済みの操作を捨てないため)
+  if (answer?.revision === null && answer.cancelled === true) return { account, revision: null };
+  throw new SyncNetworkError("unexpected response body (operation)");
 }
 
 /**
@@ -426,15 +429,15 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
             save(recordPending(state, decision.epoch, pending), state.base === null ? { ...binding, planId: planId ?? "" } : binding);
           } else pending = decision.pending;
           // サーバーに断られた操作は、同じ中身を送り直さない (手元を直しても、残った操作の中身は変わらないので、同じ理由で断られ続ける)。
-          // 中身を送らずに「この操作を受理したか」を問い合わせて、片付ける:
-          //   受理していた (前の送信は届いていて、応答だけ失われた。その後で断られるようになった) → 受理として基準を進める
-          //   受理していない → 操作を消す。次の判断で、今の手元の中身から、新しい操作として送り直す
-          // どちらの場合も、手元の編集は落とさない (手元のファイルが正。送る予定だった写しも、状態の置き場に残る)
+          // 中身を送らずに、サーバーに操作の結果を確定させて、片付ける:
+          //   受理済みだった (前の送信は届いていて、応答だけ失われた。その後で断られるようになった) → 受理として基準を進める
+          //   未受理 → サーバーが「この操作を今後も受理しない」と記録する。その答えを得てから操作を消し、次の判断で、今の手元から新しい操作として送る
+          // 「今の時点で受理の記録が無い」だけでは消さない: 遅れている古い送信が後から受理されると、手元で取り消した編集が、確認なしで戻ってくる
           if (pending.rejected) {
-            const op = await fetchOperation(remoteOptions, pending.opId);
-            // (取得と問い合わせの間に、利用者や履歴の世代が変わっていたら、答えを使わない)
+            const op = await settleOperation({ ...remoteOptions, epoch: stored!.epoch ?? "" }, pending.opId);
+            if ("history" in op) return halted({ reason: "history-changed", expected: stored!.epoch ?? "", actual: op.history });
+            // (取得と確定の間に、利用者が変わっていたら、答えを使わない)
             if (op.account !== account) return halted({ reason: "account-mismatch", bound: account, actual: op.account });
-            if (op.epoch !== stored!.epoch) return halted({ reason: "history-changed", expected: stored!.epoch ?? "", actual: op.epoch });
             if (op.revision !== null) { save(pushAccepted(stored!, pending.opId, op.revision), stored!.binding); pushed++; }
             else save(pushRejected(stored!, pending.opId), stored!.binding);
             break;
