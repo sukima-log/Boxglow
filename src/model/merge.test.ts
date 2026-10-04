@@ -259,7 +259,8 @@ describe("統合した結果の検査", () => {
       const files = { base: join(dir, "base.json"), ours: join(dir, "ours.json"), theirs: join(dir, "theirs.json") };
       writeFileSync(files.base, toJSON(p)); writeFileSync(files.ours, toJSON(ours)); writeFileSync(files.theirs, toJSON(theirs));
       const before = readFileSync(files.ours, "utf8");
-      const run = spawnSync(process.execPath, ["bin/boxglow.js", "merge", files.base, files.ours, files.theirs, "--lang", "ja"], { encoding: "utf8" });
+      // --file で計画の場所を指定する (指定が無いと、実行した場所から boxglow.json を探す。リポジトリの外やまっさらな複製では見つからない)
+      const run = spawnSync(process.execPath, ["bin/boxglow.js", "merge", files.base, files.ours, files.theirs, "--file", files.ours, "--lang", "ja"], { encoding: "utf8" });
       expect(run.status).toBe(1);
       expect(run.stderr).toContain("書き込みませんでした");
       expect(readFileSync(files.ours, "utf8")).toBe(before);
