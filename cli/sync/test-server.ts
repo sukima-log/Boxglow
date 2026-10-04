@@ -2,9 +2,12 @@
  * 試験用の同期サーバー (メモリの中だけ。サインイン無し、localhost だけ)
  * 同期のクライアント (cli/sync/client.ts) が前提にしている約束を、そのまま実装した最小のもの:
  *   GET /v1/projects      -> 200 計画の一覧 [{ id, revision, deleted }] (全部の計画の最新の版を 1 回で確かめるため)
+ *   GET /v1/projects/:id/ops/:op -> 200 { revision } (その操作が受理されていれば版、受理されていなければ null。拒否された送信の後始末に使う)
  *   GET /v1/projects/:id  -> 200 中身 (ETag = 版) / 404 まだ無い / 410 消されている。どの応答にも x-boxglow-epoch (履歴の世代)
  *   PUT /v1/projects/:id  <- 中身。If-Match: "<版>" (置き換え) か If-None-Match: * (作成)、x-boxglow-op (操作 ID) が必須
  *        200 / 201 受理 (ETag = 新しい版) / 412 前提の版が違う / 409 履歴の世代が違う / 410 消されている / 428 前提なし / 422 同じ操作 ID で違う要求
+ * どの応答にも x-boxglow-account (サーバーが確かめた利用者の ID) を付ける。利用者は Authorization: Bearer <名前> で決まる (省くと "test")。
+ * 計画は利用者ごとの名前空間にある (別の利用者が同じ ID を使っても、別の計画)。
  * 置き換えは「同じ操作の結果があればそれを返す → 無ければ前提の版を確かめる → 合えば確定」を、割り込まれない 1 つの処理で行う。
  * 本番のサーバー (別のリポジトリ) も、同じ約束を守る
  */
@@ -25,7 +28,12 @@ interface StoredProject {
 export class TestSyncServer {
   /** サーバーの履歴の世代 (バックアップからの復旧を模すときに変える) */
   epoch = "e1";
+  /** 既定の利用者 ("test") の計画 */
   projects = new Map<string, StoredProject>();
+  /** 利用者の ID → その利用者の計画 (既定の利用者は projects と同じもの) */
+  accounts = new Map<string, Map<string, StoredProject>>([["test", this.projects]]);
+  /** 中身の大きさの上限 (バイト)。超えた PUT は、操作の照合より前に 413 で断る (本番のサーバーと同じ順) */
+  maxBytes = Infinity;
   /** true にすると、次の PUT を処理した後、応答を返さずに接続を切る (応答の紛失の再現)。1 回で false に戻る */
   dropNextPutResponse = false;
   /** 受け取った PUT の数 (送り直しの確認用) */
@@ -47,23 +55,39 @@ export class TestSyncServer {
     await new Promise<void>((done) => this.server ? this.server.close(() => done()) : done());
   }
   /** 計画の今の状態 (試験の確認用) */
-  project(id: string): StoredProject | undefined { return this.projects.get(id); }
+  project(id: string, account = "test"): StoredProject | undefined { return this.accounts.get(account)?.get(id); }
+  /** 利用者の名前空間 (無ければ作る) */
+  private space(account: string): Map<string, StoredProject> {
+    let space = this.accounts.get(account);
+    if (!space) { space = new Map(); this.accounts.set(account, space); }
+    return space;
+  }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    // 利用者: トークンの文字列を、そのまま利用者の ID として扱う (試験用)
+    const account = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1] ?? "test";
+    const projects = this.space(account);
     const send = (status: number, body = "", headers: Record<string, string> = {}) => {
-      res.writeHead(status, { "x-boxglow-epoch": this.epoch, "content-type": "application/json; charset=utf-8", ...headers });
+      res.writeHead(status, { "x-boxglow-epoch": this.epoch, "x-boxglow-account": account, "content-type": "application/json; charset=utf-8", ...headers });
       res.end(body);
     };
     // 一覧: 全部の計画の最新の版 (常時の同期は、これ 1 回で、どの計画が進んだかを確かめる)
     if (req.method === "GET" && req.url === "/v1/projects") {
       this.lists++;
-      send(200, JSON.stringify([...this.projects.entries()].map(([id, p]) => ({ id, revision: p.head?.revision ?? null, deleted: p.deleted }))));
+      send(200, JSON.stringify([...projects.entries()].map(([id, p]) => ({ id, revision: p.head?.revision ?? null, deleted: p.deleted }))));
+      return;
+    }
+    // 操作の結果の問い合わせ: 受理されていれば、その版。受理されていなければ null
+    const opMatch = /^\/v1\/projects\/([^/]+)\/ops\/([^/]+)$/.exec(req.url ?? "");
+    if (opMatch && req.method === "GET") {
+      const done = projects.get(decodeURIComponent(opMatch[1]))?.ops.get(decodeURIComponent(opMatch[2]));
+      send(200, JSON.stringify({ revision: done?.revision ?? null }));
       return;
     }
     const match = /^\/v1\/projects\/([^/]+)$/.exec(req.url ?? "");
     if (!match) { send(404, JSON.stringify({ code: "not-found" })); return; }
     const id = decodeURIComponent(match[1]);
-    const project = this.projects.get(id);
+    const project = projects.get(id);
     if (req.method === "GET") {
       if (project?.deleted) { send(410, JSON.stringify({ code: "deleted" })); return; }
       if (!project?.head) { send(404, JSON.stringify({ code: "absent" })); return; }
@@ -75,7 +99,8 @@ export class TestSyncServer {
       for await (const chunk of req) chunks.push(chunk as Buffer);
       const text = Buffer.concat(chunks).toString("utf8");
       this.puts++;
-      const result = this.put(id, text, req.headers);
+      if (Buffer.byteLength(text) > this.maxBytes) { send(413, JSON.stringify({ code: "too-large" })); return; }
+      const result = this.put(id, text, req.headers, projects);
       if (this.dropNextPutResponse) { this.dropNextPutResponse = false; req.socket.destroy(); return; }
       send(result.status, JSON.stringify(result.body), result.revision ? { etag: `"${result.revision}"` } : {});
       return;
@@ -85,10 +110,10 @@ export class TestSyncServer {
 
   /**
    * 置き換え・作成を確定する (同期の処理。途中で他の要求が割り込まない)
-   * Input : id = 計画の ID, text = 中身, headers = 要求のヘッダ
+   * Input : id = 計画の ID, text = 中身, headers = 要求のヘッダ, projects = 利用者の名前空間 (省くと既定の利用者)
    * Output: 応答の状態コード・本文・(受理なら) 版
    */
-  put(id: string, text: string, headers: IncomingMessage["headers"]): { status: number; body: unknown; revision?: string } {
+  put(id: string, text: string, headers: IncomingMessage["headers"], projects = this.projects): { status: number; body: unknown; revision?: string } {
     const op = typeof headers["x-boxglow-op"] === "string" ? headers["x-boxglow-op"] : "";
     const ifMatch = typeof headers["if-match"] === "string" ? headers["if-match"].replace(/^"|"$/g, "") : null;
     const create = headers["if-none-match"] === "*";
@@ -97,7 +122,7 @@ export class TestSyncServer {
     if (!op || epoch === null || (!create && ifMatch === null)) return { status: 428, body: { code: "precondition-required" } };
     // (1) 履歴の世代と、対象の計画: 世代が今と違えば、412 とは別の応答にする。消した計画には、何も受け付けない (消した ID は二度と使わない)
     if (epoch !== this.epoch) return { status: 409, body: { code: "history-changed" } };
-    const project: StoredProject = this.projects.get(id) ?? { head: null, deleted: false, seq: 0, ops: new Map(), versions: [] };
+    const project: StoredProject = projects.get(id) ?? { head: null, deleted: false, seq: 0, ops: new Map(), versions: [] };
     if (project.deleted) return { status: 410, body: { code: "deleted" } };
     // 受け取る中身は、計画として検査する (JSON であるだけでは足りない)
     try { validateProjectText(text); } catch (e) { return { status: 400, body: { code: "invalid", message: e instanceof Error ? e.message : String(e) } }; }
@@ -118,7 +143,7 @@ export class TestSyncServer {
     project.head = { revision, text };
     project.versions.push({ revision, hash });
     project.ops.set(op, { request, revision });
-    this.projects.set(id, project);
+    projects.set(id, project);
     return { status: create ? 201 : 200, body: { revision }, revision };
   }
 }

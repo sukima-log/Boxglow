@@ -42,6 +42,11 @@ export interface PendingPush {
   expected: Revision | null;
   /** 記録した日時 (ISO 8601) */
   at: string;
+  /**
+   * サーバーが、この送信を断った記録 (大きすぎる・計画として不正など。待っても、送り直しても直らない)。
+   * これが付いた操作は、同じ中身を送り直さない。サーバーに「この操作を受理したか」を問い合わせてから片付ける
+   */
+  rejected?: { status: number; at: string };
 }
 
 /** 残っている「受け取り」の操作: 手元に書く前に記録し、基準を進めるまで残す */
@@ -370,6 +375,16 @@ export function recordPending(state: SyncState, epoch: string, pending: Pending)
 }
 
 /**
+ * 送りを、サーバーが断った (待っても直らない)。操作は残したまま、断られた印を付ける
+ * Input : state = 送りの操作が残っている状態, opId = 断られた操作の ID, status = 応答の状態コード, at = 日時 (ISO 8601)
+ * Output: 印を付けた状態 (基準も操作も、そのまま)。残っている操作と opId が違えば SyncStateError
+ */
+export function pushRefused(state: SyncState, opId: string, status: number, at: string): SyncState {
+  if (state.pending?.kind !== "push" || state.pending.opId !== opId) throw new SyncStateError("the response does not belong to the pending push");
+  return { ...state, generation: state.generation + 1, pending: { ...state.pending, rejected: { status, at } } };
+}
+
+/**
  * 送りが受理された (前に受理されていた場合も含む)
  * Input : state = 送りの操作が残っている状態, opId = 応答が返ってきた操作の ID, revision = 受理された版
  * Output: 基準を「送った中身 S とその版」に進め、操作を消した状態。送信の間に手元が変わっていても、基準は S (変わった分は次の回で送る)。
@@ -381,7 +396,7 @@ export function pushAccepted(state: SyncState, opId: string, revision: Revision)
 }
 
 /**
- * 送りが、受理されないことが確定した (前提の版が違う)。操作を消す (基準は変えない。次の判断で受け取りからやり直す)。
+ * 送りが、受理されないことが確定した (前提の版が違う。または、断られた操作を、サーバーが「受理していない」と答えた)。操作を消す (基準は変えない。次の判断で受け取りからやり直す)。
  * 「サーバーの履歴の世代が違う」「通信できなかった」ときには呼ばない (操作を残したままにする)
  */
 export function pushRejected(state: SyncState, opId: string): SyncState {

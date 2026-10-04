@@ -312,6 +312,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  --adopt <印> = 消えた設定の削除を採って送る / --restore <印> = 消えた設定を手元に戻す
                                                  --resolve <印> --prefer local|remote = 競合を手元 / サーバーの値に決める / --link <印> --prefer local|remote = 初回に中身が違うときの選択
                                                  --recover <印> --applied|--not-applied = 途中で終わった受け取りを続ける
+                                                 --account <利用者の ID> = 利用者の記録が無い結び付けを、表示された利用者のものとして続ける
   unlock [--remove --lock-token <印> --actor human]  残った保存ロックの状態 (持ち主・判定) を出す (読むだけ。AI も使える)。--remove は人が解除する:
                                                  この計画を開いている Boxglow を止めてから、表示された印を付けて実行する。持ち主が動いているロックは解除できない
   status [--brief] [--json]                     全体の状況 (Markdown)。--brief は全階層を省略し、判断・回答・活動・次の候補を表示
@@ -393,6 +394,7 @@ Usage (npx boxglow <command> ...):
                                                  --adopt <token> = send the deletion of settings / --restore <token> = put the deleted settings back locally
                                                  --resolve <token> --prefer local|remote = settle conflicts / --link <token> --prefer local|remote = choose a side on first link
                                                  --recover <token> --applied|--not-applied = continue an interrupted pull
+                                                 --account <account id> = continue a binding that has no account recorded, as the account shown
   unlock [--remove --lock-token <token> --actor human]  Show a leftover save lock (owner and verdict; read-only, agents may use it). --remove is for a person:
                                                  stop every Boxglow that has this plan open, then run it with the token shown. A lock whose owner is running cannot be removed
   status [--brief] [--json]                     Overall status (Markdown). --brief omits the tree; keeps decisions, answers, activity and next actions
@@ -1196,7 +1198,7 @@ if (argv[0] === "mcp") {
     const file = locateFile(str(options.file));
     try { setLang(explicitLang(options) ?? load(file).lang ?? "ja"); } catch { /* 読めない計画でも、止まった理由は表示する */ }
     // 知らない指定 (まだ無い --watch など) を、黙って「1 回の同期」として実行しない
-    const known = new Set(["file", "lang", "actor", "watch", "server", "project", "adopt", "restore", "resolve", "link", "prefer", "recover", "applied", "not-applied"]);
+    const known = new Set(["file", "lang", "actor", "watch", "server", "project", "adopt", "restore", "resolve", "link", "prefer", "recover", "applied", "not-applied", "account"]);
     const unknown = Object.keys(options).filter((k) => !known.has(k));
     if (unknown.length > 0) { out(t("boxglow sync が知らない指定です: {list}", { list: unknown.map((k) => "--" + k).join(", ") })); process.exitCode = 1; return; }
     process.exitCode = await (options.watch ? runWatchCommand : runSyncCommand)({
@@ -1211,6 +1213,7 @@ if (argv[0] === "mcp") {
     , recover: str(options.recover)
     , applied: !!options.applied
     , notApplied: !!options["not-applied"]
+    , account: str(options.account)
     }, out);
   })().catch((e) => { console.error(`[boxglow sync] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });
 } else if (argv[0] === "serve") {

@@ -33,6 +33,13 @@ export interface Binding {
    * 書く前に planId を書き換えてしまうと、「書かなかった」場合に、手元の計画 (別の ID) と食い違って先へ進めなくなる
    */
   pendingPlanId?: string;
+  /**
+   * 結び付けたときに、サーバーが確かめた利用者の ID (トークンではない。トークンは更新されるので、利用者の代わりにしない)。
+   * 同期のたびに、サーバーが答えた利用者と比べる。違えば、基準・やりかけの操作・人の選択を使わずに止まる
+   * (利用者ごとに別の計画が、同じ ID・同じ版番号を持てる。比べないと、別の利用者の計画を、確認なしで置き換えてしまう)。
+   * 利用者を記録する前の状態には無い。その場合は、人が確かめるまで同期しない
+   */
+  account?: string;
 }
 
 /** state.json の中身 */
@@ -61,6 +68,7 @@ export function stateProblem(value: unknown): string | null {
   if (value.epoch !== null && !text(value.epoch)) return "epoch";
   const b = value.binding;
   if (!obj(b) || !text(b.file) || !text(b.server) || !text(b.remoteId) || typeof b.planId !== "string") return "binding";
+  if (b.account !== undefined && !text(b.account)) return "binding account";
   // 仮の ID は、初めての受け取りの操作が残っている間だけ持つ
   if (b.pendingPlanId !== undefined && (typeof b.pendingPlanId !== "string" || !obj(value.pending) || value.pending.kind !== "pull")) return "pending plan id";
   const base = value.base;
@@ -68,7 +76,10 @@ export function stateProblem(value: unknown): string | null {
   const p = value.pending;
   if (p !== null) {
     if (!obj(p) || !text(p.hash) || !text(p.at)) return "pending";
-    if (p.kind === "push") { if (!text(p.opId) || (p.expected !== null && !text(p.expected))) return "pending push"; }
+    if (p.kind === "push") {
+      if (!text(p.opId) || (p.expected !== null && !text(p.expected))) return "pending push";
+      if (p.rejected !== undefined && (!obj(p.rejected) || !Number.isSafeInteger(p.rejected.status) || !text(p.rejected.at))) return "pending push rejection";
+    }
     else if (p.kind === "pull") {
       if ((p.expectedLocal !== null && !text(p.expectedLocal)) || !obj(p.remote) || !text(p.remote.hash) || !text(p.remote.revision)) return "pending pull";
     } else return "pending kind";

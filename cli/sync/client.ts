@@ -12,7 +12,7 @@ import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { commitFile, FileBusy, FileConflict, revisionOf } from "../file-store";
 import { basename } from "node:path";
 import {
-  baseSet, decide, previewRecovery, pullNotWritten, pullRecovered, pullWritten, pushAccepted, pushRejected, recordPending, recoveryToken as engineRecoveryToken, remoteMark, SyncStateError
+  baseSet, decide, previewRecovery, pullNotWritten, pullRecovered, pullWritten, pushAccepted, pushRefused, pushRejected, recordPending, recoveryToken as engineRecoveryToken, remoteMark, SyncStateError
 , type Content, type Halt, type PendingPush, type RecoveryOutcome, type Remote, type RemoteMark, type SyncState
 } from "../../src/sync/engine";
 import { bindingDir, bindingsOf, hashOf, lockFileSync, normalizeServer, realFile, StateStore, type Binding, type StoredState } from "./state-store";
@@ -50,7 +50,11 @@ export type ClientHalt =
   /** 状態を読めない結び付けのフォルダがあり、このファイルがすでに結び付いているかを確かめられない (新しい結び付けを作らない) */
   | { reason: "unreadable-bindings"; dirs: string[] }
   /** 渡された人の選択 (初回の選択・競合の解決) が、今の状態には当てはまらなかった (選択なしの同期として進めない) */
-  | { reason: "choice-not-applied"; choice: "firstLink" | "resolution" };
+  | { reason: "choice-not-applied"; choice: "firstLink" | "resolution" }
+  /** この結び付けは、別の利用者のもの (サーバーが答えた利用者が、結び付けたときと違う)。基準もやりかけの操作も使わず、何も送らない・書かない */
+  | { reason: "account-mismatch"; bound: string; actual: string }
+  /** この結び付けには、利用者の記録がまだ無い (記録するようになる前に作った状態)。今の利用者のものだと、人が確かめるまで同期しない */
+  | { reason: "account-unconfirmed"; account: string };
 
 /** サーバーとの通信の失敗 (やりかけの操作は残したまま。後でやり直せる) */
 export class SyncNetworkError extends Error {}
@@ -92,6 +96,8 @@ export interface SyncOptions {
   firstLink?: { token: string; prefer: "local" | "remote" };
   /** 止まっている「受け取りの再開」への人の選択: 印 (recoveryToken の値) と、反映済みとして続けるか */
   recover?: { token: string; applied: boolean };
+  /** 利用者の記録が無い結び付けを「この利用者のもの」と人が確かめた、その利用者の ID (account-unconfirmed で表示した値) */
+  confirmAccount?: string;
   /** 今の時刻 (試験で差し替える) */
   now?: () => Date;
   /** 通信の関数 (試験で差し替える) */
@@ -110,15 +116,25 @@ export function recoveryToken(state: SyncState, localHash: string | null, remote
   return engineRecoveryToken(state, localHash, remote, bindingId, hashOf);
 }
 
-/** 印に使う「結び付けの印」: 結び付けのフォルダ (サーバーの場所とファイルで決まる) と、サーバー側の計画の ID */
-export const bindingIdOf = (dir: string, remoteId: string): string => `${basename(dir)}:${remoteId}`;
+/**
+ * 印に使う「結び付けの印」: 結び付けのフォルダ (サーバーの場所とファイルで決まる)、サーバー側の計画の ID、利用者の ID。
+ * 利用者も含める: まだ状態が無い「初回の選択」でも、ある利用者の計画を見て得た選択を、別の利用者の計画には使えない
+ */
+export const bindingIdOf = (dir: string, remoteId: string, account: string): string => `${basename(dir)}:${remoteId}:${account}`;
+
+/** 応答から、サーバーが確かめた利用者の ID を読む。無ければ通信の失敗として扱う (利用者が分からないまま、基準や操作を使わない) */
+function accountOf(res: Response): string {
+  const account = res.headers.get("x-boxglow-account");
+  if (!account) throw new SyncNetworkError(`unexpected response ${res.status} (no account)`);
+  return account;
+}
 
 /**
  * サーバーの今の状態を取得する
  * Input : server・remoteId・token・fetch
- * Output: Remote (在る / まだ無い / 消されている)。通信できなければ SyncNetworkError
+ * Output: { remote = Remote (在る / まだ無い / 消されている), account = サーバーが確かめた利用者の ID }。通信できなければ SyncNetworkError
  */
-async function fetchRemote(o: { server: string; remoteId: string; token?: string; fetch: typeof fetch }): Promise<Remote> {
+async function fetchRemote(o: { server: string; remoteId: string; token?: string; fetch: typeof fetch }): Promise<{ remote: Remote; account: string }> {
   let res: Response;
   try {
     res = await o.fetch(`${o.server}/v1/projects/${encodeURIComponent(o.remoteId)}`, { headers: headers(o.token) });
@@ -126,27 +142,53 @@ async function fetchRemote(o: { server: string; remoteId: string; token?: string
   rejectUnauthorized(res);
   const epoch = res.headers.get("x-boxglow-epoch");
   if (!epoch) throw new SyncNetworkError(`unexpected response ${res.status} (no epoch)`);
-  if (res.status === 404) return { kind: "absent", epoch };
-  if (res.status === 410) return { kind: "deleted", epoch };
+  const account = accountOf(res);
+  if (res.status === 404) return { remote: { kind: "absent", epoch }, account };
+  if (res.status === 410) return { remote: { kind: "deleted", epoch }, account };
   if (res.status !== 200) throw new SyncNetworkError(`unexpected response ${res.status}`);
   const revision = unquote(res.headers.get("etag"));
   if (!revision) throw new SyncNetworkError("no ETag");
   let text: string;
   try { text = await res.text(); } catch (e) { throw new SyncNetworkError(`could not read the response body: ${String(e)}`); }
-  return { kind: "present", epoch, revision, content: { hash: hashOf(text), text } };
+  return { remote: { kind: "present", epoch, revision, content: { hash: hashOf(text), text } }, account };
+}
+
+/**
+ * 送りの操作を、サーバーが受理したかを問い合わせる (断られた送信の後始末に使う。中身は送らない)
+ * Input : server・remoteId・token・fetch, opId = 操作 ID
+ * Output: { epoch = サーバーの履歴の世代, account = 利用者の ID, revision = 受理されていれば、その版。受理されていなければ null }。
+ *         通信できない・想定外の応答は SyncNetworkError (操作は残したまま)
+ */
+async function fetchOperation(o: { server: string; remoteId: string; token?: string; fetch: typeof fetch }, opId: string): Promise<{ epoch: string; account: string; revision: string | null }> {
+  let res: Response;
+  try {
+    res = await o.fetch(`${o.server}/v1/projects/${encodeURIComponent(o.remoteId)}/ops/${encodeURIComponent(opId)}`, { headers: headers(o.token) });
+  } catch (e) { throw new SyncNetworkError(String(e)); }
+  rejectUnauthorized(res);
+  const epoch = res.headers.get("x-boxglow-epoch");
+  if (res.status !== 200 || !epoch) throw new SyncNetworkError(`unexpected response ${res.status}`);
+  const account = accountOf(res);
+  let body: unknown;
+  try { body = await res.json(); } catch (e) { throw new SyncNetworkError(`could not read the response body: ${String(e)}`); }
+  const revision = (body as { revision?: unknown } | null)?.revision;
+  // 「受理していない」は、明示の null だけ。項目が無い・形が違う応答を「受理していない」と読まない (受理済みの操作を捨てないため)
+  if (revision !== null && (typeof revision !== "string" || revision === "")) throw new SyncNetworkError("unexpected response body (operation)");
+  return { epoch, account, revision };
 }
 
 /**
  * 全部の計画の最新の版を、1 回の要求で取得する (常時の同期が、どの計画が進んだかを確かめるのに使う)
  * Input : server・token・fetch
- * Output: { epoch = サーバーの履歴の世代, heads = 計画の ID → { revision (まだ無ければ null), deleted } }。通信できなければ SyncNetworkError
+ * Output: { epoch = サーバーの履歴の世代, account = サーバーが確かめた利用者の ID, heads = 計画の ID → { revision (まだ無ければ null), deleted } }。
+ *         通信できなければ SyncNetworkError
  */
-export async function fetchHeads(o: { server: string; token?: string; fetch?: typeof fetch }): Promise<{ epoch: string; heads: Map<string, { revision: string | null; deleted: boolean }> }> {
+export async function fetchHeads(o: { server: string; token?: string; fetch?: typeof fetch }): Promise<{ epoch: string; account: string; heads: Map<string, { revision: string | null; deleted: boolean }> }> {
   let res: Response;
   try { res = await (o.fetch ?? fetch)(`${normalizeServer(o.server)}/v1/projects`, { headers: headers(o.token) }); } catch (e) { throw new SyncNetworkError(String(e)); }
   rejectUnauthorized(res);
   const epoch = res.headers.get("x-boxglow-epoch");
   if (res.status !== 200 || !epoch) throw new SyncNetworkError(`unexpected response ${res.status}`);
+  const account = accountOf(res);
   // 本文の受信の失敗 (ヘッダの後で接続が切れた) や、形の合わない本文も、通信の失敗として扱う (呼び出し側が、間隔を置いてやり直せるように)
   let list: unknown;
   try { list = await res.json(); } catch (e) { throw new SyncNetworkError(`could not read the response body: ${String(e)}`); }
@@ -157,7 +199,7 @@ export async function fetchHeads(o: { server: string; token?: string; fetch?: ty
     if (typeof p?.id !== "string" || (p.revision !== null && typeof p.revision !== "string") || typeof p.deleted !== "boolean" || heads.has(p.id)) throw new SyncNetworkError("unexpected response body (bad list item)");
     heads.set(p.id, { revision: p.revision as string | null, deleted: p.deleted });
   }
-  return { epoch, heads };
+  return { epoch, account, heads };
 }
 
 /** 要求に付ける共通のヘッダ (トークン、クライアントの版と保存の取り決めの版) */
@@ -257,7 +299,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       lastLocal = local?.hash ?? null;
       await options.onStep?.("local:read");
       // 結び付け: 初めてなら作る (サーバー側の ID は手元で決める)。同じパスに別の計画が置かれていたら、同期しない
-      const binding: Binding = stored?.binding ?? { file, server, remoteId: options.remoteId ?? randomUUID(), planId: planId ?? "" };
+      let binding: Binding = stored?.binding ?? { file, server, remoteId: options.remoteId ?? randomUUID(), planId: planId ?? "" };
       // (初めての結び付けで選択待ちのあいだは、まだ状態が無いので、ここには来ない。
       //  初めての受け取りを記録した後は、書く予定の計画の ID が固定されている。受け取りを書けたか分からない場面では、手元が別の ID でも、
       //  ここでは止めずに「受け取りの再開」の確認に任せる)
@@ -270,12 +312,25 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       const state: SyncState = stored ?? { generation: 0, epoch: null, base: null, pending: null };
       const remoteOptions = { server, remoteId: binding.remoteId, token: options.token, fetch: doFetch };
       // ---- 読む: サーバー (やりかけの送りがあるときも取得する。履歴の世代が変わっていないかを、送り直しの前に確かめるため) ----
-      const remote: Remote = await fetchRemote(remoteOptions);
+      const { remote, account } = await fetchRemote(remoteOptions);
+      // ---- 利用者を確かめる (基準・やりかけの操作・人の選択を使う前に) ----
+      // 利用者ごとに別の計画が、同じ ID・同じ版番号を持てる。確かめずに進むと、別の利用者の計画を、前の利用者の基準で「未変更」と読み違える
+      if (options.confirmAccount !== undefined && options.confirmAccount !== account) return halted({ reason: "account-mismatch", bound: options.confirmAccount, actual: account });
+      if (stored) {
+        if (stored.binding.account === undefined) {
+          // 利用者の記録が無い状態: 人が「この利用者のもの」と確かめたときだけ、記録して進む (黙って、今の利用者のものと決めない)
+          if (options.confirmAccount !== account) return halted({ reason: "account-unconfirmed", account });
+          save({ ...state, generation: state.generation + 1 }, { ...stored.binding, account });
+          continue;
+        }
+        if (stored.binding.account !== account) return halted({ reason: "account-mismatch", bound: stored.binding.account, actual: account });
+      } else binding = { ...binding, account };
+      const bindingId = bindingIdOf(store.dir, binding.remoteId, account);
       // ---- 止まっている「受け取りの再開」に、人の選択が渡されたら進める ----
       // サーバーを取得してから照合する: 印は、表示したときの状態・手元・サーバーの位置に結び付いている。どれかが変わっていたら進めない
       if (state.pending?.kind === "pull" && options.recover && round === 0) {
         try {
-          const next = pullRecovered(state, options.recover, local?.hash ?? null, remoteMark(remote), bindingIdOf(store.dir, binding.remoteId), hashOf);
+          const next = pullRecovered(state, options.recover, local?.hash ?? null, remoteMark(remote), bindingId, hashOf);
           save(next, options.recover.applied ? written(binding) : notWritten(binding));
           continue;
         } catch (e) {
@@ -285,7 +340,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       }
       const input = {
         // (印は、サーバーの場所・ファイル・サーバー側の計画の ID に結び付ける。ある計画を見て得た選択を、別の計画には使えない)
-        state, local, remote, bindingId: bindingIdOf(store.dir, binding.remoteId)
+        state, local, remote, bindingId: bindingId
       , baseText: state.base ? store.getObject(state.base.hash) : null
       , now: now(), hashOf
       , approvedDeletion: options.approvedDeletion, restoreDeletion: options.restoreDeletion
@@ -315,7 +370,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
             const stop = (_outcome: RecoveryOutcome): RecoveryOutcome => ({ next: "binding-mismatch", localChanges: [], remoteChanges: [] });
             const applied = mismatch(binding.pendingPlanId ?? binding.planId, true) ? stop(preview.applied) : preview.applied;
             const notApplied = mismatch(binding.planId, state.base !== null) ? stop(preview.notApplied) : preview.notApplied;
-            return halted(decision.halt, { recovery: { token: recoveryToken(state, local?.hash ?? null, remoteMark(remote), bindingIdOf(store.dir, binding.remoteId)), applied, notApplied } });
+            return halted(decision.halt, { recovery: { token: recoveryToken(state, local?.hash ?? null, remoteMark(remote), bindingId), applied, notApplied } });
           }
           return halted(decision.halt);
         case "edit-local":
@@ -370,9 +425,30 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
             pending = { kind: "push", opId: randomUUID(), hash: decision.content.hash, expected: decision.expected, at: now().toISOString() };
             save(recordPending(state, decision.epoch, pending), state.base === null ? { ...binding, planId: planId ?? "" } : binding);
           } else pending = decision.pending;
+          // サーバーに断られた操作は、同じ中身を送り直さない (手元を直しても、残った操作の中身は変わらないので、同じ理由で断られ続ける)。
+          // 中身を送らずに「この操作を受理したか」を問い合わせて、片付ける:
+          //   受理していた (前の送信は届いていて、応答だけ失われた。その後で断られるようになった) → 受理として基準を進める
+          //   受理していない → 操作を消す。次の判断で、今の手元の中身から、新しい操作として送り直す
+          // どちらの場合も、手元の編集は落とさない (手元のファイルが正。送る予定だった写しも、状態の置き場に残る)
+          if (pending.rejected) {
+            const op = await fetchOperation(remoteOptions, pending.opId);
+            // (取得と問い合わせの間に、利用者や履歴の世代が変わっていたら、答えを使わない)
+            if (op.account !== account) return halted({ reason: "account-mismatch", bound: account, actual: op.account });
+            if (op.epoch !== stored!.epoch) return halted({ reason: "history-changed", expected: stored!.epoch ?? "", actual: op.epoch });
+            if (op.revision !== null) { save(pushAccepted(stored!, pending.opId, op.revision), stored!.binding); pushed++; }
+            else save(pushRejected(stored!, pending.opId), stored!.binding);
+            break;
+          }
           const text = store.getObject(pending.hash);
           if (text === null) throw new Error("the content of a pending push is missing from the sync state folder");
-          const result = await sendPush({ ...remoteOptions, epoch: stored!.epoch }, pending, text);
+          let result: Awaited<ReturnType<typeof sendPush>>;
+          try {
+            result = await sendPush({ ...remoteOptions, epoch: stored!.epoch }, pending, text);
+          } catch (e) {
+            // 断られた (待っても直らない): 操作は残したまま、断られた印を付ける。次の実行は、送り直さずに、受理の有無の問い合わせから始める
+            if (e instanceof SyncRejectedError) save(pushRefused(stored!, pending.opId, e.status, now().toISOString()), stored!.binding);
+            throw e;
+          }
           await options.onStep?.("push:sent");
           if ("history" in result) return halted({ reason: "history-changed", expected: stored!.epoch ?? "", actual: result.history });
           // サーバーで計画が消されていた: 操作と送る予定の写しは残したまま止まる (送り直さない・作り直さない)

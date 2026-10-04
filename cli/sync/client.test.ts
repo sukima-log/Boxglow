@@ -145,7 +145,7 @@ describe("途中で失敗したときの再開", () => {
     expect(readFileSync(B.file, "utf8")).toBe(before);
     // 止まった結果には、選ぶための印と、2 つの続け方それぞれの「選んだ後の結果」が付いている
     if (stopped.status !== "halted" || !stopped.recovery) throw new Error("expected a recovery preview");
-    expect(stopped.recovery.token).toBe(recoveryToken(B.store().read()!, createHash("sha256").update(before).digest("hex"), { epoch: "e1", revision: server.project("plan-1")!.head!.revision }, bindingIdOf(B.store().dir, "plan-1")));
+    expect(stopped.recovery.token).toBe(recoveryToken(B.store().read()!, createHash("sha256").update(before).digest("hex"), { epoch: "e1", revision: server.project("plan-1")!.head!.revision }, bindingIdOf(B.store().dir, "plan-1", "test")));
     expect(stopped.recovery.applied).toMatchObject({ next: "push", localChanges: ["ボックス「A」の title が変わる"], remoteChanges: ["ボックス「B」の description が変わる"] });
     expect(stopped.recovery.notApplied.next).toBe("push");
     expect(await B.sync({ recover: { token: stopped.recovery.token, applied: true } })).toMatchObject({ status: "synced" });
@@ -535,7 +535,7 @@ describe("初回の選択と結び付け", () => {
     const hash = store.putObject(remoteText);
     store.write({ version: 1, generation: 1, epoch: "e1", base: null
     , pending: { kind: "pull", hash, expectedLocal: createHash("sha256").update(readFileSync(C.file, "utf8")).digest("hex"), remote: { hash, revision: "e1.1" }, at: new Date().toISOString() }
-    , binding: { file: C.file, server: server.url, remoteId: "seen", planId: mine, pendingPlanId: fromJSON(remoteText).id } }, null);
+    , binding: { file: C.file, server: server.url, remoteId: "seen", planId: mine, pendingPlanId: fromJSON(remoteText).id, account: "test" } }, null);
     unlock();
     const stopped = await C.sync();
     if (stopped.status !== "halted" || !stopped.recovery) throw new Error("expected a recovery halt");
@@ -798,4 +798,214 @@ describe("子プロセスを境目で止めて、順序を固定する", () => {
     expect((await finish(first)).done).toMatchObject({ status: "synced", pushed: 1 });
     expect(fromJSON(server.project("plan-1")!.head!.text).blocks[a].title).toBe("A 改");
   }, 60_000);
+});
+
+// ---- Codex のレビュー 15 ----
+describe("利用者を取り違えない (結び付けに、サーバーが確かめた利用者を記録する)", () => {
+  /** 利用者 a が計画を同期し、利用者 b の同じ ID には、中身の違う別の計画がある (どちらも版は e1.1) */
+  async function twoAccounts() {
+    const A = new Device("a");
+    let p = createProject("利用者 a の計画");
+    const box = addBlock(p, { parentId: defaultTaskParent(p), title: "A" }); p = box.project;
+    A.write(fromJSON(toJSON(p)));
+    expect(await A.sync({ remoteId: "shared-id", token: "a" })).toMatchObject({ status: "synced", pushed: 1 });
+    const other = new Device("other");
+    other.write(fromJSON(toJSON(createProject("利用者 b の計画"))));
+    expect(await other.sync({ remoteId: "shared-id", token: "b" })).toMatchObject({ status: "synced", pushed: 1 });
+    // 前提: 別の利用者の、同じ ID・同じ版番号・違う中身
+    expect(server.project("shared-id", "a")!.head!.revision).toBe(server.project("shared-id", "b")!.head!.revision);
+    expect(server.project("shared-id", "a")!.head!.text).not.toBe(server.project("shared-id", "b")!.head!.text);
+    return { A, a: box.blockId };
+  }
+
+  it("結び付けに利用者を記録する", async () => {
+    const { A } = await twoAccounts();
+    expect(A.store().read()!.binding.account).toBe("a");
+  });
+  it("トークンだけを別の利用者に変えて同期しても、その利用者の計画を置き換えない (同じ ID・同じ版番号・違う中身)", async () => {
+    const { A, a } = await twoAccounts();
+    A.edit((p) => updateBlock(p, a, { title: "A 改" }));
+    const before = server.project("shared-id", "b")!.head!.text;
+    const puts = server.puts;
+    const state = readFileSync(join(A.store().dir, "state.json"), "utf8");
+    const r = await A.sync({ token: "b" });
+    expect(r.status === "halted" && r.halt).toEqual({ reason: "account-mismatch", bound: "a", actual: "b" });
+    expect(server.puts).toBe(puts);                                               // 何も送っていない
+    expect(server.project("shared-id", "b")!.head!.text).toBe(before);
+    expect(readFileSync(join(A.store().dir, "state.json"), "utf8")).toBe(state);  // 状態も変えていない
+    // 元の利用者に戻せば、編集はそのまま送られる
+    expect(await A.sync({ token: "a" })).toMatchObject({ status: "synced", pushed: 1 });
+    expect(fromJSON(server.project("shared-id", "a")!.head!.text).blocks[a].title).toBe("A 改");
+  });
+  it("やりかけの送りが残っていても、別の利用者には送り直さない", async () => {
+    const { A, a } = await twoAccounts();
+    A.edit((p) => updateBlock(p, a, { title: "A 改" }));
+    server.dropNextPutResponse = true;
+    await expect(A.sync({ token: "a" })).rejects.toBeInstanceOf(SyncNetworkError);
+    expect(A.store().read()!.pending?.kind).toBe("push");
+    const before = server.project("shared-id", "b")!.head!.text;
+    const puts = server.puts;
+    const r = await A.sync({ token: "b" });
+    expect(r.status === "halted" && r.halt.reason).toBe("account-mismatch");
+    expect(server.puts).toBe(puts);
+    expect(server.project("shared-id", "b")!.head!.text).toBe(before);
+    expect(A.store().read()!.pending?.kind).toBe("push");                         // 操作は残っている
+    expect(await A.sync({ token: "a" })).toMatchObject({ status: "synced" });
+  });
+  it("受け取りの側でも、別の利用者の計画を手元に書かない", async () => {
+    const { A } = await twoAccounts();
+    const local = readFileSync(A.file, "utf8");
+    // 利用者 b の計画が進んでいる (a の基準の版 e1.1 とは違う版になる)
+    const other = new Device("other");
+    other.edit((p) => ({ ...p, description: "b が進めた" }));
+    expect(await other.sync({ token: "b" })).toMatchObject({ status: "synced", pushed: 1 });
+    const r = await A.sync({ token: "b" });
+    expect(r.status === "halted" && r.halt.reason).toBe("account-mismatch");
+    expect(readFileSync(A.file, "utf8")).toBe(local);
+  });
+  it("利用者の記録が無い状態は、今の利用者のものと黙って決めない。人が確かめたら、記録して進む", async () => {
+    const { A, a } = await twoAccounts();
+    // 利用者を記録するようになる前の状態にする
+    const path = join(A.store().dir, "state.json");
+    const old = JSON.parse(readFileSync(path, "utf8")); delete old.binding.account;
+    writeFileSync(path, JSON.stringify(old));
+    A.edit((p) => updateBlock(p, a, { title: "A 改" }));
+    const puts = server.puts;
+    for (const token of ["a", "b"]) {
+      const r = await A.sync({ token });
+      expect(r.status === "halted" && r.halt).toEqual({ reason: "account-unconfirmed", account: token });
+    }
+    // 確かめた利用者と、今のトークンの利用者が違えば、進まない
+    const wrong = await A.sync({ token: "b", confirmAccount: "a" });
+    expect(wrong.status === "halted" && wrong.halt.reason).toBe("account-mismatch");
+    expect(server.puts).toBe(puts);
+    expect(A.store().read()!.binding.account).toBeUndefined();
+    expect(await A.sync({ token: "a", confirmAccount: "a" })).toMatchObject({ status: "synced", pushed: 1 });
+    expect(A.store().read()!.binding.account).toBe("a");
+    // 記録した後は、別の利用者では進まない
+    const after = await A.sync({ token: "b" });
+    expect(after.status === "halted" && after.halt.reason).toBe("account-mismatch");
+  });
+  it("初回の選択の印は、別の利用者の計画には使えない (まだ状態が無い場面)", async () => {
+    await twoAccounts();
+    const C = new Device("c"); C.write(fromJSON(toJSON(createProject("手元の別の計画"))));
+    const asA = await C.sync({ remoteId: "shared-id", token: "a" });
+    if (asA.status !== "halted" || asA.halt.reason !== "first-link") throw new Error("expected first-link");
+    const before = server.project("shared-id", "b")!.head!.text;
+    const r = await C.sync({ remoteId: "shared-id", token: "b", firstLink: { token: asA.halt.token, prefer: "local" } });
+    expect(r.status).toBe("halted");
+    expect(server.project("shared-id", "b")!.head!.text).toBe(before);
+    expect(C.store().read()).toBeNull();                                          // 結び付けも作っていない
+  });
+  it("利用者の ID を返さないサーバーとは、同期しない (通信の失敗として扱う)", async () => {
+    const { A, a } = await twoAccounts();
+    A.edit((p) => updateBlock(p, a, { title: "A 改" }));
+    const puts = server.puts;
+    const strip = (async (...args: Parameters<typeof fetch>) => {
+      const res = await fetch(...args);
+      const headers = new Headers(res.headers); headers.delete("x-boxglow-account");
+      return new Response(res.body, { status: res.status, headers });
+    }) as typeof fetch;
+    await expect(A.sync({ token: "a", fetch: strip })).rejects.toBeInstanceOf(SyncNetworkError);
+    expect(server.puts).toBe(puts);
+  });
+});
+
+describe("サーバーに断られた送りからの復帰 (状態のファイルを手で消さずに)", () => {
+  /** 送られた PUT の本文のハッシュを記録する fetch */
+  function recording() {
+    const bodies: string[] = [];
+    const record = (async (...args: Parameters<typeof fetch>) => {
+      const init = args[1] as RequestInit | undefined;
+      if (init?.method === "PUT") bodies.push(createHash("sha256").update(String(init.body)).digest("hex"));
+      return fetch(...args);
+    }) as typeof fetch;
+    return { bodies, record };
+  }
+
+  it("大きすぎて断られた後、手元を直せば、直した内容で送り直す (断られた古い中身を送り続けない)", async () => {
+    const { A, B, a } = await twoDevices();
+    server.maxBytes = Buffer.byteLength(readFileSync(A.file, "utf8")) + 2_000;
+    A.edit((p) => updateBlock(p, a, { description: "x".repeat(5_000) }));
+    const { bodies, record } = recording();
+    const error = await A.sync({ fetch: record }).then(() => null, (e: unknown) => e);
+    expect(error).toBeInstanceOf(SyncRejectedError);
+    expect(A.store().read()!.pending).toMatchObject({ kind: "push", rejected: { status: 413 } });
+    // 手元を、上限に収まる内容に直す
+    A.edit((p) => updateBlock(p, a, { description: "短くした", title: "A 改" }));
+    expect(await A.sync({ fetch: record })).toMatchObject({ status: "synced", pushed: 1 });
+    expect(bodies.length).toBe(2);
+    expect(bodies[1]).not.toBe(bodies[0]);                                        // 断られた中身は送り直していない
+    expect(bodies[1]).toBe(createHash("sha256").update(readFileSync(A.file, "utf8")).digest("hex"));
+    expect(A.store().read()!.pending).toBeNull();
+    expect(await B.sync()).toMatchObject({ status: "synced", pulled: 1 });
+    expect(B.project.blocks[a]).toMatchObject({ description: "短くした", title: "A 改" });
+  });
+  it("手元を直さないままなら、もう一度断られる (操作は残り、状態を手で消す必要はない)", async () => {
+    const { A, a } = await twoDevices();
+    server.maxBytes = Buffer.byteLength(readFileSync(A.file, "utf8")) + 2_000;
+    A.edit((p) => updateBlock(p, a, { description: "x".repeat(5_000) }));
+    for (let i = 0; i < 3; i++) {
+      await expect(A.sync()).rejects.toBeInstanceOf(SyncRejectedError);
+      expect(A.store().read()!.pending).toMatchObject({ kind: "push", rejected: { status: 413 } });
+    }
+    expect(A.project.blocks[a].description.length).toBe(5_000);                   // 手元の編集は、そのまま
+    // サーバーの側の上限が上がった場合も、そのまま進む
+    server.maxBytes = Infinity;
+    expect(await A.sync()).toMatchObject({ status: "synced", pushed: 1 });
+  });
+  it("前の送信が受理済みで、応答だけ失われていた場合は、断られた後でも、受理として扱う (編集を落とさない・二重に適用しない)", async () => {
+    const { A, B, a, b } = await twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "受理済みの編集" }));
+    server.dropNextPutResponse = true;
+    await expect(A.sync()).rejects.toBeInstanceOf(SyncNetworkError);              // サーバーは受理したが、応答が届かなかった
+    const accepted = server.project("plan-1")!.head!.revision;
+    // その後で、サーバーが断るようになった (上限が下がった)。手元には、次の編集が入っている
+    server.maxBytes = 10;
+    A.edit((p) => updateBlock(p, b, { title: "次の編集" }));
+    await expect(A.sync()).rejects.toBeInstanceOf(SyncRejectedError);
+    expect(A.store().read()!.pending).toMatchObject({ kind: "push", rejected: { status: 413 } });
+    // 断られている間も、受理の有無の問い合わせ (中身を送らない) で、前の操作は片付く: 基準が、受理された版に進む
+    await expect(A.sync()).rejects.toBeInstanceOf(SyncRejectedError);
+    expect(A.store().read()!.base!.revision).toBe(accepted);
+    // 上限が戻れば、次の編集も送られる
+    server.maxBytes = Infinity;
+    expect(await A.sync()).toMatchObject({ status: "synced" });
+    expect(await B.sync()).toMatchObject({ status: "synced", pulled: 1 });
+    expect(B.project.blocks[a].title).toBe("受理済みの編集");
+    expect(B.project.blocks[b].title).toBe("次の編集");
+    expect(server.project("plan-1")!.versions.length).toBe(3);                    // 作成・受理済みの編集・次の編集 (二重の版は無い)
+  });
+  it("断られた送りを片付ける間に、別の端末が進めていても、両方の編集が残る", async () => {
+    const { A, B, a, b } = await twoDevices();
+    server.maxBytes = Buffer.byteLength(readFileSync(A.file, "utf8")) + 2_000;
+    A.edit((p) => updateBlock(p, a, { description: "x".repeat(5_000) }));
+    await expect(A.sync()).rejects.toBeInstanceOf(SyncRejectedError);
+    B.edit((p) => updateBlock(p, b, { title: "B 改" }));
+    expect(await B.sync()).toMatchObject({ status: "synced", pushed: 1 });
+    A.edit((p) => updateBlock(p, a, { description: "短くした" }));
+    expect(await A.sync()).toMatchObject({ status: "synced", pulled: 1, pushed: 1 });
+    expect(A.project.blocks[a].description).toBe("短くした");
+    expect(A.project.blocks[b].title).toBe("B 改");
+  });
+  it("受理の有無の答えが読めないときは、「受理していない」と決めつけない (操作を残す)", async () => {
+    const { A, a } = await twoDevices();
+    server.maxBytes = Buffer.byteLength(readFileSync(A.file, "utf8")) + 2_000;
+    A.edit((p) => updateBlock(p, a, { description: "x".repeat(5_000) }));
+    await expect(A.sync()).rejects.toBeInstanceOf(SyncRejectedError);
+    A.edit((p) => updateBlock(p, a, { description: "短くした" }));
+    const pending = A.store().read()!.pending;
+    for (const body of ["{}", "[]", "null", "not json", JSON.stringify({ revision: 5 })]) {
+      const broken = (async (...args: Parameters<typeof fetch>) => String(args[0]).includes("/ops/")
+        ? new Response(body, { status: 200, headers: { "x-boxglow-epoch": "e1", "x-boxglow-account": "test" } }) : fetch(...args)) as typeof fetch;
+      await expect(A.sync({ fetch: broken })).rejects.toBeInstanceOf(SyncNetworkError);
+      expect(A.store().read()!.pending).toEqual(pending);
+    }
+    // サーバーの履歴の世代が変わっていたら、答えを使わない
+    const otherEpoch = (async (...args: Parameters<typeof fetch>) => String(args[0]).includes("/ops/")
+      ? new Response(JSON.stringify({ revision: null }), { status: 200, headers: { "x-boxglow-epoch": "e2", "x-boxglow-account": "test" } }) : fetch(...args)) as typeof fetch;
+    const r = await A.sync({ fetch: otherEpoch });
+    expect(r.status === "halted" && r.halt.reason).toBe("history-changed");
+    expect(A.store().read()!.pending).toEqual(pending);
+  });
 });

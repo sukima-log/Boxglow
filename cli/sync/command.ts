@@ -8,6 +8,7 @@
  *   boxglow sync --resolve <印> --prefer local|remote                 止まっていた競合を、表示した項目について手元 / サーバーの値に決める
  *   boxglow sync --link <印> --prefer local|remote                    初めて結び付けるときに中身が違った場合に、どちらを採るかを決める
  *   boxglow sync --recover <印> --applied | --not-applied             止まっていた「受け取りの再開」を、人の選択で進める
+ *   boxglow sync --account <利用者の ID>                              利用者の記録が無い結び付けを、表示された利用者のものとして続ける
  * 止まったとき (競合・確認が要る場面) は、理由と次の操作を表示して、終了コード 2 で終わる。通信の失敗は終了コード 1 (もう一度実行すれば続きから)。
  *   boxglow sync --watch                                              常時の同期 (Ctrl+C で終了)。この端末の、同じサーバーに結び付いた計画すべてを受け持つ
  * まだ無いもの: 競合を 1 件ずつ選ぶ操作、サインイン (login)
@@ -33,6 +34,8 @@ export interface SyncCommandOptions {
   recover?: string;
   applied?: boolean;
   notApplied?: boolean;
+  /** 利用者の記録が無い結び付けを、この利用者のものとして続ける (表示された利用者の ID) */
+  account?: string;
   /** 常時の同期 (終了するまで動き続ける) */
   watch?: boolean;
 }
@@ -69,9 +72,14 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
     , resolution: o.resolve ? { token: o.resolve, prefer } : undefined
     , firstLink: o.link ? { token: o.link, prefer } : undefined
     , recover: o.recover ? { token: o.recover, applied: !!o.applied } : undefined
+    , confirmAccount: o.account
     });
   } catch (e) {
-    if (e instanceof SyncRejectedError) { out(t("サーバーが、この計画の同期を受け付けませんでした (待っても直りません)。やりかけの操作は残してあります: {status} {detail}", { status: e.status, detail: rejectionHint(e.status) })); return 2; }
+    if (e instanceof SyncRejectedError) { out(t("サーバーが、この計画の同期を受け付けませんでした (待っても直りません)。やりかけの操作は残してあります: {status} {detail}", { status: e.status, detail: rejectionHint(e.status) }));
+      // 手元を直すだけでは、残った操作の中身は変わらない。次の実行で、その操作を片付けてから、今の中身で送り直すことを伝える
+      out(t("手元のファイルを直してから、もう一度 boxglow sync を実行してください。断られた送信は送り直さず、サーバーに届いていたかを確かめて片付けてから、今の手元の内容で送り直します"));
+      return 2;
+    }
     if (e instanceof SyncAuthError) { out(t("サーバーが利用者を確かめられませんでした (トークンが無い、または無効です)。環境変数 BOXGLOW_TOKEN を確かめてください。やりかけの操作は残してあります")); return 1; }
     if (e instanceof SyncNetworkError) { out(t("サーバーと通信できませんでした (やりかけの操作は残してあります。もう一度 boxglow sync を実行すると、続きから進みます): {message}", { message: e.message })); return 1; }
     if (e instanceof SyncStateUnreadable) { out(t("同期の状態のファイルを読めません。自動では直しません (消すと、やりかけの操作と前回そろえた中身の記録を失います): {path} ({problem})", { path: e.path, problem: e.problem })); return 1; }
@@ -195,6 +203,14 @@ export function describeHalt(result: Extract<SyncResult, { status: "halted" }>, 
       out(halt.choice === "firstLink"
         ? t("--link の選択は、今の状態には当てはまりません (同期の対象が、選択を表示したときと違う可能性があります)。何もしていません。表示されたコマンドを、--server・--project・--file を付けたまま実行してください")
         : t("--resolve の選択は、今の状態には当てはまりません (競合がもう無い、または対象が違います)。何もしていません。boxglow sync でもう一度確かめてください"));
+      break;
+    case "account-mismatch":
+      out(t("この計画の結び付けは、別の利用者 ({bound}) のものです。今のトークンの利用者は {actual} です。別の利用者の計画を置き換えないよう、何も送らず、何も書いていません。結び付けたときの利用者のトークンで実行してください", { bound: halt.bound, actual: halt.actual }));
+      break;
+    case "account-unconfirmed":
+      out(t("この計画の結び付けには、利用者の記録がありません (記録するようになる前に結び付けたものです)。今のトークンの利用者は {account} です。この利用者で結び付けたものなら、次を実行すると、利用者を記録して同期を続けます:", { account: halt.account }));
+      out(`  boxglow sync --account ${quote(halt.account)}${target}`);
+      out(t("別の利用者で結び付けたものなら、実行しないでください (そのときのトークンに直してから、もう一度確かめてください)"));
       break;
     case "binding-mismatch":
       out(t("このパスには、結び付けたときとは別の計画が置かれています (結び付けた計画の ID: {expected}、今の計画の ID: {actual})。同期しません", { expected: halt.expected, actual: halt.actual }));

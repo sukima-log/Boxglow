@@ -313,3 +313,47 @@ describe("通信の本文の失敗・読み取りの量", () => {
     expect(ten).toBeLessThanOrEqual(10 * 2);
   });
 });
+
+// ---- Codex のレビュー 15 ----
+describe("利用者・拒否の扱い (常時の同期)", () => {
+  it("別の利用者のトークンで動かしても、その利用者の計画を置き換えない。1 回だけ知らせて、ほかの計画は続ける", async () => {
+    const mine = planFile("mine"), theirs = planFile("theirs");
+    await syncOnce({ file: mine.file, server: server.url, remoteId: "same-id", token: "a" });
+    // 利用者 b の同じ ID には別の計画がある。b には、この端末で結び付けた別の計画 (theirs) もある
+    const saved = process.env.BOXGLOW_CONFIG_DIR;
+    process.env.BOXGLOW_CONFIG_DIR = join(root, "other-config");
+    const other = planFile("other");
+    await syncOnce({ file: other.file, server: server.url, remoteId: "same-id", token: "b" });
+    process.env.BOXGLOW_CONFIG_DIR = saved;
+    await syncOnce({ file: theirs.file, server: server.url, remoteId: "b-plan", token: "b" });
+    const before = server.project("same-id", "b")!.head!.text;
+    const w = watcher({ token: "b" });
+    await w.tick();
+    edit(mine.file, (p) => updateBlock(p, mine.a, { title: "a の編集" }));
+    edit(theirs.file, (p) => updateBlock(p, theirs.a, { title: "b の編集" }));
+    await advance(w, 100); await advance(w, DEBOUNCE_MS);
+    await advance(w, POLL_MS * 2); await advance(w, POLL_MS * 2);
+    expect(server.project("same-id", "b")!.head!.text).toBe(before);
+    expect(fromJSON(server.project("b-plan", "b")!.head!.text).blocks[theirs.a].title).toBe("b の編集");
+    const halts = events.filter((e) => e.kind === "halted" && e.file === mine.file);
+    expect(halts.length).toBe(1);
+    expect(halts[0].kind === "halted" && halts[0].result.halt.reason).toBe("account-mismatch");
+  });
+  it("断られた計画は、手元が直されたら、直した内容で送り直す", async () => {
+    const { file, a } = planFile("big");
+    await syncOnce({ file, server: server.url, remoteId: "big" });
+    const w = watcher();
+    await w.tick();
+    server.maxBytes = Buffer.byteLength(readFileSync(file, "utf8")) + 2_000;
+    edit(file, (p) => updateBlock(p, a, { description: "x".repeat(5_000) }));
+    await advance(w, 100); await advance(w, DEBOUNCE_MS);
+    expect(events.filter((e) => e.kind === "error").length).toBe(1);
+    const puts = server.puts;
+    await advance(w, POLL_MS * 2); await advance(w, POLL_MS * 2);
+    expect(server.puts).toBe(puts);                                    // 同じ内容を送り続けない
+    edit(file, (p) => updateBlock(p, a, { description: "短くした" }));
+    await advance(w, 100); await advance(w, DEBOUNCE_MS);
+    expect(fromJSON(server.project("big")!.head!.text).blocks[a].description).toBe("短くした");
+    expect(events.filter((e) => e.kind === "synced").length).toBeGreaterThan(0);
+  });
+});
