@@ -3,6 +3,7 @@
  * 試験用のサーバー (サインインの手順つき) と、実際のファイルを使う。待ち時間は、差し替えた sleep で進める (実際には待たない)
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -274,11 +275,22 @@ describe("R23-04: 発行の後の保存の失敗 (権限の確認でも、ふつ
     expect(existsSync(path)).toBe(false);
   });
 
-  it("保存に成功した後の、控えの片付けの失敗は、失敗として扱わない (新しいトークンを取り消さない)", async () => {
-    expect(await login(approve(ALICE))).toBe(0);
-    expect(await login(approve(ALICE))).toBe(0);
-    expect(readCredentials(server.url)!.token).toBe("tok-acc-alice-2");
-    expect(server.revoked.has("tok-acc-alice-2")).toBe(false);
+  it("保存に成功した後の、控えの片付けの失敗は、失敗として扱わない (保存は成功。新しい資格情報が使え、控えが残る)", async () => {
+    const cred = (token: string) => ({ server: server.url, account: "acc-alice", login: "alice", token, createdAt: "2026-10-04T00:00:00.000Z" });
+    await withCredentialsLock(server.url, async () => { saveCredentials(cred("old-token")); });
+    const path = credentialsPath(server.url), folder = dirname(path);
+    const leftovers = () => readdirSync(folder).filter((f) => f.includes(".prev-"));
+    let failed: unknown = null;
+    await withCredentialsLock(server.url, async () => {
+      // 新しいファイルを置いた直後に、フォルダを書き込めなくする: 最後の確認 (読むだけ) は通り、控えの削除だけが失敗する
+      try { saveCredentials(cred("new-token"), { afterPlace: () => chmodSync(folder, 0o500) }); } catch (e) { failed = e; }
+      // (この後、ロックを外すのにフォルダへ書くので、ここで権限を戻す。控えが残っていることは、戻す前に確かめる)
+      expect(leftovers().length).toBe(1);
+      chmodSync(folder, 0o700);
+    });
+    expect(failed).toBeNull();                                              // 保存は成功として返る
+    expect(readCredentials(server.url)!.token).toBe("new-token");           // 新しい資格情報が使える
+    expect(leftovers().length).toBe(1);                                     // 控えは残っている (片付けの失敗の分岐を通った)
   });
 });
 
@@ -338,5 +350,64 @@ describe("R23-05: 資格情報が「無い」と「在るが、安全に読め�
     expect(await runLogout({ server: server.url, out })).toBe(0);
     expect([...server.revoked]).toEqual(["tok-acc-alice-1"]);
   });
+});
+
+// ---- Codex のレビュー 24 ----
+describe("R24-01: 壊れた資格情報のファイルの中身を、画面に出さない", () => {
+  for (const [name, content] of [["トークンをそのまま貼ったファイル", "FAKE_SECRET_SENTINEL_tok_1234567890"], ["途中で切れた JSON", '{"token": "FAKE_SECRET_SENTINEL_tok_1234567890", "acc']] as const) {
+    it(`${name}: login も logout も、中身を表示せず、通信せずに、終了コード 1。ファイルは残る`, async () => {
+      const path = credentialsPath(server.url);
+      mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+      writeFileSync(path, content, { mode: 0o600 });
+      const reason = inspectCredentials(server.url);
+      expect(reason).toMatchObject({ kind: "unusable" });
+      expect(JSON.stringify(reason)).not.toContain("FAKE_SECRET_SENTINEL");
+      let calls = 0;
+      const counting = (async (...args: Parameters<typeof fetch>) => { calls++; return fetch(...args); }) as typeof fetch;
+      expect(await runLogin({ server: server.url, out, fetch: counting, sleep: async () => {} })).toBe(1);
+      expect(await runLogout({ server: server.url, out, fetch: counting })).toBe(1);
+      expect(calls).toBe(0);
+      expect(lines.join("\n")).not.toContain("FAKE_SECRET_SENTINEL");
+      expect(lines.join("\n")).toContain(path);                             // どのファイルを確かめればよいかは伝える
+      expect(readFileSync(path, "utf8")).toBe(content);
+    });
+  }
+});
+
+describe("配布する入口 (bin/boxglow.js) を、サブプロセスで通す", () => {
+  /** CLI を実行する。Output: 終了コードと標準出力 */
+  const run = (args: string[], env: Record<string, string> = {}) => new Promise<{ status: number | null; stdout: string }>((done) => {
+    const child = spawn(process.execPath, ["bin/boxglow.js", ...args, "--lang", "ja"]
+    , { env: { ...process.env, BOXGLOW_CONFIG_DIR: join(root, "cli-config"), BOXGLOW_SERVER: "", BOXGLOW_TOKEN: "", ...env } });
+    let stdout = "";
+    child.stdout.on("data", (c: Buffer) => { stdout += c.toString(); });
+    child.on("exit", (status) => done({ status, stdout }));
+  });
+
+  it("login → whoami → sync → logout。トークンは、どの出力にも出ない", async () => {
+    // login は、コードを表示して待つ。その間に、サーバーの側で許可する
+    const approving = setInterval(() => { for (const [code, state] of server.deviceCodes) if (state === "pending") server.deviceCodes.set(code, ALICE); }, 100);
+    const signedIn = await run(["login", "--server", server.url, "--name", "subprocess-test"]);
+    clearInterval(approving);
+    expect(signedIn.status).toBe(0);
+    expect(signedIn.stdout).toContain("TEST-1");
+    expect(signedIn.stdout).toContain("alice (acc-alice)");
+    const who = await run(["whoami", "--server", server.url]);
+    expect([who.status, who.stdout.includes("alice (acc-alice)")]).toEqual([0, true]);
+    // 計画を作って、保存したサインインで同期する
+    mkdirSync(join(root, "cli-plan"), { recursive: true });
+    const file = join(root, "cli-plan", "boxglow.json");
+    writeFileSync(file, toJSON(fromJSON(toJSON(createProject("入口の試験")))) + "\n");
+    const synced = await run(["sync", "--server", server.url, "--project", "cli-1", "--file", file]);
+    expect(synced.status).toBe(0);
+    expect(server.project("cli-1", "acc-alice")?.head).toBeTruthy();
+    const out1 = await run(["logout", "--server", server.url]);
+    expect(out1.status).toBe(0);
+    expect([...server.revoked]).toEqual(["tok-acc-alice-1"]);
+    expect((await run(["whoami", "--server", server.url])).status).toBe(1);
+    for (const text of [signedIn.stdout, who.stdout, synced.stdout, out1.stdout]) expect(text).not.toContain("tok-acc-alice-1");
+    // 知らない指定は、実行せずに断る
+    expect((await run(["login", "--server", server.url, "--bogus"])).status).toBe(1);
+  }, 60_000);
 });
 

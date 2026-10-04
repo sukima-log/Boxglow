@@ -95,11 +95,18 @@ export function inspectCredentials(server: string): StoredCredentials {
       const reason = unsafeReason(dir(), "dir") ?? unsafeReason(path, "file");
       if (reason) return { kind: "unusable", path, reason };
     }
-    const value = JSON.parse(readFileSync(path, "utf8")) as Partial<Credentials>;
+    const text = readFileSync(path, "utf8");
+    // 理由には、ファイルの中身を混ぜない (中身はトークンかもしれない)。JSON の解析の失敗は、例外の文言に入力の抜粋が入ることがあるので、決まった文言にする
+    let value: Partial<Credentials> | null;
+    try { value = JSON.parse(text) as Partial<Credentials> | null; } catch { return { kind: "unusable", path, reason: "the file is not valid JSON" }; }
+    if (typeof value !== "object" || value === null || Array.isArray(value)) return { kind: "unusable", path, reason: "the file is not a credentials file" };
     if (value.server !== normalizeServer(server)) return { kind: "unusable", path, reason: "the file belongs to another server" };
     if (typeof value.token !== "string" || typeof value.account !== "string" || typeof value.login !== "string") return { kind: "unusable", path, reason: "the file is not a credentials file" };
     return { kind: "valid", credentials: { server: value.server, account: value.account, login: value.login, token: value.token, createdAt: String(value.createdAt ?? "") } };
-  } catch (e) { return { kind: "unusable", path, reason: e instanceof Error ? e.message : String(e) }; }
+  } catch (e) {
+    // 読み取りの失敗: 理由は、エラーの種類 (EACCES など) だけにする
+    return { kind: "unusable", path, reason: `the file could not be read (${(e as NodeJS.ErrnoException).code ?? "error"})` };
+  }
 }
 
 /**
