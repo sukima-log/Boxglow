@@ -2,7 +2,16 @@
 
 ## Unreleased
 
-- Lock: a live owner on the same machine keeps its lock until five minutes have passed (a dead owner's lock is recovered at once; other hosts after 30 s). `setup-agent` says when it enabled the context guard and how to use it.
+## 0.4.1 (2026-10-04)
+
+Save lock, reviewed together with Codex. **Update the CLI, `serve` and the VS Code extension together and restart running ones**: 0.4.0 takes over locks by elapsed time, so mixing 0.4.0 and 0.4.1 writers on one plan is not safe.
+
+- Lock: a lock is recovered automatically only when its owner is confirmed gone. The owner record now carries the OS, the process-ID space (Linux: boot id + PID namespace) and the process start, so a pid checked from a different space (Windows vs WSL with the same machine name, another container) is never mistaken for a dead owner, and a reused pid is recognized. A live writer, another host, Windows and macOS (no verifiable process-ID space), an owner written by 0.4.0, and a missing, unreadable or malformed owner record are never taken over, however much time has passed.
+- Lock: the owner record is in place the moment the lock appears (the folder is prepared and renamed into place); empty lock folders are no longer recovered automatically. Release, recovery and manual removal take one exclusive marker inside the lock and re-check its generation before moving it, and always move it aside before deleting. The marker is published together with its owner record. A marker left by an interrupted recovery is taken over only by manual removal, by placing a higher-numbered marker (never by renaming or deleting an existing one), and only when no existing marker belongs to a writer confirmed running. Recovery attempts respect the wait deadline. Releasing twice is harmless; a failed release is remembered and retried by the same process only while the lock is still its own.
+- New `boxglow unlock`: shows the owner, the verdict and any recovery in progress (read-only; agents may use it). `unlock --remove --lock-token <token> --actor human` lets a person remove a leftover lock; it refuses when the owner or a recovering writer is running, or when the lock changed after it was shown. The "file lock" error now names the owner and points here.
+- Merge: keeping a parent no longer resurrects a child explicitly selected for deletion; automatic recovery respects explicit deletion choices for related data too.
+- Inspector: keeps the current tab when moving between boxes, and on tabs other than Status shows a short button (for example "AI未確認 1 →") leading to unanswered questions and answers the AI has not acknowledged. The dot on the Status tab covers both.
+- `setup-agent` says when it enabled the context guard and how to use it. Agent instructions tell agents to ask a person when a lock does not clear.
 
 ## 0.4.0 (2026-10-04)
 

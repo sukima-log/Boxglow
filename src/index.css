@@ -940,6 +940,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .topbar .summary-chip__txt { display: inline; }
 .attention-section { display: flex; flex-direction: column; gap: 16px; padding: 16px 8px; border: 1px solid var(--accent); border-radius: 8px; background: var(--bg-paper); }
 .attention-section .label { color: var(--text); }
+.inspector-attention { white-space: normal; line-height: 1.5; text-align: left; justify-content: flex-start; border-color: var(--accent); }
 .category-field { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 16px; margin-top: 8px; }
 .panel.right .input { min-width: 0; }
 .panel.right { overflow-wrap: anywhere; }

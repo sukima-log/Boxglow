@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, mkdirSync, statSync, utimesSync, chmodSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, mkdirSync, statSync, utimesSync, chmodSync, readdirSync } from "node:fs";
 import { tmpdir, hostname } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
 import { request as httpRequest } from "node:http";
 import { spawn, spawnSync } from "node:child_process";
-import { commitFile, FileBusy, FileConflict, lockFile, revisionOf } from "./file-store";
+import { commitFile, FileBusy, FileConflict, lockFile, revisionOf, pidSpace, removeLock, inspectLock, lockTokenOf } from "./file-store";
 import { startServe, MAX_BODY } from "./serve";
 import { createProject, addBlock, defaultTaskParent, toJSON, fromJSON, editDecisionAnswer, ackDecisions, removeBlock } from "../src/model/graph";
 import { validateProjectText } from "../src/model/validate-file";
@@ -154,10 +154,13 @@ describe("durable agent context", () => {
 });
 
 describe("ロックの回収と待ち合わせ", () => {
-  /** ロックのディレクトリを、指定した持ち主の情報で直接作る (他のプロセスが取ったロックの再現) */
+  /**
+   * ロックのディレクトリを、指定した持ち主の情報で直接作る (他のプロセスが取ったロックの再現)
+   * 既定では、このテストと同じマシン・OS・プロセス番号の空間で取ったロックにする (owner = null なら、持ち主の記録が無い空のロック)
+   */
   const plantLock = (file: string, owner: { pid: number; host?: string; at?: string } | null) => {
     mkdirSync(file + ".boxglow-lock");
-    if (owner) writeFileSync(join(file + ".boxglow-lock", "owner.json"), JSON.stringify({ pid: owner.pid, host: owner.host ?? hostname(), at: owner.at ?? new Date().toISOString(), token: "planted" }));
+    if (owner) writeFileSync(join(file + ".boxglow-lock", "owner.json"), JSON.stringify({ pid: owner.pid, host: owner.host ?? hostname(), at: owner.at ?? new Date(Date.now() - 60_000).toISOString(), token: "planted", platform: process.platform, space: pidSpace(), start: null }));
   };
   /** すでに終了したプロセスの pid (同じホストで「持ち主がいない」ロックの再現) */
   const deadPid = () => spawnSync(process.execPath, ["-e", ""]).pid!;
@@ -171,27 +174,73 @@ describe("ロックの回収と待ち合わせ", () => {
     // 2 回目の解放・ロックが先に消えていた場合でも例外にならない
     expect(() => unlock()).not.toThrow();
   });
-  it("持ち主のプロセスがいないロックは回収して書き込める", () => {
+  // 終了を確かめられるのは、プロセス番号の空間の印が取れる Linux だけ (Windows・macOS では人の解除に回す)
+  it.runIf(process.platform === "linux")("持ち主のプロセスがいないロックは回収して書き込める", () => {
     const file = join(temp(), "plan.json"); commitFile(file, "base", null);
     plantLock(file, { pid: deadPid() });
     commitFile(file, "after crash", revisionOf("base"));
     expect(readFileSync(file, "utf8")).toBe("after crash"); expect(existsSync(file + ".boxglow-lock")).toBe(false);
   });
-  it("取得から時間が経ちすぎたロック・持ち主の分からない古いロックは回収する", () => {
+  it("生きている持ち主のロックと、持ち主の記録が無いロックは、時間が経っても奪わない", () => {
     const file = join(temp(), "plan.json"); commitFile(file, "base", null);
     // 持ち主が生きている (自分の親) 間は、31 秒経っただけでは奪わない (保存に時間がかかっているだけかもしれない)
     plantLock(file, { pid: process.ppid, at: new Date(Date.now() - 31_000).toISOString() });
-    expect(() => commitFile(file, "one", revisionOf("base"), { waitMs: 100 })).toThrow();
+    expect(() => commitFile(file, "one", revisionOf("base"), { waitMs: 100 })).toThrow(FileBusy);
     expect(readFileSync(file, "utf8")).toBe("base");
     rmSync(file + ".boxglow-lock", { recursive: true });
-    // 生きている持ち主でも、5 分を過ぎたら回収する (固まったプロセスへの備え)
+    // 5 分を過ぎても生きている書き手のロックは奪わない
     plantLock(file, { pid: process.ppid, at: new Date(Date.now() - 6 * 60_000).toISOString() });
-    commitFile(file, "one", revisionOf("base"));
-    // 旧版が残した空のロック (持ち主の情報なし)。更新時刻が古い
+    expect(() => commitFile(file, "one", revisionOf("base"), { waitMs: 0 })).toThrow(FileBusy);
+    rmSync(file + ".boxglow-lock", { recursive: true });
+    // 持ち主の記録が無い空のロック (旧版の残骸か、旧版が取得している途中かを見分けられない) は、古くても奪わない
     plantLock(file, null); const old = new Date(Date.now() - 60_000); utimesSync(file + ".boxglow-lock", old, old);
-    commitFile(file, "two", revisionOf("one"));
+    expect(() => commitFile(file, "two", revisionOf("base"), { waitMs: 0 })).toThrow(FileBusy);
+    expect(readFileSync(file, "utf8")).toBe("base");
+    // 人が解除すれば書ける (照合用の印は、表示のときの世代の印)
+    expect(removeLock(file, lockTokenOf(inspectLock(file)!))).toBe("removed");
+    commitFile(file, "two", revisionOf("base"));
     expect(readFileSync(file, "utf8")).toBe("two");
   });
+  it("CLI を 16 個同時に走らせても、全部が成功し、全部の変更が残り、ロックの残骸が無い", async () => {
+    // 取得 (改名で置く) と解放 (改名してから消す) が重なっても、2 つの書き手が同時にロックの中へ入らないこと。
+    // 入ってしまうと、片方の変更が黙って消える (成功の数より、残ったボックスの数が少なくなる)
+    const { project: p } = fixture(); p.lang = "ja";
+    const dir = temp(); const file = join(dir, "plan.json"); writeFileSync(file, toJSON(p));
+    const before = Object.keys(fromJSON(readFileSync(file, "utf8")).blocks).length;
+    const runs = Array.from({ length: 16 }, (_, i) => {
+      const child = spawn(process.execPath, ["bin/boxglow.js", "add", `並行 ${i}`, "--file", file, "--actor", "codex"], { stdio: "ignore" });
+      return once(child, "exit").then(([code]) => code as number);
+    });
+    const codes = await Promise.all(runs);
+    expect(codes.filter((c) => c === 0).length).toBe(16);
+    const after = fromJSON(readFileSync(file, "utf8"));
+    expect(Object.values(after.blocks).filter((b) => b.title.startsWith("並行 ")).length).toBe(16);
+    expect(Object.keys(after.blocks).length).toBe(before + 16);
+    expect(readdirSync(dir).filter((n) => n.includes("boxglow-lock") || n.includes("boxglow-tmp"))).toEqual([]);
+  }, 60_000);
+  it("CLI: 解けないロックは持ち主を示して止まり、unlock は表示だけ・解除は人だけ・印が合うときだけ", () => {
+    const { project: p } = fixture(); p.lang = "ja";
+    const file = join(temp(), "plan.json"); writeFileSync(file, toJSON(p));
+    const cli = (actor: string, ...args: string[]) => spawnSync(process.execPath, ["bin/boxglow.js", ...args, "--file", file, "--actor", actor], { encoding: "utf8" });
+    expect(cli("codex", "unlock").stdout).toContain("ロックはありません");
+    // 別のマシンの書き手が残したロック (こちらからは生死を確かめられない)
+    plantLock(file, { pid: 1, host: "another-host" });
+    const busy = cli("codex", "add", "新しいボックス");
+    expect(busy.status).toBe(1);
+    expect(busy.stderr).toContain("another-host"); expect(busy.stderr).toContain("boxglow unlock");
+    // 表示は AI でもできる。解除の手順と照合用の印が出る
+    const shown = cli("codex", "unlock");
+    expect(shown.status).toBe(0); expect(shown.stdout).toContain("--lock-token planted");
+    // AI は解除できない。人でも、印が無い・違うときは解除できない
+    expect(cli("codex", "unlock", "--remove", "--lock-token", "planted").status).toBe(1);
+    expect(cli("human", "unlock", "--remove").status).toBe(1);
+    expect(cli("human", "unlock", "--remove", "--lock-token", "other").status).toBe(1);
+    expect(existsSync(file + ".boxglow-lock")).toBe(true);
+    // 人が、表示された印を付けて解除する。その後は書ける
+    expect(cli("human", "unlock", "--remove", "--lock-token", "planted").status).toBe(0);
+    expect(existsSync(file + ".boxglow-lock")).toBe(false);
+    expect(cli("codex", "add", "新しいボックス").status).toBe(0);
+  }, 30_000);
   it("生きている他のプロセスのロックは待ち、時間切れなら FileBusy。解放されれば待った後に書ける", async () => {
     const file = join(temp(), "plan.json"); commitFile(file, "base", null);
     // 0.4 秒だけロックを持つ別のプロセス

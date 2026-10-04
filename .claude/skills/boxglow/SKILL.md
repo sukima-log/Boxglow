@@ -62,3 +62,4 @@ npx boxglow done B12 --artifact "<名前>=<パス>" --context-token <新しい�
 - 古い確認トークンを通すために guard を無効にしない (AI が `guard off` するには最新の確認トークンが要る)
 - 再開するときは `npx boxglow resume` を読み、引き継ぎメモのあるボックスは `context` で中身を確かめてから続ける。引き継ぎメモは会話の履歴や活動ログの上限とは別に、計画の中に残る
 - MCP では `boxglow_context` と、各ツールの `contextToken` 引数を使う
+- 「他の Boxglow が書き込み中 (ロック中)」と出て、少し待ってやり直しても解けないときは、`npx boxglow unlock` の表示 (持ち主と判定) を人に見せて解除を頼む。自分で `--actor human` を付けたり、ロックのフォルダを直接消したりしない

@@ -15,3 +15,5 @@ Boxglow is a React/Vite diagram editor, a Node CLI/MCP server, and a VS Code cus
 ## Context and handoff
 
 When `contextGuard` is enabled, read `node bin/boxglow.js context <block>` before work and pass the returned `contextToken` via `--context-token` to guarded commands (including start/done). If rejected, reread and reconcile the current decisions. Save findings, next steps and open questions with `checkpoint <block> --note ... --context-token ...` before handoff or compaction. A checkpoint changes context; obtain a new token afterward. Keep the guard enabled while using it.
+
+If a command reports that another Boxglow writer holds the file lock and waiting does not help, run `node bin/boxglow.js unlock` (read-only), show its output to the user and ask them to remove the lock. Do not pass `--actor human` yourself and do not delete the lock folder.

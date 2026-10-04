@@ -108,12 +108,12 @@ function mergeArrayById<T extends { id: string }>(path: string[], base: T[] | un
  * Input : out = マージ途中の結果 (blocks / ports / edges / handoffs を書き換える), deleter = 消した側の計画, keeper = 残っている側の計画
  * Output: なし (out を書き換える)
  */
-function restoreDeleted(out: Dict, deleter: Project, keeper: Project): void {
+function restoreDeleted(out: Dict, deleter: Project, keeper: Project, explicitlyDeleted: (kind: string, id: string) => boolean): void {
   const blocks = out.blocks as Record<string, Dict>;
   const ports = out.ports as Record<string, Dict>;
   const edges = out.edges as Record<string, Dict>;
   /** 消した側に無く、残っている側にあるボックスか (= 消した側が消した、または残っている側が足したボックス) */
-  const onlyInKeeper = (id: string): boolean => !deleter.blocks[id] && !!keeper.blocks[id];
+  const onlyInKeeper = (id: string): boolean => !deleter.blocks[id] && !!keeper.blocks[id] && !explicitlyDeleted("blocks", id);
   // 戻す起点: 結果に残っている「消した側に無いボックス」と、結果に残っている「消した側に無い入出力」の持ち主で、結果に無いボックス
   const seeds = new Set<string>();
   for (const id of Object.keys(blocks)) if (onlyInKeeper(id)) seeds.add(id);
@@ -134,20 +134,20 @@ function restoreDeleted(out: Dict, deleter: Project, keeper: Project): void {
   for (let grew = true; grew;) {
     grew = false;
     for (const b of Object.values(keeper.blocks)) {
-      if (b.parentId && restored.has(b.parentId) && !restored.has(b.id)) { restored.add(b.id); grew = true; }
+      if (b.parentId && restored.has(b.parentId) && !restored.has(b.id) && !explicitlyDeleted("blocks", b.id)) { restored.add(b.id); grew = true; }
     }
   }
   // ボックス・入出力・引き継ぎメモを、結果に無いものだけ残っている側から戻す (結果にあるものは、項目ごとのマージの結果を優先する)
   for (const id of restored) if (!blocks[id]) blocks[id] = keeper.blocks[id] as unknown as Dict;
-  for (const port of Object.values(keeper.ports)) if (restored.has(port.blockId) && !ports[port.id]) ports[port.id] = port as unknown as Dict;
+  for (const port of Object.values(keeper.ports)) if (restored.has(port.blockId) && !ports[port.id] && !explicitlyDeleted("ports", port.id)) ports[port.id] = port as unknown as Dict;
   if (keeper.handoffs) {
     const handoffs = (out.handoffs ?? {}) as Record<string, Dict>;
-    for (const id of restored) if (keeper.handoffs[id] && !handoffs[id]) handoffs[id] = keeper.handoffs[id] as unknown as Dict;
+    for (const id of restored) if (keeper.handoffs[id] && !handoffs[id] && !explicitlyDeleted("handoffs", id)) handoffs[id] = keeper.handoffs[id] as unknown as Dict;
     out.handoffs = handoffs;
   }
   // 線は、戻したボックスにつながっていて、両端の入出力が結果にあるものだけ戻す
   for (const e of Object.values(keeper.edges)) {
-    if (edges[e.id] || !ports[e.from.portId] || !ports[e.to.portId]) continue;
+    if (edges[e.id] || !ports[e.from.portId] || !ports[e.to.portId] || explicitlyDeleted("edges", e.id)) continue;
     const from = keeper.ports[e.from.portId]?.blockId;
     const to = keeper.ports[e.to.portId]?.blockId;
     if ((from && restored.has(from)) || (to && restored.has(to))) edges[e.id] = e as unknown as Dict;
@@ -173,8 +173,14 @@ export function mergeProjects(base: Project | null, ours: Project, theirs: Proje
     out[k] = mergeMap([k], b?.[k] as Record<string, Dict> | undefined, (o[k] ?? {}) as Record<string, Dict>, (th[k] ?? {}) as Record<string, Dict>, r);
   }
   // 片方が消したボックスが (もう片方の変更を残すために) 残ったときは、そのボックスの親・中のボックス・入出力・線も戻して参照をそろえる
-  restoreDeleted(out, ours, theirs);
-  restoreDeleted(out, theirs, ours);
+  // 保護のための自動復元は、利用者が明示した削除を取り消してはいけない。
+  const explicitlyDeleted = (kind: string, id: string): boolean => {
+    const choice = choices[JSON.stringify([kind, id])];
+    if (!choice) return false;
+    return ((choice === "ours" ? o : th)[kind] as Dict | undefined)?.[id] === undefined;
+  };
+  restoreDeleted(out, ours, theirs, explicitlyDeleted);
+  restoreDeleted(out, theirs, ours, explicitlyDeleted);
   // 持ち主のボックスが無い入出力・端の入出力が無い線は残さない (削除を選んだ側に、相手が変えた入出力だけが残る場合)
   const mergedBlocks = out.blocks as Record<string, Dict>;
   const mergedPorts = out.ports as Record<string, Dict>;

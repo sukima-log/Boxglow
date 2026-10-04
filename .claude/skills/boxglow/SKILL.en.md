@@ -62,3 +62,4 @@ npx boxglow done B12 --artifact "<name>=<path>" --context-token <new context tok
 - Do not turn the guard off to get past an old context token (an AI needs the latest context token to run `guard off`)
 - When resuming, read `npx boxglow resume`, and check a box that has a handoff note with `context` before continuing. Handoff notes stay in the plan, independent of the chat history and the activity-log limit
 - With MCP, use `boxglow_context` and the `contextToken` argument of each tool
+- If "Another Boxglow writer holds the file lock" persists after waiting and retrying, show the output of `npx boxglow unlock` (owner and verdict) to a person and ask them to remove it. Never add `--actor human` yourself or delete the lock folder directly

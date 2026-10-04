@@ -1,5 +1,8 @@
 /** 英語の辞書 (gui: 詳細パネルの注意欄・Activity の「再開」タブ・競合の比較ダイアログ・バージョン表示)。キー = ソースの日本語の文 */
 export const gui: Record<string, string> = {
+  "回答待ち {n}": "Awaiting answers: {n}",
+  "AI未確認 {n}": "Unacknowledged: {n}",
+  "Status で確認": "View in Status",
   "題名": "Title",
   "名前": "Name",
   "説明": "Description",

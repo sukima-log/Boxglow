@@ -7,7 +7,7 @@
 import { fileURLToPath } from "node:url";
 import { startMcp } from "./mcp";
 import { startServe } from "./serve";
-import { commitFile, FileConflict, revisionOf, sleepSync } from "./file-store";
+import { commitFile, describeLock, FileConflict, inspectLock, lockTokenOf, removeLock, revisionOf, sleepSync } from "./file-store";
 import { contextReceipt, isCurrentToken, requireContext } from "./context";
 import { setupAgent } from "./setup-agent";
 import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
@@ -297,6 +297,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  blocked / review / leave / checkpoint は --context-token <context で得た contextToken> が要る (読んだ後に指示・回答・引き継ぎが変わっていたら拒否)。
                                                  人 (--actor human) には要求しない。AI が off にするときは --context-token が要る
   version [--json]                               boxglow の版と、保存の取り決めの版を出す (--version でも可)
+  unlock [--remove --lock-token <印> --actor human]  残った保存ロックの状態 (持ち主・判定) を出す (読むだけ。AI も使える)。--remove は人が解除する:
+                                                 この計画を開いている Boxglow を止めてから、表示された印を付けて実行する。持ち主が動いているロックは解除できない
   status [--brief] [--json]                     全体の状況 (Markdown)。--brief は全階層を省略し、判断・回答・活動・次の候補を表示
   export [--format md|json] [--out <path>]       計画全体を Markdown (または JSON) に書き出す (ロードマップの文書化に)
   show <block>                                   ブロックの詳細
@@ -365,6 +367,8 @@ Usage (npx boxglow <command> ...):
                                                  blocked / review / leave / checkpoint need --context-token <contextToken from context> (rejected if instructions, answers or handoff notes changed after reading).
                                                  People (--actor human) are not asked for it. An AI needs --context-token to turn it off
   version [--json]                               Print the boxglow version and the save-protocol version (--version also works)
+  unlock [--remove --lock-token <token> --actor human]  Show a leftover save lock (owner and verdict; read-only, agents may use it). --remove is for a person:
+                                                 stop every Boxglow that has this plan open, then run it with the token shown. A lock whose owner is running cannot be removed
   status [--brief] [--json]                     Overall status (Markdown). --brief omits the tree; keeps decisions, answers, activity and next actions
   export [--format md|json] [--out <path>]       Write the whole plan out as Markdown (or JSON) (for documenting the roadmap)
   show <block>                                   Details of a block
@@ -445,6 +449,32 @@ function main(argv: string[]): void {
     return;
   }
   const actor = actorOf(str(options.actor));
+
+  if (cmd === "unlock") {
+    // 残った保存ロックの状態を見る / 人の判断で解除する。計画の中身は読まない (壊れた計画でも使えるように)
+    const path = locateFile(str(options.file));
+    if (!explicitLang(options)) { try { setLang(load(path).lang ?? "ja"); } catch { /* 読めない計画でも、ロックの確認はできる */ } }
+    const status = inspectLock(path);
+    if (!status) { out(t("ロックはありません: {path}", { path })); return; }
+    if (!options.remove) {
+      // 既定は表示だけ (AI も使える)。解除は、表示した印 (--lock-token) を付けて人が実行する
+      out(describeLock(status));
+      if (status.verdict === "live") out(t("持ち主が動いているので、解除できません。保存が終わるのを待つか、そのプロセスを止めてからもう一度確かめてください"));
+      else out(t("解除するには、この計画を開いている Boxglow (CLI・serve・VS Code。別の OS やマシンのものも含む) を止めてから、人が実行してください: boxglow unlock --remove --lock-token {token} --actor human", { token: lockTokenOf(status) }));
+      return;
+    }
+    // 解除は人の操作に限る (--actor human は自己申告で、認証ではない。AI が自分の判断で消さないための取り決め)
+    if (!isHumanActor(actor)) throw new Error(t("ロックの解除は人が行います。AI は boxglow unlock の表示を人に見せて、解除を頼んでください (自分で --actor human を付けたり、ロックを直接消したりしない)"));
+    const expected = str(options["lock-token"]);
+    if (!expected) throw new Error(t("--lock-token <boxglow unlock が表示した印> を付けてください (表示のあとで別のロックに替わっていないかを確かめるため)"));
+    const result = removeLock(path, expected);
+    if (result === "removed") out(t("ロックを解除しました: {path}", { path }));
+    else if (result === "none") out(t("ロックはありません: {path}", { path }));
+    else if (result === "busy") throw new Error(t("他の書き手が回収・解除の途中の可能性があり、解除の権利を取れませんでした。boxglow unlock で状態をもう一度確かめてください"));
+    else if (result === "live") throw new Error(t("持ち主が動いているので、解除できません。保存が終わるのを待つか、そのプロセスを止めてからもう一度確かめてください"));
+    else throw new Error(t("表示のあとで別のロックに替わっています。boxglow unlock でもう一度確かめてください"));
+    return;
+  }
 
   if (cmd === "init") {
     const path = locateFile(str(options.file), true);

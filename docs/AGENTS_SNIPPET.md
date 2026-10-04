@@ -87,5 +87,6 @@ npx boxglow done B12 --artifact "<名前>=<パス>" --context-token <新しい�
 - **自分で更新できる場合**: 自分の `ask` / `artifact` / `done` / `set` / `split` / `checkpoint` などでコンテキストが変わったときは、その出力の最後の行に「新しい確認トークン: <token>」が出る。自分で変えた内容は分かっているので、読み直さずに次の操作へ使う。`ask` / `decision` / `answer` / `reopen` は確認トークン無しでも実行できるが、新しい確認トークンが出るのは最新の確認トークンを付けたときだけ
 - 古い確認トークンを通すために guard を無効にしない (AI が `guard off` するには最新の確認トークンが要る)
 - MCP では `boxglow_context` と、各ツールの `contextToken` 引数を使う (新しい確認トークンはツールの結果の最後の行に出る)
+- 「他の Boxglow が書き込み中 (ロック中)」と出て、少し待ってやり直しても解けないときは、`npx boxglow unlock` の表示 (持ち主と判定) を人に見せて解除を頼む。自分で `--actor human` を付けたり、ロックのフォルダを直接消したりしない
 
 ---

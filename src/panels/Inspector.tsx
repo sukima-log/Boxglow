@@ -233,11 +233,22 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           <button key={id} className="seg__btn" data-on={tab === id} onClick={() => setTab(id)} style={{ padding: "6px 2px", fontSize: 12 }}
             title={TAB_HELP[id]}>
             {label}
-            {id === "status" && pending.length > 0 && <span className="dot decision" style={{ marginLeft: 4, display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "var(--accent)" }} />}
+            {id === "status" && (pending.length > 0 || unread.length > 0) && <span className="dot decision" style={{ marginLeft: 4, display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "var(--accent)" }} />}
             {id === "io" && <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.7 }}>{portsOf(project, blockId, "in").length}/{portsOf(project, blockId, "out").length}</span>}
           </button>
         ))}
       </div>
+
+      {tab !== "status" && (pending.length > 0 || unread.length > 0) && (
+        // Status 以外のタブを開いていても、回答待ちと AI 未確認の回答に気づけるようにする (タブは勝手に切り替えない)。
+        // 0 件の項目は出さない。押すと Status へ移る (行き先は title と aria-label で伝える)
+        <button className="btn btn-sm inspector-attention" onClick={() => setTab("status")} title={t("Status で確認")} aria-label={[
+          pending.length > 0 ? t("回答待ち {n}", { n: pending.length }) : "", unread.length > 0 ? t("AI未確認 {n}", { n: unread.length }) : "", t("Status で確認"),
+        ].filter(Boolean).join(" ")}>
+          {[pending.length > 0 ? t("回答待ち {n}", { n: pending.length }) : "", unread.length > 0 ? t("AI未確認 {n}", { n: unread.length }) : ""].filter(Boolean).join("・")}
+          <span aria-hidden="true" style={{ marginLeft: 8 }}>→</span>
+        </button>
+      )}
 
       {/* 1. 状態と進捗 */}
       {tab === "status" && (

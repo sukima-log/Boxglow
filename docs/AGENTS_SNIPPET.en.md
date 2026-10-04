@@ -87,5 +87,6 @@ npx boxglow done B12 --artifact "<name>=<path>" --context-token <new context tok
 - **You can update it yourself**: when your own `ask` / `artifact` / `done` / `set` / `split` / `checkpoint` etc. changes the context, the last line of its output is "New context token: <token>". You already know what you changed, so use it for the next command without rereading. `ask` / `decision` / `answer` / `reopen` run without a context token, but they print the new context token only when you pass the latest one
 - Do not turn the guard off to get past an old context token (an AI needs the latest context token to run `guard off`)
 - With MCP, use `boxglow_context` and the `contextToken` argument of each tool (the new context token is the last line of the tool result)
+- If "Another Boxglow writer holds the file lock" persists after waiting and retrying, show the output of `npx boxglow unlock` (owner and verdict) to a person and ask them to remove it. Never add `--actor human` yourself or delete the lock folder directly
 
 ---

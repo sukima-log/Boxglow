@@ -14,6 +14,25 @@ function base() {
   return { p: fromJSON(toJSON(p)), a: a.blockId, b: b.blockId, pj };
 }
 
+// 親と子の両方が「削除と変更」でぶつかったとき、人が「親は残す・子は削除する」と選んだら、
+// 親を残すための自動の復元 (中のボックスも戻す) が、明示的に選んだ子の削除を取り消さないこと。ours / theirs のどちら向きでも同じ
+it.each([false, true])("親を残す選択で、削除を選んだ子のボックスを復活させない (向きを入れ替え=%s)", (reversed) => {
+  const { p, a } = base();
+  const child = addBlock(p, { parentId: a, title: "Child" });
+  const before = fromJSON(toJSON(child.project));
+  const deleted = removeBlock(before, a);
+  const edited = updateBlock(updateBlock(before, a, { title: "Edited parent" }), child.blockId, { title: "Edited child" });
+  const ours = reversed ? edited : deleted, theirs = reversed ? deleted : edited;
+  const kept = reversed ? "ours" : "theirs", removed = reversed ? "theirs" : "ours";
+  const r = mergeProjects(before, ours, theirs, {
+    [JSON.stringify(["blocks", a])]: kept,
+    [JSON.stringify(["blocks", child.blockId])]: removed,
+  });
+  expect(r.project.blocks[a].title).toBe("Edited parent");
+  expect(r.project.blocks[child.blockId]).toBeUndefined();
+  expect(Object.values(r.project.ports).some(port => port.blockId === child.blockId)).toBe(false);
+});
+
 describe("boxglow.json の 3 方向マージ", () => {
   it("別々のボックスを変えた 2 人の変更が両方入る", () => {
     const { p, a, b } = base();
