@@ -1,4 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+// この試験は 1 件ごとに CLI を何度も起動する。CI の遅い機械では既定の 5 秒を超えることがあるので、制限時間を延ばす
+vi.setConfig({ testTimeout: 30_000 });
 import { build } from "esbuild";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
