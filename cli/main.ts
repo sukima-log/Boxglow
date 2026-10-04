@@ -564,8 +564,11 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const root = str(options.dir) ? resolve(str(options.dir)!) : dirname(path);
       const done = setupAgent({ root, agent: str(options.agent) ?? "all", snippet: AGENTS_SNIPPET(), skill: SKILL_MD() });
       // 指示書に「context を読んでトークンを付ける」手順が入るので、計画の側でも確認トークンの要求を有効にする
+      const guardWasOn = !!p.contextGuard;
       p.contextGuard = true;
       save(path, p);
+      // 既存の計画で setup-agent をやり直した場合も動作が変わるので、有効にしたことと次の手順を必ず伝える
+      if (!guardWasOn) out(t("確認トークン (guard) を有効にしました。AI は作業の前に boxglow context <ボックス> を読み、返ってきたトークンを --context-token で渡します。人の操作 (--actor human) には不要です。外すときは boxglow guard off --actor human"));
       out(t("設定しました: {list}\nAI は作業の始まり・終わり・判断待ちを boxglow.json に記録し、セッションの最初に計画を読みます。人は画面で見て判断してください (編集と回答は npx boxglow serve --open か VS Code 拡張で。boxglow.json を直接開いた画面は閲覧専用です)", { list: done.join(", ") }));
       return;
     }

@@ -3,7 +3,7 @@
 Boxglow is a React/Vite diagram editor, a Node CLI/MCP server, and a VS Code custom editor. All surfaces share the model in `src/model/` and a schema-v5 `boxglow.json`.
 
 - Read `CLAUDE.md` for the repository's development agreement. The local development plan is ignored by Git; public examples belong in `examples/`.
-- Start with `node bin/boxglow.js status --brief` (use full `status` if the bundle predates this option). Inspect the relevant box with `show`, record `start --actor codex`, and finish with `done --artifact name=path --actor codex`.
+- Start with `node bin/boxglow.js resume` (or `status --brief`). Before working on a box, read `node bin/boxglow.js context <box>` and keep its `contextToken`; record `start <box> --context-token <token> --actor codex`, and finish with `done <box> --context-token <token> --artifact name=path --actor codex`. After your own change the CLI prints the new token; after a person answers or edits anything, read `context` again. The development plan has the context guard enabled (see below).
 - Add findings under "運用で見つかった改善". Keep user decisions in `ask`/`answer`; a recorded decision does not grant publication or deployment permission.
 - Edit sources under `cli/` and `src/`, then build the CLI. Do not hand-edit the development plan or generated bundles.
 - User-facing text uses New / In Progress / Done. Japanese strings use `t()` with English entries in `src/i18n/en/`. Use the existing 8px spacing scale.

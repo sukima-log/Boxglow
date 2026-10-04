@@ -2,7 +2,7 @@
 
 Boxglow is open core. Everything that works with the plan file on your own machines is free (MIT) and stays free, including a team sharing that file through Git. Features that need a service run for you, or a connection to an external service, are the paid product (Boxglow Cloud, in preparation).
 
-The rule: **your file, your machines, your Git = free. A service we run for you (sync, share links, team administration, integrations, hosted agents) or a commercial self-hosted licence = paid.**
+The rule: **your file, your machines, your Git = free. A service we run for you (sync, share links, team administration, integrations, hosted agents) = paid, and so is the self-hosted edition of that paid product.** Running the MIT core on your own server stays free.
 
 | Feature | Free (MIT) | Paid |
 |---|---|---|
@@ -33,7 +33,7 @@ If you want to be told when Boxglow Cloud opens, leave your email here: https://
 
 Boxglow はオープンコアです。手元の計画ファイルで完結する機能は MIT で無料のまま (チームでそのファイルを Git で共有する使い方も含みます)。こちらで運営するサービスや、外部サービスとの連携が要る機能が有料版 (Boxglow Cloud、準備中) です。
 
-原則: **手元のファイル・手元のマシン・手元の Git で済むものは無料。こちらで運営するサービス (同期、共有リンク、チームの管理、外部連携、ホスト型のエージェント) と、自社サーバ版の商用ライセンスが有料。**
+原則: **手元のファイル・手元のマシン・手元の Git で済むものは無料。こちらで運営するサービス (同期、共有リンク、チームの管理、外部連携、ホスト型のエージェント) が有料。その有料版の機能を自社のサーバで動かす版 (Self-host) も有料です。** MIT で公開しているコアを自分のサーバで使うのは無料のままです。
 
 無料に残す: ブラウザのアプリ (ブラウザ内保存・ローカルファイル)、CLI と setup-agent、1 ファイルの Git 運用とボックス単位のマージ、ファイル内のメンバー、部品・入力グループ・カテゴリ・期日、VS Code 拡張。
 

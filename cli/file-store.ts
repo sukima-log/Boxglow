@@ -39,6 +39,8 @@ const canonical = (file: string) => existsSync(file) ? realpathSync(file) : reso
 
 /** ロックを古いとみなすまでの時間 (ms)。VS Code 拡張が保存の await をまたいで持つ時間 (通常は 1 秒未満) より十分長くする */
 export const LOCK_STALE_MS = 30_000;
+/** 生きている持ち主のロックでも回収する時間 (固まったプロセスへの備え。通常の保存はミリ秒で終わる) */
+const LOCK_HARD_STALE_MS = 5 * 60 * 1000;
 /** ロックが空くのを待つ時間の上限 (ms)。これを過ぎたら FileBusy */
 export const LOCK_WAIT_MS = 3_000;
 /** ロックを取り直す間隔 (ms) */
@@ -102,7 +104,8 @@ function readOwner(lock: string): LockOwner | null {
  * 残っているロックが古い (回収してよい) か判定する
  * Input : lock = ロックのディレクトリのパス, owner = 読めた持ち主の情報 (読めなければ null), staleMs = 古いとみなすまでの時間
  * Output: 回収してよければ true。
- *         同じホストで持ち主のプロセスがもういない、または取得から staleMs を過ぎている場合
+ *         同じホストなら、持ち主のプロセスがもういない場合 (生きている持ち主からは、5 分を過ぎるまで奪わない)。
+ *         別のホストや持ち主の生死が分からない場合は、取得から staleMs を過ぎている場合
  *         (持ち主が読めないロックは、ディレクトリの更新時刻から staleMs を過ぎていれば古いとみなす)
  */
 function isStale(lock: string, owner: LockOwner | null, staleMs: number): boolean {
@@ -110,9 +113,15 @@ function isStale(lock: string, owner: LockOwner | null, staleMs: number): boolea
     try { return Date.now() - statSync(lock).mtimeMs > staleMs; } catch { return false; } // 消えていたら、次の取得の試行に任せる
   }
   const age = Date.now() - Date.parse(owner.at);
-  if (!(age <= staleMs)) return true; // 時刻が読めない (NaN) 場合も古い扱いにする
-  // 自分と同じ pid は「生きている」と出るので、時間切れだけで判定する (同じプロセスの別スレッドが持っている場合がある)
-  return owner.host === hostname() && owner.pid !== process.pid && !isAlive(owner.pid);
+  if (Number.isNaN(age)) return true; // 時刻が読めない記録は古い扱いにする
+  if (owner.host === hostname() && owner.pid !== process.pid) {
+    // 同じホスト: 持ち主のプロセスがもういなければすぐ回収する。生きている間は、時間が過ぎただけでは奪わない
+    // (保存に時間がかかっているだけの持ち主から奪うと、2 つの書き込みが重なる)。固まったプロセスへの備えとして、十分長い時間 (LOCK_HARD_STALE_MS) で回収する
+    if (!isAlive(owner.pid)) return true;
+    return age > LOCK_HARD_STALE_MS;
+  }
+  // 別のホスト (共有フォルダ) や自分と同じ pid (同じプロセスの別の処理) は生死を確かめられないので、時間切れで判定する
+  return age > staleMs;
 }
 
 /**

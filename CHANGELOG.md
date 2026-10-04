@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Lock: a live owner on the same machine keeps its lock until five minutes have passed (a dead owner's lock is recovered at once; other hosts after 30 s). `setup-agent` says when it enabled the context guard and how to use it.
+
 ## 0.4.0 (2026-10-04)
 
 Reviewed and extended together with Codex; "箱" is now "ボックス" throughout the Japanese UI, CLI and instructions.

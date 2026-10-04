@@ -179,8 +179,13 @@ describe("ロックの回収と待ち合わせ", () => {
   });
   it("取得から時間が経ちすぎたロック・持ち主の分からない古いロックは回収する", () => {
     const file = join(temp(), "plan.json"); commitFile(file, "base", null);
-    // 持ち主は生きている (自分の親) が、取得から 31 秒経っている
+    // 持ち主が生きている (自分の親) 間は、31 秒経っただけでは奪わない (保存に時間がかかっているだけかもしれない)
     plantLock(file, { pid: process.ppid, at: new Date(Date.now() - 31_000).toISOString() });
+    expect(() => commitFile(file, "one", revisionOf("base"), { waitMs: 100 })).toThrow();
+    expect(readFileSync(file, "utf8")).toBe("base");
+    rmSync(file + ".boxglow-lock", { recursive: true });
+    // 生きている持ち主でも、5 分を過ぎたら回収する (固まったプロセスへの備え)
+    plantLock(file, { pid: process.ppid, at: new Date(Date.now() - 6 * 60_000).toISOString() });
     commitFile(file, "one", revisionOf("base"));
     // 旧版が残した空のロック (持ち主の情報なし)。更新時刻が古い
     plantLock(file, null); const old = new Date(Date.now() - 60_000); utimesSync(file + ".boxglow-lock", old, old);
