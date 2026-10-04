@@ -2,7 +2,7 @@
  * キャンバスのタブ (図の下の辺)。表計算のシート選択と同じ操作感:
  *   [一覧] [◀] [▶]  All | 大項目1 | 大項目2 | ...   (帯はスクロールバーを出さず、◀ ▶ で左右に送る)
  * 「一覧」を押すと全部のタブが縦に並んだポップアップが出て、押せばそのタブへ飛ぶ
- * Input : project (表示用), majors = 大項目の箱, scope = 開いているタブ (null = All), onSelect = タブを選んだときに呼ぶ
+ * Input : project (表示用), majors = 大項目のボックス, scope = 開いているタブ (null = All), onSelect = タブを選んだときに呼ぶ
  * Output: タブの帯 (role=tablist)
  */
 import { useEffect, useRef, useState } from "react";

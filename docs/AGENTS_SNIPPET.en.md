@@ -15,16 +15,20 @@ Status: BlackBox (only the output is decided) → GrayBox (being broken down or 
 
 ### What to do every time you work
 
-1. **Read first**: read `npx boxglow status` for the overall picture, pending decisions, work in progress and next candidates. Check the inputs and outputs of your box with `npx boxglow show <block>`
-2. **Record the start**: when you take on a box, run `npx boxglow start <block> --note "<what you will do>"`. Work on at most 1-2 boxes at a time
+1. **Read first**: read `npx boxglow resume` (or `npx boxglow status --brief`) for handoff notes, answers not yet read by the AI, pending decisions, work in progress and next candidates. To continue a previous session, start from the handoff notes shown there. Check the inputs and outputs of your box with `npx boxglow show <block>`
+2. **Record the start**: when you take on a box, run `npx boxglow start <block> --note "<what you will do>"`. Work on at most 1-2 boxes at a time.
+   On a plan with the context guard on, first read `npx boxglow context <block>` and pass the `contextToken` (context token) from its output:
+   `npx boxglow start <block> --note "<what you will do>" --context-token <context token>` (see "Context token and handoff" below)
 3. **Split**: when you cannot see how to produce the output with a single box, place smaller boxes inside it with `npx boxglow split <block> --spec '<JSON>'`. Always decide the output (deliverable) of each box. Inputs can be omitted if unknown (they automatically become inputs of the level above)
 4. **Record completion**: when the output's deliverable exists, run `npx boxglow done <block> --artifact "<name>=<path in the repository>"`.
-   A path under Git is recorded as "commit + path + content hash" (nothing is uploaded). Commit first, then run done. For PRs and external material, a URL is fine.
+   With the guard on, add `--context-token <context token>` (if your previous command printed "New context token: <token>", use that one).
+   An unchanged file already committed to HEAD is recorded as "commit + path + content hash" (nothing is uploaded). Uncommitted or untracked files remain local file references, and `npx boxglow check` turns them into Git references once they are committed; do not create a commit solely to satisfy Boxglow. Use full `npx boxglow status` when you need the entire tree. For PRs and external material, a URL is fine.
    To attach a deliverable ahead of completion, use `npx boxglow artifact <block> <path>`. Record progress along the way with `npx boxglow set <block> --progress 60`
 5. **When a human decision is needed**: `npx boxglow ask <block> "<question>" --options "A|B"`. Do not proceed with that box until it is answered; move on to another box. A human's answer appears under "Answered" in `status`. After reading it, acknowledge it with `npx boxglow ack <block>` (`start` / `done` / `set` etc. on that box also acknowledge it automatically). Until you acknowledge it, it stays on the human's screen as "Not read by the AI yet" and the human can still revise the answer. If the answer contains a question back to you, record your own answer too with `ask` and `answer --by <yourself>`
 6. **When you are stuck**: `npx boxglow blocked <block> --note "<what is in the way>"`
 7. **Check deliverables**: after moving or renaming files, run `npx boxglow check` (it detects the move and updates the path; if the file cannot be found, it is flagged)
-8. **Report**: at the end of your work, summarize `npx boxglow status` and report it
+8. **Before an interruption or a handoff**: before the session ends, the context is compacted, or you hand over to another AI or a person, save a handoff note with `npx boxglow checkpoint <block> --note "Findings; next steps; unresolved questions"` (with the guard on, add `--context-token <context token>`). It stays in the plan even when the chat history is gone, and the next session reads it with `resume` and `context`
+9. **Report**: at the end of your work, summarize `npx boxglow status --brief` and report it
 
 ### Structural rules
 
@@ -55,7 +59,7 @@ When there are many top-level inputs, create a group with `npx boxglow group "<g
 A box with no children has a single output (write just one entry in outputs). Make the title a short phrase that tells "what is made".
 Record dates and hours with `npx boxglow set <block> --due 2026-10-15 --start 2026-10-01 --estimate 8 --hours 3.5`.
 Give each box a kind of work (category): `--category design` / build / verify / evaluate / study / research / ui / improve / fix / docs / ops / other (other: when unsure). Set it at add time; to change it, use `npx boxglow set <block> --category verify`.
-The receiving side of a connection can be just a title (`npx boxglow connect "A.Design doc" "B"` creates an input "Design doc" on B and connects it. In split's connections, `to: "B"` also works). A connected input takes the name of the source output and cannot be renamed on the input side (to change it, rename the source output; everything connected to it changes with it). To add inputs / outputs to an existing box or rename them, use `npx boxglow port <block> --in <name> --out <name> --rename <old>=<new>` (`project` = the first project box. This also renames the final deliverable). Remove a wire with `npx boxglow disconnect <title.output name> <title.input name>`, and remove a box itself with `npx boxglow remove <block>` (`--force` if it has boxes inside). The MCP tools (`boxglow_status` / `boxglow_start` / `boxglow_done` / `boxglow_ask` etc.; available if registered in `.mcp.json`) are another entry point to the same commands, and either way updates the same file. Export the plan as a document with `npx boxglow export --out docs/ROADMAP.md`.
+The receiving side of a connection can be just a title (`npx boxglow connect "A.Design doc" "B"` creates an input "Design doc" on B and connects it. In split's connections, `to: "B"` also works). A connected input takes the name of the source output and cannot be renamed on the input side (to change it, rename the source output; everything connected to it changes with it). To add inputs / outputs to an existing box or rename them, use `npx boxglow port <block> --in <name> --out <name> --rename <old>=<new>` (`project` = the first project box. This also renames the final deliverable). Remove a wire with `npx boxglow disconnect <title.output name> <title.input name>`, and remove a box itself with `npx boxglow remove <block>` (`--force` if it has boxes inside). The MCP tools (`boxglow_status` / `boxglow_start` / `boxglow_done` / `boxglow_ask` etc.; available after registration in your agent; `.mcp.json` is the Claude Code configuration) are another entry point to the same commands, and either way updates the same file. Export the plan as a document with `npx boxglow export --out docs/ROADMAP.md`.
 In a new project, first create 3-7 top-level items from the direction (the README or the request), confirm them with a human via `ask`, and then `split` only the item you are about to start (leave later stages coarse). Write each `ask` question so that it can be decided on its own, and put the premises, comparison and impact in `--context` (do not point outside the question, as in "Is this OK?"). When choosing one of several candidates, even if you decide by yourself, record it with `ask ... --options "A|B|C"` and `answer --by <yourself>` so that the candidates you did not choose are kept. To change direction, use `reopen <block> --note <reason>`. Everything works with the CLI alone (the screen is for humans to watch). If no human is in the loop, the AI records its decisions with `answer --by <yourself>` and proceeds.
 Name each output after a "concrete deliverable" (e.g. `Design doc docs/design.md`, `PR #12`, `Public URL`, `Test results (vitest, 53 tests)`). Avoid abstract names such as "feature set" or "findings", and always attach a file, URL or commit with --artifact when you run done.
 Make sure every box's "input → output" is connected to something (an unconnected box is a hole in the plan. Unconnected inputs are raised to the top-level input node automatically).
@@ -63,5 +67,25 @@ If several people edit the same boxglow.json, each of them runs `npx boxglow git
 To manage several repositories with one plan, put boxglow.json in the folder above them and set the environment variable BOXGLOW_FILE to its location in each repository (one project box per repository: `npx boxglow project "name" --repo <path>`).
 Inputs are required by default. On the screen, mark an input as "Optional" if work can start without it. "Next candidates" in status lists boxes whose required inputs are ready first (each is marked "ready to start" or "waiting for required inputs").
 Do not write descriptions for inputs (the description of the connected output is used). Write the format and constraints in the output's description.
+
+
+### Context token and handoff
+
+The context guard keeps an AI from continuing work on outdated instructions. `setup-agent` turns it on (on other plans, run `npx boxglow guard on`).
+While it is on, an AI's `start` / `done` / `set` / `split` / `artifact` / `ack` / `blocked` / `review` / `leave` / `checkpoint` need `--context-token <context token>`. Commands run by a person (`--actor human`) do not.
+
+```
+npx boxglow context B12        # read the decisions (including acknowledged answers), input/output contracts and handoff notes. contextToken in the output is the context token
+npx boxglow start B12 --note "<what you will do>" --context-token <context token>
+npx boxglow ask B12 "<question>" --options "A|B" --context-token <context token>
+#   -> last line of the output: New context token: <token>
+npx boxglow done B12 --artifact "<name>=<path>" --context-token <new context token>
+```
+
+- **The context token changes (you must reread)** when a person answers a decision or revises an answer, a person changes the instructions (title, description, input/output contracts), or another AI or a person updates the handoff note. The same applies when this happens on a parent box or an input provider. The old context token is rejected: reread `context`, take the change into account in your work, then retry
+- **The context token does not change** on `start` / `blocked` / `review` / `leave` / `ack`, on changes to progress, status, dates or category, when `check` verifies deliverables, or when boxes are moved on the screen. Keep using the same context token
+- **You can update it yourself**: when your own `ask` / `artifact` / `done` / `set` / `split` / `checkpoint` etc. changes the context, the last line of its output is "New context token: <token>". You already know what you changed, so use it for the next command without rereading. `ask` / `decision` / `answer` / `reopen` run without a context token, but they print the new context token only when you pass the latest one
+- Do not turn the guard off to get past an old context token (an AI needs the latest context token to run `guard off`)
+- With MCP, use `boxglow_context` and the `contextToken` argument of each tool (the new context token is the last line of the tool result)
 
 ---

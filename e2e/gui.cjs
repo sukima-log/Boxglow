@@ -1,0 +1,81 @@
+/**
+ * 画面の部品の検査: 幅 320 / 390 / 768 / 1280px で上の帯の操作が画面内に収まること、
+ * 通常の幅では Auto Layout と Undo / Redo が帯に出て、狭い幅では ⋯ メニューに入ること、質問が詳細パネルの先頭に出ること、
+ * 別のボックスを選んでも詳細パネルのタブを保つこと、Activity の Resume タブ、保存の競合で左右を比べて選べること。
+ * 使い方: e2e/run.sh から呼ばれる (PLAYWRIGHT と LD_LIBRARY_PATH は run.sh が設定。プレビューが 4173 番で動いていること)
+ */
+const fs = require('fs');
+const path = require('path');
+const { chromium, ROOT, open, check, result } = require('./lib.cjs');
+(async () => {
+  const browser = await chromium.launch();
+  try {
+    const {page,errors} = await open(browser,{query:'?demo=1&lang=ja'});
+    const search=page.getByRole('textbox',{name:'ブロックを検索'});
+    for (const width of [320,390,768,1280]) {
+      await page.setViewportSize({width,height:844});
+      check(`上の帯 ${width}px: 検索・メニュー・保存の札が画面内に収まる`, await page.evaluate(()=> {
+        const controls=[...document.querySelectorAll('.topbar button,.topbar input,.save-chip')].filter(e=>e.getClientRects().length);
+        return controls.every(e=>{const r=e.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth+1;});
+      }));
+    }
+    // 通常の幅 (上のループで最後に設定した 1280px): よく使う編集の操作は帯に出ている
+    check('上の帯 1280px: Auto Layout と Undo / Redo が帯に出ている',await page.evaluate(()=>{
+      const vis=(sel)=>[...document.querySelectorAll(sel)].some(e=>e.getClientRects().length>0);
+      return vis('.topbar-tools > button.desktop-action[aria-label="Undo"]') && vis('.topbar-tools > button.desktop-action[aria-label="Redo"]') && [...document.querySelectorAll('.topbar-tools > button.desktop-action')].some(e=>e.textContent==='Auto Layout'&&e.getClientRects().length>0);
+    }));
+    check('上の帯 1280px: プロジェクト名と保存先が出ている',await page.locator('.project-name').isVisible() && await page.locator('.save-chip').isVisible());
+    await page.setViewportSize({width:390,height:844});
+    await search.fill('B5'); await search.press('Enter');
+    await page.getByText('回答が必要です',{exact:true}).waitFor();
+    check('詳細パネル: 質問がカテゴリより上、画面の中に出る',await page.evaluate(()=>{
+      const question=document.querySelector('.attention-section').getBoundingClientRect();
+      const category=document.querySelector('.category-field').getBoundingClientRect();
+      const top=document.querySelector('.app-top').getBoundingClientRect();
+      const panel=document.querySelector('.panel.right').getBoundingClientRect();
+      return question.bottom<innerHeight-36 && question.bottom<category.top && panel.top>=top.bottom;
+    }));
+    check('詳細パネル: 答えていない質問は 1 回だけ出る',await page.getByText('公開先はどれにしますか?',{exact:true}).count()===1);
+    await page.getByRole('button',{name:'静的ホスティング',exact:true}).click();
+    await page.getByText('AI未確認の回答',{exact:true}).waitFor();
+    check('詳細パネル: 回答は AI が確認するまで残る',await page.getByText('静的ホスティング',{exact:true}).isVisible());
+    await page.getByRole('button',{name:'More',exact:true}).click();
+    await search.fill('B4');await search.press('Enter');
+    check('詳細パネル: 別のボックスを選んでも開いているタブ (More) を保つ',await page.locator('.panel.right .seg__btn').filter({hasText:/^More$/}).getAttribute('data-on')==='true');
+    await page.locator('.summary-chip').click();
+    await page.getByRole('button',{name:/^Resume/}).click();
+    check('Resume タブ: AI 未確認の回答が残り、引き継ぎメモが無いときの案内が出る',await page.getByText('引き継ぎメモはまだありません。各タスクの「AI への引き継ぎ」に残せます。').isVisible() && await page.getByText('静的ホスティング',{exact:true}).isVisible());
+    await page.locator('.topbar button[title="Menu"]').click();
+    check('狭い幅 (390px): 追加・Auto Layout・Undo / Redo は ⋯ メニューの中にある',await page.locator('.menu-actions').getByRole('button',{name:'+ Block',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Auto Layout',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Undo',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Redo',exact:true}).isVisible());
+    check('画面: 実行時のエラーが無い',errors.length===0,errors.join(';'));
+    await page.context().close();
+
+    const second=await open(browser,{vscode:true,query:'?lang=en',lang:'en'});const p=second.page;
+    const original=fs.readFileSync(path.join(ROOT,'examples/notes-app/boxglow.json'),'utf8');
+    await p.evaluate(text=>window.postMessage({type:'load',text,version:1,name:'boxglow.json',appVersion:'0.3.0',extensionVersion:'0.2.2',protocol:1},'*'),original);
+    await p.waitForFunction(()=>window.boxglow.store.getState().source==='vscode');
+    await p.evaluate(()=>{
+      window.boxglow.store.getState().apply(p=>({...p,name:'Local title',description:'Local note'}));
+      const remote=JSON.parse(JSON.stringify(window.boxglow.store.getState().project));remote.name='Remote title';remote.description='Remote note';
+      window.postMessage({type:'update',text:JSON.stringify(remote),version:2,appVersion:'0.3.0',extensionVersion:'0.2.2',protocol:1},'*');
+    });
+    await p.getByRole('button',{name:/Compare and choose/}).click();
+    const dialog=p.getByRole('dialog');
+    check('競合: 全部の項目を選ぶまで統合できない',!(await dialog.getByRole('button',{name:'Merge selected values'}).isEnabled()));
+    check('競合: 両方の題名が見える',await dialog.getByText('Local title',{exact:true}).isVisible() && await dialog.getByText('Remote title',{exact:true}).isVisible());
+    await dialog.locator('fieldset').filter({has: p.locator('legend').filter({hasText:/^Name$/})}).getByRole('radio',{name:/^Latest file/}).check();
+    await dialog.locator('fieldset').filter({has: p.locator('legend').filter({hasText:/^Description$/})}).getByRole('radio',{name:/^Your edits/}).check();
+    await dialog.getByRole('button',{name:'Merge selected values'}).click();
+    await p.waitForFunction(()=>window.__posted.some(m=>m.type==='save'));
+    const saved=await p.evaluate(()=>window.__posted.find(m=>m.type==='save'));
+    const merged=JSON.parse(saved.text);
+    check('競合: 保存される JSON が項目ごとの選択どおり',merged.name==='Remote title' && merged.description==='Local note');
+    await p.evaluate(m=>window.postMessage({type:'saved',requestId:m.requestId,version:3},'*'),saved);
+    await p.waitForFunction(()=>window.boxglow.store.getState().saveState==='saved');
+    await p.locator('.version-info summary').click();
+    check('バージョン: 拡張の版と保存方式が見える',await p.getByText('0.2.2',{exact:true}).isVisible() && await p.getByText('GUI 1 / Peer 1',{exact:true}).isVisible());
+    check('競合の画面: 実行時のエラーが無い',second.errors.length===0,second.errors.join(';'));
+    await p.context().close();
+  } finally {await browser.close();}
+  const {passed,failed}=result();console.log(`${passed}/${passed+failed} passed`);process.exitCode=failed?1:0;
+})().catch(e=>{console.error(e);process.exitCode=1;});

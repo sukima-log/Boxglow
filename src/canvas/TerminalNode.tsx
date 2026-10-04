@@ -14,8 +14,8 @@ export const TerminalNode = memo(function TerminalNode({ data, selected, height 
   useLang(); // 言語が変わったら文言を描き直す
   const which = data.which;
   const groupId = data.groupId ?? null;
-  const scopeId = data.scopeId ?? null; // タブで開いた大項目の箱の入出力を表すとき
-  const readonly = useProjectStore((s) => s.readonly);
+  const scopeId = data.scopeId ?? null; // タブで開いた大項目のボックスの入出力を表すとき
+  const canEdit = useProjectStore((s) => !s.readonly && s.editMode);
   // プロジェクト本体だけを取り、表示用の配列は useMemo で導く (セレクタで新しい配列を返すと無限ループになる)
   const project = useProjectStore((s) => s.project)!;
   const ports = useMemo(
@@ -24,8 +24,10 @@ export const TerminalNode = memo(function TerminalNode({ data, selected, height 
   );
   const groupName = groupId ? inputGroupsOf(project).find((g) => g.id === groupId)?.name ?? "" : null;
 
+  // onClick: 丸 (ハンドル) を押したクリックはノードの選択に伝えない (丸を押すだけで詳細パネルが開いて図がずれるのを防ぐ。BlockNode と同じ)。
+  // 丸は Edit モードのときだけ結線できる (isConnectable = canEdit)
   return (
-    <div className={`bg-terminal ${selected ? "selected" : ""}`} style={{ height }}>
+    <div className={`bg-terminal ${selected ? "selected" : ""}`} style={{ height }} onClick={(ev) => { if ((ev.target as HTMLElement).closest(".react-flow__handle")) ev.stopPropagation(); }}>
       <div className="bg-terminal__head">
         <span className="truncate" title={groupName ?? undefined}>{which === "in" ? (groupName ?? "Inputs") : "Outputs"}</span>
       </div>
@@ -41,9 +43,11 @@ export const TerminalNode = memo(function TerminalNode({ data, selected, height 
           type={which === "in" ? "source" : "target"}
           position={which === "in" ? Position.Right : Position.Left}
           id={handleId(which, q.id, "inner")}
+          title={q.name}
           className={`${which === "in" ? "port-out" : ""} ${q.promoted ? "port-promoted" : ""}`}
           style={{ top: rowY(i) }}
-          isConnectable={!readonly}
+          isConnectable={canEdit}
+          onMouseDown={(ev) => ev.preventDefault()}
         />
       ))}
     </div>

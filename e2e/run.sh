@@ -25,4 +25,13 @@ fi
 # 自分で起動したプレビューだけ、終わったら止める
 trap '[ -n "$STARTED" ] && kill "$STARTED" 2>/dev/null || true' EXIT
 
+node e2e/home.cjs
 node e2e/checks.cjs
+node e2e/reliability.cjs
+
+node e2e/gui.cjs
+node e2e/canvas.cjs
+
+node e2e/experience.cjs
+# 自分の計画 (boxglow.json があるときだけ): 交差の合計とタブ切り替えの速さ
+node e2e/own.cjs

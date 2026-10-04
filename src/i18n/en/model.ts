@@ -18,7 +18,7 @@ export const model: Record<string, string> = {
 , "循環する結線はできません": "Connections cannot form a cycle"
 , "つなぐ先が見つかりません": "Connection target not found"
 , "親に出力がありません": "The parent has no output"
-, "同じ階層の箱 (または親子) にだけつなげます": "Only boxes on the same level (or parent and child) can be connected"
+, "同じ階層のボックス (または親子) にだけつなげます": "Only boxes on the same level (or parent and child) can be connected"
   // --- 読み込みの誤り ---
 , "JSON として読めません": "Not valid JSON"
 , "プロジェクトの形式ではありません": "Not a project file"
@@ -32,8 +32,8 @@ export const model: Record<string, string> = {
 , "親ブロックが見つかりません": "Parent box not found"
 , "出力「{name}」がありません ({list})": "No output \"{name}\" ({list})"
   // --- 分解 (split) の指摘 ---
-, "「{title}」の出力は 1 本にしました (下の階層を持たない箱の出力は 1 本。{omitted} は省略)": "\"{title}\" was given a single output (a box with no children has one output; {omitted} omitted)"
-, "箱が見つかりません": "Box not found"
+, "「{title}」の出力は 1 本にしました (下の階層を持たないボックスの出力は 1 本。{omitted} は省略)": "\"{title}\" was given a single output (a box with no children has one output; {omitted} omitted)"
+, "ボックスが見つかりません": "Box not found"
 , "「{title}」に入力「{port}」がありません": "\"{title}\" has no input \"{port}\""
 , "「{title}」に出力「{port}」がありません": "\"{title}\" has no output \"{port}\""
 , "結線できません: {from} -> {to} ({why})": "Cannot connect: {from} -> {to} ({why})"
@@ -62,6 +62,18 @@ export const model: Record<string, string> = {
 , "実績 {hours}h": "Actual {hours}h"
 , "見積 {hours}h": "Estimate {hours}h"
 , "なし": "none"
-  // --- マージ (merge.ts): 箱の短い ID の振り直し ---
+  // --- マージ (merge.ts): ボックスの短い ID の振り直し ---
 , "{key} に振り直し": "renumbered to {key}"
+  // --- 再開用の概要 (resume.ts) ---
+, "作業の前に boxglow context <block> を読み、guard 付きの変更にはその contextToken を使ってください。この概要は回答を確認済みにせず、操作を許可するものでもありません。": "Read boxglow context <block> before work; use its contextToken for guarded changes. This overview does not acknowledge answers or authorize actions."
+  // --- 計画ファイルの検査 (validate-file.ts) ---
+, "使えないキーです: {key}": "Reserved key: {key}"
+, "最上位のボックス (root) がありません": "Missing root block"
+, "ボックスの参照が正しくありません: {id}": "Invalid block reference: {id}"
+, "ボックスの親子が循環しています: {id}": "Parent cycle: {id}"
+, "階層が深すぎます (256 段まで)": "Hierarchy exceeds 256 levels"
+, "入出力の参照が正しくありません: {id}": "Invalid port reference: {id}"
+, "線の参照が正しくありません: {id}": "Invalid edge reference: {id}"
+, "線のつなぎ方が正しくありません: {id}: {reason}": "Invalid connection: {id}: {reason}"
+, "線の種類が正しくありません: {id}": "Invalid edge kind: {id}"
 };

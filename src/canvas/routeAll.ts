@@ -1,7 +1,10 @@
 /**
  * 同じ階層の線をまとめて経路計算し、縦の通路が重なる線を横にずらす (純粋関数)
  * 1 本ずつ別々に計算すると同じ通路に重なるため、全部の経路が決まってから重なりを解く。
+ * 最後に、同じ出力から分岐する線の出だしを 1 本の幹にそろえる (bundleFanout)。
  */
+import { bundleFanout } from "./bundleFanout";
+import { sourceKey } from "./sharedWires";
 import { marginOf, wallsOf, rankRoutes, chooseRoute, SQUEEZE_MARGIN, type Point, type Rect, type RankedRoute } from "./routeEdge";
 
 export interface NodeRect {
@@ -24,7 +27,7 @@ const SEP = 16;
 const SPREAD_MAX = 96;
 /** 同じ通路とみなす x の近さ */
 const NEAR = 16; // 間隔 (SEP) より近い線は同じ束として広げる (6 だと 8〜15px ずれた線が重なって見えたまま残る)
-/** 箱の縁から線を離す余白 (routeEdge と同じ) */
+/** ボックスの縁から線を離す余白 (routeEdge と同じ) */
 
 
 /**
@@ -33,6 +36,8 @@ const NEAR = 16; // 間隔 (SEP) より近い線は同じ束として広げる (
  * Output: 線 id -> 折れ線
  */
 export function routeAll(nodes: NodeRect[], edges: EdgeSpec[], opts: { separate?: boolean } = {}): Map<string, Point[]> {
+  // JSON の順序やランダム ID に依存せず、近い供給元・行き先から通路を決める。
+  edges = [...edges].sort((a,b) => a.s.x-b.s.x || a.s.y-b.s.y || a.t.x-b.t.x || a.t.y-b.t.y || a.id.localeCompare(b.id));
   const byId = new Map(nodes.map((n) => [n.id, n]));
   const paths = new Map<string, Point[]>();
   const scopeOf = new Map<string, string>();
@@ -51,7 +56,7 @@ export function routeAll(nodes: NodeRect[], edges: EdgeSpec[], opts: { separate?
     const bounds = scopeNode && scopeNode.rect.width > 0 ? scopeNode.rect : null;
     setup.set(e.id, { obstacles, ends, bounds });
     if (!obstaclesOf.has(scope)) {
-      // ずらすときに避ける箱: その階層の全部の箱 (端点の箱も含む) と、親の箱の内側の縁
+      // ずらすときに避けるボックス: その階層の全部のボックス (端点のボックスも含む) と、親のボックスの内側の縁
       const all = nodes.filter((r) => r.parentId === scope && r.rect.width > 0).map((r) => r.rect);
       if (bounds) all.push(...wallsOf(bounds)); // 親の縁は、縁の外側に置いた壁として表す
       obstaclesOf.set(scope, all);
@@ -62,21 +67,22 @@ export function routeAll(nodes: NodeRect[], edges: EdgeSpec[], opts: { separate?
     const scope = scopeOf.get(e.id);
     const out: Point[][] = [];
     for (const o of edges) {
-      if (o.id === e.id || scopeOf.get(o.id) !== scope) continue;
+      if (o.id === e.id || sourceKey(o) === sourceKey(e) || scopeOf.get(o.id) !== scope) continue;
       const p = paths.get(o.id);
       if (p) out.push(p);
     }
     return out;
   };
-  // 候補の基本の評価 (箱・壁) は線ごとに 1 回だけ (2 回通しの両方で使い回す。候補 x 箱の総当たりが一番重い)
+  // 候補の基本の評価 (ボックス・壁) は線ごとに 1 回だけ (2 回通しの両方で使い回す。候補 x ボックスの総当たりが一番重い)
   const ranked = new Map<string, RankedRoute[]>();
   for (const e of edges) {
     const st = setup.get(e.id)!;
     ranked.set(e.id, rankRoutes(e.s, e.t, st.obstacles, 0, st.ends, st.bounds));
   }
-  // 1 回目: 先に決まった線との交差を避けながら順に決める。2 回目: 全部の線が決まった状態で、それぞれを選び直す
-  // (後から決まった線に横切られた線が、別の通路に逃げられる)
-  for (let pass = 0; pass < 2; pass++) {
+  // 1 回目: 先に決まった線との交差を避けながら順に決める。2 回目・3 回目: 全部の線が決まった状態で、それぞれを選び直す
+  // (後から決まった線に横切られた線が、別の通路に逃げられる。3 回通すのは、2 回目の選び直しで動いた線に合わせ直すため)
+  // 同じ出力から分岐する線どうしは幹を共有するので、交差・重なりの相手から外している (othersOf)
+  for (let pass = 0; pass < 3; pass++) {
     for (const e of edges) {
       paths.set(e.id, chooseRoute(ranked.get(e.id)!, othersOf(e)));
     }
@@ -90,25 +96,26 @@ export function routeAll(nodes: NodeRect[], edges: EdgeSpec[], opts: { separate?
     separateVerticals(paths, scopeOf, obstaclesOf, sourceKeyOf);
     separateHorizontals(paths, scopeOf, obstaclesOf);
   }
+  bundleFanout(paths, edges, nodes, scopeOf);
   return paths;
 }
 
 /**
- * 横の線分 (y, x0..x1) を置ける y の範囲: 横の範囲がかぶる箱から MARGIN 以上離れた、y を含む隙間
+ * 横の線分 (y, x0..x1) を置ける y の範囲: 横の範囲がかぶるボックスから MARGIN 以上離れた、y を含む隙間
  * Input : y = 今の位置, x0, x1, obstacles
  * Output: [lo, hi]
  */
 function freeRangeAtY(y: number, x0: number, x1: number, obstacles: Rect[]): [number, number] {
-  // 通常の余白 (箱から MARGIN) で範囲を取り、取れなければ詰めた余白 (SQUEEZE_MARGIN) で取り直す
+  // 通常の余白 (ボックスから MARGIN) で範囲を取り、取れなければ詰めた余白 (SQUEEZE_MARGIN) で取り直す
   // (経路探索が「詰めた通路」を選んだ線は、通常の余白では両側から挟まれて範囲が無い。
-  //  その線を通常の余白の範囲へ押し出すと箱の縁の上に乗ってしまうので、詰めた余白で動かせる範囲を求める)
+  //  その線を通常の余白の範囲へ押し出すとボックスの縁の上に乗ってしまうので、詰めた余白で動かせる範囲を求める)
   const rangeWith = (squeeze: boolean): [number, number] => {
     let lo = -Infinity;
     let hi = Infinity;
     for (const o of obstacles) {
-      if (o.wall === "left" || o.wall === "right") continue; // 左右の壁は横線分の y を制約しない (親の縁のハンドルから出る線は箱の外から始まる)
+      if (o.wall === "left" || o.wall === "right") continue; // 左右の壁は横線分の y を制約しない (親の縁のハンドルから出る線はボックスの外から始まる)
       const m = squeeze && !o.wall ? SQUEEZE_MARGIN : marginOf(o);
-      if (o.x + o.width + m < x0 || o.x - m > x1) continue; // 横にかぶらない箱は関係ない
+      if (o.x + o.width + m < x0 || o.x - m > x1) continue; // 横にかぶらないボックスは関係ない
       const top = o.y - m;
       const bottom = o.y + o.height + m;
       if (bottom <= y) lo = Math.max(lo, bottom);
@@ -219,13 +226,13 @@ function separateHorizontals(paths: Map<string, Point[]>, scopeOf: Map<string, s
       if (Number.isFinite(lo) && center - half < lo) center = lo + half;
       if (Number.isFinite(hi) && center + half > hi) center = hi - half;
       order.forEach((id, k) => {
-        // 範囲の外には出さない (束が範囲より広いときは端で重なる。箱の縁に乗るよりまし)
+        // 範囲の外には出さない (束が範囲より広いときは端で重なる。ボックスの縁に乗るよりまし)
         const y = Math.max(lo, Math.min(hi, center + (k - (order.length - 1) / 2) * sep));
         const path = paths.get(id)!;
         for (const g of group) {
           if (g.edgeId !== id) continue;
           // 線分ごとの空き範囲でも抑える: 束の範囲は束全体の共通部分だが、別の線分の範囲に引きずられて
-          // この線分だけが箱 (自分の箱など) の中へ入ることがある。自分の範囲が無い (両側から挟まれている) 線分は動かさない
+          // この線分だけがボックス (自分のボックスなど) の中へ入ることがある。自分の範囲が無い (両側から挟まれている) 線分は動かさない
           const [ol, oh] = ownRange.get(g)!;
           const yy = oh < ol ? g.y : Math.max(ol, Math.min(oh, y));
           path[g.idx] = { ...path[g.idx], y: yy };
@@ -237,7 +244,7 @@ function separateHorizontals(paths: Map<string, Point[]>, scopeOf: Map<string, s
 }
 
 /**
- * 縦の線分 (x, y0..y1) を置ける x の範囲: 縦の範囲がかぶる箱から MARGIN 以上離れた、x を含む隙間
+ * 縦の線分 (x, y0..y1) を置ける x の範囲: 縦の範囲がかぶるボックスから MARGIN 以上離れた、x を含む隙間
  * Input : x = 今の位置, y0, y1, obstacles
  * Output: [lo, hi]
  */
@@ -248,8 +255,8 @@ function freeRangeAt(x: number, y0: number, y1: number, obstacles: Rect[]): [num
     let hi = Infinity;
     for (const o of obstacles) {
       if (o.wall === "top" || o.wall === "bottom") continue; // 上下の壁は縦線分の x を制約しない
-      const m = squeeze && !o.wall ? SQUEEZE_MARGIN : marginOf(o); // 壁は箱より近づいてよい
-      if (o.y + o.height + m < y0 || o.y - m > y1) continue; // 縦にかぶらない箱は関係ない
+      const m = squeeze && !o.wall ? SQUEEZE_MARGIN : marginOf(o); // 壁はボックスより近づいてよい
+      if (o.y + o.height + m < y0 || o.y - m > y1) continue; // 縦にかぶらないボックスは関係ない
       const left = o.x - m;
       const right = o.x + o.width + m;
       if (right <= x) lo = Math.max(lo, right);
@@ -362,7 +369,7 @@ function separateVerticals(paths: Map<string, Point[]>, scopeOf: Map<string, str
         })
         .sort((p, q) => p.side - q.side || (p.side < 0 ? p.span - q.span : p.side > 0 ? q.span - p.span : p.zOrder - q.zOrder))
         .map((o) => o.id);
-      // 束全体が置ける範囲: 各線分の空き範囲の共通部分 (箱から MARGIN 以上離れる)
+      // 束全体が置ける範囲: 各線分の空き範囲の共通部分 (ボックスから MARGIN 以上離れる)
       let lo = -Infinity;
       let hi = Infinity;
       const ownRange = new Map<VSeg, [number, number]>(); // 線分ごとの空き範囲 (束の範囲とは別に、最後に線分ごとに抑える)
@@ -380,7 +387,7 @@ function separateVerticals(paths: Map<string, Point[]>, scopeOf: Map<string, str
       if (Number.isFinite(lo) && center - half < lo) center = lo + half;
       if (Number.isFinite(hi) && center + half > hi) center = hi - half;
       order.forEach((id, k) => {
-        // 範囲の外には出さない (束が範囲より広いときは端で重なる。箱の縁に乗るよりまし)
+        // 範囲の外には出さない (束が範囲より広いときは端で重なる。ボックスの縁に乗るよりまし)
         const x = Math.max(lo, Math.min(hi, center + (k - (order.length - 1) / 2) * sep));
         for (const g of group) {
           if (g.bus !== id) continue;

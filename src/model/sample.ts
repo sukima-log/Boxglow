@@ -10,8 +10,8 @@ import { layoutAll } from "./autolayout";
 /** サンプルを組み立てて返す */
 export function buildSampleProject(): Project {
   let p = createProject("Web アプリを公開する");
-  p.description = "小さな Web アプリを、要件の整理から公開まで箱に分けて進める例。箱が完了するごとに、右端の最終成果物に近づく。";
-  // タスクはプロジェクトの箱 (最上位の包み) の中に置く
+  p.description = "小さな Web アプリを、要件の整理から公開までボックスに分けて進める例。ボックスが完了するごとに、右端の最終成果物に近づく。";
+  // タスクはプロジェクトのボックス (最上位の包み) の中に置く
   const PJ = projectBlocks(p)[0].id;
   p.blocks[PJ].description = p.description;
   p.blocks[PJ].status = "gray";
@@ -51,7 +51,7 @@ export function buildSampleProject(): Project {
   p = updateBlock(p, req.blockId, { status: "white", assigneeIds: [m1.memberId], description: "企画メモを読み、機能を箇条書きにする。優先度を付ける。" });
   p = connect(p, { portId: rin.portId, side: "inner" }, { portId: reqIn.portId, side: "outer" }).project;
 
-  // 設計する: 要件一覧 -> 設計書 (画面設計と API 仕様をまとめたもの。下の階層を持たない箱の出力は 1 本) (完了)
+  // 設計する: 要件一覧 -> 設計書 (画面設計と API 仕様をまとめたもの。下の階層を持たないボックスの出力は 1 本) (完了)
   const desIn = addPort(p, { blockId: design.blockId, direction: "in", name: "要件一覧" });
   p = desIn.project;
   const desOut1 = portsOf(p, design.blockId, "out")[0];
@@ -115,7 +115,7 @@ export function buildSampleProject(): Project {
   // AI の活動の例: バックエンドは Claude Code が作業中、公開するは判断待ち
   p = setActivity(p, be.blockId, "claude-code", "working", "OpenAPI 定義から API のひな形を生成中");
   p = setProgress(p, be.blockId, 40, "claude-code");
-  p = askDecision(p, release.blockId, "codex", "公開先はどれにしますか?", ["静的ホスティング", "自前のサーバー"]).project;
+  p = askDecision(p, release.blockId, "codex", "公開先はどれにしますか?", ["静的ホスティング", "自前のサーバー"], "最初に公開するのは静的な紹介ページです。フォーム送信などのサーバー処理は、別の API を使う想定です。\n静的ホスティング: 運用の手間を抑えやすく、今回の範囲に合います。\n自前のサーバー: 自由度は高い一方、更新・監視も自分たちで行います。\nこの判断を記録してから公開作業へ進みます。").project;
 
   // 依存関係で並べ直す (線が読みやすい配置にする)
   return layoutAll(normalizeCollapsed(p)); // 大項目は畳んだ前提で並べる (All は大項目までしか出さない)

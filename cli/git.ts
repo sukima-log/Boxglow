@@ -51,17 +51,36 @@ export function gitRefFor(filePath: string): GitRef | null {
   if (!root) return null;
   const rel = relative(root, abs).replace(/\\/g, "/");
   const commit = git(["rev-parse", "HEAD"], root) ?? "";
-  const blob = git(["hash-object", abs], root) ?? "";
+  // 作業ツリーの中身のハッシュ (--path で、そのパスの改行変換などの設定を当てた値にする)
+  const blob = git(["hash-object", "--path", rel, "--", abs], root) ?? "";
+  // HEAD にコミット済みで、中身が同じときだけ Git の参照にする。
+  // 未コミット・未追跡・変更中のファイルは null を返す (呼び出し側はローカルのファイル参照として記録する。コミットに無い中身を「コミット + パス」で指さないため)
+  const committedBlob = commit ? git(["rev-parse", `${commit}:${rel}`], root) : null;
+  if (!blob || !committedBlob || blob !== committedBlob) return null;
   const repo = git(["config", "--get", "remote.origin.url"], root) ?? "";
   const web = repo ? remoteToWeb(repo) : null;
   const url = web && commit ? `${web}/blob/${commit}/${rel}` : "";
   return { root, repo, path: rel, commit, blob, url };
 }
 
+/**
+ * 記録済みのパスから Git 参照を探す (ローカル参照として記録した成果物を、後から Git の参照に補完するとき用)
+ * Input : recorded = 記録したときのパス (相対または絶対), bases = 相対パスの基準にするフォルダの候補 (先頭から順に試す)
+ * Output: 今 HEAD にコミット済みで中身が一致していれば GitRef、そうでなければ null (未コミット・変更中・ファイルが無い)
+ */
+export function findGitRef(recorded: string, bases: string[]): GitRef | null {
+  for (const base of bases) {
+    const ref = gitRefFor(resolve(base, recorded));
+    if (ref) return ref;
+  }
+  return null;
+}
+
 /** いまの HEAD でのパス・コミット・blob・URL */
 function currentRef(root: string, rel: string): { path: string; commit: string; blob: string; url: string } {
   const commit = git(["rev-parse", "HEAD"], root) ?? "";
-  const blob = git(["hash-object", resolve(root, rel)], root) ?? "";
+  // gitRefFor と同じく、そのパスの改行変換などの設定を当てたハッシュにする (記録した blob と比べられるように)
+  const blob = git(["hash-object", "--path", rel, "--", resolve(root, rel)], root) ?? "";
   const repo = git(["config", "--get", "remote.origin.url"], root) ?? "";
   const web = repo ? remoteToWeb(repo) : null;
   return { path: rel, commit, blob, url: web && commit ? `${web}/blob/${commit}/${rel}` : "" };

@@ -1,16 +1,17 @@
 /**
  * ブロックの大きさ (画面と自動整列で共用。React Flow に依存しない)
  */
+import { categoryOf } from "./categories";
 import type { Project } from "./types";
 import { missingRequiredInputs, childrenOf, portsOf } from "./graph";
 import { ROOT_ID } from "./types";
 import { t } from "../i18n/core";
 
 /** 畳んだブロックの幅 */
-export const BLOCK_W = 240;
-/** 見出し行の高さ (入力/出力ノード用。箱は題名の行 + 情報の行) */
+export const BLOCK_W = 256;
+/** 見出し行の高さ (入力/出力ノード用。ボックスは題名の行 + 情報の行) */
 export const HEADER_H = 44;
-/** 箱の題名の行の高さ (1 行) */
+/** ボックスの題名の行の高さ (1 行) */
 export const TITLE_H = 36;
 /** 題名の 2 行目以降の高さ */
 export const TITLE_LINE_H = 18;
@@ -19,12 +20,12 @@ export const META_H = 24;
 /** ポート 1 行の高さ */
 export const ROW_H = 26;
 /** ポート列の下の余白 */
-export const PAD_BOTTOM = 12;
+export const PAD_BOTTOM = 16;
 /** 展開中のブロックの最小幅 */
 export const EXPANDED_MIN_W = 320;
-/** 展開中: 子の右端から箱の縁までの余白 (子の出力から親の出力へ上がる線の通路) */
+/** 展開中: 子の右端からボックスの縁までの余白 (子の出力から親の出力へ上がる線の通路) */
 export const EXPANDED_PAD = 96;
-/** 展開中: 子の下端から箱の縁までの余白 */
+/** 展開中: 子の下端からボックスの縁までの余白 */
 export const EXPANDED_PAD_Y = 104; // 子の下を通る線 (縁から 36px + 2 本分)。空きが足りないときは線の間隔を詰める
 /** 入力/出力ノードの幅 */
 export const TERMINAL_W = 200;
@@ -36,7 +37,7 @@ export interface Size {
   headerH: number;
 }
 
-/** 箱の最大幅 (これを超える題名は折り返す) */
+/** ボックスの最大幅 (これを超える題名は折り返す) */
 export const BLOCK_MAX_W = 460;
 
 /** 文字列のおおよその表示幅 (px)。全角は幅広、半角は細い */
@@ -85,16 +86,18 @@ export function blockSize(p: Project, blockId: string): Size {
   const rows = Math.max(insP.length, outsP.length, 1);
   const kids = childrenOf(p, blockId);
   // 題名の行: 題名 (+ プロジェクトの札 + 畳むボタン) が収まる幅。最大幅を超えたら折り返す
-  const titleExtras = 12 + 10 + (b?.kind === "project" ? 66 : 0) + (kids.length > 0 ? 30 : 0);
-  const titleW = textWidth(b?.title ?? "", 14) + 4;
+  // 題名の左右に置くものの幅の見積もり: 左右の余白 (12 + 10) + 隙間 (8) + プロジェクトの札 (66) か状態アイコン (26)
+  // + 畳むボタン (30) + カテゴリの札 (文字の幅 + 20。英語のときは英語の幅)。index.css の .bg-block__head と合わせる
+  const category = categoryOf(b?.category);
+  const titleExtras =12 + 10 + 8 + (b?.kind === "project" ? 66 : 26) + 30 + (category ? textWidth(t(category.label), 11) + 20 : 0);
+  const titleW = textWidth(b?.title ?? "", 15) + 4;
   const wantTitle = titleExtras + titleW;
-  const titleLines = wantTitle > BLOCK_MAX_W ? Math.min(3, Math.ceil(titleW / (BLOCK_MAX_W - titleExtras))) : 1;
   // 情報の行: 状態・担当・進捗・活動・期日・ID
   const actorText = (actor: string) => { const a = actor.toLowerCase(); return a.startsWith("claude") ? "Claude Code" : a.startsWith("codex") ? "Codex" : a.startsWith("human:") ? actor.slice(6) : actor; };
   // 活動の札の文言 (BlockNode と同じキーを t() で引き、英語のときは英語の幅で見積もる)
   const stateText: Record<string, string> = { working: t("作業中"), blocked: t("詰まり"), needs_decision: t("判断待ち"), waiting_review: t("確認待ち") };
   const metaW = metaRowWidth({
-    assigneeText: "" // 担当は箱に出さない
+    assigneeText: "" // 担当はボックスに出さない
   , unassigned: false
   , hasPercent: !!b && b.status !== "white" && (kids.length > 0 || (typeof b.progress === "number" && b.progress > 0))
   , activityText: b?.activity ? `${stateText[b.activity.state] ?? ""} (${actorText(b.activity.actor)})` : null
@@ -104,12 +107,15 @@ export function blockSize(p: Project, blockId: string): Size {
   , hasReady: !!b && b.status === "black" && b.kind !== "project" && insP.length > 0 && missingRequiredInputs(p, b.id).length === 0
   });
   const headWidth = Math.min(BLOCK_MAX_W, Math.max(BLOCK_W, wantTitle, metaW));
-  const headerH = TITLE_H + (titleLines - 1) * TITLE_LINE_H + META_H;
   // 入出力の名前が省略されない幅 (左右の列 + 真ん中の隙間)
-  const inW = Math.max(0, ...insP.map((q) => textWidth(q.name, 11) + (q.name ? 14 : 0) + (q.required ? 0 : textWidth(t("(任意)"), 9) + 4)));
-  const outW = Math.max(0, ...outsP.map((q) => textWidth(q.name, 11)));
+  const inW = Math.max(0, ...insP.map((q) => textWidth(q.name, 12) + (q.name ? 14 : 0) + (q.required ? 0 : textWidth(t("(任意)"), 9) + 4)));
+  const outW = Math.max(0, ...outsP.map((q) => textWidth(q.name, 12)));
   const portsWidth = 12 + inW + 24 + outW + 10;
   const width = Math.max(BLOCK_W, headWidth, Math.min(BLOCK_MAX_W + 120, portsWidth));
+  // 題名の行数は、入出力まで含めて決まったボックスの幅で数える。行数に上限は付けない:
+  // 題名は「…」で省略せず必ず全部見せるので (CSS 側でも切らない)、長い題名はボックスの高さを増やして収める
+  const titleLines = Math.max(1, Math.ceil(titleW / Math.max(80, width - titleExtras)));
+  const headerH = TITLE_H + (titleLines - 1) * TITLE_LINE_H + META_H;
   const baseH = headerH + rows * ROW_H + PAD_BOTTOM;
   if (!isExpanded(p, blockId)) return { width, height: baseH, headerH };
   let right = 0;

@@ -19,13 +19,15 @@ Do not edit it directly; update it with `npx boxglow`.
 
 ## Steps
 
-1. Read `npx boxglow status`. Take in the answers to pending decisions, the boxes in progress and the next candidates
-2. Once you have chosen a box, check its inputs and outputs with `npx boxglow show <block>`, then run `npx boxglow start <block> --note "<what you will do>"`
+1. Read `npx boxglow resume` (or `npx boxglow status --brief`). Take in the handoff notes, the answers not yet read by the AI, the pending decisions, the boxes in progress and the next candidates. Use `npx boxglow status` when you need the whole tree
+2. Once you have chosen a box, check its inputs and outputs with `npx boxglow show <block>`, then run `npx boxglow start <block> --note "<what you will do>"`.
+   On a plan with the context guard on, first read `npx boxglow context <block>` and pass the `contextToken` (context token) from its output as `--context-token <context token>`
 3. Split a large box with `npx boxglow split <block> --spec '<JSON>'` (see `npx boxglow help` for the format). Always decide the output of each box
-4. When the deliverable exists, run `npx boxglow done <block> --artifact "<name>=<URL or path>"`
+4. When the deliverable exists, run `npx boxglow done <block> --artifact "<name>=<URL or path>"` (with the guard on, add `--context-token <context token>`; if your previous command printed "New context token: <token>", use that one)
 5. When a human decision is needed, run `npx boxglow ask <block> "<question>" --options "A|B"` and move on to another box
 6. When you are stuck, run `npx boxglow blocked <block> --note "<what is in the way>"`
-7. At the end, summarize `npx boxglow status` and report it
+7. Before an interruption, context compaction or a handoff, save a handoff note with `npx boxglow checkpoint <block> --note "Findings; next steps; unresolved questions"`
+8. At the end, summarize `npx boxglow status --brief` and report it
 
 ## Rules
 
@@ -40,3 +42,23 @@ Do not edit it directly; update it with `npx boxglow`.
 - Always connect boxes as "input → output". Add missing inputs / outputs with `port`, remove a wire with `disconnect`, and remove a box itself with `remove`. Export a document with `export --out docs/ROADMAP.md`
 - When you add a box, give it a kind of work with `--category` (design / build / verify / evaluate / study / research / ui / improve / fix / docs / ops / other). On the screen it becomes a colored band and a tag
 - If boxglow.json does not exist yet, create it with `npx boxglow init --name "<project name>"` and place the final deliverable and the top-level boxes with `add`
+
+## Context token and handoff
+
+The context guard keeps an AI from continuing work on outdated instructions. `setup-agent` turns it on (on other plans, run `npx boxglow guard on`).
+While it is on, an AI's `start` / `done` / `set` / `split` / `artifact` / `ack` / `blocked` / `review` / `leave` / `checkpoint` need `--context-token <context token>`. Commands run by a person (`--actor human`) do not.
+
+```
+npx boxglow context B12        # read the decisions (including acknowledged answers), input/output contracts and handoff notes. contextToken in the output is the context token
+npx boxglow start B12 --note "<what you will do>" --context-token <context token>
+npx boxglow ask B12 "<question>" --options "A|B" --context-token <context token>
+#   -> last line of the output: New context token: <token>
+npx boxglow done B12 --artifact "<name>=<path>" --context-token <new context token>
+```
+
+- **The context token changes (you must reread)** when a person answers a decision or revises an answer, a person changes the instructions (title, description, input/output contracts), or another AI or a person updates the handoff note. The same applies when this happens on a parent box or an input provider. The old context token is rejected: reread `context`, take the change into account in your work, then retry
+- **The context token does not change** on `start` / `blocked` / `review` / `leave` / `ack`, on changes to progress, status, dates or category, when `check` verifies deliverables, or when boxes are moved on the screen. Keep using the same context token
+- **You can update it yourself**: when your own `ask` / `artifact` / `done` / `set` / `split` / `checkpoint` etc. changes the context, the last line of its output is "New context token: <token>". Use it for the next command without rereading. `ask` / `decision` / `answer` / `reopen` run without a context token, but they print the new context token only when you pass the latest one
+- Do not turn the guard off to get past an old context token (an AI needs the latest context token to run `guard off`)
+- When resuming, read `npx boxglow resume`, and check a box that has a handoff note with `context` before continuing. Handoff notes stay in the plan, independent of the chat history and the activity-log limit
+- With MCP, use `boxglow_context` and the `contextToken` argument of each tool

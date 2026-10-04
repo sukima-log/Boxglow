@@ -1,6 +1,6 @@
 /**
- * ブロック (箱) のノード
- * 状態は箱の見た目で表す: black = 濃い塗り + 破線 + ?, gray = 斜線 + 進捗バー, white = 明るい塗り + チェック (光る)
+ * ブロック (ボックス) のノード
+ * 状態はボックスの見た目で表す: black = 濃い塗り + 破線 + ?, gray = 斜線 + 進捗バー, white = 明るい塗り + チェック (光る)
  */
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
@@ -53,7 +53,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   const headerH = data.headerH ?? 44;
   /** ポート i 行目のハンドルの縦位置 (見出しの高さに追従) */
   const rowAt = (i: number) => headerH + i * 26 + 13;
-  const readonly = useProjectStore((s) => s.readonly);
+  const canEdit = useProjectStore((s) => !s.readonly && s.editMode);
   // ストアからはプロジェクト本体だけを取り (参照が変わるのは変更時だけ)、表示用の値は useMemo で導く。
   // セレクタで毎回新しい配列を作ると React が無限ループ (エラー #185) になるため。
   const project = useShownProject()!;
@@ -81,7 +81,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     , category: categoryOf(b?.category) ?? null // 色の帯と札 (未分類なら null)
     , startable: !!b && b.status === "black" && b.kind !== "project" && ins.length > 0 && missingRequiredInputs(p, blockId).length === 0 // 必須の入力がそろった New
     , issue: b?.issue ? { url: b.issue, key: issueKeyOf(b.issue) } : null // 外部の課題 (JIRA / Redmine など)
-    , depth: Math.min(4, Math.max(1, ancestorsOf(p, blockId).length)) // 階層の深さ (プロジェクトの箱 = 1)。枠線の太さと地色に使う
+    , depth: Math.min(4, Math.max(1, ancestorsOf(p, blockId).length)) // 階層の深さ (プロジェクトのボックス = 1)。枠線の太さと地色に使う
     , key: b?.key ?? ""
     , dueDate: b?.dueDate ?? null
     , overdue: b ? isOverdue(b) : false
@@ -102,13 +102,13 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   }, [view.status]);
 
   const toggleCollapsed = useProjectStore((s) => s.toggleCollapsed);
-  // ▸ で中を見る (その箱を開く) (ファイルに差分を出さない)
+  // ▸ で中を見る (そのボックスを開く) (ファイルに差分を出さない)
   const toggle = (ev: React.MouseEvent) => {
     ev.stopPropagation();
     toggleCollapsed(blockId);
   };
-  // ダブルクリック: 大項目なら All からそのタブを開く、中の箱なら畳む / 展開。1 回のクリックは選ぶだけ。
-  // 箱の側で受ける (React Flow のノードのダブルクリックは View のとき届かない)
+  // ダブルクリック: 大項目なら All からそのタブを開く、中のボックスなら畳む / 展開。1 回のクリックは選ぶだけ。
+  // ボックスの側で受ける (React Flow のノードのダブルクリックは View のとき届かない)
   const onDoubleClick = (ev: React.MouseEvent) => {
     ev.stopPropagation();
     if (view.kids > 0 || data.major) toggleCollapsed(blockId); // 大項目はタブがあるので、中が空でも開ける
@@ -129,8 +129,10 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   , view.category ? "has-cat" : ""
   ].filter(Boolean).join(" ");
 
+  // ボックスの onClick: 丸 (ハンドル) を押したクリックはボックスの選択に伝えない。
+  // 丸を押すだけで詳細パネルが開くと図の幅が変わり、クリックでの結線 (出力の丸 → 入力の丸) の途中で接続先がずれるため
   return (
-    <div className={cls} style={{ width, height, ...(view.category ? ({ "--cat": view.category.color } as React.CSSProperties) : {}) }} onDoubleClick={onDoubleClick}>
+    <div className={cls} style={{ width, height, ...(view.category ? ({ "--cat": view.category.color } as React.CSSProperties) : {}) }} onDoubleClick={onDoubleClick} onClick={(ev) => { if ((ev.target as HTMLElement).closest(".react-flow__handle")) ev.stopPropagation(); }}>
       {/* 題名の行: 題名だけ (カテゴリとプロジェクトの札、畳むボタン以外は置かない) */}
       <div className="bg-block__head" style={{ height: headerH - 24 }}>
         {view.category && <span className={`bg-block__cat${view.category.neutral ? " neutral" : ""}`} title={t("カテゴリ: {label}", { label: t(view.category.label) })}>{t(view.category.label)}</span>}
@@ -138,7 +140,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         {!view.isProject && <StatusIcon status={view.status} />}
         <span className="bg-block__title" title={view.fromTemplate ? t("{title} (部品: {name})", { title: view.title, name: view.fromTemplate }) : view.title}>{view.title}</span>
         {(view.kids > 0 || data.major) && (
-          <button className="bg-block__toggle nodrag" onClick={toggle} title={data.major ? t("この大項目のタブを開く (中の箱 {n} 個)", { n: view.kids }) : view.collapsed ? t("下の階層を展開する") : t("下の階層を畳む")}>
+          <button className="bg-block__toggle nodrag" onClick={toggle} title={data.major ? t("この大項目のタブを開く (中のボックス {n} 個)", { n: view.kids }) : view.collapsed ? t("下の階層を展開する") : t("下の階層を畳む")}>
             {data.major || view.collapsed ? "▸" : "▾"}
           </button>
         )}
@@ -148,7 +150,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         {!view.isProject && (
           <span className={`meta-chip status-${view.status}`} title={t("状態")}>{STATUS_LABEL[view.status]}</span>
         )}
-        {/* 担当は箱には出さない (押して右パネルの Owner で見る)。自分の担当だけ左の帯で分かる */}
+        {/* 担当はボックスには出さない (押して右パネルの Owner で見る)。自分の担当だけ左の帯で分かる */}
         {view.status !== "white" && view.percent > 0 && (
           <span className="meta-chip" title={view.kids > 0 ? t("下の階層の完了 {done}", { done: view.progressText }) : t("進捗")}>{view.percent}%</span>
         )}
@@ -189,19 +191,23 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         </div>
       )}
 
-      {/* ハンドル: 入力は左、出力は右。展開中は内側用のハンドルも出す */}
+      {/* ハンドル: 入力は左、出力は右。展開中は内側用のハンドルも出す。
+          結線できるのは Edit モードだけ (isConnectable = canEdit。View では丸を押しても線は変わらない)。
+          onMouseDown の preventDefault は、丸を押したときに文字の選択やフォーカスの移動が起きないようにするため */}
       {view.ins.map((q, i) => (
         <Handle
           key={`${q.id}-outer`}
           type="target"
           position={Position.Left}
           id={handleId("in", q.id, "outer")}
+          title={t("入力: {name}", { name: q.name })}
           className={q.promoted ? "port-promoted" : ""}
           style={{ top: rowAt(i) }}
-          isConnectable={!readonly}
+          isConnectable={canEdit}
+          onMouseDown={(ev) => ev.preventDefault()}
         />
       ))}
-      {/* 内側のハンドル (展開中だけ): 親の入力を中へ流すので、向きは右 (線は右へ出る)。位置は箱の内側 */}
+      {/* 内側のハンドル (展開中だけ): 親の入力を中へ流すので、向きは右 (線は右へ出る)。位置はボックスの内側 */}
       {view.expanded && view.ins.map((q, i) => (
         <Handle
           key={`${q.id}-inner`}
@@ -209,9 +215,10 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           position={Position.Right}
           id={handleId("in", q.id, "inner")}
           className="port-inner"
-          title={t("{name} を中のブロックへ (ここから中の箱の入力へドラッグ)", { name: q.name })}
+          title={t("{name} を中のブロックへ (ここから中のボックスの入力へドラッグ)", { name: q.name })}
           style={{ top: rowAt(i), zIndex: 2, left: -7, right: "auto", transform: "translate(-50%, -50%)" }}
-          isConnectable={!readonly}
+          isConnectable={canEdit}
+          onMouseDown={(ev) => ev.preventDefault()}
         />
       ))}
       {view.outs.map((q, i) => (
@@ -220,12 +227,14 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           type="source"
           position={Position.Right}
           id={handleId("out", q.id, "outer")}
+          title={t("出力: {name} (クリックまたはドラッグで接続)", { name: q.name })}
           className="port-out"
           style={{ top: rowAt(i), zIndex: 1 }}
-          isConnectable={!readonly}
+          isConnectable={canEdit}
+          onMouseDown={(ev) => ev.preventDefault()}
         />
       ))}
-      {/* 内側のハンドル (出力): 中のブロックの出力を受けるので、向きは左 (線は左から入る)。位置は箱の内側 */}
+      {/* 内側のハンドル (出力): 中のブロックの出力を受けるので、向きは左 (線は左から入る)。位置はボックスの内側 */}
       {view.expanded && view.outs.map((q, i) => (
         <Handle
           key={`${q.id}-inner`}
@@ -235,7 +244,8 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           className="port-inner"
           title={t("中のブロックの出力を {name} へ", { name: q.name })}
           style={{ top: rowAt(i), zIndex: 0, right: -7, left: "auto", transform: "translate(50%, -50%)" }}
-          isConnectable={!readonly}
+          isConnectable={canEdit}
+          onMouseDown={(ev) => ev.preventDefault()}
         />
       ))}
     </div>

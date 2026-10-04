@@ -13,7 +13,7 @@
 /** 最上位ブロック (プロジェクト全体) の id */
 export const ROOT_ID = "root";
 
-/** データ形式の版。読み込み時に照合する (1 = 初版, 2 = AI の活動・判断・ログ, 3 = プロジェクトの箱と再利用のテンプレート) */
+/** データ形式の版。読み込み時に照合する (1 = 初版, 2 = AI の活動・判断・ログ, 3 = プロジェクトのボックスと再利用のテンプレート) */
 export const SCHEMA_VERSION = 5; // 4: 入力の required が意味を持つ (既定は必須) / 5: updatedAt と version をファイルに書かない (Git の差分を汚さない)
 
 /** ブロックの状態: black = 出力だけ決めた (中身は未定), gray = 分解中・着手中, white = 完了 (入力から出力が得られることが確定) */
@@ -172,7 +172,7 @@ export interface Block {
   actualHours?: number;
   /** カテゴリ (何の種類の仕事か)。categories.ts のキー。無ければ未分類 */
   category?: string;
-  /** プロジェクトの箱: 対応するリポジトリ (パスや URL)。複数リポジトリを 1 つの boxglow.json で管理するときの目印 */
+  /** プロジェクトのボックス: 対応するリポジトリ (パスや URL)。複数リポジトリを 1 つの boxglow.json で管理するときの目印 */
   repo?: string;
   /** 外部の課題 (JIRA / Redmine / GitHub Issue など) の URL。画面には URL から取り出したキー (PROJ-123, #45) を札で出す */
   issue?: string;
@@ -212,6 +212,10 @@ export type Visibility = "private" | "link" | "public";
 
 /** プロジェクト (= ブロック図の全体。JSON 書き出しの単位) */
 export interface Project {
+  /** true なら、CLI / MCP で作業を記録するコマンドが最新のコンテキストの確認トークンを要求する (guard)。無い古い計画は要求しない */
+  contextGuard?: boolean;
+  /** 引き継ぎメモ (ボックスの id → 分かったこと・次の手順など)。件数に上限のある活動ログとは別に残る。無い古い計画もそのまま読める */
+  handoffs?: Record<string, { note: string; actor: string; at: string }>;
   schemaVersion: number;
   id: string;
   name: string;
@@ -241,10 +245,10 @@ export interface Project {
 }
 
 /* ------------------------------------------------------------------ */
-/* 再利用のテンプレート (箱を下の階層ごと別のプロジェクトへ持っていく)       */
+/* 再利用のテンプレート (ボックスを下の階層ごと別のプロジェクトへ持っていく)       */
 /* ------------------------------------------------------------------ */
 
-/** テンプレートの中の 1 箱 (再帰)。ポートは名前で、結線は "題名.ポート名" で表す (id に依存しない) */
+/** テンプレートの中の 1 ボックス (再帰)。ポートは名前で、結線は "題名.ポート名" で表す (id に依存しない) */
 export interface TemplateNode {
   title: string;
   description: string;
@@ -253,7 +257,7 @@ export interface TemplateNode {
   inputs: { name: string; description: string; required: boolean }[];
   outputs: { name: string; description: string }[];
   children: TemplateNode[];
-  /** 子どうし・親子の結線 ("parent.<名前>" はこの箱自身の入出力) */
+  /** 子どうし・親子の結線 ("parent.<名前>" はこのボックス自身の入出力) */
   connections: { from: string; to: string }[];
 }
 

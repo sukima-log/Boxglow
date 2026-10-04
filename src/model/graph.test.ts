@@ -70,7 +70,7 @@ import {
 } from "./graph";
 import { ROOT_ID, type Project } from "./types";
 
-/** テスト用: プロジェクトの箱の中に 2 つのブロック A, B を持つプロジェクト (pj = 箱の id) */
+/** テスト用: プロジェクトのボックスの中に 2 つのブロック A, B を持つプロジェクト (pj = ボックスの id) */
 function twoBlocks(): { p: Project; a: string; b: string; pj: string } {
   let p = createProject("test");
   const pj = defaultTaskParent(p);
@@ -135,7 +135,7 @@ describe("結線ルール", () => {
     const c2 = connect(c1.project, { portId: outB.id, side: "outer" }, { portId: r2.portId, side: "inner" });
     expect(c1.error).toBeUndefined();
     expect(c2.error).toBeUndefined();
-    // 箱の中の 2 本 + 箱の出力から最終成果物への 1 本 + 第 2 成果物の最上位への写し 1 本
+    // ボックスの中の 2 本 + ボックスの出力から最終成果物への 1 本 + 第 2 成果物の最上位への写し 1 本
     expect(Object.keys(c2.project.edges)).toHaveLength(4);
   });
 
@@ -166,7 +166,7 @@ describe("結線ルール", () => {
 });
 
 describe("浮いている入力の自動引き上げ", () => {
-  it("未接続の入力は、プロジェクトの箱を経由して最上位の入力ノードに自動ポートと自動線で伸びる", () => {
+  it("未接続の入力は、プロジェクトのボックスを経由して最上位の入力ノードに自動ポートと自動線で伸びる", () => {
     const { p, a, pj } = twoBlocks();
     const r = addPort(p, { blockId: a, direction: "in", name: "仕様書" });
     const pjIns = portsOf(r.project, pj, "in");
@@ -237,7 +237,7 @@ describe("浮いている入力の自動引き上げ", () => {
     const r2 = addPort(r1.project, { blockId: b, direction: "in", name: "仕様書" });
     const rootIns = portsOf(r2.project, ROOT_ID, "in");
     expect(rootIns).toHaveLength(1);
-    // 箱 -> A, 箱 -> B, 最上位 -> 箱 の 3 本
+    // ボックス -> A, ボックス -> B, 最上位 -> ボックス の 3 本
     expect(Object.values(r2.project.edges).filter((e) => e.auto)).toHaveLength(3);
     // 片方を手動でつなぐと、自動ポートはもう片方のために残る
     const outA = portsOf(r2.project, a, "out")[0];
@@ -339,7 +339,7 @@ describe("AI の活動・判断・分解 (schemaVersion 2)", () => {
     }, "codex");
     expect(r.errors).toEqual([]);
     expect(childrenOf(r.project, a)).toHaveLength(2);
-    // 分解でできた 3 本 + プロジェクトの箱から最終成果物への 1 本
+    // 分解でできた 3 本 + プロジェクトのボックスから最終成果物への 1 本
     expect(Object.values(r.project.edges).filter((e) => !e.auto)).toHaveLength(4);
     expect(r.project.blocks[a].status).toBe("gray");
   });
@@ -383,8 +383,8 @@ describe("自動整列", () => {
   });
 });
 
-describe("プロジェクトの箱・深い階層・テンプレート (schemaVersion 3)", () => {
-  it("createProject は最上位にプロジェクトの箱を 1 つ置き、その出力が最終成果物につながる", () => {
+describe("プロジェクトのボックス・深い階層・テンプレート (schemaVersion 3)", () => {
+  it("createProject は最上位にプロジェクトのボックスを 1 つ置き、その出力が最終成果物につながる", () => {
     const p = createProject("X");
     const pj = projectBlocks(p);
     expect(pj).toHaveLength(1);
@@ -407,13 +407,13 @@ describe("プロジェクトの箱・深い階層・テンプレート (schemaVe
     }
     const r = addPort(p, { blockId: ids[3], direction: "in", name: "素材" });
     p = r.project;
-    expect(ancestorsOf(p, ids[3])).toHaveLength(5); // L2, L1, L0, プロジェクトの箱, root
+    expect(ancestorsOf(p, ids[3])).toHaveLength(5); // L2, L1, L0, プロジェクトのボックス, root
     expect(portsOf(p, ROOT_ID, "in").some((x) => x.name === "素材" && x.promotedFrom)).toBe(true);
     // 各階層に自動ポートが 1 つずつ
     for (const id of [ids[2], ids[1], ids[0], defaultTaskParent(p)]) expect(portsOf(p, id, "in").filter((x) => x.promotedFrom)).toHaveLength(1);
   });
 
-  it("版 2 のデータ (最上位に直接タスク) は読み込み時にプロジェクトの箱で包まれる", () => {
+  it("版 2 のデータ (最上位に直接タスク) は読み込み時にプロジェクトのボックスで包まれる", () => {
     let p0 = createProject("old");
     const ra = addBlock(p0, { parentId: ROOT_ID, title: "A" });
     p0 = ra.project;
@@ -430,14 +430,14 @@ describe("プロジェクトの箱・深い階層・テンプレート (schemaVe
     const d = connect(c, { portId: outB.id, side: "outer" }, { portId: rootOut.id, side: "inner" }).project;
     const v2 = JSON.parse(toJSON(d));
     v2.schemaVersion = 2;
-    // createProject が作ったプロジェクトの箱は、版 2 のデータには無かったものとして消す
+    // createProject が作ったプロジェクトのボックスは、版 2 のデータには無かったものとして消す
     for (const blk of Object.values(v2.blocks) as { id: string; kind?: string }[]) if (blk.kind === "project") { delete v2.blocks[blk.id]; }
     const q = fromJSON(JSON.stringify(v2));
     const pj = projectBlocks(q);
     expect(pj).toHaveLength(1);
     expect(q.blocks[a].parentId).toBe(pj[0].id);
     expect(q.blocks[b].parentId).toBe(pj[0].id);
-    // A -> B の線は残り、B -> 最終成果物 は箱の出力を経由する
+    // A -> B の線は残り、B -> 最終成果物 はボックスの出力を経由する
     expect(Object.values(q.edges).some((e) => e.kind === "sibling" && q.ports[e.from.portId].blockId === a)).toBe(true);
     const mid = portsOf(q, pj[0].id, "out").find((o) => o.name === rootOut.name);
     expect(mid).toBeDefined();
@@ -519,9 +519,9 @@ describe("用意できた線・進捗 %", () => {
 });
 
 describe("短い ID・期日・入力の供給元 (一重管理)", () => {
-  it("箱には B1, B2 ... の短い ID が付き、ID でも探せる。古いデータにも補われる", () => {
+  it("ボックスには B1, B2 ... の短い ID が付き、ID でも探せる。古いデータにも補われる", () => {
     const { p, a, b } = twoBlocks();
-    expect(p.blocks[a].key).toBe("B2"); // B1 はプロジェクトの箱
+    expect(p.blocks[a].key).toBe("B2"); // B1 はプロジェクトのボックス
     expect(p.blocks[b].key).toBe("B3");
     expect(findBlock(p, "b3").block?.id).toBe(b);
     expect(searchBlocks(p, "B2")[0].id).toBe(a);
@@ -555,7 +555,7 @@ describe("短い ID・期日・入力の供給元 (一重管理)", () => {
     q = connect(q, { portId: outA.id, side: "outer" }, { portId: rp.portId, side: "outer" }).project;
     expect(sourceOfInput(q, rp.portId)?.id).toBe(outA.id);
     expect(effectiveDescription(q, rp.portId)).toBe("A が作る設計書");
-    // 親 (プロジェクトの箱) の入力から下りてくる場合は、さらにその供給元 (最上位の入力) まで
+    // 親 (プロジェクトのボックス) の入力から下りてくる場合は、さらにその供給元 (最上位の入力) まで
     const r2 = addPort(q, { blockId: a, direction: "in", name: "仕様" });
     q = r2.project;
     const rootIn = portsOf(q, ROOT_ID, "in")[0];
@@ -567,7 +567,7 @@ describe("短い ID・期日・入力の供給元 (一重管理)", () => {
 });
 
 describe("1 つの出力から複数の入力へ", () => {
-  it("同じ出力を 3 つの箱の入力につなげる (枝分かれ)。入力側は 1 本まで", () => {
+  it("同じ出力を 3 つのボックスの入力につなげる (枝分かれ)。入力側は 1 本まで", () => {
     const { p, a, pj } = twoBlocks();
     let q = p;
     const targets: string[] = [];
@@ -591,7 +591,7 @@ describe("1 つの出力から複数の入力へ", () => {
 });
 
 describe("ドラッグ操作の補助", () => {
-  it("箱を別の箱の中へ移すと、位置は見出しの下に収まり、親は分解中になる", () => {
+  it("ボックスを別のボックスの中へ移すと、位置は見出しの下に収まり、親は分解中になる", () => {
     const { p, a, b, pj } = twoBlocks();
     const rp = addPort(p, { blockId: b, direction: "in", name: "x" });
     const outA = portsOf(rp.project, a, "out")[0];
@@ -607,7 +607,7 @@ describe("ドラッグ操作の補助", () => {
     expect(q.blocks[rc.blockId].status).toBe("gray");
   });
 
-  it("出力を箱に落とすと、空いている入力か新しい入力につながる。親に落とすと親の出力につながる", () => {
+  it("出力をボックスに落とすと、空いている入力か新しい入力につながる。親に落とすと親の出力につながる", () => {
     const { p, a, b, pj } = twoBlocks();
     const outA = portsOf(p, a, "out")[0];
     const r1 = connectToBlock(p, { portId: outA.id, side: "outer" }, b);
@@ -616,7 +616,7 @@ describe("ドラッグ操作の補助", () => {
     expect(inB).toHaveLength(1);
     expect(inB[0].name).toBe(outA.name);
     expect(incomingEdges(r1.project, { portId: inB[0].id, side: "outer" })[0].from.portId).toBe(outA.id);
-    // 親 (プロジェクトの箱) に落とす -> 親の出力 (inner) へ
+    // 親 (プロジェクトのボックス) に落とす -> 親の出力 (inner) へ
     const outB = portsOf(r1.project, b, "out")[0];
     const r2 = connectToBlock(r1.project, { portId: outB.id, side: "outer" }, pj);
     expect(r2.error).toBeUndefined();
@@ -626,7 +626,7 @@ describe("ドラッグ操作の補助", () => {
 });
 
 describe("階層移動の線の付け替えと重なりの解消", () => {
-  it("箱を別の箱の中へ移すと、兄弟との線は新しい親の入出力を経由して残る", () => {
+  it("ボックスを別のボックスの中へ移すと、兄弟との線は新しい親の入出力を経由して残る", () => {
     const { p, a, b, pj } = twoBlocks();
     // A.出力 -> B.x、 B.出力 -> D.y
     let q = addPort(p, { blockId: b, direction: "in", name: "x" }).project;
@@ -658,7 +658,7 @@ describe("階層移動の線の付け替えと重なりの解消", () => {
     expect(portsOf(q, ROOT_ID, "in")).toHaveLength(0);
   });
 
-  it("1 つ目の箱が広がったとき、間の箱と右の箱が順に (玉突きで) 押し出されて重ならない", () => {
+  it("1 つ目のボックスが広がったとき、間のボックスと右のボックスが順に (玉突きで) 押し出されて重ならない", () => {
     // 横一列 A B C。A が広がって B と重なり、B を右へ押すと C とも重なる (B を全部の兄弟から避けさせると右 ↔ 左の往復になる)
     const p0 = createProject("t");
     const pj = defaultTaskParent(p0);
@@ -681,8 +681,8 @@ describe("階層移動の線の付け替えと重なりの解消", () => {
     expect(r.blocks[c.blockId].position.y).toBe(76);
   });
 
-  it("縦に詰まった列 (隣どうしが重なる) は、どの箱も重ならない位置まで順に押し下げられる", () => {
-    // 高さ 98 の箱を 60px 刻みで 6 つ並べる (全部が隣と重なる)。往復せずに全部ばらけること
+  it("縦に詰まった列 (隣どうしが重なる) は、どのボックスも重ならない位置まで順に押し下げられる", () => {
+    // 高さ 98 のボックスを 60px 刻みで 6 つ並べる (全部が隣と重なる)。往復せずに全部ばらけること
     let p = createProject("t");
     const pj = defaultTaskParent(p);
     const ids: string[] = [];
@@ -749,7 +749,7 @@ describe("最上位の入力のグループ", () => {
     const B = r.blocks[b].position;
     const overlap = B.x < A.x + 240 && B.x + 240 > A.x && B.y < A.y + 80 && B.y + 80 > A.y;
     expect(overlap).toBe(false);
-    expect(A).toEqual({ x: 160, y: 200 }); // 先にある箱は動かさない
+    expect(A).toEqual({ x: 160, y: 200 }); // 先にあるボックスは動かさない
   });
 });
 
@@ -800,12 +800,12 @@ describe("階層をまたぐ移動で線を保つ", () => {
     if (wires.xt) p = connect(p, { portId: portsOf(p, rx.blockId, "out")[0].id, side: "outer" }, { portId: tin.portId, side: "outer" }).project;
     return { p, pj, P: rp.blockId, S: rs.blockId, X: rx.blockId, T: rt.blockId, xin: xin.portId, tin: tin.portId };
   }
-  /** 入力ポートの供給元を、間の箱のポート (内側 / 外側) を越えてたどり、最終的な出力の箱を返す */
+  /** 入力ポートの供給元を、間のボックスのポート (内側 / 外側) を越えてたどり、最終的な出力のボックスを返す */
   function sourceBlock(p: Project, portId: string, side: "outer" | "inner" = "outer"): string | null {
     const e = incomingEdges(p, { portId, side })[0];
     if (!e) return null;
     const sp = p.ports[e.from.portId];
-    if (sp.direction === "out" && e.from.side === "outer" && incomingEdges(p, { portId: sp.id, side: "inner" }).length > 0) return sourceBlock(p, sp.id, "inner"); // 箱の出力: 中から来ている
+    if (sp.direction === "out" && e.from.side === "outer" && incomingEdges(p, { portId: sp.id, side: "inner" }).length > 0) return sourceBlock(p, sp.id, "inner"); // ボックスの出力: 中から来ている
     if (sp.direction === "in" && e.from.side === "inner") return sourceBlock(p, sp.id, "outer"); // 親の入力 (内側): 外から来ている
     return sp.blockId;
   }
@@ -903,7 +903,7 @@ describe("線のつながり (親の縁を越える)", () => {
   });
 });
 
-describe("プロジェクトの箱の出力は最上位に写る", () => {
+describe("プロジェクトのボックスの出力は最上位に写る", () => {
   it("足すと同名の最上位の出力ができ、名前を変えると追従し、消すと消える", () => {
     let p = createProject("t");
     const pj = defaultTaskParent(p);
@@ -966,7 +966,7 @@ describe("入力名は供給元の出力名に追従する (二重管理をな�
   it("split の結線は受け側が題名だけでよい (出力名と同じ入力が作られる)", () => {
     let p = createProject("t");
     const pj = projectBlocks(p)[0].id;
-    const big = addBlock(p, { parentId: pj, title: "大きい箱", outputName: "成果物" }); p = big.project;
+    const big = addBlock(p, { parentId: pj, title: "大きいボックス", outputName: "成果物" }); p = big.project;
     const r = splitBlock(p, big.blockId, { blocks: [{ title: "前半", outputs: ["中間ファイル"] }, { title: "後半", outputs: ["成果物"] }], connections: [{ from: "前半.中間ファイル", to: "後半" }, { from: "後半.成果物", to: "parent.成果物" }] }, "test");
     expect(r.errors).toEqual([]);
     const latter = findBlock(r.project, "後半").block!;

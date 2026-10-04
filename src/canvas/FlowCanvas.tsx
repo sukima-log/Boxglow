@@ -1,7 +1,8 @@
 /**
  * キャンバス: React Flow にプロジェクトを描き、ドラッグ・結線・選択を store に反映する
  */
-import { Background, BackgroundVariant, Controls, MiniMap, ReactFlow, useNodesState, useReactFlow, useStore, type ReactFlowState, type Connection, type Edge as RFEdge, type NodeChange, type OnConnectEnd, type OnNodeDrag } from "@xyflow/react";
+import { sharedWires } from "./sharedWires";
+import { Background, BackgroundVariant, MiniMap, ReactFlow, useNodesState, useReactFlow, useStore, type ReactFlowState, type Connection, type Edge as RFEdge, type NodeChange, type OnConnectEnd, type OnNodeDrag } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { connect, connectToBlock, isHiddenByCollapse, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, validateConnection, withIndex } from "../model/graph";
 import { blockSize, isExpanded } from "../model/size";
@@ -9,6 +10,7 @@ import { ROOT_ID } from "../model/types";
 import { nextFreePosition } from "../model/autolayout";
 import type { Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
+import { CanvasTools } from "./CanvasTools";
 import { BlockNode } from "./BlockNode";
 import { TerminalNode } from "./TerminalNode";
 import { RoutedEdge } from "./RoutedEdge";
@@ -63,6 +65,8 @@ export function FlowCanvas({ project, matcher }: Props) {
   const readonly = useProjectStore((s) => s.readonly);
   const editMode = useProjectStore((s) => s.editMode);
   const canEdit = !readonly && editMode;
+  const [snap, setSnap] = useState(false);
+  const [showMap, setShowMap] = useState(false);
   const selection = useProjectStore((s) => s.selection);
   const select = useProjectStore((s) => s.select);
   const apply = useProjectStore((s) => s.apply);
@@ -72,7 +76,7 @@ export function FlowCanvas({ project, matcher }: Props) {
   const focusBlock = useProjectStore((s) => s.focusBlock);
   const viewScope = useProjectStore((s) => s.viewScope);
   const rf = useReactFlow();
-  // 箱の幅の見積もり (size.ts) は文言の言語に依存するので、言語が変わったらノードを作り直す
+  // ボックスの幅の見積もり (size.ts) は文言の言語に依存するので、言語が変わったらノードを作り直す
   const lang = useLang();
 
   // 動作確認やスクリーンショット用に、React Flow の instance もコンソールから触れるようにしておく
@@ -91,9 +95,8 @@ export function FlowCanvas({ project, matcher }: Props) {
       const { zoom } = rf.getViewport();
       const { x, y } = rf.flowToScreenPosition({ x: abs.x, y: abs.y });
       const el = document.querySelector(".react-flow") as HTMLElement | null;
-      const vw = el?.clientWidth ?? window.innerWidth;
-      const vh = el?.clientHeight ?? window.innerHeight;
-      const visible = x >= 0 && y >= 0 && x + w * zoom <= vw && y + h * zoom <= vh;
+      const bounds = el?.getBoundingClientRect() ?? { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+      const visible = x >= bounds.left && y >= bounds.top && x + w * zoom <= bounds.right && y + h * zoom <= bounds.bottom;
       if (!visible) void rf.setCenter(abs.x + w / 2, abs.y + h / 2, { zoom, duration: 300 });
     }, 120);
     return () => clearTimeout(t);
@@ -126,7 +129,7 @@ export function FlowCanvas({ project, matcher }: Props) {
     return () => clearTimeout(t);
   }, [nodes, rf]);
 
-  // 箱にマウスを乗せたら、つながる線を強調する
+  // ボックスにマウスを乗せたら、つながる線を強調する
   const [hovered, setHovered] = useState<string | null>(null);
   const baseEdges = useMemo(() => withIndex(project, () => buildEdges(project, { selectedEdgeId: selection.edgeId, selectedBlockId: selection.blockId, scope: viewScope })), [project, selection.edgeId, selection.blockId, viewScope]);
 
@@ -148,6 +151,16 @@ export function FlowCanvas({ project, matcher }: Props) {
     }
     return routeAll(nodeRects, specs);
   }, [topoSig, geometrySig]);
+  // 同じ出力から分岐する線の描き分け (幹は 1 本だけが描き、分岐点に丸を置く)。経路 (paths) は変えず、描く区間だけを決める。
+  // 選択中・ホバー中の線を優先して幹を描かせる (強調した線が出力の丸から途切れずに見えるように)
+  const shared = useMemo(() => {
+    const specs: EdgeSpec[] = baseEdges.filter((e) => !e.hidden && paths.has(e.id)).map((e) => {
+      const path = paths.get(e.id)!;
+      return { id:e.id, source:e.source, target:e.target, s:path[0], t:path[path.length-1] };
+    });
+    const priority = new Set(baseEdges.filter((e) => e.selected || e.data?.net || (hovered && (e.source === hovered || e.target === hovered))).map((e) => e.id));
+    return sharedWires(paths, specs, priority);
+  }, [paths, baseEdges, hovered]);
   // 見た目の飾り (選択・ホバー・ラベル) は経路を使い回して付け直すだけ (軽い)
   const edges = useMemo(() => baseEdges.map((e) => {
     const path = paths.get(e.id);
@@ -155,10 +168,10 @@ export function FlowCanvas({ project, matcher }: Props) {
     const hotClass = hot || (e.className ?? "").includes("edge-hot");
     return {
       ...e
-    , data: { ...(e.data ?? {}), path, hot: !!hotClass } // net (選んだ線とのつながり) を残す
+    , data: { ...(e.data ?? {}), path, shared: shared.get(e.id), hot: !!hotClass } // net (選んだ線とのつながり) を残す
     , className: hot ? `${(e.className ?? "").replace("edge-dim", "")} edge-hot` : e.className
     };
-  }), [baseEdges, paths, hovered]);
+  }), [baseEdges, paths, hovered, shared]);
 
   /** 選択の変化を store に伝え、位置の変化は React Flow の状態に反映する */
   const onNodesChange = useCallback(
@@ -169,10 +182,10 @@ export function FlowCanvas({ project, matcher }: Props) {
           if (ch.id === "root-in") select({ terminal: "in" });
           else if (ch.id.startsWith("root-in:")) select({ terminal: "in", terminalGroup: ch.id.slice(8) });
           else if (ch.id === "root-out") select({ terminal: "out" });
-          // 大項目の入力/出力ノードを選んだら、その大項目の箱を選ぶ (右のパネルで入出力を直せる)
+          // 大項目の入力/出力ノードを選んだら、その大項目のボックスを選ぶ (右のパネルで入出力を直せる)
           else if (ch.id === SCOPE_IN || ch.id === SCOPE_OUT) { const sc = useProjectStore.getState().viewScope; if (sc) select({ blockId: sc }); }
           else select({ blockId: ch.id });
-          // 右の詳細パネルが開いてキャンバスが狭まり、選んだノードが隠れることがあるので、見えなければ寄せる (画面 = 開いている箱は変えない)
+          // 右の詳細パネルが開いてキャンバスが狭まり、選んだノードが隠れることがあるので、見えなければ寄せる (画面 = 開いているボックスは変えない)
           focusBlock(ch.id, { scope: false });
         }
       }
@@ -181,9 +194,9 @@ export function FlowCanvas({ project, matcher }: Props) {
   );
 
   /**
-   * ドラッグ中の箱の中心が入っている「落とせる箱」(展開中で、自分や自分の子孫でない) を探す。無ければ null
-   * Input : nodeId = ドラッグ中の箱
-   * Output: 落とせる箱の id (一番深いもの)
+   * ドラッグ中のボックスの中心が入っている「落とせるボックス」(展開中で、自分や自分の子孫でない) を探す。無ければ null
+   * Input : nodeId = ドラッグ中のボックス
+   * Output: 落とせるボックスの id (一番深いもの)
    */
   const findContainer = useCallback(
     (nodeId: string): string | null => {
@@ -198,7 +211,7 @@ export function FlowCanvas({ project, matcher }: Props) {
         for (const b of Object.values(project.blocks)) if (b.parentId === cur) { myDesc.add(b.id); stack.push(b.id); }
       }
       let best: { id: string; depth: number } | null = null;
-      // 落とせる箱: 見えている箱ならどれでも (畳まれた箱に落とすと、その中の空いた場所に入る)
+      // 落とせるボックス: 見えているボックスならどれでも (畳まれたボックスに落とすと、その中の空いた場所に入る)
       for (const b of Object.values(project.blocks)) {
         if (b.id === ROOT_ID || b.id === nodeId || myDesc.has(b.id) || isHiddenByCollapse(project, b.id)) continue;
         const n = rf.getInternalNode(b.id);
@@ -229,7 +242,7 @@ export function FlowCanvas({ project, matcher }: Props) {
   , [findContainer, project]
   );
 
-  /** ドラッグが終わったら位置を保存する (履歴に積む)。別の箱の中に落としたら階層を移す */
+  /** ドラッグが終わったら位置を保存する (履歴に積む)。別のボックスの中に落としたら階層を移す */
   const onNodeDragStop: OnNodeDrag<AnyRFNode> = useCallback(
     (_ev, _node, dragged) => {
       setDropTarget(null);
@@ -247,7 +260,7 @@ export function FlowCanvas({ project, matcher }: Props) {
               const me = rf.getInternalNode(n.id);
               const parent = rf.getInternalNode(container);
               if (me && parent) {
-                // 畳まれた箱 (All の大項目) に落としたときは中の空いた場所へ。展開中なら落とした位置 (新しい親の座標系) へ
+                // 畳まれたボックス (All の大項目) に落としたときは中の空いた場所へ。展開中なら落とした位置 (新しい親の座標系) へ
                 const rel = isExpanded(project, container)
                   ? { x: me.internals.positionAbsolute.x - parent.internals.positionAbsolute.x, y: me.internals.positionAbsolute.y - parent.internals.positionAbsolute.y }
                   : nextFreePosition(q, container);
@@ -257,7 +270,7 @@ export function FlowCanvas({ project, matcher }: Props) {
               }
             }
             q = moveBlock(q, n.id, n.position);
-            // 同じ階層の箱と重なったままにしない
+            // 同じ階層のボックスと重なったままにしない
             q = resolveOverlap(q, n.id, blockSize);
           }
         }
@@ -267,14 +280,15 @@ export function FlowCanvas({ project, matcher }: Props) {
   , [apply, findContainer, rf]
   );
 
-  /** 丸ではなく箱の上で離したときも結線する (空いている入力か、新しい入力へ) */
+  /** 丸ではなくボックスの上で離したときも結線する (空いている入力か、新しい入力へ) */
   const onConnectEnd: OnConnectEnd = useCallback(
     (event, state) => {
-      if (state.isValid || !state.fromHandle || !state.fromHandle.id) return;
+      if (!canEdit || state.isValid || !state.fromHandle || !state.fromHandle.id) return;
       const from = parseHandle(state.fromHandle.id);
       if (!from) return;
       const pt = "changedTouches" in event ? event.changedTouches[0] : (event as MouseEvent);
       const el = document.elementFromPoint(pt.clientX, pt.clientY);
+      if (el?.closest(".react-flow__handle")) return; // つなげない丸の上で離したときは何もしない (黙って別の入力が作られると、意図しない結線になる)
       const nodeEl = el?.closest(".react-flow__node-block") as HTMLElement | null;
       const targetId = nodeEl?.getAttribute("data-id");
       if (!targetId) return;
@@ -286,11 +300,12 @@ export function FlowCanvas({ project, matcher }: Props) {
       });
       if (error) setToast(error);
     }
-  , [apply, setToast]
+  , [apply, setToast, canEdit]
   );
 
   const onConnect = useCallback(
     (c: Connection) => {
+      if (!canEdit) return;
       const from = parseHandle(c.sourceHandle);
       const to = parseHandle(c.targetHandle);
       if (!from || !to) return;
@@ -302,20 +317,20 @@ export function FlowCanvas({ project, matcher }: Props) {
       });
       if (error) setToast(error);
     }
-  , [apply, setToast]
+  , [apply, setToast, canEdit]
   );
 
   const isValidConnection = useCallback(
     (c: Connection | RFEdge) => {
       const from = parseHandle(c.sourceHandle);
       const to = parseHandle(c.targetHandle);
-      if (!from || !to) return false;
+      if (!canEdit || !from || !to) return false;
       return validateConnection(project, from, to).ok;
     }
-  , [project]
+  , [project, canEdit]
   );
 
-  /** 線をクリック: 画面だけの線 (タブの Inputs / Outputs と開いた箱をつなぐ線) は、同じポートに外からつながる本物の線を選ぶ (無ければ箱) */
+  /** 線をクリック: 画面だけの線 (タブの Inputs / Outputs と開いたボックスをつなぐ線) は、同じポートに外からつながる本物の線を選ぶ (無ければボックス) */
   const onEdgeClick = useCallback((_ev: React.MouseEvent, e: RFEdge) => {
     if (e.id.startsWith("scope-in:") || e.id.startsWith("scope-out:")) {
       const portId = e.id.slice(e.id.indexOf(":") + 1);
@@ -342,7 +357,10 @@ export function FlowCanvas({ project, matcher }: Props) {
       onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
       onConnectEnd={onConnectEnd}
-      connectionRadius={40}
+      connectOnClick
+      snapToGrid={snap}
+      snapGrid={[8, 8]}
+      connectionRadius={28}
       isValidConnection={isValidConnection}
       onEdgeClick={onEdgeClick}
       onPaneClick={onPaneClick}
@@ -352,16 +370,16 @@ export function FlowCanvas({ project, matcher }: Props) {
       deleteKeyCode={null}
       selectionKeyCode={null}
       multiSelectionKeyCode={null}
-      zoomOnDoubleClick={false} // ダブルクリックは箱の畳む / 展開 (大項目ならタブを開く) に使う。拡大に取られると View で届かない
+      zoomOnDoubleClick={false} // ダブルクリックはボックスの畳む / 展開 (大項目ならタブを開く) に使う。拡大に取られると View で届かない
       fitView
       fitViewOptions={FIT_OPTIONS}
       minZoom={0.05} // 大きな計画 (横 1 万 px など) も全体表示できるように
       maxZoom={2}
       proOptions={{ hideAttribution: false }}
     >
-      <Background variant={BackgroundVariant.Lines} gap={32} lineWidth={1} color="var(--bg-grid)" />
-      <Controls showInteractive={false} position="bottom-left" fitViewOptions={FIT_OPTIONS} />
-      <MiniMap
+      <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--bg-grid)" />
+      <CanvasTools snap={snap} onSnap={() => setSnap((v) => !v)} showMap={showMap} onMap={() => setShowMap((v) => !v)} />
+      {showMap && <MiniMap
         position="bottom-right"
         pannable
         zoomable
@@ -372,7 +390,7 @@ export function FlowCanvas({ project, matcher }: Props) {
         }}
         nodeStrokeColor="var(--line)"
         maskColor="rgba(127,127,127,0.15)"
-      />
+      />}
     </ReactFlow>
   );
 }

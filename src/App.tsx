@@ -44,6 +44,8 @@ import { applyTheme } from "./lib/theme";
 import { HomeDialog } from "./panels/HomeDialog";
 import { Inspector } from "./panels/Inspector";
 import { Drawer, isFilterEmpty, matchesFilter, type Filter, EMPTY_FILTER } from "./panels/Drawer";
+import { SaveNotice } from "./panels/SaveNotice";
+import { VersionInfo } from "./panels/VersionInfo";
 import { TopBar } from "./panels/TopBar";
 import { TabBar } from "./panels/TabBar";
 
@@ -110,10 +112,17 @@ export function App() {
       observer = new MutationObserver(follow);
       observer.observe(document.body, { attributes: true, attributeFilter: ["class"] });
       openFromVsCode();
-    } else if (article || params.get("demo") === "daw") {
-      openExample(); // 記事の埋め込みと ?demo=daw は 3 階層の例
-    } else if (params.get("demo") === "1") {
+    } else if (params.get("demo") === "daw") {
+      openExample(); // 大きな計画を試すための 3 階層の例
+    } else if (article || params.get("demo") === "1") {
       openSample();
+      if (article) {
+        // 記事ではボックスと分岐が読める範囲から始める。All へはいつでも戻れる。
+        const state = useProjectStore.getState();
+        const blocks = Object.values(state.project?.blocks ?? {});
+        const scope = blocks.find((b) => b.kind === "task" && blocks.some((child) => child.parentId === b.id));
+        if (scope) state.setViewScope(scope.id);
+      }
     } else if (params.get("serve") === "1") {
       void openFromServer(); // npx boxglow serve が配信する手元の boxglow.json
     } else {
@@ -122,6 +131,13 @@ export function App() {
     }
     return () => observer?.disconnect();
   }, [setMode, openSample, openExample, openProject, openFromServer, openFromVsCode]);
+
+  // 保存が終わっていない編集 (保存中・未保存) があるときは、タブを閉じる・再読み込みの前にブラウザの確認を出す (サンプルは保存しないので対象外)
+  useEffect(() => {
+    const onLeave = (e: BeforeUnloadEvent) => { const s = useProjectStore.getState(); if (!s.ephemeral && ["saving", "unsaved"].includes(s.saveState)) { e.preventDefault(); e.returnValue = ""; } };
+    window.addEventListener("beforeunload", onLeave);
+    return () => window.removeEventListener("beforeunload", onLeave);
+  }, []);
 
   // 通知は 3 秒で消す
   useEffect(() => {
@@ -133,6 +149,8 @@ export function App() {
   // キーボード操作
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
+      if (document.querySelector("dialog[open]")) return; // 競合の比較などのダイアログを開いている間は、図のショートカットを効かせない
+      if (ev.isComposing) return; // 日本語変換中のキー (確定の Enter など) は操作として扱わない
       const target = ev.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)) return;
       const p = useProjectStore.getState().project;
@@ -194,7 +212,7 @@ export function App() {
     url.searchParams.delete("embed");
     url.searchParams.delete("readonly");
     url.searchParams.delete("view");
-    url.searchParams.set("demo", "daw"); // 記事から「全画面で開く」は同じ例を開く
+    url.searchParams.set("demo", url.searchParams.get("demo") === "daw" ? "daw" : "1"); // 記事から「全画面で開く」は同じ例を開く
     return url.toString();
   }, []);
 
@@ -207,7 +225,7 @@ export function App() {
   const wireTabs = useMemo(() => (project && selection.edgeId && project.edges[selection.edgeId] ? new Set(wireNetTabs(project, selection.edgeId)) : undefined), [project, selection.edgeId]);
   const showTabs = !!project && majors.length > 0; // 埋め込みでも出す (All は大項目までしか見せないので、中を見る手段が要る)
   const scopeOk = viewScope && project?.blocks[viewScope] ? viewScope : null;
-  // パンくず: 開いている箱から大項目までの道 (タブは大項目で選ぶ)
+  // パンくず: 開いているボックスから大項目までの道 (タブは大項目で選ぶ)
   const path = useMemo(() => (project && scopeOk ? scopePath(project, scopeOk) : []), [project, scopeOk]);
   const activeTab = path[0]?.id ?? null;
 
@@ -215,6 +233,7 @@ export function App() {
     <div className={gridClass} style={{ ["--right-w" as string]: `${rightW}px` }}>
       <div className="app-top">
         {project && !embed && <TopBar project={project} onToggleDrawer={toggleDrawer} onHelp={() => setHelpOpen(true)} />}
+        {project && !embed && <SaveNotice />}
       </div>
 
       <main className="app-main relative min-w-0 min-h-0">
@@ -261,17 +280,17 @@ export function App() {
             <div className="card modal p-5 flex flex-col gap-2" style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>
               <div className="font-head text-[16px]">Help</div>
               <table className="help-table"><tbody>
-                <tr><td>{t("ブロックを置く")}</td><td><span className="kbd">N</span> {t("または「+ Block」(選んだ箱の中に)")}</td></tr>
+                <tr><td>{t("ブロックを置く")}</td><td><span className="kbd">N</span> {t("または「+ Block」(選んだボックスの中に)")}</td></tr>
                 <tr><td>Edit / View</td><td>{t("上の切替。Edit のときだけドラッグで移動・結線・階層移動と Del が効く")}</td></tr>
-                <tr><td>{t("結線")}</td><td>{t("丸から相手の丸、または相手の箱へドラッグ (近くで離せばつながる)")}</td></tr>
-                <tr><td>{t("階層を移す")}</td><td>{t("箱をドラッグして別の箱の中に落とす")}</td></tr>
+                <tr><td>{t("結線")}</td><td>{t("丸から相手の丸、または相手のボックスへドラッグ (近くで離せばつながる)")}</td></tr>
+                <tr><td>{t("階層を移す")}</td><td>{t("ボックスをドラッグして別のボックスの中に落とす")}</td></tr>
                 <tr><td>{t("下の階層を畳む / 展開")}</td><td>{t("ブロックをダブルクリック")}</td></tr>
                 <tr><td>{t("削除")}</td><td><span className="kbd">Del</span></td></tr>
                 <tr><td>{t("元に戻す / やり直す")}</td><td><span className="kbd">Ctrl+Z</span> / <span className="kbd">Ctrl+Y</span></td></tr>
                 <tr><td>{t("選択を解除")}</td><td><span className="kbd">Esc</span></td></tr>
               </tbody></table>
               <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>
-                {t("箱は「入力から出力を作るタスク」。出力を先に決め、大きな箱は「分解する」で中に箱を置く。供給元の無い入力は左端の入力まで自動で点線が伸びる。")}
+                {t("ボックスは「入力から出力を作るタスク」。出力を先に決め、大きなボックスは「分解する」で中にボックスを置く。供給元の無い入力は左端の入力まで自動で点線が伸びる。")}
               </div>
               <button className="btn btn-sm self-end" onClick={() => setHelpOpen(false)}>Close</button>
             </div>
@@ -293,7 +312,8 @@ export function App() {
           </>
         )}
         {!project && <span style={{ color: "var(--text-muted)" }}>Boxglow</span>}
-        <span className="ml-auto text-[10px]" style={{ color: "var(--text-muted)" }} title={t("ビルド日時 (日本時間)。古い場合は再読み込み (Ctrl+F5) してください")}>build {__BUILD__}</span>
+        <VersionInfo />
+        <span className="build-stamp text-[10px]" style={{ color: "var(--text-muted)" }} title={t("ビルド日時 (日本時間)。古い場合は再読み込み (Ctrl+F5) してください")}>build {__BUILD__}</span>
       </footer>
 
       {toast && <div className="toast" role="status">{toast}</div>}

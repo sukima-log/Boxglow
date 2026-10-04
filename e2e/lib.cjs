@@ -49,7 +49,7 @@ async function open(browser, opts = {}) {
 /**
  * 計画のファイルを読み込ませる (ブラウザ内保存に取り込む)
  * Input : page, file = boxglow.json のパス (または JSON 文字列を返す関数)
- * Output: なし (箱が描かれるまで待つ)
+ * Output: なし (ボックスが描かれるまで待つ)
  */
 async function load(page, file) {
   const text = typeof file === "function" ? file() : fs.readFileSync(file, "utf8");
@@ -58,7 +58,7 @@ async function load(page, file) {
   await page.waitForTimeout(900);
 }
 
-/** 大項目 (プロジェクト直下の箱) の一覧 [{ id, title }] */
+/** 大項目 (プロジェクト直下のボックス) の一覧 [{ id, title }] */
 const majorsOf = (page) => page.evaluate(() => {
   const s = window.boxglow.store.getState();
   const bs = Object.values(s.project.blocks);
@@ -66,25 +66,33 @@ const majorsOf = (page) => page.evaluate(() => {
   return bs.filter((b) => pj.has(b.parentId)).map((b) => ({ id: b.id, title: b.title }));
 });
 
-/** 題名から箱の id を引く */
+/** 題名からボックスの id を引く */
 const idOf = (page, title) => page.evaluate((t) => Object.values(window.boxglow.store.getState().project.blocks).find((b) => b.title === t)?.id ?? null, title);
 
 /**
  * タブを切り替えて、画面が落ち着くまでの時間を測る
+ * 見張るもの: 図の位置と倍率 (viewport の transform)、描かれているボックスの数、線の数。
+ * transform だけを見ると、大きいタブや All では transform が変わる前に「落ち着いた」と判定して 0 ms を返すことがある
+ * (重い描画の間は setInterval が回らず、描画の後に transform が元と同じ文字列のことがあるため)。
+ * ボックスと線の数が入れ替わってから 350 ms 変化が無くなるまでを測れば、描画の重さがそのまま時間に出る。
  * Input : page, scope = 大項目の id (null = All)
- * Output: 所要時間 (ms)
+ * Output: 所要時間 (ms。最後に画面が変わった時刻 - 切り替えを始めた時刻)
  */
 async function switchTab(page, scope) {
   return page.evaluate(async (id) => {
+    // 画面の状態を 1 つの文字列にする (どれか 1 つでも変われば「まだ動いている」)
+    const sig = () => document.querySelector(".react-flow__viewport").style.transform
+      + "|" + document.querySelectorAll(".react-flow__node").length
+      + "|" + document.querySelectorAll(".react-flow__edge path.react-flow__edge-path").length;
     const t0 = performance.now();
     window.boxglow.store.getState().setViewScope(id);
-    let last = document.querySelector(".react-flow__viewport").style.transform;
+    let last = sig();
     let since = performance.now();
     return await new Promise((res) => {
       const i = setInterval(() => {
-        const tr = document.querySelector(".react-flow__viewport").style.transform;
+        const cur = sig();
         const now = performance.now();
-        if (tr !== last) { last = tr; since = now; }
+        if (cur !== last) { last = cur; since = now; }
         if (now - since > 350) { clearInterval(i); res(Math.round(since - t0)); }
       }, 10);
     });
@@ -92,9 +100,9 @@ async function switchTab(page, scope) {
 }
 
 /**
- * 今の画面で、描かれている線 (SVG の path そのもの) が箱の内側を通っていないか調べる
- * 判定: path を 4px ごとに標本化し、両端以外の箱の内側 (1px 内側) に 3 点以上、
- *       または両端の箱の内側 (8px 内側 = 反対側から貫いている) に 3 点以上あれば貫通
+ * 今の画面で、描かれている線 (SVG の path そのもの) がボックスの内側を通っていないか調べる
+ * 判定: path を 4px ごとに標本化し、両端以外のボックスの内側 (1px 内側) に 3 点以上、
+ *       または両端のボックスの内側 (8px 内側 = 反対側から貫いている) に 3 点以上あれば貫通
  * Output: 貫通の一覧 [{ src, dst, box }]
  */
 const penetrations = (page) => page.evaluate(() => {
@@ -117,7 +125,7 @@ const penetrations = (page) => page.evaluate(() => {
     const ends = new Set([e.source, e.target]);
     const around = new Set([...(p.blocks[e.source] ? anc(e.source) : []), ...(p.blocks[e.target] ? anc(e.target) : [])]);
     for (const r of rects) {
-      if (around.has(r.id) && !ends.has(r.id)) continue; // 親の箱の中を通るのは当然
+      if (around.has(r.id) && !ends.has(r.id)) continue; // 親のボックスの中を通るのは当然
       const other = r.id === e.source ? e.target : e.source;
       if (ends.has(r.id) && p.blocks[other] && anc(other).has(r.id)) continue; // 親子の線 (内側のポート)
       const inset = ends.has(r.id) ? 8 : 1;

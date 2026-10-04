@@ -1,8 +1,8 @@
 /**
  * キャンバスのタブ (表示範囲 scope) でのノード・線の絞り込みの確認
- * - 範囲の箱の中だけが出る。最上位の入力・出力ノードは出ず、代わりに範囲の箱の入力/出力ノード (scope-in / scope-out) が出る
- * - 範囲の箱は「上の階層の箱」として絶対座標に置かれ、動かせない。中の箱はその箱を親にする。入力/出力ノードは箱の外 (最上位)
- * - 範囲の外とつながる線は hidden になり、入力/出力ノードと箱の外側の面とをつなぐ線が合成される
+ * - 範囲のボックスの中だけが出る。最上位の入力・出力ノードは出ず、代わりに範囲のボックスの入力/出力ノード (scope-in / scope-out) が出る
+ * - 範囲のボックスは「上の階層のボックス」として絶対座標に置かれ、動かせない。中のボックスはそのボックスを親にする。入力/出力ノードはボックスの外 (最上位)
+ * - 範囲の外とつながる線は hidden になり、入力/出力ノードとボックスの外側の面とをつなぐ線が合成される
  */
 import { describe, expect, it } from "vitest";
 import { buildSampleProject } from "../model/sample";
@@ -15,7 +15,7 @@ describe("表示範囲 (大項目のタブ)", () => {
   const majors = childrenOf(p, parent);
   const scope = majors.find((b) => childrenOf(p, b.id).length > 0) ?? majors[0];
 
-  it("中の箱と範囲の入力/出力ノードだけが出て、最上位の入力・出力ノードは出ない", () => {
+  it("中のボックスと範囲の入力/出力ノードだけが出て、最上位の入力・出力ノードは出ない", () => {
     const nodes = buildNodes(p, { selectedBlockId: null, readonly: false, scope: scope.id });
     const ids = new Set(nodes.map((n) => n.id));
     expect(ids.has("root-in")).toBe(false);
@@ -24,14 +24,14 @@ describe("表示範囲 (大項目のタブ)", () => {
     const tout = nodes.find((n) => n.id === SCOPE_OUT)!;
     expect(tin.type).toBe("terminal");
     expect(tout.type).toBe("terminal");
-    expect(tin.parentId).toBeUndefined(); // 箱の外 (最上位) に置く
+    expect(tin.parentId).toBeUndefined(); // ボックスの外 (最上位) に置く
     expect((tin.data as { scopeId?: string }).scopeId).toBe(scope.id);
     expect(ids.has(scope.id)).toBe(true);
     for (const kid of childrenOf(p, scope.id)) expect(ids.has(kid.id)).toBe(true);
     for (const other of majors) if (other.id !== scope.id) expect(ids.has(other.id)).toBe(false);
   });
 
-  it("範囲の箱は上の階層の箱として絶対座標に置かれ、動かせない", () => {
+  it("範囲のボックスは上の階層のボックスとして絶対座標に置かれ、動かせない", () => {
     const nodes = buildNodes(p, { selectedBlockId: null, readonly: false, scope: scope.id });
     const n = nodes.find((x) => x.id === scope.id)!;
     expect(n.type).toBe("block");
@@ -43,7 +43,7 @@ describe("表示範囲 (大項目のタブ)", () => {
     let cur = scope.parentId;
     while (cur && p.blocks[cur] && p.blocks[cur].parentId !== null) { x += p.blocks[cur].position.x; y += p.blocks[cur].position.y; cur = p.blocks[cur].parentId; }
     expect(n.position).toEqual({ x, y });
-    // 中の箱は親の座標系のまま
+    // 中のボックスは親の座標系のまま
     const kid = childrenOf(p, scope.id)[0];
     if (kid) expect(nodes.find((x) => x.id === kid.id)!.parentId).toBe(scope.id);
   });
@@ -55,7 +55,7 @@ describe("表示範囲 (大項目のタブ)", () => {
     for (const e of edges) {
       if (!ids.has(e.source) || !ids.has(e.target)) expect(e.hidden).toBe(true);
     }
-    // 範囲の箱の外側の面につながる本物の線 (兄弟・親との線) は hidden
+    // 範囲のボックスの外側の面につながる本物の線 (兄弟・親との線) は hidden
     for (const e of edges) {
       const edge = p.edges[e.id];
       if (!edge) continue;
@@ -63,7 +63,7 @@ describe("表示範囲 (大項目のタブ)", () => {
       const toScope = p.ports[edge.to.portId].blockId === scope.id;
       if ((fromScope && edge.from.side === "outer") || (toScope && edge.to.side === "outer")) expect(e.hidden).toBe(true);
     }
-    // 合成した線: 入力ノード -> 箱の外側の入力、箱の外側の出力 -> 出力ノード (ポートの数だけ)
+    // 合成した線: 入力ノード -> ボックスの外側の入力、ボックスの外側の出力 -> 出力ノード (ポートの数だけ)
     const synthIn = edges.filter((e) => e.source === SCOPE_IN);
     const synthOut = edges.filter((e) => e.target === SCOPE_OUT);
     expect(synthIn.length).toBe(portsOf(p, scope.id, "in").length);

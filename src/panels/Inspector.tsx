@@ -4,11 +4,13 @@
  * 何も選んでいなければ何も出さない (App 側でパネルごと隠す)
  * 文言は日本語で書き t() で包む (英語は src/i18n/en/inspector.ts の辞書で引く)
  */
+import { isAcked as decisionIsAcked } from "../model/graph";
 import { useEffect, useMemo, useState } from "react";
 import { addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, disconnect, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, missingRequiredInputs, removeBlock, setCategory, setProgress, setSchedule, updateBlock, wireNetTabs } from "../model/graph";
 import { saveTemplate } from "../lib/templates";
 import { actorLabel, ACTIVITY_LABEL, agoText } from "../model/report";
 import { DecisionCard, Timeline } from "./Timeline";
+import { agentContext } from "../model/context";
 import { blockToPrompt } from "../model/export";
 import { ROOT_ID, type BlockStatus, type Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
@@ -149,7 +151,9 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   const chain = [...ancestorsOf(project, blockId)].reverse();
   const suggest = canSuggestWhite(project, blockId);
   const prog = computeProgress(project, blockId);
-  const pending = b.decisions.filter((d) => d.answer === undefined);
+  const pending = b.decisions.filter((d) => d.answer === undefined); // まだ答えていない質問
+  // 人が答えたが、AI がまだ引き取っていない (ack していない) 回答。引き取られるまでパネルの先頭に残す
+  const unread =b.decisions.filter((d) => d.answer !== undefined && !decisionIsAcked(project, blockId, d));
   const percent = effectiveProgress(project, blockId);
   const isProject = kindOf(b) === "project";
 
@@ -160,6 +164,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
     setMore(true);
     setMenu(false);
     setOwnerQuery("");
+    // タブは保つ (別のボックスを選んでも I/O などを続けて見比べられるように。Status には戻さない)
   }, [blockId]);
 
   const setStatus = (s: BlockStatus) => apply((p) => updateBlock(p, blockId, { status: s }));
@@ -237,6 +242,15 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       {/* 1. 状態と進捗 */}
       {tab === "status" && (
       <section className="sec">
+        {/* 人の対応が要るものを先頭に: 答えていない質問、次に AI がまだ読んでいない回答 (編集できる) */}
+        {pending.length > 0 && <div className="attention-section">
+          <h3 className="label">{t("回答が必要です")}</h3>
+          {pending.map((d) => <DecisionCard key={d.id} project={project} blockId={blockId} decisionId={d.id} />)}
+        </div>}
+        {unread.length > 0 && <div className="attention-section">
+          <h3 className="label">{t("AI未確認の回答")}</h3>
+          {unread.map((d) => <DecisionCard key={d.id} project={project} blockId={blockId} decisionId={d.id} />)}
+        </div>}
         <div className="sec__head"><span className="label">Status</span></div>
         <div className="seg">
           {(["black", "gray", "white"] as BlockStatus[]).map((s) => (
@@ -249,14 +263,14 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         {suggest && !readonly && (
           <button className="btn btn-primary btn-sm w-full" onClick={() => setStatus("white")} title={t("下の階層が全部完了し、出力に成果物が付いています")}>{t("完了にできます → Done")}</button>
         )}
-        {/* 必須の入力の状況 (I/O タブの 必須 / 任意 がここと箱の Ready に効く) */}
+        {/* 必須の入力の状況 (I/O タブの 必須 / 任意 がこことボックスの Ready に効く) */}
         {b.status !== "white" && kindOf(b) !== "project" && portsOf(project, blockId, "in").length > 0 && (() => {
           const missing = missingRequiredInputs(project, blockId);
           return missing.length === 0
             ? <div className="text-[12px]" style={{ color: "var(--primary-strong)" }}>{t("必須の入力はそろっています (着手できます)")}</div>
             : <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("必須の入力待ち: {names}", { names: missing.map((q) => q.name).join(", ") })}</div>;
         })()}
-        {/* プロジェクトの箱: 対応するリポジトリ (複数リポジトリを 1 つのファイルで管理するときの目印) */}
+        {/* プロジェクトのボックス: 対応するリポジトリ (複数リポジトリを 1 つのファイルで管理するときの目印) */}
         {isProject && (
           <>
             <div className="sec__head mt-2"><span className="label">Repository</span></div>
@@ -266,18 +280,14 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
             <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{t("複数のリポジトリをまたぐときは、boxglow.json を上のフォルダに 1 つ置き、各リポジトリの AI には環境変数 BOXGLOW_FILE でその場所を教えます")}</div>
           </>
         )}
-        {/* カテゴリ: 何の種類の仕事か (色の帯と札で箱に出る)。もう一度押すと外す。札の訳は common.ts */}
-        <div className="sec__head mt-2"><span className="label">Category</span></div>
-        <div className="flex flex-wrap gap-1">
-          {CATEGORIES.map((c) => (
-            <button key={c.key} className={`chip cat-chip${c.neutral ? " neutral" : ""}`} data-on={b.category === c.key} disabled={readonly}
-              style={{ "--cat": c.color } as React.CSSProperties}
-              onClick={() => apply((p) => setCategory(p, blockId, b.category === c.key ? null : c.key))}
-              title={`${t(c.label)} (${c.en})`}>
-              <span className="cat-chip__dot" />{t(c.label)}
-            </button>
-          ))}
-        </div>
+        {/* カテゴリ: 何の種類の仕事か (ボックスの札に出る)。候補が多いので一覧のボタンではなく選択欄にまとめる。空を選ぶと外す。札の訳は common.ts */}
+        <label className="category-field"><span className="label">Category</span>
+          <select className="input" aria-label="Category" value={b.category ?? ""} disabled={readonly}
+            onChange={(e) => apply((p) => setCategory(p, blockId, (e.target.value || null) as Parameters<typeof setCategory>[2]))}>
+            <option value="">{t("カテゴリなし")}</option>
+            {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{t(c.label)}</option>)}
+          </select>
+        </label>
         {b.status !== "white" && (
           <div className="flex items-center gap-2 text-[12px]" style={{ color: "var(--text-muted)" }}>
             <input type="range" min={0} max={100} step={5} value={percent} disabled={readonly} className="flex-1" title={t("進捗 (ドラッグで入力)")}
@@ -302,13 +312,21 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
             {b.activity.note && b.activity.state !== "needs_decision" && <div className="text-[13px]">{b.activity.note}</div>}
           </div>
         )}
-        {pending.map((d) => <DecisionCard key={d.id} project={project} blockId={blockId} decisionId={d.id} />)}
+        {/* AI への引き継ぎ: セッションをまたいで残すメモ (project.handoffs にボックスごとに 1 つ)。メモがあるときは開いた状態で出す。
+            下のボタンは、判断・入出力も含めた引き継ぎ情報 (agentContext) を JSON でコピーする */}
+        <details className="text-[12px]" open={!!project.handoffs?.[blockId]}>
+          <summary>{t("AI への引き継ぎ")}</summary>
+          <p className="my-2">{t("セッションを越えて残す発見・次の手順・未解決事項。AI は context コマンドで判断と合わせて読み直します。")}</p>
+          <DebouncedText multiline className="input" value={project.handoffs?.[blockId]?.note ?? ""} disabled={readonly} placeholder={t("発見 / 次の手順 / 未解決事項")}
+            onCommit={(note) => apply((q) => ({ ...q, handoffs: { ...q.handoffs, [blockId]: { note, actor: "human", at: new Date().toISOString() } } }))} />
+          <button className="btn btn-sm mt-2" onClick={async () => { const ok = await copyText(JSON.stringify(agentContext(project, blockId), null, 2)); setToast(ok ? t("引き継ぎ情報をコピーしました") : t("コピーできませんでした")); }}>{t("判断・入出力も含めてコピー")}</button>
+        </details>
         {/* 回答済みの判断も残す: 選んだもの・残した候補・以前の答えが見え、やり直せる */}
-        {b.decisions.filter((d) => d.answer !== undefined).length > 0 && (
+        {b.decisions.filter((d) => d.answer !== undefined && decisionIsAcked(project, blockId, d)).length > 0 && (
           <details className="text-[12px]">
-            <summary style={{ cursor: "pointer", color: "var(--text-muted)" }}>{t("判断の記録 ({n})", { n: b.decisions.filter((d) => d.answer !== undefined).length })}</summary>
+            <summary style={{ cursor: "pointer", color: "var(--text-muted)" }}>{t("判断の記録 ({n})", { n: b.decisions.filter((d) => d.answer !== undefined && decisionIsAcked(project, blockId, d)).length })}</summary>
             <div className="flex flex-col gap-3 mt-2">
-              {b.decisions.filter((d) => d.answer !== undefined).map((d) => <DecisionCard key={d.id} project={project} blockId={blockId} decisionId={d.id} />)}
+              {b.decisions.filter((d) => d.answer !== undefined && decisionIsAcked(project, blockId, d)).map((d) => <DecisionCard key={d.id} project={project} blockId={blockId} decisionId={d.id} />)}
             </div>
           </details>
         )}
@@ -393,7 +411,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       {tab === "more" && (<>
       <section className="sec">
         <div className="sec__head"><span className="label">Issue</span></div>
-        {/* 外部の課題 (JIRA / Redmine / GitHub Issue) の URL。箱にはキー (PROJ-123, #45) の札が出て、押すと開く */}
+        {/* 外部の課題 (JIRA / Redmine / GitHub Issue) の URL。ボックスにはキー (PROJ-123, #45) の札が出て、押すと開く */}
         <input className="input" placeholder={t("JIRA / Redmine / GitHub Issue の URL")} value={b.issue ?? ""} disabled={readonly}
           onChange={(e) => apply((p) => updateBlock(p, blockId, { issue: e.target.value }), { history: false })}
           onBlur={(e) => apply((p) => updateBlock(p, blockId, { issue: e.target.value.trim() || undefined }))} />
@@ -401,7 +419,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       </section>
       <section className="sec">
         <div className="sec__head"><span className="label">AI</span>
-        <button className="btn btn-sm" data-on={aiOpen} onClick={() => setAiOpen(!aiOpen)} title={t("この箱の入出力と位置づけを Markdown にしてコピーして AI に渡す")}>Copy for AI {aiOpen ? "▴" : "▾"}</button>
+        <button className="btn btn-sm" data-on={aiOpen} onClick={() => setAiOpen(!aiOpen)} title={t("このボックスの入出力と位置づけを Markdown にしてコピーして AI に渡す")}>Copy for AI {aiOpen ? "▴" : "▾"}</button>
         </div>
       {aiOpen && (
         <div className="flex flex-col pl-2" style={{ borderLeft: "3px solid var(--line-soft)" }}>

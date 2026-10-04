@@ -1,10 +1,33 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-10-04)
 
-- Straighter, less tangled wires: in a tab the Inputs / Outputs nodes line up with the opened box's port rows, so those wires run straight; parallel Z-shaped wires are now ordered by their direction (a bundle going down-right nests instead of crossing itself). Crossings on the DAW example went from 14 to 0, on Boxglow's own plan from 211 to 163.
-- Activity panel: one item at a time. Tabs with counts (Decisions / Answered / Working / Next / Log) replace the single mixed list; the panel opens on the first tab that needs you. Working rows show the full title and note instead of cutting them off.
-- When the browser refuses to open a picked file (for example a file under `\\wsl.localhost\...`, which Chrome blocks as a protected location), the Home dialog now says so and points to `npx boxglow serve --open` instead of silently doing nothing.
+Reviewed and extended together with Codex; "箱" is now "ボックス" throughout the Japanese UI, CLI and instructions.
+
+Remembering decisions across sessions
+- `context <box>` returns what an agent must read before working (the task, its parents and upstream boxes, answered decisions, input / output contracts, handoff notes) plus a context token. `checkpoint <box> --note ...` stores findings, next steps and open questions in the plan. `resume` (CLI, MCP `boxglow_resume`, the Resume tab of the Activity panel) lists unread answers, handoff notes and next candidates in one place.
+- Context guard (`setup-agent` enables it; `guard on|off`): `start`, `done`, `set`, `split`, `artifact`, `ack`, `blocked`, `review`, `leave` and `checkpoint` by an agent need the current context token (`--context-token`). When a person answers, edits an answer, changes the instructions, or another agent leaves a handoff, the old token is rejected and the agent has to read the context again. People (`--actor human`) are never asked for a token. After an agent's own change the CLI prints the new token, so it can continue without re-reading. Volatile fields (`checkedAt`) are not part of the token.
+- Editing an answered decision marks it "not read by the AI" again. Asking another question no longer acknowledges earlier answers.
+
+Saving without losing changes
+- CLI, `serve` and the VS Code extension share one lock and compare the revision they read with the file on disk before writing (atomic replace). A stale write is refused instead of silently overwriting. The lock records its owner, stale locks are recovered automatically, and writers wait a few seconds for each other; concurrent CLI commands reload and retry, so six parallel `add` calls all succeed.
+- `serve`: `PUT` needs `If-Match` (ETag), validates the plan (schema, references, parent cycles), accepts only local Host / Origin, JSON, 5 MiB. The app shows what failed and keeps your edits; on a conflict it lets you compare both values and choose per item, or export your copy.
+- VS Code extension: "Saved" is shown only after the edit was applied, the document saved and the disk content confirmed (also for CRLF files); failures keep your edits with retry / export.
+- Opening a file directly in the browser (File System Access) is now view-only, because the browser cannot take part in the lock. Edit through `npx boxglow serve --open` or the VS Code extension. The Home dialog says so.
+- 3-way merge: when one side deleted a box and the other changed it, the changed box is kept and the conflict is recorded.
+
+Screen
+- Wires from the same output draw their shared run once and mark real branch points with a dot; the selected branch stays continuous from the output. A new tool strip on the canvas (zoom, Fit, jump to selection, and a View drawer with legend, 8 px snapping, "align this level", minimap, help) replaces the default controls. Click-to-connect with Esc to cancel; connecting is disabled in View.
+- Top bar shows the open plan and where it is saved; on narrow screens the bar wraps and secondary actions move into the menu. Home: a short welcome with "Try the sample"; your own plans open directly when the browser already has some. The sample is a small web-app plan (the DAW example stays at `?demo=daw`).
+- Details panel: questions and unread answers come first; categories are one select box. Activity panel: tabs with counts (Resume / Decisions / Answered / Working / Next / Log), opening on the first that needs you; working rows show the full title and note.
+- In a tab the Inputs / Outputs nodes line up with the opened box's port rows (straight wires); parallel Z-shaped wires are ordered by direction. Crossings on the DAW example went from 14 to 0.
+- When the browser refuses to open a picked file (for example under `\\wsl.localhost\...`), the Home dialog says so and points to `npx boxglow serve --open`.
+- IME confirmation (Enter while converting Japanese) no longer creates a project or submits a search. Version of the app, the connected CLI and the extension is shown in the footer.
+
+CLI
+- `setup-agent --agent codex|claude-code|all` (Codex: `AGENTS.md` and `.agents/skills`; Claude Code: `CLAUDE.md`, skill, hook, `.mcp.json`); malformed existing settings stop setup instead of being overwritten.
+- `status --brief`, `version`, MCP tools report failed validation as errors and honour `mcp --actor`. Uncommitted files are recorded as local references and upgraded to Git references by `check` once committed.
+- Browser checks in `e2e/` grew to 167 (Home, saving and conflicts, canvas, crossings and tab-switch time on the development plan).
 
 ## 0.3.0 (2026-10-03)
 

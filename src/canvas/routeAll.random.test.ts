@@ -1,7 +1,7 @@
 /**
- * 無作為な配置で「線が箱を貫かない」ことを確かめる (性質テスト)
- * 親の箱の中に大きさの違う箱を無作為に置き (隙間は 24px 以上。詰めた配置も含む)、無作為に結線して routeAll で経路を求め、
- * どの線分も両端以外の箱の内側を通らないこと、両端の箱も反対側から貫かないことを調べる
+ * 無作為な配置で「線がボックスを貫かない」ことを確かめる (性質テスト)
+ * 親のボックスの中に大きさの違うボックスを無作為に置き (隙間は 24px 以上。詰めた配置も含む)、無作為に結線して routeAll で経路を求め、
+ * どの線分も両端以外のボックスの内側を通らないこと、両端のボックスも反対側から貫かないことを調べる
  */
 import { describe, expect, it } from "vitest";
 import { routeAll, type EdgeSpec, type NodeRect } from "./routeAll";
@@ -51,7 +51,7 @@ function makeCase(seed: number, gapMin: number): { nodes: NodeRect[]; edges: Edg
   return { nodes, edges, parent };
 }
 
-describe("無作為な配置でも線は箱を貫かない", () => {
+describe("無作為な配置でも線はボックスを貫かない", () => {
   for (const [label, gapMin] of [["通常の間隔 (96px 以上)", 96], ["詰めた間隔 (24px 以上)", 24]] as const) {
     it(label, { timeout: 120000 }, () => { // 300 通りの経路計算は CI の遅い環境でも数十秒かかることがある (既定の 5 秒では足りない)
       const failures: string[] = [];

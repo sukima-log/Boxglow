@@ -1,25 +1,52 @@
 /** 英語の辞書 (app: App / TopBar / TabBar / HomeDialog / store の toast)。キー = ソースの日本語の文 */
 export const app: Record<string, string> = {
-  // App: キー操作・パンくず・絞り込み
-  "「{title}」と下の階層のブロックを削除します。よろしいですか?": "Delete \"{title}\" and all boxes inside it?"
-, "新しいブロック": "New box"
+  "最新のファイルを取得できません。接続を確認して保存を再試行してください。": "Could not read the latest file. Check the connection and retry saving.",
+  "別の保存処理が進行中です。編集は保持しています。少し待って保存を再試行してください。": "Another save is in progress. Your edits are retained. Wait briefly and retry saving.",
+  "計画の形式や参照に問題があり、保存できません。編集を JSON で退避して確認してください。": "The plan has an invalid structure or reference. Export your edits as JSON for review.",
+  "計画が保存可能なサイズ（5 MiB）を超えています。編集を JSON で退避してください。": "The plan exceeds the 5 MiB save limit. Export your edits as JSON.",
+  "接続できません。編集は保持しています。サーバーを確認して保存を再試行してください。": "Connection failed. Your edits are retained. Check the server and retry saving.",
+  "閲覧専用": "Read only",
+
+  "保存の応答がありません。編集は画面に残っています。再試行してください。": "No save acknowledgement. Your edits remain here. Retry saving.",
+  "他の編集と競合しました。両方の変更を保持しているので、統合方法を選んでください。": "Another edit conflicts with yours. Both versions are retained. Choose how to resolve them.",
+  "共同編集は npx boxglow serve --open または VS Code 拡張で開いてください。": "For shared editing, open with npx boxglow serve --open or the VS Code extension.",
+  "未保存の編集があります。必要なら JSON を書き出してください。編集を破棄して移動しますか？": "You have unsaved edits. Export JSON if needed. Discard the edits and leave?",
+  // store (useProjectStore の canLeave) が使う文は「先に」が入る。キーが 1 文字でも違うと英語にならないので両方置く
+  "未保存の編集があります。必要なら先に JSON を書き出してください。編集を破棄して移動しますか？": "You have unsaved edits. Export JSON first if needed. Discard the edits and leave?",
+  "保存に失敗しました": "Saving failed",
+  "このファイルは閲覧専用です。共同編集は npx boxglow serve --open または VS Code 拡張で開いてください。": "This file is read-only. For shared editing, use npx boxglow serve --open or the VS Code extension.",
+  "手元の編集を JSON で退避": "Export unsaved edits as JSON",
+  "手元を退避して最新のファイルを開く": "Export mine and open the latest file",
+  "別の項目の変更です。統合できます。": "Different fields changed. They can be merged.",
+  "保存を再試行": "Retry saving",
+  "AI への引き継ぎ": "Agent handoff",
+  "セッションを越えて残す発見・次の手順・未解決事項。AI は context コマンドで判断と合わせて読み直します。": "Keep findings, next steps and open questions across sessions. Agents reread these with decisions using the context command.",
+  "発見 / 次の手順 / 未解決事項": "Findings / next steps / open questions",
+  "引き継ぎ情報をコピーしました": "Handoff context copied",
+  "判断・入出力も含めてコピー": "Copy with decisions and input/output contracts",
+  "ファイルを閲覧": "View file",
+
+  "コピー": "Copy",
+  "ブラウザ内": "Browser",
+  // App: キー操作・パンくず・絞り込み (ボックスの削除の確認文は inspector.ts にある)
+  "新しいブロック": "New box"
 , "大項目の一覧へ": "Back to the overview"
 , "{title} へ戻る": "Back to {title}"
 , "絞り込みを解除": "Clear the filter"
   // App: ヘルプ
 , "ブロックを置く": "Add a box"
-, "または「+ Block」(選んだ箱の中に)": "or \"+ Box\" (inside the selected box)"
+, "または「+ Block」(選んだボックスの中に)": "or \"+ Box\" (inside the selected box)"
 , "上の切替。Edit のときだけドラッグで移動・結線・階層移動と Del が効く": "Toggle at the top. Drag to move, wire, re-parent and Del work only in Edit"
 , "結線": "Wire"
-, "丸から相手の丸、または相手の箱へドラッグ (近くで離せばつながる)": "Drag from a dot to another dot or box (release nearby to connect)"
+, "丸から相手の丸、または相手のボックスへドラッグ (近くで離せばつながる)": "Drag from a dot to another dot or box (release nearby to connect)"
 , "階層を移す": "Move into a box"
-, "箱をドラッグして別の箱の中に落とす": "Drag a box and drop it inside another"
+, "ボックスをドラッグして別のボックスの中に落とす": "Drag a box and drop it inside another"
 , "下の階層を畳む / 展開": "Collapse / expand"
 , "ブロックをダブルクリック": "Double-click a box"
 , "削除": "Delete"
 , "元に戻す / やり直す": "Undo / Redo"
 , "選択を解除": "Clear selection"
-, "箱は「入力から出力を作るタスク」。出力を先に決め、大きな箱は「分解する」で中に箱を置く。供給元の無い入力は左端の入力まで自動で点線が伸びる。": "A box is a task that turns inputs into an output. Decide the output first; break big boxes down by putting boxes inside. Inputs with no source get a dotted line from the left edge automatically."
+, "ボックスは「入力から出力を作るタスク」。出力を先に決め、大きなボックスは「分解する」で中にボックスを置く。供給元の無い入力は左端の入力まで自動で点線が伸びる。": "A box is a task that turns inputs into an output. Decide the output first; break big boxes down by putting boxes inside. Inputs with no source get a dotted line from the left edge automatically."
   // App: 埋め込み・フッタ
 , "Boxglow で開く": "Open in Boxglow"
 , "ビルド日時 (日本時間)。古い場合は再読み込み (Ctrl+F5) してください": "Build time (JST). If it looks old, reload with Ctrl+F5"
@@ -28,7 +55,6 @@ export const app: Record<string, string> = {
 , "Mermaid をコピーしました": "Mermaid copied"
 , "コピーできませんでした": "Could not copy"
 , "サンプルは保存されません。Save で自分のプロジェクトとして保存": "The sample is not saved. Press Save to keep it as your own project"
-, "{file} に自動で保存します (変更から 1 秒後)。Save で今すぐ書きます": "Auto-saves to {file} (1 second after a change). Save writes it now"
 , "このブラウザに自動で保存します": "Auto-saves in this browser"
 , "階層 / 絞り込み / メンバー / 部品": "Tree / Filter / Members / Parts"
 , "Home (プロジェクト一覧へ)": "Home (project list)"
@@ -38,11 +64,11 @@ export const app: Record<string, string> = {
 , "View モード: ドラッグでの編集は効きません。押すと Edit に": "View mode: dragging does not edit. Click to switch to Edit"
 , "Search  ID / 題名": "Search  ID / title"
 , "見つかりません": "No matches"
-, "ブロックを追加 (N)。箱を選んでいればその中に、選んでいなければプロジェクトの中に": "Add a box (N): inside the selected box, or in the project if nothing is selected"
+, "ブロックを追加 (N)。ボックスを選んでいればその中に、選んでいなければプロジェクトの中に": "Add a box (N): inside the selected box, or in the project if nothing is selected"
 , "Auto Layout: 依存関係で並べ直す (大項目は畳んだ前提)": "Auto Layout: arrange by dependencies (top-level boxes assumed collapsed)"
 , "元に戻す (Ctrl+Z)": "Undo (Ctrl+Z)"
 , "やり直す (Ctrl+Y)": "Redo (Ctrl+Y)"
-, "同じファイルにプロジェクトの箱を足す": "Add a project box to the same file"
+, "同じファイルにプロジェクトのボックスを足す": "Add a project box to the same file"
 , "画面の文言の言語を切り替える": "Switch the UI language"
   // TabBar
 , "タブの一覧 (押して選ぶ)": "List of tabs (click to pick)"
@@ -52,17 +78,12 @@ export const app: Record<string, string> = {
 , "{title} (選んだ線の続きがある)": "{title} (the selected wire continues here)"
 , "{title} の中を見る": "Look inside {title}"
   // HomeDialog
-, "AI エージェントとチームの作業を、箱と線で一目で。": "See what AI agents and your team are doing, at a glance, as boxes and wires."
+, "AI エージェントとチームの作業を、ボックスと線で一目で。": "See what AI agents and your team are doing, at a glance, as boxes and wires."
   // 太字の npx boxglow を挟むので 2 つに分かれている: "<前> npx boxglow <後>"
-, "Claude Code / Codex が": "Opens the file that Claude Code / Codex updates with"
-, "で更新するファイルをそのまま開きます。変更は 1〜2 秒で画面に反映され、画面での編集はファイルに書き戻されます。": "directly. Changes appear on screen within 1-2 seconds, and edits made here are written back to the file."
 , "前回開いたファイル": "The file you opened last time"
-, "リポジトリ内の boxglow.json を直接開いて AI エージェントと共有するには、Chrome または Edge で開いてください。": "To open boxglow.json in your repository directly and share it with AI agents, use Chrome or Edge."
-, "まだありません。上から作るか、サンプルを開いてみてください。": "Nothing yet. Create one above, or open the sample."
 , "「{name}」を削除します。よろしいですか?": "Delete \"{name}\"?"
   // リンク (sukimalog.com) を挟むので 2 つに分かれている: "<前> (sukimalog.com) <後>"
 , "すきま研究所日誌": "An app from Sukima Lab Diary"
-, "のアプリ。紹介記事に使い方の説明があります。": "- the intro article there explains how to use it."
   // store: toast など
 , "サーバに書けません ({status})": "Could not write to the server ({status})"
 , "ファイルへの書き込みが許可されていません (Save を押すともう一度確認します)": "Writing to the file was not allowed (press Save to ask again)"
@@ -75,6 +96,19 @@ export const app: Record<string, string> = {
 , "「{name}」を読み込みました": "Loaded \"{name}\""
 , "{name} (複製)": "{name} (copy)"
 , "自分のプロジェクトとして保存しました": "Saved as your own project"
-, "回答済み": "Answered"
 , "このファイルはブラウザから直接開けませんでした ({error})。npx boxglow serve --open なら、どの場所のファイルでも開けます": "The browser could not open this file directly ({error}). npx boxglow serve --open opens a file in any location"
+
+, "AI と一緒に使う": "WORK WITH YOUR AI AGENT"
+, "リポジトリの計画を開く": "Open your repository plan"
+, "WSL・Firefox・Safari でも使うには、計画のあるフォルダーで実行します。": "For WSL, Firefox or Safari, run this in the folder containing your plan."
+, "まずブラウザで試す": "Try it in your browser"
+, "作成・インポートした計画は、このブラウザに保存されます。元のファイルや AI とは自動で同期しません。": "Created and imported plans are saved in this browser. They do not automatically sync with the original file or your AI agent."
+, "新しい計画の名前": "New project name"
+, "このブラウザに保存した計画": "Saved in this browser"
+, "使い方・CLI の手順": "Guide and CLI commands"
+, "コマンドをコピーしました": "Command copied"
+, "「{name}」を削除": "Delete \"{name}\""
+, "変更なし": "No changes"
+  // --- 保存の競合の統合で残すログ (useProjectStore.ts) ---
+, "競合を統合: {path} (採用: {selected} / 手元: {ours} / 相手: {theirs})": "Conflict {path}: selected {selected}; local {ours}; remote {theirs}"
 };

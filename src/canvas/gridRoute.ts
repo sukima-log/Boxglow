@@ -1,10 +1,10 @@
 /**
- * 最後の手段の経路探索: 格子 (箱の縁 ± 余白と端点の座標を集めた直交格子) の上で最短路 (Dijkstra) を求める
+ * 最後の手段の経路探索: 格子 (ボックスの縁 ± 余白と端点の座標を集めた直交格子) の上で最短路 (Dijkstra) を求める
  *
- * routeEdge の候補 (Z 型 / U 型 / S 型 / 戻る線) は形が決まっているので、箱が入り組んでいると
- * 「通れる隙間はあるのに候補に無い」ことがある。ここでは格子の上で箱 (余白込み) を通らない辺だけをたどるので、
+ * routeEdge の候補 (Z 型 / U 型 / S 型 / 戻る線) は形が決まっているので、ボックスが入り組んでいると
+ * 「通れる隙間はあるのに候補に無い」ことがある。ここでは格子の上でボックス (余白込み) を通らない辺だけをたどるので、
  * 通れる経路があれば必ず見つかる (無ければ null)。曲がりは罰を付けて少なくする。
- * 余白は 36 → 12 → 2 の順に試す (狭い隙間でも、箱を貫くよりは詰めて通す)。
+ * 余白は 36 → 12 → 2 の順に試す (狭い隙間でも、ボックスを貫くよりは詰めて通す)。
  */
 import { HEADER_ZONE, WALL_MARGIN, type Point, type Rect } from "./routeEdge";
 
@@ -26,16 +26,16 @@ function blocked(ax: number, ay: number, bx: number, by: number, r: Rect, m: num
 
 /**
  * 格子の上で s から t への経路を求める
- * Input : s, t = 出す側・受ける側のハンドル位置 (箱の縁の上), obstacles = 避ける箱, ends = 自分の箱 (出す側・受ける側),
- *         bounds = 親の箱 (この内側に収める。null なら制限なし), margin = 箱から離す余白
+ * Input : s, t = 出す側・受ける側のハンドル位置 (ボックスの縁の上), obstacles = 避けるボックス, ends = 自分のボックス (出す側・受ける側),
+ *         bounds = 親のボックス (この内側に収める。null なら制限なし), margin = ボックスから離す余白
  * Output: 折れ線 (s から t まで)。経路が無ければ null
  */
 export function gridRoute(s: Point, t: Point, obstacles: Rect[], ends: Rect[], bounds: Rect | null, margin: number, stubS = 40, stubT = 40): Point[] | null {
-  // 出入りの直線: ポートから少し離れた点を格子の始点・終点にする (自分の箱の余白の外に出る。真横に箱があれば routeEdge が短い stub を渡す)
-  // 親の縁ぎりぎりの箱では、始点・終点を親の内側に収める (routeEdge と同じ)
+  // 出入りの直線: ポートから少し離れた点を格子の始点・終点にする (自分のボックスの余白の外に出る。真横にボックスがあれば routeEdge が短い stub を渡す)
+  // 親の縁ぎりぎりのボックスでは、始点・終点を親の内側に収める (routeEdge と同じ)
   const a = { x: bounds ? Math.min(s.x + stubS, Math.max(s.x + 4, bounds.x + bounds.width - WALL_MARGIN)) : s.x + stubS, y: s.y };
   const b = { x: bounds ? Math.max(t.x - stubT, Math.min(t.x - 4, bounds.x + WALL_MARGIN)) : t.x - stubT, y: t.y };
-  // 格子の座標: 箱の縁 ± 余白、親の内側の縁、始点・終点
+  // 格子の座標: ボックスの縁 ± 余白、親の内側の縁、始点・終点
   const xs = new Set<number>([a.x, b.x]);
   const ys = new Set<number>([a.y, b.y]);
   for (const o of [...obstacles, ...ends]) {
@@ -58,7 +58,7 @@ export function gridRoute(s: Point, t: Point, obstacles: Rect[], ends: Rect[], b
   const iy = (v: number) => Y.indexOf(v);
   const sx = ix(a.x), sy = iy(a.y), tx = ix(b.x), ty = iy(b.y);
   if (sx < 0 || sy < 0 || tx < 0 || ty < 0) return null;
-  // 自分の箱は余白なし (ポートが縁の上にあり、始点・終点は余白の外)。始点・終点が親の外 (親の縁のポート) でも通れるように、親の外側の判定は格子の範囲で行う
+  // 自分のボックスは余白なし (ポートが縁の上にあり、始点・終点は余白の外)。始点・終点が親の外 (親の縁のポート) でも通れるように、親の外側の判定は格子の範囲で行う
   const rects: { r: Rect; m: number }[] = [...obstacles.map((r) => ({ r, m: margin })), ...ends.map((r) => ({ r, m: 0 }))];
   const passable = (x0: number, y0: number, x1: number, y1: number): boolean => {
     for (const { r, m } of rects) if (blocked(x0, y0, x1, y1, r, m)) return false;

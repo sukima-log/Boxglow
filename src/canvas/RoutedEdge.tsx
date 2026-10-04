@@ -1,7 +1,9 @@
 /**
- * 箱を避ける直角の線 (React Flow のカスタム edge)
+ * ボックスを避ける直角の線 (React Flow のカスタム edge)
  * 経路は FlowCanvas が同じ階層の線をまとめて計算して data.path で渡す (重なりを解くため)
+ * 同じ出力から分岐する線は data.shared (sharedWires の結果) で、自分が描く区間と分岐点の丸を受け取る
  */
+import type { SharedWire } from "./sharedWires";
 import { BaseEdge, EdgeLabelRenderer, type EdgeProps } from "@xyflow/react";
 import { memo } from "react";
 import { toRoundedPath, type Point } from "./routeEdge";
@@ -11,7 +13,10 @@ export const RoutedEdge = memo(function RoutedEdge(props: EdgeProps) {
   const net = !!(data as { net?: boolean } | undefined)?.net; // 選んだ線とつながっている線
   const arrow = !!(data as { arrow?: boolean } | undefined)?.arrow; // 入力に入る線は先端に矢印
   const path = ((data as { path?: Point[] } | undefined)?.path) ?? [{ x: sourceX, y: sourceY }, { x: targetX, y: targetY }];
-  const d = toRoundedPath(path);
+  // 分岐の描き分け: 幹の区間はほかの線が描くので、自分の区間 (parts) だけをパスにする。分岐点 (corners) の角は丸めない
+  // (当たり判定とラベルの位置は、下で元の経路 path の全体から作る。幹の上を押してもこの線を選べる)
+  const shared = (data as { shared?: SharedWire } | undefined)?.shared;
+  const d =shared ? shared.parts.map((p) => toRoundedPath(p, 10, shared.corners)).join(" ") : toRoundedPath(path);
   // 当たり判定 (太い透明の線) は両端の丸にかぶらないよう、端から少し内側までにする
   const trim = (pts: Point[]): Point[] => {
     if (pts.length < 2) return pts;
@@ -58,15 +63,16 @@ export const RoutedEdge = memo(function RoutedEdge(props: EdgeProps) {
 
   return (
     <>
-      {/* 光 (halo) は線を 1 本選んだときだけ。箱を選んだとき (hot) は束になった線の光が重なって 1 本の帯に見えるので出さない */}
+      {/* 光 (halo) は線を 1 本選んだときだけ。ボックスを選んだとき (hot) は束になった線の光が重なって 1 本の帯に見えるので出さない */}
       {(selected || net) && <path d={d} className="react-flow__edge-halo" />}
       <BaseEdge id={id} path={d} markerEnd={markerEnd} style={style} interactionWidth={0} />
+      {shared?.junctions.map((p) => <circle key={`${p.x},${p.y}`} cx={p.x} cy={p.y} r={3} className="react-flow__edge-junction" />)}
       {arrowD && <path d={arrowD} className="react-flow__edge-arrow" />}
-      <path d={dHit} fill="none" stroke="transparent" strokeWidth={14} className="react-flow__edge-interaction" />
+      <path d={dHit} fill="none" stroke="transparent" strokeWidth={14} vectorEffect="non-scaling-stroke" className="react-flow__edge-interaction" />
       {label && (
         <EdgeLabelRenderer>
           <div
-            className="nodrag nopan"
+            className="canvas-edge-label nodrag nopan"
             style={{
               position: "absolute"
             , transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y}px)`
@@ -80,6 +86,9 @@ export const RoutedEdge = memo(function RoutedEdge(props: EdgeProps) {
             , opacity: 1
             , zIndex: 1000
             , whiteSpace: "nowrap"
+            , maxWidth: 240
+            , overflow: "hidden"
+            , textOverflow: "ellipsis"
             , boxShadow: "0 1px 2px rgba(0,0,0,0.15)"
             }}
           >

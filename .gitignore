@@ -21,3 +21,7 @@ e2e_*.png
 
 # 社内向けの計画 (公開しない)
 /docs/private/
+
+# Boxglow cooperative writer lock and atomic write staging
+*.boxglow-lock/
+.*.boxglow-tmp

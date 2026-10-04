@@ -2,17 +2,17 @@ import { describe, expect, it } from "vitest";
 import { routeEdge } from "./routeEdge";
 
 describe("線の経路探索", () => {
-  it("間に箱が無ければ Z 型 (曲がり 2 回) で結ぶ", () => {
+  it("間にボックスが無ければ Z 型 (曲がり 2 回) で結ぶ", () => {
     const path = routeEdge({ x: 100, y: 50 }, { x: 400, y: 150 }, []);
     expect(path.length).toBe(4);
     expect(path[0]).toEqual({ x: 100, y: 50 });
     expect(path[3]).toEqual({ x: 400, y: 150 });
   });
 
-  it("間に箱があれば、それを避けて通る", () => {
+  it("間にボックスがあれば、それを避けて通る", () => {
     const box = { x: 200, y: 20, width: 120, height: 200 };
     const path = routeEdge({ x: 100, y: 100 }, { x: 500, y: 120 }, [box]);
-    // どの線分も箱の内側を通らない
+    // どの線分もボックスの内側を通らない
     for (let i = 1; i < path.length; i++) {
       const a = path[i - 1];
       const b = path[i];
@@ -22,8 +22,8 @@ describe("線の経路探索", () => {
     }
   });
 
-  it("戻る線の真下 (出た直後の縦の通路) に箱があっても貫かない (右の隙間へ回る)", () => {
-    // 出す側の箱 (右上) の真下に別の箱が右へはみ出して並び、受ける側は左下
+  it("戻る線の真下 (出た直後の縦の通路) にボックスがあっても貫かない (右の隙間へ回る)", () => {
+    // 出す側のボックス (右上) の真下に別のボックスが右へはみ出して並び、受ける側は左下
     const src = { x: 1100, y: 350, width: 180, height: 40 };
     const below = { x: 1100, y: 430, width: 210, height: 40 }; // 右端が出す側より 30px 右 → x1 (= s.x + 40) の通路にかかる
     const dst = { x: 300, y: 550, width: 200, height: 60 };
@@ -37,10 +37,10 @@ describe("線の経路探索", () => {
     }
   });
 
-  it("戻る線が受ける側の箱を反対側 (右) から貫いてポートに届くことはない", () => {
+  it("戻る線が受ける側のボックスを反対側 (右) から貫いてポートに届くことはない", () => {
     // 受ける側 (左下) の入力ポートの高さに横の通路が来やすい配置 (出す側は右上、間に障害物なし)
     const src = { x: 1000, y: 100, width: 200, height: 60 };
-    const dst = { x: 100, y: 400, width: 600, height: 300 }; // 大きな箱。入力は左の縁 (x = 100) の y = 500
+    const dst = { x: 100, y: 400, width: 600, height: 300 }; // 大きなボックス。入力は左の縁 (x = 100) の y = 500
     const path = routeEdge({ x: 1200, y: 130 }, { x: 100, y: 500 }, [], 0, [src, dst]);
     const inner = { x: dst.x + 8, y: dst.y + 8, width: dst.width - 16, height: dst.height - 16 };
     for (let i = 1; i < path.length; i++) {
@@ -50,14 +50,14 @@ describe("線の経路探索", () => {
       const hits = x1 > inner.x && x0 < inner.x + inner.width && y1 > inner.y && y0 < inner.y + inner.height;
       expect(hits).toBe(false);
     }
-    // 受ける側へは左から入る (最後の線分は右向き、x は箱の左縁まで)
+    // 受ける側へは左から入る (最後の線分は右向き、x はボックスの左縁まで)
     const last = path[path.length - 1], prev = path[path.length - 2];
     expect(prev.x).toBeLessThan(last.x);
   });
 
-  it("箱と箱の隙間が余白 2 つ分 (72px) に満たなくても、箱を貫かずに隙間を詰めて通る", () => {
-    // 段違いの配置: 出す側 (左上) の右に横長の箱、その下に 2 段目の箱。1 段目の右の箱の下端と 2 段目の上端の隙間は 60px しかない。
-    // 受ける側は右端の 1 段目。親の箱は上 (題名の行) にも下にも余裕が無く、上の段を横切るには右の箱を貫くしかなく、
+  it("ボックスとボックスの隙間が余白 2 つ分 (72px) に満たなくても、ボックスを貫かずに隙間を詰めて通る", () => {
+    // 段違いの配置: 出す側 (左上) の右に横長のボックス、その下に 2 段目のボックス。1 段目の右のボックスの下端と 2 段目の上端の隙間は 60px しかない。
+    // 受ける側は右端の 1 段目。親のボックスは上 (題名の行) にも下にも余裕が無く、上の段を横切るには右のボックスを貫くしかなく、
     // 下へ回るには 60px の隙間を通るしかない
     const src = { x: 100, y: 80, width: 200, height: 80 };
     const wide = { x: 500, y: 80, width: 600, height: 150 }; // 下端 230
@@ -65,7 +65,7 @@ describe("線の経路探索", () => {
     const tall = { x: 1300, y: 80, width: 300, height: 150 }; // 下端 230 (受ける側の左隣)
     const third = { x: 500, y: 450, width: 300, height: 100 }; // 3 段目 (2 段目との隙間も 60px)。下端 550
     const dst = { x: 1800, y: 80, width: 200, height: 80 };
-    const bounds = { x: 0, y: 0, width: 2100, height: 555 }; // 題名の行 (76px) の直下に箱、下の縁は 3 段目の箱のすぐ下
+    const bounds = { x: 0, y: 0, width: 2100, height: 555 }; // 題名の行 (76px) の直下にボックス、下の縁は 3 段目のボックスのすぐ下
     const path = routeEdge({ x: 300, y: 120 }, { x: 1800, y: 120 }, [wide, second, tall, third], 0, [src, dst], bounds);
     for (const box of [wide, second, tall, third]) {
       for (let i = 1; i < path.length; i++) {

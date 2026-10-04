@@ -142,9 +142,9 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                 )}
                 {direction === "in" && !q.promotedFrom && (
                   <div className="flex items-center gap-2 text-[12px]">
-                    {/* 必須 / 任意: 必須の入力がそろうと箱に Ready が出る。任意は無くても着手できる */}
+                    {/* 必須 / 任意: 必須の入力がそろうとボックスに Ready が出る。任意は無くても着手できる */}
                     <div className="seg" style={{ width: "auto" }}>
-                      <button className="seg__btn" data-on={q.required} disabled={readonly} onClick={() => apply((p) => updatePort(p, q.id, { required: true }))} title={t("必須: この入力がそろうまで着手できない (箱の Ready に効く)")}>{t("必須")}</button>
+                      <button className="seg__btn" data-on={q.required} disabled={readonly} onClick={() => apply((p) => updatePort(p, q.id, { required: true }))} title={t("必須: この入力がそろうまで着手できない (ボックスの Ready に効く)")}>{t("必須")}</button>
                       <button className="seg__btn" data-on={!q.required} disabled={readonly} onClick={() => apply((p) => updatePort(p, q.id, { required: false }))} title={t("任意: 無くても着手できる")}>{t("任意")}</button>
                     </div>
                     <span style={{ color: "var(--text-muted)" }}>{q.required ? t("そろうまで着手できない") : t("無くても着手できる")}</span>
@@ -216,7 +216,7 @@ export function DebouncedText({ value, onCommit, multiline = false, delay = 400,
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef(value);
   latest.current = value;
-  // 外から値が変わったとき (別の箱を選んだ、AI が書き換えた) は、打っている最中でなければ追従する
+  // 外から値が変わったとき (別のボックスを選んだ、AI が書き換えた) は、打っている最中でなければ追従する
   useEffect(() => { if (!focused.current) setText(value); }, [value]);
   const commit = (v: string) => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } if (v !== latest.current) onCommit(v); };
   const change = (v: string) => {

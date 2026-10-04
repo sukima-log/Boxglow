@@ -1,10 +1,13 @@
 /**
  * タイムライン: 判断待ち・作業中・ログを時系列で見る (上の帯の要約チップから開く)
+ * 「再開」タブは、作業を再開するときに読み直すもの (AI 未確認の回答・引き継ぎメモ・次の候補) を 1 か所にまとめる
  */
+import { resumeSummary } from "../model/resume";
 import { useState } from "react";
 import { answerDecision, editDecisionAnswer, summarize, candidatesOf, reopenDecision, ancestorsOf, kindOf, portsOf, isAcked } from "../model/graph";
 import { actorLabel, ACTIVITY_LABEL, agoText, shortTime } from "../model/report";
 import { ROOT_ID, type Project } from "../model/types";
+import { STATUS_LABEL } from "../model/status";
 import { useProjectStore } from "../store/useProjectStore";
 // 言語切り替え: 日本語の文は t() で包み、英語の辞書 (src/i18n/en/parts.ts) で引く
 import { t, useLang } from "../i18n";
@@ -30,7 +33,7 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
     setEditing(null);
   };
   // Ctrl+Enter (Mac は Cmd+Enter) で送る。Enter だけ・Shift+Enter は改行 (書いている途中で送られないように)
-  const submitKey = (ev: React.KeyboardEvent, go: () => void) => { if (ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); go(); } };
+  const submitKey = (ev: React.KeyboardEvent, go: () => void) => { if (!ev.nativeEvent.isComposing && ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); go(); } };
   return (
     <div className="flex flex-col gap-2 pl-2" style={{ borderLeft: "3px solid var(--accent)" }}>
       <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("{actor} からの質問 ({ago})", { actor: actorLabel(d.askedBy), ago: agoText(d.askedAt) })}</div>
@@ -97,8 +100,8 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
 }
 
 /**
- * 箱の見出し (一覧の中で「どの箱か」をすぐ分かるように): B 番号、階層のパス、題名、箱へ飛ぶボタン
- * Input : blockId, onJump = 押したときに箱を選んで画面を寄せる
+ * ボックスの見出し (一覧の中で「どのボックスか」をすぐ分かるように): B 番号、階層のパス、題名、ボックスへ飛ぶボタン
+ * Input : blockId, onJump = 押したときにボックスを選んで画面を寄せる
  */
 function BlockRef({ project, blockId, onJump }: { project: Project; blockId: string; onJump: (id: string) => void }) {
   useLang(); // 言語が変わったら描き直す
@@ -106,25 +109,26 @@ function BlockRef({ project, blockId, onJump }: { project: Project; blockId: str
   if (!b) return null;
   const path = ancestorsOf(project, blockId).filter((a) => a.id !== ROOT_ID).reverse().map((a) => a.title).join(" › ");
   return (
-    <div className="dec-head" role="button" tabIndex={0} onClick={() => onJump(blockId)} onKeyDown={(e) => e.key === "Enter" && onJump(blockId)} title={t("この箱を画面で選ぶ")}>
+    <button className="dec-head w-full text-left" onClick={() => onJump(blockId)} title={t("このボックスを画面で選ぶ")}>
       <span className="dec-key">{b.key}</span>
       <div className="min-w-0 flex-1">
         {path && <div className="text-[11px] truncate" style={{ color: "var(--text-muted)" }}>{path}</div>}
-        <div className="text-[13px] font-bold truncate">{b.title}</div>
+        <div className="text-[13px] font-bold">{b.title}</div>
       </div>
-      <span className="btn btn-sm flex-none">{t("箱へ →")}</span>
-    </div>
+      <span className="btn btn-sm flex-none">{t("ボックスへ →")}</span>
+    </button>
   );
 }
 
 /** Activity のタブ (一度に 1 項目だけ見せる。混ざって見えると、どれが判断待ちでどれが作業中か分かりにくい) */
-type ActivityTab = "decisions" | "answered" | "working" | "next" | "log";
+type ActivityTab = "resume" | "decisions" | "answered" | "working" | "next" | "log";
 
 export function Timeline({ project }: { project: Project }) {
   useLang(); // 言語が変わったら描き直す
   const select = useProjectStore((s) => s.select);
   const focusBlock = useProjectStore((s) => s.focusBlock);
   const s = summarize(project);
+  const resume = resumeSummary(project); // 再開のまとめ (引き継ぎメモの一覧など。CLI の resume と同じモデル)
   const jump = (blockId: string) => {
     select({ blockId });
     focusBlock(blockId);
@@ -133,13 +137,15 @@ export function Timeline({ project }: { project: Project }) {
   const active = [...s.working, ...s.blocked.map((b) => ({ ...b, since: project.blocks[b.block.id].activity?.since ?? "" }))];
   // タブと件数。最初に開くのは「人の対応が要る順」で中身のある最初のタブ (判断待ち → 回答済み → 作業中 → 次の候補 → ログ)
   const tabs: { id: ActivityTab; label: string; count: number | null; help: string }[] = [
+    { id: "resume", label: "Resume", count: resume.handoffs.length, help: t("引き継ぎ・未確認の回答・次の候補") },
     { id: "decisions", label: "Decisions", count: s.decisions.length, help: t("判断待ち: あなたの回答で AI が進めます") }
   , { id: "answered", label: "Answered", count: s.answered.length, help: t("回答済み: AI がまだ読んでいない回答 (読まれるまで残り、編集できます)") }
-  , { id: "working", label: "Working", count: active.length, help: t("作業中・詰まり・確認待ちの箱") }
-  , { id: "next", label: "Next", count: s.next.length, help: t("未着手で、次に着手できる箱") }
+  , { id: "working", label: "Working", count: active.length, help: t("作業中・詰まり・確認待ちのボックス") }
+  , { id: "next", label: "Next", count: s.next.length, help: t("未着手で、次に着手できるボックス") }
   , { id: "log", label: "Log", count: null, help: t("最近の記録 (新しい順)") }
   ];
-  const firstFilled = tabs.find((x) => (x.count ?? 0) > 0)?.id ?? "log";
+  // 並びは「再開」が先頭だが、最初に開く優先順は 判断待ち → 回答済み → 再開 → 作業中 → 次の候補 (人の対応が要るものを先に)
+  const firstFilled = [...tabs.slice(1, 3), tabs[0], ...tabs.slice(3)].find((x) => (x.count ?? 0) > 0)?.id ?? "log";
   // 利用者が選んだタブ (null = まだ選んでいない → 中身のある最初のタブ)。選んだ後は、中身が空になっても勝手に移らない
   // (答えた直後にタブが切り替わると、今どこを見ていたか見失う。件数の変化で行き先が分かる)
   const [picked, setPicked] = useState<ActivityTab | null>(null);
@@ -154,7 +160,7 @@ export function Timeline({ project }: { project: Project }) {
       <div className="text-[13px]">Done {s.white} / {s.total}</div>
 
       {/* タブ: 項目ごとに開く。件数を添えて、どこに何件あるかを切り替える前に分かるようにする */}
-      <div className="seg" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
+      <div className="seg" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
         {tabs.map((x) => (
           <button key={x.id} className="seg__btn" data-on={tab === x.id} onClick={() => setPicked(x.id)} style={{ padding: "6px 2px", fontSize: 12 }} title={x.help}>
             {x.label}
@@ -163,13 +169,30 @@ export function Timeline({ project }: { project: Project }) {
         ))}
       </div>
 
+      {/* 再開: AI 未確認の回答 → 引き継ぎメモ (新しい順) → 次の候補 (5 件まで)。見るだけでは回答を確認済みにしない (ack は AI が行う) */}
+      {tab === "resume" && <section className="resume-section">
+        <p>{t("記録を読み直してから作業を再開します。ここを開くだけでは回答を確認済みにしません。")}</p>
+        <h3 className="label">{t("AI未確認の回答")} · {s.answered.length}</h3>
+        {s.answered.map(({ block, decision }) => <div key={decision.id} className="resume-card"><BlockRef project={project} blockId={block.id} onJump={jump} /><DecisionCard project={project} blockId={block.id} decisionId={decision.id} /></div>)}
+        <h3 className="label">{t("引き継ぎ（新しい順）")}</h3>
+        {resume.handoffs.length === 0 && empty(t("引き継ぎメモはまだありません。各タスクの「AI への引き継ぎ」に残せます。"))}
+        {resume.handoffs.map(({ blockId, note, actor, at, status }) => <div key={blockId} className="resume-card">
+          <BlockRef project={project} blockId={blockId} onJump={jump} />
+          <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{actorLabel(actor)} · {agoText(at)} · {STATUS_LABEL[status]}</div>
+          <p className="whitespace-pre-wrap">{note}</p>
+        </div>)}
+        <h3 className="label">{t("次の候補")}</h3>
+        {s.next.slice(0, 5).map((b) => <BlockRef key={b.id} project={project} blockId={b.id} onJump={jump} />)}
+        <p className="text-[12px]">{t("CLI: boxglow resume → boxglow context B番号 で最新の判断を読みます。")}</p>
+      </section>}
+
       {tab === "decisions" && (
         <section className="flex flex-col gap-2">
           <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("あなたの回答で AI が進めます")}</span>
           {s.decisions.length === 0 && empty(s.answered.length > 0 ? t("判断待ちはありません。答えたものは Answered にあります") : t("判断待ちはありません"))}
           {s.decisions.map(({ block, decision }) => (
             <div key={decision.id} className="flex flex-col gap-1">
-              {/* どの箱の判断かを見出しで示す: B 番号・階層のパス・題名・箱へ飛ぶボタン */}
+              {/* どのボックスの判断かを見出しで示す: B 番号・階層のパス・題名・ボックスへ飛ぶボタン */}
               <BlockRef project={project} blockId={block.id} onJump={jump} />
               <DecisionCard project={project} blockId={block.id} decisionId={decision.id} />
             </div>
@@ -179,7 +202,7 @@ export function Timeline({ project }: { project: Project }) {
 
       {tab === "answered" && (
         <section className="flex flex-col gap-2">
-          {/* 答えた直後に一覧から消えると「どの箱の何に答えたか」を見失う。AI が引き取る (ack) までここに残し、編集もできる */}
+          {/* 答えた直後に一覧から消えると「どのボックスの何に答えたか」を見失う。AI が引き取る (ack) までここに残し、編集もできる */}
           <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("AI がまだ読んでいない回答。読まれるまでここに残ります")}</span>
           {s.answered.length === 0 && empty(t("AI が未確認の回答はありません"))}
           {s.answered.map(({ block, decision }) => (
@@ -193,9 +216,9 @@ export function Timeline({ project }: { project: Project }) {
 
       {tab === "working" && (
         <section className="flex flex-col gap-1">
-          {active.length === 0 && empty(t("作業中の箱はありません"))}
+          {active.length === 0 && empty(t("作業中のボックスはありません"))}
           {active.map((w) => {
-            // 「全体のどこで、何のために」: 箱の位置 (大項目 › 中項目) と、この作業が出すもの (出力の名前)
+            // 「全体のどこで、何のために」: ボックスの位置 (大項目 › 中項目) と、この作業が出すもの (出力の名前)
             const where = ancestorsOf(project, w.block.id).filter((a) => a.id !== ROOT_ID && kindOf(a) !== "project").reverse().map((a) => a.title).join(" › ");
             const outs = portsOf(project, w.block.id, "out").map((q) => q.name).join(", ");
             return (
@@ -216,8 +239,8 @@ export function Timeline({ project }: { project: Project }) {
 
       {tab === "next" && (
         <section className="flex flex-col gap-1">
-          <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("未着手の箱 (着手できるものから)")}</span>
-          {s.next.length === 0 && empty(t("未着手の箱はありません"))}
+          <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("未着手のボックス (着手できるものから)")}</span>
+          {s.next.length === 0 && empty(t("未着手のボックスはありません"))}
           {s.next.slice(0, 30).map((b) => (
             <button key={b.id} className="tree-row text-left" onClick={() => jump(b.id)}>
               <span className="dec-key">{b.key}</span>

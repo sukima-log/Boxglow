@@ -7,7 +7,12 @@
 import { fileURLToPath } from "node:url";
 import { startMcp } from "./mcp";
 import { startServe } from "./serve";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { commitFile, FileConflict, revisionOf, sleepSync } from "./file-store";
+import { contextReceipt, isCurrentToken, requireContext } from "./context";
+import { setupAgent } from "./setup-agent";
+import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
+import { resumeSummary, resumeReport } from "../src/model/resume";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import AGENTS_SNIPPET_JA from "../docs/AGENTS_SNIPPET.md";
 import AGENTS_SNIPPET_EN from "../docs/AGENTS_SNIPPET.en.md";
 import { getLang, setLang, t, type Lang } from "../src/i18n/core";
@@ -30,11 +35,11 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, isInputNameLocked, normalizeInputNames, ackDecisions } from "../src/model/graph";
+import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, isInputNameLocked, normalizeInputNames, ackDecisions, isHumanActor } from "../src/model/graph";
 import type { Artifact } from "../src/model/types";
 import { blockToPrompt } from "../src/model/export";
 import { blockReport, logReport, statusReport } from "../src/model/report";
-import { checkGitRef, gitRefFor } from "./git";
+import { checkGitRef, findGitRef, gitRefFor } from "./git";
 import { layoutAll, layoutScope, nextFreePosition } from "../src/model/autolayout";
 import { ROOT_ID, type Endpoint, type Project } from "../src/model/types";
 
@@ -120,15 +125,50 @@ function artifactFrom(spec: string, titleOpt?: string): Artifact {
   return a;
 }
 
+/**
+ * 読んだときのリビジョン (絶対パス → 版の印。null = ファイルが無い前提)。
+ * 保存のときに「読んだ後に他の誰かが書き換えていないか」を照合するために覚えておく (cli/file-store.ts の commitFile)
+ */
+const readRevisions = new Map<string, string | null>();
+
+/**
+ * この実行で最後に書いた計画の中身 (書いていなければ null)。
+ * 操作のあとに「自分が書いた内容」から新しい確認トークンを作るために覚えておく
+ * (ディスクを読み直すと、その間に他の人が書いた変更までトークンに含めてしまうので、読み直さない)
+ */
+let lastSavedText: string | null = null;
+
+/** 書き込みの時点で他の変更とぶつかったとき (FileConflict)、最新を読み直してコマンドをやり直す回数の上限 */
+const CONFLICT_RETRIES = 8;
+
+/**
+ * 計画を読む (読んだときのリビジョンを覚える)
+ * Input : path = boxglow.json のパス
+ * Output: fromJSON 済みの Project
+ */
 function load(path: string): Project {
-  return fromJSON(readFileSync(path, "utf8"));
+  const text = readFileSync(path, "utf8");
+  readRevisions.set(resolve(path), revisionOf(text));
+  return fromJSON(text);
 }
 
+/**
+ * 計画を書く (ロック + リビジョン照合 + 原子的な置換)
+ * Input : path = boxglow.json のパス, p = 書く計画
+ * Output: なし。読んだ後に他が書き換えていたら FileConflict、他が書き込み中なら FileBusy の例外 (どちらも書き込まない)
+ */
 function save(path: string, p: Project): void {
-  // 画面と同じく、保存のたびに箱の重なりを解く (子が増えて親が大きくなったときに、下の箱を押し出す)
+  // 画面と同じく、保存のたびにボックスの重なりを解く (子が増えて親が大きくなったときに、下のボックスを押し出す)
   // 大項目は常に畳んだ状態 (All の図は大項目までしか出さず、中はタブで見る。大きさもこの前提で計算する)
   // つないだ入力の名前は供給元にそろえる (古いファイルの食い違いもここで直る)
-  writeFileSync(path, toJSON(resolveAllOverlaps(normalizeCollapsed(normalizeInputNames(p).project), (q, id) => blockSize(q, id))) + "\n", "utf8");
+  // 読んでいないパス (新規作成) は「ファイルが無い」ことを前提にする
+  const expected = readRevisions.has(resolve(path)) ? readRevisions.get(resolve(path))! : null;
+  const text = toJSON(resolveAllOverlaps(normalizeCollapsed(normalizeInputNames(p).project), (q, id) => blockSize(q, id))) + "\n";
+  const revision = commitFile(path, text, expected);
+  // 同じ実行の中で続けて書く場合に備えて、書いた後の版を覚え直す
+  readRevisions.set(resolve(path), revision);
+  // 書いた中身を覚える (新しい確認トークンの元にする)
+  lastSavedText = text;
 }
 
 /** ブロックを探す (見つからなければ候補を示して終了) */
@@ -145,8 +185,8 @@ function mustFind(p: Project, ref: string | undefined, what = "block") {
 
 /** "題名.ポート名" を端点に解決する (connect 用)。親子関係は呼び出し側で面を決める */
 /**
- * "<題名>.<ポート名>" を箱とポート名に分ける。題名やポート名にドットが含まれていてもよい
- * (例: "公開 (OSS).公開された Boxglow 1.0")。左から順にドットで区切ってみて、箱が見つかり、
+ * "<題名>.<ポート名>" をボックスとポート名に分ける。題名やポート名にドットが含まれていてもよい
+ * (例: "公開 (OSS).公開された Boxglow 1.0")。左から順にドットで区切ってみて、ボックスが見つかり、
  * できればその名前のポートがある区切りを選ぶ
  * Input : ref
  * Output: { blockId, portName }
@@ -158,7 +198,7 @@ function resolveRef(p: Project, ref: string): { blockId: string; portName: strin
     const title = ref.slice(0, i);
     const portName = ref.slice(i + 1);
     let blockId: string | null = null;
-    // "project" は最初のプロジェクトの箱 (タスクはその中にあるので、最終成果物へはその箱の出力につなぐ)。最上位そのものは "root"
+    // "project" は最初のプロジェクトのボックス (タスクはその中にあるので、最終成果物へはそのボックスの出力につなぐ)。最上位そのものは "root"
     if (title === "project") blockId = projectBlocks(p)[0]?.id ?? ROOT_ID;
     else if (title === ROOT_ID) blockId = ROOT_ID;
     else {
@@ -169,7 +209,7 @@ function resolveRef(p: Project, ref: string): { blockId: string; portName: strin
     candidates.push({ blockId, portName, hasPort: portsOf(p, blockId).some((x) => x.name === portName) });
   }
   const best = candidates.find((c) => c.hasPort) ?? candidates[0];
-  if (!best) throw new Error(t("「{ref}」の箱が見つかりません (<題名>.<ポート名> の形。題名は status に出る題名か B 番号)", { ref }));
+  if (!best) throw new Error(t("「{ref}」のボックスが見つかりません (<題名>.<ポート名> の形。題名は status に出る題名か B 番号)", { ref }));
   return { blockId: best.blockId, portName: best.portName };
 }
 
@@ -178,19 +218,47 @@ let sink: (text: string) => void = (text) => process.stdout.write(text);
 const out = (text: string) => sink(text.endsWith("\n") ? text : text + "\n");
 
 /**
+ * コマンドを 1 回実行する。書く時点で計画が他の変更で更新されていたら (FileConflict)、最新を読み直して最初からやり直す
+ * CLI の 1 コマンドは「読む → 変える → 書く」なので、複数の AI や人が同時に実行すると、後から書く側は古い内容を元にしている。
+ * やり直せば最新の内容に自分の変更を重ねられる (やり直さないと、同時に実行したうちの 1 本しか成功しない)
+ * Input : argv = コマンドと引数, onRetry = やり直す直前に呼ぶ関数 (溜めた出力を捨てる)
+ * Output: なし。CONFLICT_RETRIES 回やり直してもぶつかるときは FileConflict を投げる。それ以外の例外はそのまま伝える
+ */
+function mainWithRetry(argv: string[], onRetry: () => void): void {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      main(argv);
+      return;
+    } catch (e) {
+      if (!(e instanceof FileConflict) || attempt >= CONFLICT_RETRIES) throw e;
+      onRetry();
+      // 同時に走っている相手と同じ間隔でぶつかり続けないよう、待つ時間をばらつかせる
+      sleepSync(5 + Math.floor(Math.random() * 25 * (attempt + 1)));
+    }
+  }
+}
+
+/**
  * CLI を関数として実行し、出力を文字列で返す (MCP サーバから使う。標準出力には何も書かない)
  * Input : argv = コマンドと引数 (process.argv.slice(2) と同じ形)
  * Output: 出力の文字列。失敗は例外
  */
 export function runCli(argv: string[]): string {
   const prev = sink;
+  // 終了コードはこの呼び出しの分だけを見る (常駐する MCP サーバで、前の失敗の終了コードが残らないように元に戻す)
+  const previousExitCode = process.exitCode;
+  process.exitCode = undefined;
   let buf = "";
   sink = (text) => { buf += text; };
   try {
-    main(argv);
+    // 他の変更とぶつかったら、溜めた出力を捨てて最初からやり直す
+    mainWithRetry(argv, () => { buf = ""; process.exitCode = undefined; });
+    // コマンドが失敗の終了コードを立てたら (validate の問題あり、merge --strict の競合など)、出力を付けて失敗として返す
+    if (process.exitCode) throw new Error(buf.trim());
     return buf;
   } finally {
     sink = prev;
+    process.exitCode = previousExitCode;
   }
 }
 
@@ -220,22 +288,29 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
 
 使い方 (npx boxglow <command> ...):
   init [--name <名前>] [--file <path>]           boxglow.json を作る
-  setup-agent [--dir <path>]                     AI が自律的に使えるように設定する: AGENTS.md / CLAUDE.md に手順を追記、
-                                                 Claude Code のスキル (.claude/skills/boxglow) と、セッション開始時に status を読むフックを入れる
-  status [--json]                                全体の状況 (Markdown)
+  setup-agent [--agent codex|claude-code|all] [--dir <path>]                     AI が自律的に使えるように設定する: AGENTS.md / CLAUDE.md に手順を追記、
+                                                 Codex は AGENTS.md と .agents/skills、Claude Code は CLAUDE.md・スキル・フック・.mcp.json (既定: all)
+  resume [--json]                                作業の再開用の概要: 引き継ぎメモ・AI 未確認の回答・判断待ち・作業中・次の候補 (読むだけ。回答は確認済みにならない)
+  context <block>                                ボックスのコンテキスト (親と入力元の説明・判断・入出力の条件・引き継ぎ) と確認トークン contextToken を JSON で出す
+  checkpoint <block> --note <メモ>               引き継ぎメモ (分かったこと・次の手順・未解決の点) を計画に残す。中断や引き継ぎの前に使う
+  guard on|off                                   確認トークンの要求を有効 / 無効にする (setup-agent は有効にする)。有効な間、AI の start / done / set / split / artifact / ack /
+                                                 blocked / review / leave / checkpoint は --context-token <context で得た contextToken> が要る (読んだ後に指示・回答・引き継ぎが変わっていたら拒否)。
+                                                 人 (--actor human) には要求しない。AI が off にするときは --context-token が要る
+  version [--json]                               boxglow の版と、保存の取り決めの版を出す (--version でも可)
+  status [--brief] [--json]                     全体の状況 (Markdown)。--brief は全階層を省略し、判断・回答・活動・次の候補を表示
   export [--format md|json] [--out <path>]       計画全体を Markdown (または JSON) に書き出す (ロードマップの文書化に)
   show <block>                                   ブロックの詳細
-  add <題名> [--parent <block>] [--out <出力名>] [--in <入力名>]... [--note <説明>] [--category <カテゴリ>]   (親を省略すると最初のプロジェクトの箱の中)
+  add <題名> [--parent <block>] [--out <出力名>] [--in <入力名>]... [--note <説明>] [--category <カテゴリ>]   (親を省略すると最初のプロジェクトのボックスの中)
                                                  カテゴリ: study 検討 / research 調査 / design 設計 / ui デザイン / build 実装 / verify 検証 / evaluate 評価 / improve 改善 / fix 課題解決 / docs 文書 / ops 運用 / other その他
-  project <名前>                                 プロジェクトの箱を最上位に足す (同じファイルで複数のプロジェクト) [--repo <パス>]  (複数リポジトリは boxglow.json を上のフォルダに置き、各リポジトリで BOXGLOW_FILE を指す)
-  export-block <block> [--out <path>] [--tags "a,b"]   箱を下の階層ごとテンプレート (*.boxglow-block.json) に書き出す
-  import-block <path> [--parent <block>]         テンプレートを挿入 (親を省略すると最初のプロジェクトの箱の中)
+  project <名前>                                 プロジェクトのボックスを最上位に足す (同じファイルで複数のプロジェクト) [--repo <パス>]  (複数リポジトリは boxglow.json を上のフォルダに置き、各リポジトリで BOXGLOW_FILE を指す)
+  export-block <block> [--out <path>] [--tags "a,b"]   ボックスを下の階層ごとテンプレート (*.boxglow-block.json) に書き出す
+  import-block <path> [--parent <block>]         テンプレートを挿入 (親を省略すると最初のプロジェクトのボックスの中)
   split <block> --spec '<JSON>' | --spec-file <path>   下の階層にまとめて分解 (形式は docs/AGENTS_SNIPPET.md)
-  move <block> --parent <block|project>            箱を別の親の中へ移す (線は間の箱のポートを経由してつながったまま)
-  port <block|project> [--in <名前>]... [--out <名前>]... [--rename <旧名>=<新名>]   既存の箱に入力 / 出力を足す、名前を変える (project = 最初のプロジェクトの箱)
+  move <block> --parent <block|project>            ボックスを別の親の中へ移す (線は間のボックスのポートを経由してつながったまま)
+  port <block|project> [--in <名前>]... [--out <名前>]... [--rename <旧名>=<新名>]   既存のボックスに入力 / 出力を足す、名前を変える (project = 最初のプロジェクトのボックス)
   disconnect <題名.出力名> <題名.入力名>          線を外す
   tidy                                              ファイルを規則にそろえて保存し直す (つないだ入力の名前を供給元に合わせる、大項目を畳む、重なりを解く)
-  remove <block> [--force]                          箱を消す (中に箱があるときは --force。線も外れる。元に戻せないので Git で管理していること)
+  remove <block> [--force]                          ボックスを消す (中にボックスがあるときは --force。線も外れる。元に戻せないので Git で管理していること)
   serve [--port 4174] [--open]                      ローカルサーバ: 同梱の Web アプリを http://localhost:4174/?serve=1 で配信し、boxglow.json を読み書き (Firefox / Safari でも使える)
   mcp [--file <path>]                               MCP サーバ (標準入出力)。Claude Code などから status / start / done / ask ... をツールとして使う (.mcp.json は setup-agent が書く)
   connect <題名.出力名> <題名[.入力名]>           結線 (受け側は題名だけでよい: 出力名と同じ名前の入力を作ってつなぐ。親子は自動で内側の面。最終成果物へは project)
@@ -243,33 +318,36 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   done <block> [--artifact <題名>=<URL またはパス>]... [--output <出力名>] [--note]   完了 (成果物を付けて white)
                                                  パスが Git 管理下なら「コミット + パス + blob」で記録する (アップロードしない)
   artifact <block> <URL またはパス> [--title <題名>] [--output <出力名>]   成果物だけ付ける (完了にはしない)
-  check                                          Git の成果物が今も見つかるか確認し、移動していればパスを付け替える
+  check                                          Git の成果物が今も見つかるか確認し、移動していればパスを付け替える。未コミットのときに記録した成果物は、コミット済みになっていれば Git の参照に補完する
   blocked <block> --note <困っていること>          詰まり
   review <block> [--note]                        確認待ち
   ask <block> <質問> [--options "A|B"] [--context <判断材料>]   人間に判断を求める (判断待ちになる)。質問だけで判断できるよう、前提・比較・影響を --context に書く
   decision <block> --id <decision id> [--question] [--options "A|B"] [--context]   未回答の判断を書き直す
   answer <block> <回答> [--id <decision id>] [--by <名前>]   判断に答える (既定は最新の未回答)
-  ack <block> [--id <decision id>]                人の回答を読んで引き取ったと記録する (status の「回答あり」から消える。start / done / blocked / review / set / split / ask でも自動で引き取る)
+  ack <block> [--id <decision id>]                人の回答を読んで引き取ったと記録する (status の「回答あり」から消える。start / done / blocked / review / set / split でも自動で引き取る)
   reopen <block> [--id <decision id>] [--note <理由>]   判断をやり直す (方針転換)。前の答えは履歴に、候補はそのまま残る
   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <題名>] [--note <説明>] [--category <カテゴリ>|none] [--repo <パス>|none] [--issue <URL>|none]
               [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <時間>|none] [--hours <実績時間>|none]
-  find <文字>                                    ID や題名で箱を探す
+  find <文字>                                    ID や題名でボックスを探す
   group <名前>                                   最上位の入力グループを作る (例: "PCIe 仕様書")
   group-set <入力名> <グループ名|none>            最上位の入力をグループに入れる / 外す
   group-export <グループ名> [--out <path>]        グループを JSON に書き出す (他のプロジェクトで group-import)
   group-import <path>                            グループの JSON を読み込む
   leave <block>                                  活動を消す (作業を離れる)
   prompt <block> [--ask plan|decompose|review]    AI に渡す文脈 (Markdown)
-  layout [block]                                 自動整列 (全体、または指定した箱の中)
+  layout [block]                                 自動整列 (全体、または指定したボックスの中)
   log [--n 20]                                   最近のログ
   validate                                       形式と結線の検査
-  merge <base> <ours> <theirs>                    boxglow.json を箱・ポート・線の単位で 3 方向マージし <ours> に書く (Git のマージドライバ用)
+  merge <base> <ours> <theirs>                    boxglow.json をボックス・ポート・線の単位で 3 方向マージし <ours> に書く (Git のマージドライバ用)
   git-setup                                      このリポジトリの Git に merge ドライバを登録 (.gitattributes + git config)。以後 git merge / pull が自動で使う
 
   lang [ja|en]                                    計画の言語 (CLI の文言・ログ・AI 向け手順の言語) を見る / 変える。init は環境の言語で決める (--lang で指定可)
 共通: --lang <ja|en> (既定: 計画の言語。環境変数 BOXGLOW_LANG でも可)
+      --context-token <token> (guard が有効な計画で、AI が作業を記録するコマンドに付ける。context <block> の contextToken。
+                               自分の操作でコンテキストが変わると、出力の最後に「新しい確認トークン: <token>」が出るので、次の操作にはそれを使う。
+                               ask / decision / answer / reopen は付けなくても動くが、付けると新しい確認トークンが出る)
       --file <path> (既定: 上の階層へ boxglow.json を探す。環境変数 BOXGLOW_FILE でも可)
-      --actor <名前> (既定: 環境変数 BOXGLOW_ACTOR、Claude Code なら claude-code、それ以外は agent)
+      --actor <名前> (既定: 環境変数 BOXGLOW_ACTOR、Claude Code なら claude-code、Codex なら codex、それ以外は agent)
 <block> は短い ID (B12)、内部 id、または題名 (完全一致、または 1 つに決まる部分一致)。status に ID が出る
 `;
 
@@ -278,9 +356,16 @@ boxglow CLI: the entry point for AI agents (Claude Code / Codex, etc.) and peopl
 
 Usage (npx boxglow <command> ...):
   init [--name <name>] [--file <path>]           Create boxglow.json
-  setup-agent [--dir <path>]                     Set things up so AI can use Boxglow on its own: append the instructions to AGENTS.md / CLAUDE.md,
-                                                 install the Claude Code skill (.claude/skills/boxglow) and a hook that reads status at session start
-  status [--json]                                Overall status (Markdown)
+  setup-agent [--agent codex|claude-code|all] [--dir <path>]                     Set things up so AI can use Boxglow on its own: append the instructions to AGENTS.md / CLAUDE.md,
+                                                 Codex: AGENTS.md and .agents/skills. Claude Code: CLAUDE.md, skill, hook and .mcp.json (default: all)
+  resume [--json]                                Overview for resuming work: handoff notes, answers not yet read by the AI, pending decisions, active work and next candidates (read-only; does not acknowledge answers)
+  context <block>                                Print a box's context (descriptions, decisions, input/output contracts and handoff notes of its parents and input providers) and its contextToken as JSON
+  checkpoint <block> --note <note>               Save a handoff note (findings, next steps, unresolved questions) in the plan. Use it before an interruption or a handoff
+  guard on|off                                   Turn the context-token requirement on / off (setup-agent turns it on). While on, an AI's start / done / set / split / artifact / ack /
+                                                 blocked / review / leave / checkpoint need --context-token <contextToken from context> (rejected if instructions, answers or handoff notes changed after reading).
+                                                 People (--actor human) are not asked for it. An AI needs --context-token to turn it off
+  version [--json]                               Print the boxglow version and the save-protocol version (--version also works)
+  status [--brief] [--json]                     Overall status (Markdown). --brief omits the tree; keeps decisions, answers, activity and next actions
   export [--format md|json] [--out <path>]       Write the whole plan out as Markdown (or JSON) (for documenting the roadmap)
   show <block>                                   Details of a block
   add <title> [--parent <block>] [--out <output name>] [--in <input name>]... [--note <description>] [--category <category>]   (without a parent, goes inside the first project box)
@@ -301,13 +386,13 @@ Usage (npx boxglow <command> ...):
   done <block> [--artifact <title>=<URL or path>]... [--output <output name>] [--note]   Finish (attach artifacts and turn it white)
                                                  If the path is tracked by Git, it is recorded as "commit + path + blob" (nothing is uploaded)
   artifact <block> <URL or path> [--title <title>] [--output <output name>]   Attach an artifact only (does not finish the box)
-  check                                          Check that Git artifacts can still be found, and update the path if they moved
+  check                                          Check that Git artifacts can still be found, and update the path if they moved. Artifacts recorded while uncommitted become Git references once they are committed
   blocked <block> --note <what is blocking you>    Blocked
   review <block> [--note]                        Waiting for review
   ask <block> <question> [--options "A|B"] [--context <background>]   Ask a person to decide (becomes Needs decision). Put the assumptions, comparison and impact in --context so the question can be decided on its own
   decision <block> --id <decision id> [--question] [--options "A|B"] [--context]   Rewrite an unanswered decision
   answer <block> <answer> [--id <decision id>] [--by <name>]   Answer a decision (default: the latest unanswered one)
-  ack <block> [--id <decision id>]                Record that you have read a person's answer and taken it on (removes it from "Answered" in status. start / done / blocked / review / set / split / ask also do this automatically)
+  ack <block> [--id <decision id>]                Record that you have read a person's answer and taken it on (removes it from "Answered" in status. start / done / blocked / review / set / split also do this automatically)
   reopen <block> [--id <decision id>] [--note <reason>]   Reopen a decision (change of direction). The previous answer stays in the history and the options are kept
   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <title>] [--note <description>] [--category <category>|none] [--repo <path>|none] [--issue <URL>|none]
               [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <hours>|none] [--hours <actual hours>|none]
@@ -326,12 +411,18 @@ Usage (npx boxglow <command> ...):
 
   lang [ja|en]                                    Show / change the plan's language (the language of CLI messages, the log and the AI instructions). init picks it from the environment (or --lang)
 Common: --lang <ja|en> (default: the plan's language. The BOXGLOW_LANG environment variable also works)
+      --context-token <token> (for an AI's commands that record work on a plan with the guard on; the contextToken from context <block>.
+                               When your own command changes the context, the last line of its output is "New context token: <token>"; use that for the next command.
+                               ask / decision / answer / reopen work without it, but print the new context token when you pass it)
       --file <path> (default: look for boxglow.json in parent folders. The BOXGLOW_FILE environment variable also works)
-      --actor <name> (default: the BOXGLOW_ACTOR environment variable, claude-code under Claude Code, otherwise agent)
+      --actor <name> (default: the BOXGLOW_ACTOR environment variable, claude-code under Claude Code, codex under Codex, otherwise agent)
 <block> is a short ID (B12), an internal id, or a title (exact match, or a partial match that identifies one box). status shows the IDs
 `;
 
 function main(argv: string[]): void {
+  // 常駐 (mcp) では前の呼び出しで覚えたリビジョンが残るので、毎回忘れてから読み直す
+  readRevisions.clear();
+  lastSavedText = null;
   const { positional, options } = parseArgs(argv);
   const [cmd, ...rest] = positional;
   // 言語: --lang / BOXGLOW_LANG > 計画の lang (読み込んだ後に決め直す) > 日本語。常駐 (mcp) では前の呼び出しの言語が残るので毎回決め直す
@@ -339,6 +430,11 @@ function main(argv: string[]): void {
   // 手順書とスキルは、決まった言語のものを使う (呼ぶ時点の言語で選ぶ)
   const AGENTS_SNIPPET = () => (getLang() === "en" ? AGENTS_SNIPPET_EN : AGENTS_SNIPPET_JA);
   const SKILL_MD = () => (getLang() === "en" ? SKILL_MD_EN : SKILL_MD_JA);
+  // 版の表示 (計画が無くても出せるよう、読み込みの前に処理する)。--json は { app, protocol }
+  if (cmd === "version" || options.version) {
+    out(options.json ? JSON.stringify({ app: APP_VERSION, protocol: SAVE_PROTOCOL }) : t("boxglow {version} (保存の取り決め {protocol})", { version: APP_VERSION, protocol: SAVE_PROTOCOL }));
+    return;
+  }
   if (!cmd || cmd === "help" || options.help) {
     // ヘルプは文字列の定数 (HELP_JA / HELP_EN) を出す
     // 言語の指定が無ければ、近くの計画の言語に合わせる (計画が無い・読めないときは日本語のまま)
@@ -353,6 +449,8 @@ function main(argv: string[]): void {
   if (cmd === "init") {
     const path = locateFile(str(options.file), true);
     if (existsSync(path) && !options.force) throw new Error(t("{path} は既にあります (--force で上書き)", { path }));
+    // 上書き (--force) のときは今の中身の版を、新規のときは「無い」ことを保存の前提にする
+    readRevisions.set(resolve(path), existsSync(path) ? revisionOf(readFileSync(path, "utf8")) : null);
     // 計画の言語を決めて書き込む: 指定があればそれ、無ければ環境の言語 (日本語の環境なら ja、それ以外は en)
     const lang = explicitLang(options) ?? envLang();
     setLang(lang);
@@ -368,10 +466,85 @@ function main(argv: string[]): void {
   // 計画に書かれた言語で CLI の文言・ログを出す (同じ計画を触る AI と人が同じ言語になる)。指定があればそちらを優先
   setLang(explicitLang(options) ?? p.lang ?? "ja");
 
+  // guard (確認トークン): 計画で有効 (contextGuard) なら、AI が作業を記録するコマンドは最新のコンテキストのトークンを要求する。
+  // 無効 (contextGuard が無い古い計画を含む) なら何も要求しない。人 (--actor human / human:名前) には要求しない
+  // (guard は AI が古い指示のまま進めるのを防ぐ仕組み。人が CLI から操作するのを止める理由が無い)。
+  // ボックスの指定の誤りは今までどおり mustFind のエラーになる
+  const token = str(options["context-token"]);
+  // 操作のあとに新しい確認トークンを添えるボックス (操作の前のトークンが正しいと確かめられたときだけ決まる)
+  let tokenTarget: string | undefined;
+  if (p.contextGuard && !isHumanActor(actor)) {
+    if (GUARDED_COMMANDS.includes(cmd)) {
+      const id = mustFind(p, rest[0]).id;
+      requireContext(p, id, token, actor);
+      tokenTarget = id;
+    } else if (CONTEXT_CHANGING_COMMANDS.includes(cmd) && token) {
+      // トークンを要求しないコマンド (ask など) でも、最新のトークンを付けて実行したなら、操作のあとの新しいトークンを返す。
+      // トークンが無い・古いときは返さない (人の変更を読まないまま新しいトークンを手に入れられないようにする)
+      const b = findBlock(p, rest[0] ?? "").block;
+      if (b && contextReceipt(p, b.id).contextToken === token) tokenTarget = b.id;
+    } else if (cmd === "guard" && rest[0] === "off" && !isCurrentToken(p, token)) {
+      // AI が古いトークンを通すために guard を外すのを防ぐ (人はトークン無しで外せる)
+      throw new Error(t("AI が確認トークンの要求 (guard) を無効にするには --context-token <context で得た最新の確認トークン> が要ります。人が操作するときは --actor human を付けてください"));
+    }
+  }
+  runCommand(cmd, rest, options, actor, path, p, AGENTS_SNIPPET, SKILL_MD);
+  // 自分の操作でコンテキストが変わったら、新しい確認トークンを出力の最後に添える。
+  // 自分で変えた内容は読み直さなくても分かっているので、続けて次の操作ができる
+  // (人の回答・人の指示の変更・他の AI の引き継ぎで変わった場合は、操作の前の照合で拒否している)
+  if (tokenTarget && lastSavedText !== null) {
+    const saved = fromJSON(lastSavedText);
+    if (saved.contextGuard && saved.blocks[tokenTarget]) {
+      const next = contextReceipt(saved, tokenTarget).contextToken;
+      if (next !== token) out(t("新しい確認トークン: {token}", { token: next }));
+    }
+  }
+}
+
+/** guard が有効な計画で、AI に確認トークンを要求するコマンド (作業を記録するもの) */
+const GUARDED_COMMANDS = ["start", "done", "set", "split", "artifact", "ack", "blocked", "review", "leave", "checkpoint"];
+/** 確認トークンは要求しないが、ボックスのコンテキストを変えるコマンド (最新のトークンを付けて実行すると、新しいトークンを返す) */
+const CONTEXT_CHANGING_COMMANDS = ["ask", "decision", "answer", "reopen"];
+
+/**
+ * コマンドの本体 (計画を読んだ後の処理)。言語の決定・guard の照合は呼び出し側 (main) が済ませている
+ * Input : cmd = コマンド名, rest = 残りの位置引数, options = オプション, actor = 操作する人 / AI の名前,
+ *         path = boxglow.json のパス, p = 読み込んだ計画, AGENTS_SNIPPET / SKILL_MD = 今の言語の手順書・スキルを返す関数
+ * Output: なし (結果は out で出力し、計画は save で書く)。失敗は例外
+ */
+function runCommand(cmd: string, rest: string[], options: ReturnType<typeof parseArgs>["options"], actor: string, path: string, p: Project, AGENTS_SNIPPET: () => string, SKILL_MD: () => string): void {
   switch (cmd) {
+    case "context": {
+      // ボックスのコンテキストと確認トークンを JSON で出す (読むだけ)
+      out(JSON.stringify(contextReceipt(p, mustFind(p, rest[0]).id), null, 2));
+      return;
+    }
+    case "guard": {
+      // 確認トークンの要求を有効 / 無効にする (計画に書くので、同じ計画を使う全員に効く)
+      if (!["on", "off"].includes(rest[0])) throw new Error(t("guard on|off を指定してください"));
+      p.contextGuard = rest[0] === "on";
+      save(path, p);
+      out(t("確認トークンの要求 (guard): {state}", { state: rest[0] }));
+      return;
+    }
+    case "checkpoint": {
+      const b = mustFind(p, rest[0]);
+      const note = str(options.note)?.trim();
+      if (!note) throw new Error(t("--note <分かったこと・次の手順・未解決の点> を指定してください"));
+      // 引き継ぎメモはボックスごとに 1 つ (上書き)。件数に上限のある活動ログとは別に計画に残る
+      p.handoffs = { ...p.handoffs, [b.id]: { note, actor, at: new Date().toISOString() } };
+      save(path, p);
+      out(t("引き継ぎメモを保存しました: {block}", { block: b.key ?? b.id }));
+      return;
+    }
+    case "resume": {
+      // 再開用の概要 (読むだけ。回答を確認済みにはしない)
+      out(options.json ? JSON.stringify(resumeSummary(p), null, 2) : resumeReport(p));
+      return;
+    }
     case "status": {
       if (options.json) out(JSON.stringify(p, null, 2));
-      else out(statusReport(p));
+      else out(statusReport(p, { brief: !!options.brief }));
       return;
     }
     case "export": {
@@ -387,54 +560,13 @@ function main(argv: string[]): void {
       return;
     }
     case "setup-agent": {
-      // AI エージェント側の設定を 1 回で入れる (何度実行しても同じ結果になるよう、印の間だけを書き換える)
+      // AI エージェント側の設定を 1 回で入れる (何度実行しても同じ結果になるよう、印の間だけを書き換える。本体は cli/setup-agent.ts)
       const root = str(options.dir) ? resolve(str(options.dir)!) : dirname(path);
-      const BEGIN = "<!-- boxglow:begin -->";
-      const END = "<!-- boxglow:end -->";
-      // 同梱の指示書は前置きが付いているので、「---」で挟まれた本文だけを貼る
-      const snippet = AGENTS_SNIPPET();
-      const parts = snippet.split(/^---$/m);
-      const body = (parts.length >= 3 ? parts.slice(1, -1).join("---") : snippet).trim();
-      const block = `${BEGIN}\n${body}\n${END}\n`;
-      const done: string[] = [];
-      for (const name of ["AGENTS.md", "CLAUDE.md"]) {
-        const f = join(root, name);
-        const cur = existsSync(f) ? readFileSync(f, "utf8") : "";
-        let next: string;
-        if (cur.includes(BEGIN) && cur.includes(END)) next = cur.slice(0, cur.indexOf(BEGIN)) + block + cur.slice(cur.indexOf(END) + END.length + 1);
-        else next = (cur ? cur.replace(/\s*$/, "\n\n") : "") + block;
-        if (next !== cur) { writeFileSync(f, next, "utf8"); done.push(name); }
-      }
-      // Claude Code のスキル
-      const skillDir = join(root, ".claude", "skills", "boxglow");
-      mkdirSync(skillDir, { recursive: true });
-      writeFileSync(join(skillDir, "SKILL.md"), SKILL_MD(), "utf8");
-      done.push(".claude/skills/boxglow/SKILL.md");
-      // セッション開始時に計画を読むフック (Claude Code の settings.json に追記。他の設定は残す)
-      const settingsPath = join(root, ".claude", "settings.json");
-      let settings: Record<string, unknown> = {};
-      if (existsSync(settingsPath)) { try { settings = JSON.parse(readFileSync(settingsPath, "utf8")) as Record<string, unknown>; } catch { settings = {}; } }
-      const hooks = (settings.hooks ?? {}) as Record<string, unknown[]>;
-      const start = (hooks.SessionStart ?? []) as { hooks?: { type: string; command: string }[] }[];
-      const cmd = "npx boxglow status";
-      if (!start.some((h) => (h.hooks ?? []).some((x) => x.command === cmd))) {
-        start.push({ hooks: [{ type: "command", command: cmd }] });
-        hooks.SessionStart = start;
-        settings.hooks = hooks;
-        writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf8");
-        done.push(".claude/settings.json (SessionStart: npx boxglow status)");
-      }
-      // MCP サーバの登録 (Claude Code はプロジェクトの .mcp.json を読む。他のサーバの設定は残す)
-      const mcpPath = join(root, ".mcp.json");
-      let mcp: { mcpServers?: Record<string, unknown> } = {};
-      if (existsSync(mcpPath)) { try { mcp = JSON.parse(readFileSync(mcpPath, "utf8")) as typeof mcp; } catch { mcp = {}; } }
-      mcp.mcpServers = mcp.mcpServers ?? {};
-      if (!mcp.mcpServers.boxglow) {
-        mcp.mcpServers.boxglow = { command: "npx", args: ["boxglow", "mcp"] };
-        writeFileSync(mcpPath, JSON.stringify(mcp, null, 2) + "\n", "utf8");
-        done.push(t(".mcp.json (MCP サーバ boxglow)"));
-      }
-      out(t("設定しました: {list}\nAI は作業の始まり・終わり・判断待ちを boxglow.json に記録し、セッションの最初に計画を読みます。人は画面 (boxglow.json を開く、または npx boxglow serve) で見て判断してください", { list: done.join(", ") }));
+      const done = setupAgent({ root, agent: str(options.agent) ?? "all", snippet: AGENTS_SNIPPET(), skill: SKILL_MD() });
+      // 指示書に「context を読んでトークンを付ける」手順が入るので、計画の側でも確認トークンの要求を有効にする
+      p.contextGuard = true;
+      save(path, p);
+      out(t("設定しました: {list}\nAI は作業の始まり・終わり・判断待ちを boxglow.json に記録し、セッションの最初に計画を読みます。人は画面で見て判断してください (編集と回答は npx boxglow serve --open か VS Code 拡張で。boxglow.json を直接開いた画面は閲覧専用です)", { list: done.join(", ") }));
       return;
     }
     case "project": {
@@ -443,7 +575,7 @@ function main(argv: string[]): void {
       const r = addProjectBlock(p, name);
       if (str(options.repo)) r.project = updateBlock(r.project, r.blockId, { repo: str(options.repo) });
       save(path, r.project);
-      out(t("プロジェクトの箱を追加: 「{name}」(id: {id})。全部で {count} 件", { name, id: r.blockId, count: projectBlocks(r.project).length }));
+      out(t("プロジェクトのボックスを追加: 「{name}」(id: {id})。全部で {count} 件", { name, id: r.blockId, count: projectBlocks(r.project).length }));
       return;
     }
     case "export-block": {
@@ -522,7 +654,7 @@ function main(argv: string[]): void {
       // Git のマージドライバ: %O (base) %A (ours) %B (theirs)。結果は ours に書く。終了コード 0 = 自動で合わせた
       const [basePath, oursPath, theirsPath] = rest;
       if (!basePath || !oursPath || !theirsPath) throw new Error(t("merge <base> <ours> <theirs> の 3 つを指定してください"));
-      const read = (f: string): Project | null => { const text = readFileSync(f, "utf8"); return text.trim() ? fromJSON(text) : null; };
+      const read = (f: string): Project | null => { const text = readFileSync(f, "utf8"); readRevisions.set(resolve(f), revisionOf(text)); return text.trim() ? fromJSON(text) : null; };
       const base = read(basePath);
       const ours = read(oursPath);
       const theirs = read(theirsPath);
@@ -530,11 +662,21 @@ function main(argv: string[]): void {
       const r = mergeProjects(base, ours, theirs);
       let q = r.project;
       // 両側で同じ項目を変えていた箇所は、相手の値をログに残す (後から見直せるように)
+      // 片方が削除・片方が変更の箇所は、変更された側を残したことを記録する (ボックスの中身を丸ごとログに書くと長いので、場所だけ)
+      const kept = r.conflicts.filter((c) => !c.automatic && (c.ours === undefined || c.theirs === undefined));
       for (const c of r.conflicts) {
-        q = { ...q, log: [...q.log, { id: `m${Math.random().toString(36).slice(2, 10)}`, at: new Date().toISOString(), actor: "merge", kind: "note", message: t("マージで両側が変更: {path} (採用: {ours} / 相手: {theirs})", { path: c.path, ours: JSON.stringify(c.ours), theirs: JSON.stringify(c.theirs) }) }] };
+        const message = kept.includes(c)
+          ? t("マージで片方が削除・片方が変更: {path} (変更された側を残しました。削除した側: {side})", { path: c.path, side: c.ours === undefined ? t("自分") : t("相手") })
+          : t("マージで両側が変更: {path} (採用: {ours} / 相手: {theirs})", { path: c.path, ours: JSON.stringify(c.ours), theirs: JSON.stringify(c.theirs) });
+        q = { ...q, log: [...q.log, { id: `m${Math.random().toString(36).slice(2, 10)}`, at: new Date().toISOString(), actor: "merge", kind: "note", message }] };
       }
-      writeFileSync(oursPath, toJSON(q) + "\n", "utf8");
-      out(t("マージ: 相手の変更 {count} 件を取り込み", { count: r.merged }) + (r.conflicts.length ? t("、両側で変更が {count} 件 (自分の値を採用し、相手の値はログに記録)", { count: r.conflicts.length }) : ""));
+      commitFile(oursPath, toJSON(q) + "\n", readRevisions.get(resolve(oursPath))!);
+      const both = r.conflicts.length - kept.length;
+      out(
+        t("マージ: 相手の変更 {count} 件を取り込み", { count: r.merged })
+        + (both ? t("、両側で変更が {count} 件 (自分の値を採用し、相手の値はログに記録)", { count: both }) : "")
+        + (kept.length ? t("、削除と変更の競合が {count} 件 (変更された側を残し、ログに記録)", { count: kept.length }) : "")
+      );
       if (r.conflicts.length && options.strict) process.exitCode = 1;
       return;
     }
@@ -547,7 +689,7 @@ function main(argv: string[]): void {
       if (!cur.split(/\r?\n/).includes(line)) writeFileSync(attrs, (cur && !cur.endsWith("\n") ? cur + "\n" : cur) + line + "\n", "utf8");
       execFileSync("git", ["config", "merge.boxglow.name", "Boxglow plan merge (box level)"], { cwd: root });
       execFileSync("git", ["config", "merge.boxglow.driver", "npx boxglow merge %O %A %B"], { cwd: root });
-      out(t("登録しました: {attrs} に「{line}」、git config merge.boxglow.driver = \"npx boxglow merge %O %A %B\"\n以後 git merge / pull / rebase で boxglow.json は箱の単位で自動マージされます (チーム全員がこのコマンドを 1 回実行してください)", { attrs, line }));
+      out(t("登録しました: {attrs} に「{line}」、git config merge.boxglow.driver = \"npx boxglow merge %O %A %B\"\n以後 git merge / pull / rebase で boxglow.json はボックスの単位で自動マージされます (チーム全員がこのコマンドを 1 回実行してください)", { attrs, line }));
       return;
     }
     case "validate": {
@@ -568,7 +710,7 @@ function main(argv: string[]): void {
         const hasKids = Object.values(p.blocks).some((x) => x.parentId === b.id);
         for (const q of portsOf(p, b.id)) {
           if (!used.has(`${q.id}:outer`) && !q.promotedFrom) warnings.push(t(q.direction === "in" ? "{key} 「{title}」の入力「{name}」がどこにもつながっていません" : "{key} 「{title}」の出力「{name}」がどこにもつながっていません", { key: b.key ?? "", title: b.title, name: q.name })); // 入力 / 出力で文を分ける (訳しやすくするため)
-          if (hasKids && !used.has(`${q.id}:inner`)) warnings.push(t(q.direction === "in" ? "{key} 「{title}」の入力「{name}」が中の箱とつながっていません" : "{key} 「{title}」の出力「{name}」が中の箱とつながっていません", { key: b.key ?? "", title: b.title, name: q.name }));
+          if (hasKids && !used.has(`${q.id}:inner`)) warnings.push(t(q.direction === "in" ? "{key} 「{title}」の入力「{name}」が中のボックスとつながっていません" : "{key} 「{title}」の出力「{name}」が中のボックスとつながっていません", { key: b.key ?? "", title: b.title, name: q.name }));
         }
         if (b.status === "white" && !hasKids && portsOf(p, b.id, "out").every((q) => q.artifacts.length === 0)) warnings.push(t("{key} 「{title}」は Done ですが成果物がありません (--artifact で付けてください)", { key: b.key ?? "", title: b.title }));
       }
@@ -593,7 +735,7 @@ function main(argv: string[]): void {
     }
     case "split": {
       const b = mustFind(p, rest[0]);
-      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
       const specText = str(options["spec-file"]) ? readFileSync(str(options["spec-file"])!, "utf8") : str(options.spec);
       if (!specText) throw new Error(t("--spec '<JSON>' または --spec-file <path> を指定してください"));
       const spec = JSON.parse(specText);
@@ -608,7 +750,7 @@ function main(argv: string[]): void {
       if (!target) throw new Error(t("--parent <block|project> を指定してください"));
       const parentId = target === "project" ? defaultTaskParent(p) : mustFind(p, target).id;
       const q = moveBlockToParent(p, b.id, parentId, nextFreePosition(p, parentId));
-      if (q === p) throw new Error(t("移せません (自分の子孫の中、プロジェクトの箱、同じ親などは不可)"));
+      if (q === p) throw new Error(t("移せません (自分の子孫の中、プロジェクトのボックス、同じ親などは不可)"));
       save(path, q);
       out(t("移動: 「{title}」を「{parent}」の中へ (線はつなぎ直しました)", { title: b.title, parent: q.blocks[parentId].title }));
       return;
@@ -644,12 +786,12 @@ function main(argv: string[]): void {
     }
     case "remove": {
       const b = mustFind(p, rest[0]);
-      if (b.kind === "project") throw new Error(t("プロジェクトの箱は消せません (中の箱を全部消すか、ファイルごと作り直してください)"));
+      if (b.kind === "project") throw new Error(t("プロジェクトのボックスは消せません (中のボックスを全部消すか、ファイルごと作り直してください)"));
       const kids = Object.values(p.blocks).filter((x) => x.parentId === b.id).length;
-      if (kids > 0 && !options.force) throw new Error(t("「{title}」の中に {count} 個の箱があります。まとめて消すなら --force を付けてください", { title: b.title, count: kids }));
+      if (kids > 0 && !options.force) throw new Error(t("「{title}」の中に {count} 個のボックスがあります。まとめて消すなら --force を付けてください", { title: b.title, count: kids }));
       const q = removeBlock(p, b.id);
       save(path, q);
-      out(t("削除: 「{title}」", { title: b.title }) + (kids > 0 ? t(" と中の {count} 個の箱", { count: kids }) : "") + t(" (つながっていた線も外しました)"));
+      out(t("削除: 「{title}」", { title: b.title }) + (kids > 0 ? t(" と中の {count} 個のボックス", { count: kids }) : "") + t(" (つながっていた線も外しました)"));
       return;
     }
     case "disconnect": {
@@ -700,35 +842,35 @@ function main(argv: string[]): void {
     }
     case "start": {
       const b = mustFind(p, rest[0]);
-      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
       save(path, setActivity(p, b.id, actor, "working", str(options.note) ?? ""));
       out(t("開始: 「{title}」({actor})", { title: b.title, actor }));
       return;
     }
     case "blocked": {
       const b = mustFind(p, rest[0]);
-      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
       save(path, setActivity(p, b.id, actor, "blocked", str(options.note) ?? ""));
       out(t("詰まり: 「{title}」", { title: b.title }));
       return;
     }
     case "review": {
       const b = mustFind(p, rest[0]);
-      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
       save(path, setActivity(p, b.id, actor, "waiting_review", str(options.note) ?? ""));
       out(t("確認待ち: 「{title}」", { title: b.title }));
       return;
     }
     case "leave": {
       const b = mustFind(p, rest[0]);
-      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
       save(path, clearActivity(p, b.id));
       out(t("活動を消しました: 「{title}」", { title: b.title }));
       return;
     }
     case "done": {
       const b = mustFind(p, rest[0]);
-      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
       const artifacts = list(options.artifact).map((s) => artifactFrom(s));
       const r = finishBlock(p, b.id, actor, { artifacts, outputName: str(options.output), note: str(options.note) });
       if (r.error) throw new Error(r.error);
@@ -740,7 +882,7 @@ function main(argv: string[]): void {
     }
     case "artifact": {
       const b = mustFind(p, rest[0]);
-      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
       if (!rest[1]) throw new Error(t("<URL またはパス> を指定してください"));
       const a = artifactFrom(rest[1], str(options.title));
       const outs = portsOf(p, b.id, "out");
@@ -755,8 +897,26 @@ function main(argv: string[]): void {
       const lines: string[] = [];
       for (const port of Object.values(p.ports)) {
         for (const a of port.artifacts) {
-          if (a.kind !== "git") continue;
           const owner = p.blocks[port.blockId]?.title ?? "?";
+          // ローカル参照 (未コミットのときに記録した成果物) は、今は HEAD と中身が一致していれば Git の参照に補完する
+          // (記録したときのパスは、計画ファイルの場所か実行した場所からの相対パスなので、両方を試す)
+          if (a.kind === "file" && a.path) {
+            const ref = findGitRef(a.path, [dirname(path), process.cwd()]);
+            if (ref) {
+              a.kind = "git";
+              a.repo = ref.repo;
+              a.path = ref.path;
+              a.commit = ref.commit;
+              a.blob = ref.blob;
+              if (ref.url) a.url = ref.url;
+              a.state = "ok";
+              a.checkedAt = new Date().toISOString();
+              lines.push(t("- [補完] {owner}.{port} 「{title}」 {path} @ {commit}", { owner, port: port.name, title: a.title, path: ref.path, commit: ref.commit.slice(0, 7) }));
+              changed++;
+            }
+            continue;
+          }
+          if (a.kind !== "git") continue;
           // コミットの無いリポジトリで記録した成果物 (commit が空) は、コミットされた後の check で補う
           if (!a.commit && a.path) {
             const ref = gitRefFor(resolve(dirname(path), a.path));
@@ -798,7 +958,7 @@ function main(argv: string[]): void {
     }
     case "ask": {
       const b = mustFind(p, rest[0]);
-      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
+      // 新しい質問をしただけでは、前の人の回答を「読んで引き取った」ことにしない (ack か、作業を記録するコマンドで引き取る)
       const question = rest.slice(1).join(" ");
       if (!question) throw new Error(t("<質問> を指定してください"));
       const opts = str(options.options) ? str(options.options)!.split("|").map((s) => s.trim()).filter(Boolean) : [];
@@ -849,7 +1009,7 @@ function main(argv: string[]): void {
     }
     case "set": {
       const b = mustFind(p, rest[0]);
-      p = ackDecisions(p, b.id, actor); // 作業を記録する = その箱の回答を読んで引き取った
+      p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
       if (str(options.status)) p = setStatus(p, b.id, str(options.status) as "black" | "gray" | "white", actor);
       if (str(options.progress) !== undefined) p = setProgress(p, b.id, str(options.progress) === "auto" ? null : Number(str(options.progress)), actor);
       const sched: { startDate?: string | null; dueDate?: string | null; estimateHours?: number | null; actualHours?: number | null } = {};
@@ -894,6 +1054,7 @@ if (argv[0] === "mcp") {
   // MCP サーバ (標準入出力)。--file で計画の場所を指定できる (無ければカレントから上へ探す)
   const { options } = parseArgs(argv.slice(1));
   if (str(options.file)) process.env.BOXGLOW_FILE = resolve(str(options.file)!);
+  if (str(options.actor)) process.env.BOXGLOW_ACTOR = str(options.actor)!; // 記録者の名前 (各ツールの実行に引き継ぐ)
   if (str(options.lang)) process.env.BOXGLOW_LANG = str(options.lang)!; // ツールの説明の言語 (各コマンドの文言は計画の言語)
   startMcp(runCli).catch((e) => { console.error(`[boxglow mcp] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });
 } else if (argv[0] === "serve") {
@@ -911,10 +1072,15 @@ if (argv[0] === "mcp") {
     process.exitCode = 1;
   }
 } else {
+  // 出力はいったん溜めて、最後にまとめて出す (他の変更とぶつかってやり直すとき、途中まで出した分を二重に出さないため)
+  let buf = "";
+  sink = (text) => { buf += text; };
   try {
-    main(argv);
+    mainWithRetry(argv, () => { buf = ""; process.exitCode = undefined; });
   } catch (e) {
     console.error(`[boxglow] ${e instanceof Error ? e.message : String(e)}`);
     process.exitCode = 1;
+  } finally {
+    process.stdout.write(buf);
   }
 }

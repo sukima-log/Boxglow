@@ -1,3 +1,6 @@
+import type { PeerVersion } from "../model/version";
+import { validateProjectText } from "../model/validate-file";
+import type { ConflictChoices, MergeResult } from "../model/merge";
 /**
  * アプリの状態 (Zustand)
  *
@@ -9,7 +12,8 @@ import { create } from "zustand";
 import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeCollapsed, normalizeInputNames, resolveAllOverlaps, scopeFor, toJSON, wireNetTabs, withIndex } from "../model/graph";
 export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
-import { ensurePermission, readLocalFile, writeLocalFile } from "../lib/localfile";
+import { ensurePermission, readLocalFile } from "../lib/localfile";
+import { mergeProjects } from "../model/merge";
 import { buildSampleProject } from "../model/sample";
 import exampleText from "../../examples/logic-daw/boxglow.json?raw";
 import type { Project } from "../model/types";
@@ -47,21 +51,26 @@ interface State {
   /** ローカルファイルの名前 (source = file のとき) */
   fileName: string | null;
   readonly: boolean;
-  /** View モードで畳んだ / 展開した箱 (画面だけの状態。ファイルには書かない)。id -> collapsed */
+  /** View モードで畳んだ / 展開したボックス (画面だけの状態。ファイルには書かない)。id -> collapsed */
   viewCollapsed: Record<string, boolean>;
-  /** 箱を畳む / 展開する。All で大項目なら、そのタブを開く。Edit なら共有の配置として保存、View なら画面だけ */
+  /** ボックスを畳む / 展開する。All で大項目なら、そのタブを開く。Edit なら共有の配置として保存、View なら画面だけ */
   toggleCollapsed: (blockId: string) => void;
-  /** 開いているタブ (大項目の箱の id)。null なら All (大項目の一覧)。画面だけの状態で、プロジェクトごとにブラウザに記憶 */
+  /** 開いているタブ (大項目のボックスの id)。null なら All (大項目の一覧)。画面だけの状態で、プロジェクトごとにブラウザに記憶 */
   viewScope: string | null;
-  /** 表示範囲を切り替える (null = All)。範囲の外にある箱の選択は解除する */
+  /** 表示範囲を切り替える (null = All)。範囲の外にあるボックスの選択は解除する */
   setViewScope: (blockId: string | null) => void;
   /** 今すぐ保存する (Save ボタン。自動保存を待たずに書く) */
   saveNow: () => void;
+  peerVersion: PeerVersion | null;
+  saveError: string | null;
+  conflict: { text: string; revision: string; paths: string[] } | null;
+  previewConflict: () => MergeResult | null;
+  resolveConflict: (choice: "merge" | "remote", choices?: ConflictChoices, revision?: string) => boolean;
 
   embed: boolean;
   projects: ProjectMeta[];
   selection: Selection;
-  /** 直前まで選んでいた線の id (箱をダブルクリックしてタブを開くとき、最初のクリックで外れた線の選択を戻すため) */
+  /** 直前まで選んでいた線の id (ボックスをダブルクリックしてタブを開くとき、最初のクリックで外れた線の選択を戻すため) */
   lastEdgeId: string | null;
   past: Project[];
   future: Project[];
@@ -121,7 +130,7 @@ function loadMe(p: Project): string | null {
 /**
  * ブラウザに記憶した表示範囲 (タブ) を読む
  * Input : p = 開いたプロジェクト
- * Output: 大項目の箱の id (無い・消えていれば null = All)
+ * Output: 大項目のボックスの id (無い・消えていれば null = All)
  */
 function loadScope(p: Project): string | null {
   try {
@@ -141,74 +150,111 @@ let fileHandle: FileSystemFileHandle | null = null;
 let fileLastModified = 0;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 /** ローカルサーバ連携の状態: 自分が最後に書いた中身 (サーバからの変更通知と区別する) と、通知の接続 */
-let serveLastText = "";
 let serveEvents: EventSource | null = null;
 /** VS Code の webview の API (拡張の中だけで定義される)。postMessage で拡張とやり取りする */
 type VsCodeApi = { postMessage: (msg: unknown) => void };
 declare global { interface Window { acquireVsCodeApi?: () => VsCodeApi } }
 let vscodeApi: VsCodeApi | null = null;
-let vscodeLastText = "";
 
 /** サーバの API の場所 (アプリは相対パスで配信されるので、ページの場所から解く) */
 const serveApi = (path: string): string => new URL(path, document.baseURI).toString();
-/** サーバへ書く */
-async function writeToServer(text: string): Promise<void> {
-  serveLastText = text;
-  const r = await fetch(serveApi("api/project"), { method: "PUT", headers: { "content-type": "application/json" }, body: text });
-  if (!r.ok) throw new Error(t("サーバに書けません ({status})", { status: r.status }));
+let baseText = "";
+let serveRevision = "";
+let vscodeVersion = 0;
+let epoch = 0;
+let inFlight = false;
+let inFlightText = "";
+let refreshExternal: (() => Promise<void>) | null = null;
+let messageHandler: ((ev: MessageEvent) => void) | null = null;
+const pendingSaves = new Map<string, { resolve: (version: number) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+function saveToVsCode(text: string): Promise<number> {
+  const requestId = crypto.randomUUID();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { pendingSaves.delete(requestId); reject(new Error(t("保存の応答がありません。編集は画面に残っています。再試行してください。"))); }, 10000);
+    pendingSaves.set(requestId, { resolve, reject, timer });
+    vscodeApi!.postMessage({ type: "save", requestId, text, baseText, version: vscodeVersion });
+  });
 }
 /** ファイルの監視間隔 (ms) */
 const WATCH_INTERVAL = 1500;
 
 export const useProjectStore = create<State>((set, get) => {
-  /** 保存を予約する (連続する変更は 1 回にまとめる) */
+  const markConflict = (text: string, revision: string) => {
+    const current = get().project;
+    if (!current || text === baseText) return;
+    const remote = fromJSON(text);
+    const result = mergeProjects(baseText ? fromJSON(baseText) : null, current, remote);
+    set({ conflict: { text, revision, paths: result.conflicts.map((c) => c.path) }, saveState: "unsaved", saveError: t("他の編集と競合しました。両方の変更を保持しているので、統合方法を選んでください。") });
+  };
+  const acceptRemote = (text: string, revision = "") => {
+    const current = get().project;
+    if (text === baseText || text === inFlightText) return;
+    if (get().saveState !== "saved" && current) { markConflict(text, revision); return; }
+    const next = fromJSON(text);
+    baseText = text;
+    if (get().source === "serve") serveRevision = revision;
+    set({ project: next, past: current ? [...get().past.slice(-HISTORY_LIMIT + 1), current] : [], future: [], selection: get().selection.blockId && !next.blocks[get().selection.blockId!] ? NO_SELECTION : get().selection });
+  };
+  const persist = async () => {
+    const initial = get();
+    if (!initial.project || initial.ephemeral || initial.readonly || initial.conflict || inFlight) return;
+    const generation = epoch, source = initial.source;
+    inFlight = true;
+    try {
+      do {
+        const project = get().project!;
+        const text = toJSON(project) + "\n";
+        inFlightText = text;
+        set({ saveState: "saving", saveError: null });
+        if (source === "serve") {
+          const response = await fetch(serveApi("api/project"), { method: "PUT", headers: { "content-type": "application/json", "if-match": serveRevision }, body: text });
+          if (generation !== epoch) return;
+          if (response.status === 412) {
+            const latest = await fetch(serveApi("api/project"), { cache: "no-store" });
+            if (!latest.ok) throw new Error(t("最新のファイルを取得できません。接続を確認して保存を再試行してください。"));
+            const remote = await latest.text();
+            if (generation !== epoch) return;
+            if (remote === text) serveRevision = latest.headers.get("etag") ?? ""; // 前の書き込みは成功していて、応答だけが届かなかった (ディスクは今の中身と同じ)
+            else { markConflict(remote, latest.headers.get("etag") ?? ""); throw new Error(t("他の編集と競合しました。両方の変更を保持しているので、統合方法を選んでください。")); }
+          }
+          if (response.status === 423) throw new Error(t("別の保存処理が進行中です。編集は保持しています。少し待って保存を再試行してください。"));
+          if (response.status === 400) throw new Error(t("計画の形式や参照に問題があり、保存できません。編集を JSON で退避して確認してください。"));
+          if (response.status === 413) throw new Error(t("計画が保存可能なサイズ（5 MiB）を超えています。編集を JSON で退避してください。"));
+          if (!response.ok && response.status !== 412) throw new Error(t("サーバに書けません ({status})", { status: response.status }));
+          if (response.ok) serveRevision = response.headers.get("etag") ?? "";
+        } else if (source === "vscode") {
+          vscodeVersion = await saveToVsCode(text);
+        } else if (source === "file") {
+          throw new Error(t("共同編集は npx boxglow serve --open または VS Code 拡張で開いてください。"));
+        } else { await saveProject(project); void get().refreshList(); }
+        if (generation !== epoch) return;
+        baseText = text;
+        if (get().conflict) { set({ saveState: "unsaved" }); return; }
+        // 保存中に次の編集が入っていたら「保存済み」にしない。新しい中身を続けて (1 つずつ順に) 保存する
+        if (get().project === project) { set({ saveState: "saved", saveError: null }); break; }
+      } while (generation === epoch && get().project);
+    } catch (error) {
+      if (generation === epoch) set({ saveState: "unsaved", saveError: error instanceof TypeError ? t("接続できません。編集は保持しています。サーバーを確認して保存を再試行してください。") : error instanceof Error ? error.message : String(error) });
+    } finally {
+      if (generation === epoch) { inFlight = false; inFlightText = ""; if (get().saveState === "saved") void refreshExternal?.(); }
+    }
+  };
   const scheduleSave = () => {
     const { project, ephemeral, readonly } = get();
     if (!project || ephemeral || readonly) return;
     set({ saveState: "unsaved" });
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(async () => {
-      saveTimer = null; // 発火したら「未保存の変更がある」状態は終わり (外からの変更の読み直しを止めない)
-      const p = get().project;
-      if (!p) return;
-      set({ saveState: "saving" });
-      try {
-        if (get().source === "serve") {
-          await writeToServer(toJSON(p) + "\n");
-          set({ saveState: "saved" });
-        } else if (get().source === "vscode" && vscodeApi) {
-          // 拡張に書いてもらう (ファイルは拡張が持っている)
-          vscodeLastText = toJSON(p) + "\n";
-          vscodeApi.postMessage({ type: "save", text: vscodeLastText });
-          set({ saveState: "saved" });
-        } else if (get().source === "file" && fileHandle) {
-          // 最初の保存のときに書き込み権限を求める (開くときは読み取りだけ)
-          if (!(await ensurePermission(fileHandle, "readwrite"))) {
-            set({ saveState: "unsaved", toast: t("ファイルへの書き込みが許可されていません (Save を押すともう一度確認します)") });
-            return;
-          }
-          // ローカルファイルへ書き戻す (書いた後の更新時刻を覚えて、自分の書き込みを外部の変更と間違えない)
-          fileLastModified = await writeLocalFile(fileHandle, toJSON(p) + "\n");
-          set({ saveState: "saved" });
-        } else {
-          await saveProject(p);
-          set({ saveState: "saved" });
-          void get().refreshList();
-        }
-      } catch (e) {
-        set({ saveState: "unsaved", toast: t("保存に失敗しました: {error}", { error: String(e) }) });
-      }
-    }, SAVE_DELAY);
+    saveTimer = setTimeout(() => { saveTimer = null; void persist(); }, SAVE_DELAY);
   };
-
-  /** URL のハッシュに開いているプロジェクト id を書く (再読み込みで戻れるように) */
-  /** ローカルファイルの監視を止める */
+  const canLeave = () => !["unsaved", "saving"].includes(get().saveState) || confirm(t("未保存の編集があります。必要なら先に JSON を書き出してください。編集を破棄して移動しますか？"));
   const stopWatching = () => {
-    if (watchTimer) clearInterval(watchTimer);
-    watchTimer = null;
-    fileHandle = null;
-    if (serveEvents) serveEvents.close();
-    serveEvents = null;
+    epoch++; inFlight = false; inFlightText = ""; refreshExternal = null;
+    if (saveTimer) clearTimeout(saveTimer); saveTimer = null;
+    if (watchTimer) clearInterval(watchTimer); watchTimer = null; fileHandle = null;
+    serveEvents?.close(); serveEvents = null;
+    if (messageHandler) window.removeEventListener("message", messageHandler); messageHandler = null;
+    for (const save of pendingSaves.values()) { clearTimeout(save.timer); save.reject(new Error("Project closed")); } // (計画を閉じた後なので、この失敗は画面には出ない) pendingSaves.clear();
+    set({ conflict: null, saveError: null, peerVersion: null });
   };
 
   const rememberInUrl = (id: string | null) => {
@@ -228,7 +274,7 @@ export const useProjectStore = create<State>((set, get) => {
   , setViewScope: (blockId) => {
       const { project, selection } = get();
       if (!project) return;
-      // タブになるのは大項目だけ (中の箱は入れ子で見せる)。大項目以外を指定されたら、その箱が属する大項目のタブにする
+      // タブになるのは大項目だけ (中のボックスは入れ子で見せる)。大項目以外を指定されたら、そのボックスが属する大項目のタブにする
       const scope = blockId && project.blocks[blockId] ? majorOf(project, blockId) : null;
       try {
         if (scope) localStorage.setItem(`boxglow:scope:${project.id}`, scope);
@@ -236,46 +282,43 @@ export const useProjectStore = create<State>((set, get) => {
       } catch {
         /* 記憶できなくても動く */
       }
-      // 範囲の外の箱を選んだままだと、詳細パネルに見えない物が出て混乱するので外す (Summary などの選択は保つ)。
+      // 範囲の外のボックスを選んだままだと、詳細パネルに見えない物が出て混乱するので外す (Summary などの選択は保つ)。
       // 線の選択は保つ: 線は境界を越えて別のタブへ続くので、選んだままタブを移って接続先を追えるようにする
       const keepSel = scope && selection.blockId && !isInScope(project, scope, selection.blockId) ? { ...selection, blockId: null } : selection;
       set({ viewScope: scope, selection: keepSel });
     }
-  , saveNow: () => {
-      const { project, ephemeral, readonly } = get();
-      if (!project || ephemeral || readonly) return;
-      if (saveTimer) clearTimeout(saveTimer);
-      saveTimer = null;
-      scheduleSave();
-      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-      void (async () => {
-        set({ saveState: "saving" });
-        try {
-          if (get().source === "serve") {
-            await writeToServer(toJSON(get().project!) + "\n");
-          } else if (get().source === "vscode" && vscodeApi) {
-            vscodeLastText = toJSON(get().project!) + "\n";
-            vscodeApi.postMessage({ type: "save", text: vscodeLastText });
-          } else if (get().source === "file" && fileHandle) {
-            if (!(await ensurePermission(fileHandle, "readwrite"))) { set({ saveState: "unsaved", toast: t("ファイルへの書き込みが許可されていません") }); return; }
-            fileLastModified = await writeLocalFile(fileHandle, toJSON(get().project!) + "\n");
-          } else {
-            await saveProject(get().project!);
-            void get().refreshList();
-          }
-          set({ saveState: "saved" });
-        } catch (e) {
-          set({ saveState: "unsaved", toast: t("保存に失敗しました: {error}", { error: e instanceof Error ? e.message : String(e) }) });
-        }
-      })();
+  , saveNow: () => { if (saveTimer) clearTimeout(saveTimer); saveTimer = null; void persist(); }
+  , peerVersion: null
+  , saveError: null
+  , conflict: null
+  , previewConflict: () => {
+      const { conflict, project } = get();
+      return conflict && project ? mergeProjects(baseText ? fromJSON(baseText) : null, project, fromJSON(conflict.text)) : null;
+    }
+  , resolveConflict: (choice, choices = {}, revision) => {
+      const conflict = get().conflict, current = get().project;
+      if (!conflict || !current || inFlight || (revision !== undefined && revision !== conflict.revision)) return false;
+      const remote = fromJSON(conflict.text);
+      const result = mergeProjects(baseText ? fromJSON(baseText) : null, current, remote, choices);
+      if (choice === "merge" && result.conflicts.some((item) => !item.automatic && !choices[item.id])) return false;
+      const next = choice === "remote" ? remote : result.project;
+      try { validateProjectText(toJSON(next)); }
+      catch (e) { set({ saveError: t("この組み合わせでは参照がつながりません。選択を見直すか、手元を退避して最新のファイルを開いてください。") + " " + String(e) }); return false; }
+      if (choice === "merge") for (const item of result.conflicts) next.log.push({ id: crypto.randomUUID(), at: new Date().toISOString(), actor: "human", kind: "note", message: t("競合を統合: {path} (採用: {selected} / 手元: {ours} / 相手: {theirs})", { path: item.path, selected: item.automatic ? "automatic" : choices[item.id], ours: JSON.stringify(item.ours), theirs: JSON.stringify(item.theirs) }) });
+      baseText = conflict.text;
+      if (get().source === "serve") serveRevision = conflict.revision;
+      if (get().source === "vscode") vscodeVersion = Number(conflict.revision);
+      set({ project: next, conflict: null, saveError: null, saveState: "saved", past: [...get().past.slice(-HISTORY_LIMIT + 1), current], future: [] });
+      if (choice === "merge") scheduleSave();
+      return true;
     }
   , toggleCollapsed: (blockId) => {
       const { project, editMode, readonly, viewCollapsed, viewScope } = get();
       if (!project || !project.blocks[blockId]) return;
       // All の図では大項目は展開しない (中はタブで見る)。畳む / 展開の操作はその大項目のタブを開く操作にする
       if (viewScope === null && majorOf(project, blockId) === blockId) {
-        // ダブルクリックの 1 回目で箱が選ばれ、直前まで選んでいた線の選択が外れている。
-        // その線がこのタブへ続いているなら、線を選んだままタブを開く (線を選んで接続先の箱をダブルクリックする流れ)
+        // ダブルクリックの 1 回目でボックスが選ばれ、直前まで選んでいた線の選択が外れている。
+        // その線がこのタブへ続いているなら、線を選んだままタブを開く (線を選んで接続先のボックスをダブルクリックする流れ)
         const { lastEdgeId, selection } = get();
         if (lastEdgeId && selection.blockId === blockId && project.edges[lastEdgeId] && wireNetTabs(project, lastEdgeId).includes(blockId)) {
           set({ selection: { ...NO_SELECTION, edgeId: lastEdgeId } });
@@ -324,8 +367,8 @@ export const useProjectStore = create<State>((set, get) => {
     }
   , focus: null
   , focusBlock: (blockId, opts) => {
-      // 箱が見える画面に切り替えてから寄せる: 親の箱を開く (親がプロジェクトの箱や最上位なら All)。
-      // scope: false なら画面は変えない (キャンバスでクリックして選んだときは、クリック側が箱を開くのでここでは切り替えない)
+      // ボックスが見える画面に切り替えてから寄せる: 親のボックスを開く (親がプロジェクトのボックスや最上位なら All)。
+      // scope: false なら画面は変えない (キャンバスでクリックして選んだときは、クリック側がボックスを開くのでここでは切り替えない)
       const { project, viewScope } = get();
       if (opts?.scope !== false && project && project.blocks[blockId]) {
         const want = scopeFor(project, blockId);
@@ -340,7 +383,7 @@ export const useProjectStore = create<State>((set, get) => {
       if (!project || readonly) return;
       let next = fn(project);
       if (next === project) return;
-      // 大項目は畳んだ状態でそろえる (All は大項目までしか出さない)。箱は重ねない: 変更のたびに同じ階層の重なりを押し出す (ドラッグ中は呼び出し側が history=false で呼ぶので除く)
+      // 大項目は畳んだ状態でそろえる (All は大項目までしか出さない)。ボックスは重ねない: 変更のたびに同じ階層の重なりを押し出す (ドラッグ中は呼び出し側が history=false で呼ぶので除く)
       next = normalizeCollapsed(normalizeInputNames(next).project);
       if (opts?.history !== false) next = resolveAllOverlaps(next, blockSize);
       const history = opts?.history ?? true;
@@ -353,6 +396,7 @@ export const useProjectStore = create<State>((set, get) => {
     }
 
   , undo: () => {
+      if (get().readonly) return;
       const { project, past, future } = get();
       if (!project || past.length === 0) return;
       const prev = past[past.length - 1];
@@ -361,6 +405,7 @@ export const useProjectStore = create<State>((set, get) => {
     }
 
   , redo: () => {
+      if (get().readonly) return;
       const { project, past, future } = get();
       if (!project || future.length === 0) return;
       const [next, ...rest] = future;
@@ -372,7 +417,7 @@ export const useProjectStore = create<State>((set, get) => {
   , select: (sel) => {
       const cur = get().selection;
       const next = { ...NO_SELECTION, ...sel };
-      // 「線を選んでいた → 箱を選んだ」の直後だけ、その線を覚える (同じ箱を続けて選ぶダブルクリックの 2 回目では保つ)。
+      // 「線を選んでいた → ボックスを選んだ」の直後だけ、その線を覚える (同じボックスを続けて選ぶダブルクリックの 2 回目では保つ)。
       // 線を外しただけ (何もない所を押した) や別の物を選んだときは忘れる (あとで無関係に線が選び直されないように)
       const lastEdgeId = cur.edgeId && next.blockId ? cur.edgeId : next.blockId && next.blockId === cur.blockId ? get().lastEdgeId : null;
       set({ selection: next, lastEdgeId });
@@ -397,12 +442,15 @@ export const useProjectStore = create<State>((set, get) => {
     }
 
   , openProjectObject: (p, ephemeral) => {
+      if (!canLeave()) return;
       stopWatching();
-      set({ project: p, ephemeral, source: "idb", fileName: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: ephemeral ? "none" : "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+      baseText = toJSON(p) + "\n";
+      set({ project: p, ephemeral, source: "idb", readonly: (new URLSearchParams(location.search).get("readonly") === "1" || new URLSearchParams(location.search).get("view") === "article"), fileName: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: ephemeral ? "none" : "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(ephemeral ? null : p.id);
     }
 
   , openLocalFile: async (handle) => {
+      if (!canLeave()) return false;
       if (!(await ensurePermission(handle, "read"))) {
         set({ toast: t("ファイルの読み書きが許可されませんでした") });
         return false;
@@ -425,36 +473,29 @@ export const useProjectStore = create<State>((set, get) => {
       }
       stopWatching();
       fileHandle = handle;
-      set({ project: p, ephemeral: false, source: "file", fileName: handle.name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+      baseText = text;
+      set({ project: p, ephemeral: false, source: "file", readonly: true, fileName: handle.name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(null);
-      // 監視: 外部 (CLI など) が書き換えたら読み直す (自分の書き込みは fileLastModified で区別)
+      const generation = epoch;
       watchTimer = setInterval(async () => {
         if (!fileHandle) return;
-        try {
-          const f = await fileHandle.getFile();
-          if (f.lastModified === fileLastModified) return;
-          if (saveTimer) return; // 自分の未保存の変更がある間は、保存が終わってから読む
-          fileLastModified = f.lastModified;
-          const next = fromJSON(await f.text());
-          const cur = get().project;
-          // 選択中のブロックが消えていたら選択を解除する
-          const sel = get().selection;
-          const keep = sel.blockId && next.blocks[sel.blockId] ? sel : sel.blockId ? NO_SELECTION : sel;
-          set({ project: next, past: cur ? [...get().past.slice(-HISTORY_LIMIT + 1), cur] : get().past, future: [], selection: keep, saveState: "saved" });
-        } catch {
-          /* 一時的に読めないときは次の周期で */
-        }
+        try { const f = await fileHandle.getFile(); if (f.lastModified === fileLastModified) return; const text = await f.text(); if (generation !== epoch) return; acceptRemote(text); fileLastModified = f.lastModified; } catch { /* Try on the next poll. */ }
       }, WATCH_INTERVAL);
       return true;
     }
 
   , openFromServer: async () => {
+      if (!canLeave()) return false;
+      let revision = "";
+      let peerVersion: PeerVersion = { app: null, protocol: null };
       let text: string;
       let name = "boxglow.json";
       try {
         const r = await fetch(serveApi("api/project"), { cache: "no-store" });
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         text = await r.text();
+        revision = r.headers.get("etag") ?? "";
+        peerVersion = { app: r.headers.get("x-boxglow-version"), protocol: r.headers.has("x-boxglow-protocol") ? Number(r.headers.get("x-boxglow-protocol")) : null };
         name = decodeURIComponent(r.headers.get("x-boxglow-file") ?? name);
       } catch (e) {
         set({ toast: t("サーバから読めません (npx boxglow serve が動いていますか): {error}", { error: String(e) }) });
@@ -468,62 +509,62 @@ export const useProjectStore = create<State>((set, get) => {
         return false;
       }
       stopWatching();
-      serveLastText = text;
-      set({ project: p, ephemeral: false, source: "serve", fileName: name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+      baseText = text; serveRevision = revision;
+      set({ project: p, ephemeral: false, source: "serve", peerVersion, readonly: (new URLSearchParams(location.search).get("readonly") === "1" || new URLSearchParams(location.search).get("view") === "article"), fileName: name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(null);
-      // サーバからの変更通知 (CLI や AI が書いたとき): 読み直す。自分の未保存の変更がある間は後回し
+      const generation = epoch;
+      let sequence = 0;
       const reload = async () => {
-        if (saveTimer) { setTimeout(reload, SAVE_DELAY + 300); return; }
+        const read = ++sequence;
         try {
-          const r = await fetch(serveApi("api/project"), { cache: "no-store" });
-          const t = await r.text();
-          if (t === serveLastText) return;
-          serveLastText = t;
-          const next = fromJSON(t);
-          const cur = get().project;
-          const sel = get().selection;
-          const keep = sel.blockId && next.blocks[sel.blockId] ? sel : sel.blockId ? NO_SELECTION : sel;
-          set({ project: next, past: cur ? [...get().past.slice(-HISTORY_LIMIT + 1), cur] : get().past, future: [], selection: keep, saveState: "saved" });
-        } catch {
-          /* 次の通知で */
-        }
+          const response = await fetch(serveApi("api/project"), { cache: "no-store" });
+          if (!response.ok) return;
+          const text = await response.text();
+          if (generation !== epoch || read !== sequence) return;
+          set({ peerVersion: { app: response.headers.get("x-boxglow-version"), protocol: response.headers.has("x-boxglow-protocol") ? Number(response.headers.get("x-boxglow-protocol")) : null } });
+          acceptRemote(text, response.headers.get("etag") ?? "");
+        } catch { /* Reconnect and the next event retry. */ }
       };
+      refreshExternal = reload;
       serveEvents = new EventSource(serveApi("api/events"));
       serveEvents.addEventListener("change", () => { void reload(); });
+      serveEvents.addEventListener("hello", () => { void reload(); });
       return true;
     }
 
   , openFromVsCode: () => {
       if (!window.acquireVsCodeApi) return;
       vscodeApi = vscodeApi ?? window.acquireVsCodeApi();
-      // 拡張からの通知: load (最初の中身) / update (ファイルが外で変わった)
-      const applyText = (text: string, name: string, first: boolean) => {
-        if (!first && text === vscodeLastText) return; // 自分の書き込みの反映
-        if (!first && saveTimer) { setTimeout(() => applyText(text, name, false), SAVE_DELAY + 300); return; } // 自分の未保存の変更がある間は後回し
-        let p: Project;
+      stopWatching();
+      const generation = epoch;
+      messageHandler = (ev: MessageEvent) => {
+        if (generation !== epoch) return;
+        if (!ev.data || typeof ev.data !== "object") return;
+        // 拡張から届く中身の改行を LF にそろえる (CRLF のファイルでも、画面が保存した LF の中身と同じものとして比べられるようにする。
+        // そろえないと、自分の保存の反映を「外からの変更」とみなして、読み直しや競合が起きる)
+        const msg = typeof ev.data.text === "string" ? { ...ev.data, text: ev.data.text.replace(/\r\n/g, "\n") } : ev.data;
+        if (msg.type === "saved" || msg.type === "save-error") {
+          const pending = pendingSaves.get(msg.requestId);
+          if (!pending) return;
+          clearTimeout(pending.timer); pendingSaves.delete(msg.requestId);
+          if (msg.type === "saved") pending.resolve(msg.version);
+          else {
+            if (msg.conflict && typeof msg.text === "string") { markConflict(msg.text, String(msg.version)); if (msg.text === baseText) vscodeVersion = msg.version; }
+            pending.reject(new Error(msg.error || t("保存に失敗しました")));
+          }
+          return;
+        }
+        if ((msg.type !== "load" && msg.type !== "update") || typeof msg.text !== "string") return;
+        if (typeof msg.version === "number" && msg.version < vscodeVersion) return;
         try {
-          p = fromJSON(text);
-        } catch (e) {
-          set({ toast: e instanceof Error ? e.message : String(e) });
-          return;
-        }
-        vscodeLastText = text;
-        if (first) {
-          stopWatching();
-          set({ project: p, ephemeral: false, source: "vscode", fileName: name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
-          return;
-        }
-        const cur = get().project;
-        const sel = get().selection;
-        const keep = sel.blockId && p.blocks[sel.blockId] ? sel : sel.blockId ? NO_SELECTION : sel;
-        set({ project: p, past: cur ? [...get().past.slice(-HISTORY_LIMIT + 1), cur] : get().past, future: [], selection: keep, saveState: "saved" });
+          set({ peerVersion: { app: typeof msg.appVersion === "string" ? msg.appVersion : null, protocol: typeof msg.protocol === "number" ? msg.protocol : null, extension: typeof msg.extensionVersion === "string" ? msg.extensionVersion : undefined } });
+          if (get().source !== "vscode") {
+            const p = fromJSON(msg.text); baseText = msg.text; vscodeVersion = msg.version ?? 0;
+            set({ project: p, ephemeral: false, source: "vscode", fileName: msg.name ?? "boxglow.json", past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+          } else { acceptRemote(msg.text, String(msg.version)); if (get().saveState === "saved") vscodeVersion = msg.version ?? vscodeVersion; }
+        } catch (e) { set({ saveError: String(e) }); }
       };
-      window.addEventListener("message", (ev: MessageEvent) => {
-        const msg = ev.data as { type?: string; text?: string; name?: string } | undefined;
-        if (!msg || typeof msg.text !== "string") return;
-        if (msg.type === "load") applyText(msg.text, msg.name ?? "boxglow.json", get().source !== "vscode");
-        else if (msg.type === "update") applyText(msg.text, msg.name ?? "boxglow.json", false);
-      });
+      window.addEventListener("message", messageHandler);
       vscodeApi.postMessage({ type: "ready" });
     }
 
@@ -562,6 +603,7 @@ export const useProjectStore = create<State>((set, get) => {
     }
 
   , closeProject: () => {
+      if (!canLeave()) return;
       stopWatching();
       set({ project: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: null, saveState: "none", ephemeral: false, source: "idb", fileName: null });
       rememberInUrl(null);
@@ -572,7 +614,7 @@ export const useProjectStore = create<State>((set, get) => {
 });
 
 /**
- * 「+ ブロック」でタスクを置く階層: 選んでいる箱があればその中 (下の階層)、何も選んでいなければ最初のプロジェクトの箱
+ * 「+ ブロック」でタスクを置く階層: 選んでいるボックスがあればその中 (下の階層)、何も選んでいなければ最初のプロジェクトのボックス
  * Input : project, selection
  * Output: 親ブロックの id
  */
@@ -607,10 +649,10 @@ export function useShownProject(): Project | null {
     if (viewScope && shown.blocks[viewScope]?.collapsed) {
       shown = { ...shown, blocks: { ...shown.blocks, [viewScope]: { ...shown.blocks[viewScope], collapsed: false } } };
     }
-    // 箱の間隔は画面で保証する: ファイルの配置が詰まっていても (間隔を広げる前に保存した計画、外のツールが書いた位置など)、
-    // 線の通路 (箱から 36px x 2) が無いと線が箱を貫くしかなくなる。表示の時点で重なり・間隔を解消しておく (ファイルは変えない。
-    // 編集すれば apply が同じ解消を保存する)。畳んだ箱は畳んだ大きさで、開いた箱は開いた大きさで計算する
-    // 索引は ports だけ (箱は押し出しで差し替わるので childrenOf の索引は使わない)
+    // ボックスの間隔は画面で保証する: ファイルの配置が詰まっていても (間隔を広げる前に保存した計画、外のツールが書いた位置など)、
+    // 線の通路 (ボックスから 36px x 2) が無いと線がボックスを貫くしかなくなる。表示の時点で重なり・間隔を解消しておく (ファイルは変えない。
+    // 編集すれば apply が同じ解消を保存する)。畳んだボックスは畳んだ大きさで、開いたボックスは開いた大きさで計算する
+    // 索引は ports だけ (ボックスは押し出しで差し替わるので childrenOf の索引は使わない)
     const base = shown;
     return withIndex(base, () => resolveAllOverlaps(base, blockSize), { children: false });
   }, [project, viewCollapsed, viewScope]);

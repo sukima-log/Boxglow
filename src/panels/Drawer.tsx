@@ -23,9 +23,9 @@ export const GLYPH: Record<BlockStatus, string> = { black: "?", gray: "~", white
 export interface Filter {
   statuses: Set<BlockStatus>;
   memberId: string | null;
-  /** 未担当の箱だけ */
+  /** 未担当のボックスだけ */
   unassigned: boolean;
-  /** このカテゴリの箱だけ (null なら絞らない) */
+  /** このカテゴリのボックスだけ (null なら絞らない) */
   category: string | null;
 }
 
@@ -52,7 +52,7 @@ function TreeRows({ project, parentId, depth, selectedId, onSelect, closed, onTo
   depth: number;
   selectedId: string | null;
   onSelect: (id: string) => void;
-  /** 引き出しの中で閉じた箱の id (図の畳みとは別。既定は全部開く) */
+  /** 引き出しの中で閉じたボックスの id (図の畳みとは別。既定は全部開く) */
   closed: Set<string>;
   onToggle: (id: string) => void;
 }) {
@@ -92,7 +92,7 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
   const selection = useProjectStore((s) => s.selection);
   const select = useProjectStore((s) => s.select);
   const apply = useProjectStore((s) => s.apply);
-  // ツリーで閉じた箱 (引き出しの中だけの状態)
+  // ツリーで閉じたボックス (引き出しの中だけの状態)
   const [closed, setClosed] = useState<Set<string>>(() => new Set());
   const toggleClosed = (id: string) => setClosed((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const [name, setName] = useState("");
@@ -107,7 +107,7 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
   }, []);
   const refreshTemplates = () => void listTemplates().then(setTemplates);
 
-  /** テンプレートを、選んでいる箱の中 (タスクなら隣) に挿入する */
+  /** テンプレートを、選んでいるボックスの中 (タスクなら隣) に挿入する */
   const insertTemplate = (tpl: BlockTemplate) => {
     const parentId = parentForNewBlock(project, selection, useProjectStore.getState().viewScope);
     apply((p) => {
@@ -145,10 +145,10 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
 
   const [tab, setTab] = useState<"tree" | "filter" | "members" | "parts">("tree");
   const tabs: { id: typeof tab; label: string; hint: string }[] = [
-    { id: "tree", label: "Tree", hint: t("箱の一覧 (押すと選ぶ)") }
-  , { id: "filter", label: "Filter", hint: t("状態や担当で箱を絞る") }
+    { id: "tree", label: "Tree", hint: t("ボックスの一覧 (押すと選ぶ)") }
+  , { id: "filter", label: "Filter", hint: t("状態や担当でボックスを絞る") }
   , { id: "members", label: "Members", hint: t("担当にする人を登録。自分を決める") }
-  , { id: "parts", label: "Parts", hint: t("他のプロジェクトでも使い回す箱") }
+  , { id: "parts", label: "Parts", hint: t("他のプロジェクトでも使い回すボックス") }
   ];
 
   return (
@@ -188,7 +188,7 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
         {meId && (
           <button className="chip" data-on={filter.memberId === meId} onClick={() => onFilter({ ...filter, memberId: filter.memberId === meId ? null : meId, unassigned: false })} title={t("自分の担当だけ")}>Mine</button>
         )}
-        <button className="chip" data-on={filter.unassigned} onClick={() => onFilter({ ...filter, unassigned: !filter.unassigned, memberId: null })} title={t("担当がいない箱だけ")}>{t("未担当")}</button>
+        <button className="chip" data-on={filter.unassigned} onClick={() => onFilter({ ...filter, unassigned: !filter.unassigned, memberId: null })} title={t("担当がいないボックスだけ")}>{t("未担当")}</button>
         {project.members.filter((m) => m.id !== meId).map((m) => (
           <button key={m.id} className="chip" data-on={filter.memberId === m.id} onClick={() => onFilter({ ...filter, memberId: filter.memberId === m.id ? null : m.id, unassigned: false })} title={t("{name} の担当だけ", { name: m.name })}>
             <span className="avatar" style={{ background: m.color, width: 16, height: 16, fontSize: 9 }}>{m.name.slice(0, 1)}</span>
@@ -199,7 +199,7 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
         <div className="flex flex-wrap gap-1">
           {CATEGORIES.map((c) => (
             <button key={c.key} className={`chip cat-chip${c.neutral ? " neutral" : ""}`} data-on={filter.category === c.key} style={{ "--cat": c.color } as React.CSSProperties}
-              onClick={() => onFilter({ ...filter, category: filter.category === c.key ? null : c.key })} title={t("{label} の箱だけ", { label: t(c.label) })}>
+              onClick={() => onFilter({ ...filter, category: filter.category === c.key ? null : c.key })} title={t("{label} のボックスだけ", { label: t(c.label) })}>
               <span className="cat-chip__dot" />{t(c.label)}
             </button>
           ))}
@@ -214,7 +214,7 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
         {t("挿入先: {target}", { target: (() => { const pid = parentForNewBlock(project, selection, useProjectStore.getState().viewScope); const b = project.blocks[pid]; return b ? (kindOf(b) === "project" ? b.title : t("{title} の隣", { title: b.title })) : t("最上位"); })() })}
       </div>
       <div className="flex flex-col gap-1">
-        {templates.length === 0 && <div className="text-[12px] px-1" style={{ color: "var(--text-muted)" }}>{t("箱を選び、右の「⋯」から「Save as Part」すると、ここに並びます。")}</div>}
+        {templates.length === 0 && <div className="text-[12px] px-1" style={{ color: "var(--text-muted)" }}>{t("ボックスを選び、右の「⋯」から「Save as Part」すると、ここに並びます。")}</div>}
         {templates.map((tpl) => (
           <div key={tpl.id} className="flex items-center gap-1 text-[13px] px-1">
             <span className="truncate" title={`${tpl.description || tpl.name} (v${tpl.version}${tpl.tags.length ? ", " + tpl.tags.join(", ") : ""})`}>{tpl.name}</span>
@@ -236,7 +236,7 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
           <div key={m.id} className="flex items-center gap-2 text-[13px] px-1">
             <span className="avatar" style={{ background: m.color }}>{m.name.slice(0, 1)}</span>
             <span className="truncate">{m.name}</span>
-            <button className="chip ml-auto" data-on={meId === m.id} onClick={() => setMe(meId === m.id ? null : m.id)} title={t("このブラウザでは自分として扱う (自分の担当の箱に帯が付く)")}>{meId === m.id ? "Me" : "Set as me"}</button>
+            <button className="chip ml-auto" data-on={meId === m.id} onClick={() => setMe(meId === m.id ? null : m.id)} title={t("このブラウザでは自分として扱う (自分の担当のボックスに帯が付く)")}>{meId === m.id ? "Me" : "Set as me"}</button>
             {!readonly && <button className="btn btn-ghost btn-sm" title={t("外す")} onClick={() => apply((p) => removeMember(p, m.id))}>×</button>}
           </div>
         ))}

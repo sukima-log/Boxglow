@@ -7,23 +7,24 @@ import { CHILD_PADDING, childTop, childrenOf, outgoingEdges, portsOf } from "./g
 import { blockSize, TERMINAL_W, terminalHeight } from "./size";
 
 /** 層と層の間 (横) */
-const GAP_X = 144; // 箱の横の間隔: 線の通路 (縁から 36px x 2 + 束の広がり) が収まる最小に近い値 (8px 単位)
+const GAP_X = 144; // ボックスの横の間隔: 線の通路 (縁から 36px x 2 + 束の広がり) が収まる最小に近い値 (8px 単位)
 /** ブロックとブロックの間 (縦) */
-const GAP_Y = 96; // 縦に積んだ箱の間 (線が縁から 36px 離れて 2 本通る)
+const GAP_Y = 96; // 縦に積んだボックスの間 (線が縁から 36px 離れて 2 本通る)
 /** 1 行の幅の上限。直列の長い鎖はこれを超えたら次の行に折り返す (横 1 列の細長い帯になるのを防ぐ) */
 const MAX_ROW_W = 3000;
 
 /**
  * 1 つの階層を整列する (子の階層は先に整列して大きさを確定させる)
- * Input : scopeId = 階層のブロック id (ROOT_ID なら最上位)
+ * Input : scopeId = 階層のブロック id (ROOT_ID なら最上位),
+ *         options.recursive = false なら子の階層の中は並べ直さない (画面の「この階層を整列」用。既定は下の階層も整列する)
  * Output: 位置を更新した Project (元は変更しない)
  */
-export function layoutScope(p: Project, scopeId: string): Project {
+export function layoutScope(p: Project, scopeId: string, options: { recursive?: boolean } = {}): Project {
   let q = structuredClone(p);
   const kids = childrenOf(q, scopeId);
   if (kids.length === 0) return q;
   // 下の階層から先に
-  for (const k of kids) if (childrenOf(q, k.id).length > 0) q = layoutScope(q, k.id);
+  for (const k of kids) if (options.recursive !== false && childrenOf(q, k.id).length > 0) q = layoutScope(q, k.id);
 
   // 層: 同じ階層の線 (sibling) をたどった最長経路
   const ids = kids.map((k) => k.id);

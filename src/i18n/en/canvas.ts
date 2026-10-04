@@ -1,12 +1,12 @@
 /** 英語の辞書 (canvas)。キー = ソースの日本語の文 */
 export const canvas: Record<string, string> = {
-  // 箱 (BlockNode): 題名の行
+  // ボックス (BlockNode): 題名の行
   "カテゴリ: {label}": "Category: {label}"
 , "{title} (部品: {name})": "{title} (part: {name})"
-, "この大項目のタブを開く (中の箱 {n} 個)": "Open this item's tab ({n} boxes inside)"
+, "この大項目のタブを開く (中のボックス {n} 個)": "Open this item's tab ({n} boxes inside)"
 , "下の階層を展開する": "Expand children"
 , "下の階層を畳む": "Collapse children"
-  // 箱 (BlockNode): 情報の行
+  // ボックス (BlockNode): 情報の行
 , "状態": "Status"
 , "下の階層の完了 {done}": "Children done: {done}"
 , "下の階層の完了 {done} ({percent}%)": "Children done: {done} ({percent}%)"
@@ -20,15 +20,15 @@ export const canvas: Record<string, string> = {
 , "部品: {name}": "Part: {name}"
 , "部品": "Part"
 , "ID (検索や CLI で使えます)": "ID (usable in search and the CLI)"
-  // 箱 (BlockNode): 入出力
+  // ボックス (BlockNode): 入出力
 , "{name} (用意できています)": "{name} (ready)"
 , "{name} (任意: 無くても着手できます)": "{name} (optional: you can start without it)"
-, "{name} を中のブロックへ (ここから中の箱の入力へドラッグ)": "{name} into the inner boxes (drag from here to an inner input)"
+, "{name} を中のブロックへ (ここから中のボックスの入力へドラッグ)": "{name} into the inner boxes (drag from here to an inner input)"
 , "中のブロックの出力を {name} へ": "Inner box output to {name}"
   // 入力 / 出力ノード (TerminalNode)
 , "空のグループ (右のパネルで入力を入れる)": "Empty group (add inputs in the right panel)"
 , "供給元のない入力がここに上がります": "Inputs without a source appear here"
 , "下の階層の未接続の入力 (自動)": "Unconnected input from a child (auto)"
-  // 箱の幅の見積もり (size.ts) だけで使う文言
+  // ボックスの幅の見積もり (size.ts) だけで使う文言
 , "未担当": "Unassigned"
 };

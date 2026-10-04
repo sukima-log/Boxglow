@@ -1,8 +1,8 @@
 # Free and paid: where the line is
 
-Boxglow is open core. Everything that works with the one file on your machine is free (MIT) and stays free. Features that need a server, a second person, or a second device are the paid product (Boxglow Cloud, in preparation).
+Boxglow is open core. Everything that works with the plan file on your own machines is free (MIT) and stays free, including a team sharing that file through Git. Features that need a service run for you, or a connection to an external service, are the paid product (Boxglow Cloud, in preparation).
 
-The rule: **one file, one machine = free. Two people, two devices, or an external service = paid.**
+The rule: **your file, your machines, your Git = free. A service we run for you (sync, share links, team administration, integrations, hosted agents) or a commercial self-hosted licence = paid.**
 
 | Feature | Free (MIT) | Paid |
 |---|---|---|
@@ -11,7 +11,7 @@ The rule: **one file, one machine = free. Two people, two devices, or an externa
 | One `boxglow.json` in Git, box-level 3-way merge driver | yes | |
 | Members inside the file (owners, filters) | yes | |
 | Parts (templates), input groups, categories, due dates | yes | |
-| VS Code extension (planned) | yes | |
+| VS Code extension | yes | |
 | Sync: the same plan on several devices / people, history, server-side merge | | Sync |
 | Share: read-only links with password, expiry, embedding | | Share |
 | Team: workspaces, invitations, permissions, activity across people | | Team |
@@ -31,11 +31,11 @@ If you want to be told when Boxglow Cloud opens, leave your email here: https://
 
 # 無料と有料の線引き
 
-Boxglow はオープンコアです。手元の 1 ファイルで完結する機能は MIT で無料のまま。サーバ・2 人以上・2 端末以上・外部サービスが要る機能が有料版 (Boxglow Cloud、準備中) です。
+Boxglow はオープンコアです。手元の計画ファイルで完結する機能は MIT で無料のまま (チームでそのファイルを Git で共有する使い方も含みます)。こちらで運営するサービスや、外部サービスとの連携が要る機能が有料版 (Boxglow Cloud、準備中) です。
 
-原則: **1 ファイル・1 台で済むものは無料。2 人・2 台・外部サービスが絡むものは有料。**
+原則: **手元のファイル・手元のマシン・手元の Git で済むものは無料。こちらで運営するサービス (同期、共有リンク、チームの管理、外部連携、ホスト型のエージェント) と、自社サーバ版の商用ライセンスが有料。**
 
-無料に残す: ブラウザのアプリ (ブラウザ内保存・ローカルファイル)、CLI と setup-agent、1 ファイルの Git 運用と箱単位のマージ、ファイル内のメンバー、部品・入力グループ・カテゴリ・期日、VS Code 拡張 (予定)。
+無料に残す: ブラウザのアプリ (ブラウザ内保存・ローカルファイル)、CLI と setup-agent、1 ファイルの Git 運用とボックス単位のマージ、ファイル内のメンバー、部品・入力グループ・カテゴリ・期日、VS Code 拡張。
 
 有料にする: Sync (同期・履歴)、Share (閲覧専用リンク)、Team (招待・権限・横断)、Connect (Slack / Teams、JIRA / Redmine)、Agent (ホスト型 MCP)、Self-host (自社サーバ版、商用ライセンス)。
 

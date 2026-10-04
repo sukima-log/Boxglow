@@ -1,9 +1,8 @@
 /** 英語の辞書 (inspector)。キー = ソースの日本語の文 */
 export const inspector: Record<string, string> = {
   // パネル共通
-  "閉じる (Esc)": "Close (Esc)"
   // プロジェクト設定
-, "ゴール (何を達成したいか)": "Goal (what to achieve)"
+  "ゴール (何を達成したいか)": "Goal (what to achieve)"
 , "完了 {white} / {total}": "Done {white} / {total}"
   // 入力ノード / グループ
 , "グループの名前 (例: PCIe 仕様書)": "Group name (e.g. PCIe spec)"
@@ -42,8 +41,6 @@ export const inspector: Record<string, string> = {
 , "判断の記録 ({n})": "Decision history ({n})"
   // ブロック: 担当
 , "{name} (自分)": "{name} (me)"
-, "外す": "Remove"
-, "未担当": "Unassigned"
 , "自分を担当にする": "Assign to me"
 , "名前を打って Enter で登録": "Type a name and press Enter to add"
 , "名前で検索して Enter で割り当て": "Search by name and press Enter to assign"
@@ -59,7 +56,7 @@ export const inspector: Record<string, string> = {
   // ブロック: 課題・AI・メモ
 , "JIRA / Redmine / GitHub Issue の URL": "JIRA / Redmine / GitHub Issue URL"
 , "開く: {key}": "Open: {key}"
-, "この箱の入出力と位置づけを Markdown にしてコピーして AI に渡す": "Copy this box's inputs, outputs and context as Markdown for an AI"
+, "このボックスの入出力と位置づけを Markdown にしてコピーして AI に渡す": "Copy this box's inputs, outputs and context as Markdown for an AI"
 , "手順を提案してもらう (コピー)": "Ask for a plan (copy)"
 , "分解案を JSON でもらう (コピー)": "Ask for a breakdown as JSON (copy)"
 , "入出力の抜けを指摘してもらう (コピー)": "Ask for missing inputs/outputs (copy)"

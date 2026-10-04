@@ -1,6 +1,6 @@
 /**
  * ローカルファイル連携 (File System Access API)
- * リポジトリ内の boxglow.json を開き、1.5 秒ごとに更新を監視し、画面での変更を書き戻す。
+ * リポジトリ内の boxglow.json を開き、1.5 秒ごとに更新を監視し、閲覧する。共同編集には serve または VS Code の保存プロトコルを使う。
  * AI エージェントが CLI でファイルを更新すると、画面にすぐ反映される。
  */
 import { get, set } from "idb-keyval";

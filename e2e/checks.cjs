@@ -1,7 +1,7 @@
 /**
  * 画面の検査 (e2e) 本体。使い方: npm run e2e (run.sh がプレビューを起動してこのファイルを実行する)
  *
- * 1. 配線: 例の計画 (と、手元にあれば自分の計画) の全タブで、線が箱の上を通らない。詰めた配置でも通らない
+ * 1. 配線: 例の計画 (と、手元にあれば自分の計画) の全タブで、線がボックスの上を通らない。詰めた配置でも通らない
  * 2. 速さ: タブの切り替えが落ち着くまでの時間
  * 3. 操作: タブ、ダブルクリック、選択、判断への回答 (答えた後も残る)、線を選んだままタブ移動、強調の光
  * 4. 英語 UI: 計画の中身以外に日本語が残らない
@@ -15,7 +15,7 @@ const DAW = path.join(ROOT, "examples/logic-daw/boxglow.json");
 const NOTES = path.join(ROOT, "examples/notes-app/boxglow.json");
 const OWN = path.join(ROOT, "boxglow.json"); // この開発自身の計画 (公開対象外。手元にあるときだけ検査する)
 
-/** 箱の位置を縮めた計画 (間隔を広げる前に保存した配置の再現) を返す */
+/** ボックスの位置を縮めた計画 (間隔を広げる前に保存した配置の再現) を返す */
 function squeezed(file) {
   const p = JSON.parse(fs.readFileSync(file, "utf8"));
   for (const b of Object.values(p.blocks)) {
@@ -46,7 +46,7 @@ function squeezed(file) {
       total += hits.length;
       for (const h of hits.slice(0, 3)) detail.push(`${h.src} -> ${h.dst} が ${h.box} を貫通`);
     }
-    check(`${label}: 線が箱の上を通らない (${majors.length + 1} 画面)`, total === 0, total ? `${total} 件: ${detail.join(" / ")}` : "");
+    check(`${label}: 線がボックスの上を通らない (${majors.length + 1} 画面)`, total === 0, total ? `${total} 件: ${detail.join(" / ")}` : "");
     check(`${label}: タブの切り替えが 2.5 秒以内`, slowest < 2500, `最大 ${slowest} ms`);
     // 線どうしの不要な交差が増えていないこと (例の計画だけ上限を決めて見張る。並びの規則を壊すと数倍に増える)
     const limit = { "DAW の例": 2, "notes-app の例": 10 }[label];
@@ -74,14 +74,14 @@ function squeezed(file) {
     await page.waitForTimeout(900);
     check("ダブルクリックで大項目のタブが開く", (await page.evaluate(() => window.boxglow.store.getState().viewScope)) === apiId);
     const inTab = await page.evaluate(() => ({ blocks: document.querySelectorAll(".react-flow__node-block").length, terminals: document.querySelectorAll(".react-flow__node-terminal").length }));
-    check("タブの中: 大項目の箱と中の箱、Inputs / Outputs ノードが出る", inTab.blocks >= 6 && inTab.terminals === 2, JSON.stringify(inTab));
+    check("タブの中: 大項目のボックスと中のボックス、Inputs / Outputs ノードが出る", inTab.blocks >= 6 && inTab.terminals === 2, JSON.stringify(inTab));
 
-    // 箱を選ぶと右に詳細が出る
+    // ボックスを選ぶと右に詳細が出る
     const signIn = await idOf(page, "Sign-in");
     await page.evaluate((id) => window.boxglow.store.getState().select({ blockId: id }), signIn);
     await page.waitForTimeout(400);
     const panel = await page.locator("aside.right").innerText();
-    check("箱を選ぶと右のパネルに題名と判断の質問が出る", panel.includes("Which sign-in method should ship first?") && (await page.locator("aside.right input.input").first().inputValue()) === "Sign-in");
+    check("ボックスを選ぶと右のパネルに題名と判断の質問が出る", panel.includes("Which sign-in method should ship first?") && (await page.locator("aside.right input.input").first().inputValue()) === "Sign-in");
 
     // 判断: 帯に判断待ち → 一覧で答える → 答えた後も Answered に残る (AI が引き取るまで)
     const chip = await page.locator(".summary-chip").innerText();
@@ -93,21 +93,21 @@ function squeezed(file) {
     await page.waitForTimeout(600);
     const after = await page.locator("aside.right").innerText();
     const dec = await page.evaluate((id) => { const d = window.boxglow.store.getState().project.blocks[id].decisions[0]; return { answer: d.answer, by: d.answeredBy, acked: !!d.ackedAt }; }, signIn);
-    check("答えた直後も一覧に残り、どの箱の何への回答か分かる (AI 未確認)", /answered/i.test(after) && after.includes("Sign-in") && after.includes("Email magic link で進める") && after.includes("AI 未確認"), "");
+    check("答えた直後も一覧に残り、どのボックスの何への回答か分かる (AI 未確認)", /answered/i.test(after) && after.includes("Sign-in") && after.includes("Email magic link で進める") && after.includes("AI 未確認"), "");
     check("人の回答は AI が引き取るまで未確認のまま", dec.answer === "Email magic link で進める" && dec.by === "human" && !dec.acked, JSON.stringify(dec));
     check("帯に回答済みが出る", (await page.locator(".summary-chip").innerText()).includes("回答済み"));
     // Activity は項目ごとのタブ: 件数つきの 5 つのタブがあり、押した項目だけが出る
     const tabLabels = (await page.locator("aside.right .seg__btn").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim());
-    check("Activity: 項目ごとのタブ (件数つき) が並ぶ", tabLabels.length === 5 && tabLabels[0].startsWith("Decisions") && tabLabels[1] === "Answered 1" && tabLabels[2] === "Working 1", JSON.stringify(tabLabels));
+    check("Activity: 項目ごとのタブ (件数つき) が並ぶ", tabLabels.length === 6 && tabLabels[0].startsWith("Resume") && tabLabels[1].startsWith("Decisions") && tabLabels[2] === "Answered 1" && tabLabels[3] === "Working 1", JSON.stringify(tabLabels));
     await page.locator("aside.right .seg__btn", { hasText: "Working" }).click();
     await page.waitForTimeout(300);
     const working = await page.locator("aside.right").innerText();
-    check("Activity: Working を開くと作業中の箱だけが出る", working.includes("Full-text search") && !working.includes("Email magic link で進める"), "");
+    check("Activity: Working を開くと作業中のボックスだけが出る", working.includes("Full-text search") && !working.includes("Email magic link で進める"), "");
     await page.locator("aside.right .seg__btn", { hasText: "Log" }).click();
     await page.waitForTimeout(300);
     check("Activity: Log を開くと記録が出る", (await page.locator("aside.right .tl-row").count()) > 5);
 
-    // 線を選んだままタブを移る: All で大項目どうしの線を選び、行き先の箱をダブルクリック
+    // 線を選んだままタブを移る: All で大項目どうしの線を選び、行き先のボックスをダブルクリック
     await switchTab(page, null);
     const edge = await page.evaluate(() => {
       const s = window.boxglow.store.getState(); const p = s.project;
@@ -124,13 +124,13 @@ function squeezed(file) {
     await page.mouse.dblclick(pt2.x, pt2.y);
     await page.waitForTimeout(900);
     const kept = await page.evaluate(() => { const s = window.boxglow.store.getState(); return { edge: s.selection.edgeId, scope: s.viewScope, lit: document.querySelectorAll(".react-flow__edge.edge-net, .react-flow__edge.selected").length }; });
-    check("線を選んで行き先の箱をダブルクリックしても、線を選んだままタブが開き、続きが光る", kept.edge === edge && kept.scope === apiId && kept.lit >= 1, JSON.stringify(kept));
+    check("線を選んで行き先のボックスをダブルクリックしても、線を選んだままタブが開き、続きが光る", kept.edge === edge && kept.scope === apiId && kept.lit >= 1, JSON.stringify(kept));
 
-    // 箱を選んだときは、つながる線に光を付けない (束が 1 本の帯に潰れるため)
+    // ボックスを選んだときは、つながる線に光を付けない (束が 1 本の帯に潰れるため)
     await switchTab(page, null);
     await page.evaluate(() => { const s = window.boxglow.store.getState(); const pj = Object.values(s.project.blocks).find((b) => b.kind === "project"); s.select({ blockId: pj.id }); });
     await page.waitForTimeout(400);
-    check("箱を選んだときは線に光を付けない", (await page.locator(".react-flow__edge-halo").count()) === 0);
+    check("ボックスを選んだときは線に光を付けない", (await page.locator(".react-flow__edge-halo").count()) === 0);
     check("操作の間、コンソールにエラーが無い", errors.length === 0, errors.slice(0, 2).join(" | "));
     await page.context().close();
   }
@@ -149,7 +149,7 @@ function squeezed(file) {
     const leftTimeline = await japaneseLeft(page);
     // 例の計画は英語 (lang: en) で作ってあるので、ログの行も含めて日本語が 1 つも出ないこと
     const all = [...new Set([...leftView, ...leftPanel, ...leftTimeline])];
-    check("英語 UI: 画面・箱の詳細・一覧に日本語が残らない", all.length === 0, all.slice(0, 5).join(" | "));
+    check("英語 UI: 画面・ボックスの詳細・一覧に日本語が残らない", all.length === 0, all.slice(0, 5).join(" | "));
     check("英語 UI: html の lang が en", (await page.evaluate(() => document.documentElement.lang)) === "en");
     await page.context().close();
   }
@@ -167,11 +167,14 @@ function squeezed(file) {
     await page.waitForTimeout(2200);
     const saves = await page.evaluate(() => window.__posted.filter((m) => m.type === "save"));
     check("VS Code: 画面の変更が save として拡張へ届く", saves.length >= 1 && saves[saves.length - 1].text.includes("webview から書いたメモ"));
-    await page.evaluate((t) => window.postMessage({ type: "update", text: t.replace('"name": "Notes app"', '"name": "Notes app (CLI)"'), name: "boxglow.json" }, "*"), text);
+    check("VS Code: 応答までは保存中", await page.evaluate(() => window.boxglow.store.getState().saveState) === "saving");
+    await page.evaluate((m) => window.postMessage({type:"saved",requestId:m.requestId,version:1}, "*"), saves[saves.length-1]);
+    await page.waitForTimeout(50);
+    await page.evaluate((t) => window.postMessage({ type: "update",version:2, text: t.replace('"name": "Notes app"', '"name": "Notes app (CLI)"'), name: "boxglow.json" }, "*"), text);
     await page.waitForTimeout(500);
     check("VS Code: 外の変更 (update) で読み直す", (await page.evaluate(() => window.boxglow.store.getState().project.name)) === "Notes app (CLI)");
     const hits = await penetrations(page);
-    check("VS Code: 線が箱の上を通らない", hits.length === 0, hits.slice(0, 2).map((h) => `${h.src} -> ${h.dst} が ${h.box}`).join(" / "));
+    check("VS Code: 線がボックスの上を通らない", hits.length === 0, hits.slice(0, 2).map((h) => `${h.src} -> ${h.dst} が ${h.box}`).join(" / "));
     check("VS Code: コンソールにエラーが無い", errors.length === 0, errors.slice(0, 2).join(" | "));
     await page.context().close();
   }

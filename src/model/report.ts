@@ -8,7 +8,7 @@ import { t } from "../i18n/core";
 
 /**
  * 題名を引用符で囲む (日本語は「」、英語は "")
- * Input : title = 箱の題名
+ * Input : title = ボックスの題名
  * Output: 今の言語の引用符で囲んだ文字列
  */
 const quoted = (title: string): string => t("「{title}」", { title });
@@ -87,7 +87,7 @@ function treeLines(p: Project, parentId: string, depth: number, lines: string[])
  * 全体の状況を Markdown にする (CLI の status)
  * Output: Markdown 文字列
  */
-export function statusReport(p: Project): string {
+export function statusReport(p: Project, options: { brief?: boolean } = {}): string {
   const s = summarize(p);
   const lines: string[] = [];
   lines.push(`# ${p.name}`);
@@ -110,7 +110,7 @@ export function statusReport(p: Project): string {
     }
   }
   if (s.answered.length > 0) {
-    lines.push("", "## " + t("回答あり (人が答えた判断。読んだら `boxglow ack <block>` で引き取る。その箱の start / done などでも引き取られる)"));
+    lines.push("", "## " + t("回答あり (人が答えた判断。読んだら `boxglow ack <block>` で引き取る。そのボックスの start / done などでも引き取られる)"));
     for (const { block, decision } of s.answered) {
       lines.push(`- ${block.key ?? ""} ${quoted(block.title)} ${decision.question} -> ${decision.answer} (${decision.answeredBy ?? ""}, decision: ${decision.id})`);
     }
@@ -127,8 +127,12 @@ export function statusReport(p: Project): string {
     lines.push("", "## " + t("詰まり・確認待ち"));
     for (const w of s.blocked) lines.push(`- ${actorLabel(w.actor)} ${w.block.key ?? ""} ${quoted(w.block.title)} ${w.note}`);
   }
-  lines.push("", "## " + t("階層 ([ ] New / [~] In Progress / [x] Done。B 番号は箱の ID。出力名の * は成果物あり)"));
-  treeLines(p, ROOT_ID, 0, lines);
+  if (!options.brief) {
+    lines.push("", "## " + t("階層 ([ ] New / [~] In Progress / [x] Done。B 番号はボックスの ID。出力名の * は成果物あり)"));
+    treeLines(p, ROOT_ID, 0, lines);
+  } else {
+    lines.push("", t("階層は省略しています。全体は `boxglow status`、ボックスの詳細は `boxglow show <block>` で確認できます。"));
+  }
   if (s.next.length > 0) {
     lines.push("", "## " + t("次の候補 (未着手の New。必須の入力がそろっているものから)"));
     for (const b of s.next.slice(0, 10)) {

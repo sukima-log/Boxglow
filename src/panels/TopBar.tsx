@@ -1,5 +1,6 @@
 /**
- * 上の帯: ☰ (引き出し)、ロゴ、プロジェクト名 (押すと設定)、追加、元に戻す、メニュー、表示モード
+ * 上の帯: ☰ (引き出し)、Home、プロジェクト名 (押すと設定)、保存の札、状況の札、表示モード、検索、追加、Auto Layout、Undo / Redo、メニュー、テーマ
+ * 狭い幅 (760px 以下) では、追加・Auto Layout・Undo / Redo を ⋯ メニューの中へ移す
  */
 import { useEffect, useRef, useState } from "react";
 import { addBlock, addProjectBlock, normalizeCollapsed, searchBlocks, summarize, toJSON } from "../model/graph";
@@ -28,7 +29,15 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
   const importJSON = useProjectStore((s) => s.importJSON);
   const copyToMine = useProjectStore((s) => s.copyToMine);
   const setToast = useProjectStore((s) => s.setToast);
-  const [theme, setTheme] = useState<Theme>(currentTheme());
+  // テーマ切り替えボタンの向き: 実際に画面に当たっているテーマ (html の data-theme) に合わせる。
+  // URL の ?theme= や VS Code の配色でボタン以外からテーマが変わることがあるので、属性の変化を見張って追従する
+  const [theme, setTheme] = useState<Theme>(() => document.documentElement.dataset.theme as Theme || currentTheme());
+  useEffect(() => {
+    const sync = () => setTheme(document.documentElement.dataset.theme as Theme || currentTheme());
+    const observer = new MutationObserver(sync);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
   const [menu, setMenu] = useState(false);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -43,9 +52,10 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
   // "/" で検索欄へ
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
+      if (document.querySelector("dialog[open]")) return;
       const target = ev.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
-      if (ev.key === "/") {
+      if (ev.key === "/" && !ev.isComposing && !target?.isContentEditable && target?.tagName !== "SELECT") {
         ev.preventDefault();
         setSearchOpen(true);
         setTimeout(() => searchRef.current?.focus(), 0);
@@ -67,12 +77,17 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
     setTheme(next);
   };
 
-  /** ブロックを足す (選んでいる箱の中。何も選んでいなければ最初のプロジェクトの中) */
-  // 最上位にプロジェクトの箱を足す (⋯ メニューの New Project。上の帯のボタンにはしない: 使う頻度が低い)
+  /** ブロックを足す (選んでいるボックスの中。何も選んでいなければ最初のプロジェクトの中) */
+  // 最上位にプロジェクトのボックスを足す (⋯ メニューの New Project。上の帯のボタンにはしない: 使う頻度が低い)
   const addProject = () => {
     const name = prompt(t("追加するプロジェクトの名前 (リポジトリごとに 1 つなど)"));
     if (name?.trim()) apply((p) => { const r = addProjectBlock(p, name.trim()); setTimeout(() => { select({ blockId: r.blockId }); focusBlock(r.blockId); }, 0); return r.project; });
   };
+  /**
+   * Auto Layout: 依存関係の順に全体を並べ直す (大項目は畳んだ前提。Ctrl+Z で戻せる)
+   * Input / Output: なし (project を更新する)
+   */
+  const autoLayout = () => apply((p) => layoutAll(normalizeCollapsed(p)));
   const addSibling = () => {
     const parentId = parentForNewBlock(project, selection, useProjectStore.getState().viewScope);
     apply((p) => {
@@ -105,12 +120,15 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
   const saveNow = useProjectStore((s) => s.saveNow);
   // 保存状態: 常に見える札にする (ファイルを開いているときは「どこに保存されるか」と「保存済みか」が分かるように)
   const saveLabel = readonly ? "Read only" : ephemeral ? "Sample (not saved)" : saveState === "saving" ? "Saving…" : saveState === "unsaved" ? "Unsaved" : "Saved";
-  const saveTitle = ephemeral ? t("サンプルは保存されません。Save で自分のプロジェクトとして保存") : fileName ? t("{file} に自動で保存します (変更から 1 秒後)。Save で今すぐ書きます", { file: fileName }) : t("このブラウザに自動で保存します");
+  const saveTitle = readonly ? t("閲覧専用") : ephemeral ? t("サンプルは保存されません。Save で自分のプロジェクトとして保存") : fileName ? t("{file} に自動で保存します (変更後)。Save で今すぐ書きます", { file: fileName }) : t("このブラウザに自動で保存します");
   const sum = summarize(project);
-  const busy = sum.working.length + sum.blocked.length;
+  const busy = sum.working.length; // 作業中の件数 (詰まり・確認待ちは別の札で数える)
 
+  // 帯は 2 つのまとまり: 左 (topbar-identity) = 引き出し・Home・計画名・保存の札、右 (topbar-tools) = 状況・モード・検索・追加・メニュー。
+  // 幅が狭いと右のまとまりが次の行へ折り返す (index.css の .topbar。検索やメニューが画面の外に出ないように)
   return (
-    <header className="flex items-center gap-3 px-3 h-full" style={{ paddingTop: 9, paddingBottom: 7, borderBottom: "2px solid var(--line)", background: "var(--bg-card)" }}>
+    <header className="topbar">
+      <div className="topbar-identity">
       <button className="btn btn-ghost btn-sm" onClick={onToggleDrawer} title={t("階層 / 絞り込み / メンバー / 部品")}>☰</button>
       <button className="btn btn-ghost btn-sm" onClick={closeProject} title={t("Home (プロジェクト一覧へ)")} aria-label="Home">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -119,36 +137,39 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
           <path d="M10 20v-5h4v5" />
         </svg>
       </button>
+      <button className="project-name" onClick={() => select({ project: true })} title={project.name}>{project.name}</button>
       <span className={`save-chip ${saveState === "unsaved" ? "unsaved" : ""}`} title={saveTitle}>
-        {fileName && <span className="save-chip__file">{fileName}</span>}
+        {!ephemeral && <span className="save-chip__file">{fileName ?? t("ブラウザ内")}</span>}
         <span>{saveLabel}</span>
       </span>
       {ephemeral && !readonly && <button className="btn btn-sm" onClick={copyToMine} title={t("自分のプロジェクトとして保存")}>Save</button>}
       {!ephemeral && !readonly && <button className="btn btn-sm" onClick={saveNow} disabled={saveState === "saved" || saveState === "saving"} title={saveTitle}>Save</button>}
+      </div>
+      <div className="topbar-tools">
       <button className="summary-chip" data-on={selection.timeline} onClick={() => select({ timeline: !selection.timeline })} title={t("今の状況 (作業中・判断待ち・ログ)")}>
         {busy > 0 && <span className="dot" />}
         {busy > 0 && <span><span className="summary-chip__txt">{t("作業中")} </span>{busy}</span>}
+        {sum.blocked.length > 0 && <span><span className="summary-chip__txt">{t("詰まり・確認待ち")} </span>{sum.blocked.length}</span>}
         {sum.decisions.length > 0 && <span className="dot decision" />}
         {sum.decisions.length > 0 && <span><span className="summary-chip__txt">{t("判断待ち")} </span>{sum.decisions.length}</span>}
         {/* 人が答えて AI がまだ読んでいない回答: 答えた直後に見失わないよう、引き取られるまで帯に出す */}
         {sum.answered.length > 0 && <span><span className="summary-chip__txt">{t("回答済み")} </span>{sum.answered.length}</span>}
-        {busy === 0 && sum.decisions.length === 0 && sum.answered.length === 0 && <span>Activity</span>}
+        {busy === 0 && sum.blocked.length === 0 && sum.decisions.length === 0 && sum.answered.length === 0 && <span>Activity</span>}
       </button>
-      <div className="ml-auto flex items-center gap-1">
         {!readonly && (
           <button className="mode-toggle" data-on={editMode} onClick={() => setEditMode(!editMode)} title={editMode ? t("Edit モード: ドラッグで移動・結線・階層移動ができます。押すと View (閲覧) に") : t("View モード: ドラッグでの編集は効きません。押すと Edit に")}>
             <span className="mode-toggle__knob" />
             <span>{editMode ? "Edit" : "View"}</span>
           </button>
         )}
-        <div className="relative">
-          <input ref={searchRef} className="input search-box" placeholder={t("Search  ID / 題名")} value={query}
+        <div className="relative topbar-search">
+          <input aria-label={t("ブロックを検索")} ref={searchRef} className="input search-box" placeholder={t("Search  ID / 題名")} value={query}
             onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); }}
             onFocus={() => setSearchOpen(true)}
-            onKeyDown={(e) => { if (e.key === "Enter" && hits[0]) jump(hits[0].id); if (e.key === "Escape") { setSearchOpen(false); setQuery(""); (e.target as HTMLInputElement).blur(); } }}
+            onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && hits[0]) jump(hits[0].id); if (e.key === "Escape") { setSearchOpen(false); setQuery(""); (e.target as HTMLInputElement).blur(); } }}
             onBlur={() => setTimeout(() => setSearchOpen(false), 150)} />
           {searchOpen && query.trim() && hits.length > 0 && (
-            <div className="card absolute right-0 mt-1 p-1 flex flex-col z-30" style={{ minWidth: 280, maxHeight: 320, overflow: "auto" }}>
+            <div className="card absolute right-0 mt-1 p-1 flex flex-col z-30" style={{ width: "min(320px, calc(100vw - 32px))", maxHeight: 320, overflow: "auto" }}>
               {hits.map((h) => (
                 <button key={h.id} className="btn btn-ghost btn-sm justify-start" onMouseDown={(e) => e.preventDefault()} onClick={() => jump(h.id)}>
                   <span className="chip" style={{ fontFamily: "ui-monospace, monospace", marginRight: 6 }}>{h.key}</span>
@@ -163,18 +184,26 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
         </div>
         {!readonly && (
           <>
-            <button className="btn btn-primary btn-sm" onClick={addSibling} title={t("ブロックを追加 (N)。箱を選んでいればその中に、選んでいなければプロジェクトの中に")}>+ Block</button>
-            <button className="btn btn-sm" onClick={() => apply((p) => layoutAll(normalizeCollapsed(p)))} title={t("Auto Layout: 依存関係で並べ直す (大項目は畳んだ前提)")}>Auto Layout</button>
-            <button className="btn btn-ghost btn-sm hidden md:inline-flex" onClick={undo} disabled={past === 0} title={t("元に戻す (Ctrl+Z)")}>↶</button>
-            <button className="btn btn-ghost btn-sm hidden md:inline-flex" onClick={redo} disabled={future === 0} title={t("やり直す (Ctrl+Y)")}>↷</button>
+            {/* よく使う編集の操作は帯に出す (通常の幅)。760px 以下では帯から外し、⋯ メニューの中に同じ操作を出す (index.css の .desktop-action / .menu-actions) */}
+            <button className="btn btn-primary btn-sm desktop-action" onClick={addSibling} title={t("ブロックを追加 (N)。ボックスを選んでいればその中に、選んでいなければプロジェクトの中に")}>+ Block</button>
+            <button className="btn btn-sm desktop-action" onClick={autoLayout} title={t("Auto Layout: 依存関係で並べ直す (大項目は畳んだ前提)")}>Auto Layout</button>
+            <button className="btn btn-ghost btn-sm desktop-action" onClick={undo} disabled={past === 0} title={t("元に戻す (Ctrl+Z)")} aria-label="Undo">↶</button>
+            <button className="btn btn-ghost btn-sm desktop-action" onClick={redo} disabled={future === 0} title={t("やり直す (Ctrl+Y)")} aria-label="Redo">↷</button>
           </>
         )}
         <div className="relative">
-          <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setMenu(!menu); }} title="Menu">⋯</button>
+          <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setMenu(!menu); }} title="Menu" aria-expanded={menu} onKeyDown={(e) => { if (e.key === "Escape") setMenu(false); }}>⋯</button>
           {menu && (
-            <div className="card absolute right-0 mt-1 p-1 flex flex-col z-30" style={{ minWidth: 220 }}>
+            <div className="card absolute right-0 mt-1 p-1 flex flex-col z-30" style={{ minWidth: 220, maxHeight: "min(480px, 65dvh)", overflowY: "auto" }}>
+              {/* 編集の操作: 帯に出せない狭い幅 (760px 以下) のときだけ、ここに出す (通常の幅では帯のボタンを使う) */}
+              {!readonly && <div className="menu-actions">
+                <button className="btn btn-primary btn-sm" onClick={addSibling}>+ Block</button>
+                <button className="btn btn-sm" onClick={autoLayout}>Auto Layout</button>
+                <button className="btn btn-ghost btn-sm" onClick={undo} disabled={past === 0}>Undo</button>
+                <button className="btn btn-ghost btn-sm" onClick={redo} disabled={future === 0}>Redo</button>
+              </div>}
               {!readonly && (
-                <button className="btn btn-ghost btn-sm justify-start" onClick={addProject} title={t("同じファイルにプロジェクトの箱を足す")}>New Project</button>
+                <button className="btn btn-ghost btn-sm justify-start" onClick={addProject} title={t("同じファイルにプロジェクトのボックスを足す")}>New Project</button>
               )}
               {!readonly && <div style={{ borderTop: "1px solid var(--line-soft)", margin: "4px 0" }} />}
               <button className="btn btn-ghost btn-sm justify-start" onClick={exportJSON}>Export JSON</button>

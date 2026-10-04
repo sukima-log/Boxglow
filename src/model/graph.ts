@@ -49,7 +49,7 @@ function nextKey(q: Project): string {
   return `B${n}`;
 }
 
-/** 短い ID が無い箱に付ける (古いデータの移行用。呼び出し側で複製済み) */
+/** 短い ID が無いボックスに付ける (古いデータの移行用。呼び出し側で複製済み) */
 function ensureKeys(q: Project): void {
   const used = new Set<string>();
   for (const b of Object.values(q.blocks)) if (b.key) used.add(b.key);
@@ -127,14 +127,14 @@ export function createProject(name: string): Project {
   , agents: {}
   , nextKey: 1
   };
-  // 最上位にはプロジェクトの箱を 1 つ置き、その出力を最終成果物につなぐ (タスクはこの箱の中に置く)
+  // 最上位にはプロジェクトのボックスを 1 つ置き、その出力を最終成果物につなぐ (タスクはこのボックスの中に置く)
   return addProjectBlock(base, name).project;
 }
 
 /**
- * プロジェクトの箱を最上位に足す (同じファイルに複数のプロジェクトを置ける)
+ * プロジェクトのボックスを最上位に足す (同じファイルに複数のプロジェクトを置ける)
  * Input : name = プロジェクト名
- * Output: { project, blockId } (箱の出力「最終成果物」は、最上位の最終成果物 (同名を作る) につながる)
+ * Output: { project, blockId } (ボックスの出力「最終成果物」は、最上位の最終成果物 (同名を作る) につながる)
  */
 export function addProjectBlock(p: Project, name: string): { project: Project; blockId: string } {
   const q = clone(p);
@@ -169,21 +169,21 @@ export function addProjectBlock(p: Project, name: string): { project: Project; b
   return { project: q, blockId: id };
 }
 
-/** 最上位のプロジェクトの箱の一覧 */
+/** 最上位のプロジェクトのボックスの一覧 */
 export function projectBlocks(p: Project): Block[] {
   return childrenOf(p, ROOT_ID).filter((b) => b.kind === "project");
 }
 
-/** 既定でタスクを置く場所 (最初のプロジェクトの箱。無ければ最上位) */
+/** 既定でタスクを置く場所 (最初のプロジェクトのボックス。無ければ最上位) */
 export function defaultTaskParent(p: Project): string {
   return projectBlocks(p)[0]?.id ?? ROOT_ID;
 }
 
 /**
- * 「大項目」の箱 (プロジェクトの箱の直下。プロジェクトの箱が無ければ最上位の箱)。
+ * 「大項目」のボックス (プロジェクトのボックスの直下。プロジェクトのボックスが無ければ最上位のボックス)。
  * All の画面にはこの階層までしか出さず (常に畳む)、中はそれぞれのタブで見る
  * Input : p
- * Output: 大項目の箱の配列 (配置の上から、同じ高さなら左から)
+ * Output: 大項目のボックスの配列 (配置の上から、同じ高さなら左から)
  */
 export function majorBlocks(p: Project): Block[] {
   const projects = projectBlocks(p);
@@ -194,7 +194,7 @@ export function majorBlocks(p: Project): Block[] {
 }
 
 /**
- * 箱が属する大項目 (自分が大項目ならその id。大項目より上 (プロジェクトの箱・最上位) なら null)
+ * ボックスが属する大項目 (自分が大項目ならその id。大項目より上 (プロジェクトのボックス・最上位) なら null)
  * Input : p, blockId
  * Output: 大項目の id または null
  */
@@ -209,8 +209,8 @@ export function majorOf(p: Project, blockId: string): string | null {
 }
 
 /**
- * 箱が表示範囲 (scope の箱とその中) に入っているか
- * Input : p, scope = 範囲の箱の id, blockId = 調べる箱 (null なら「入っていない」)
+ * ボックスが表示範囲 (scope のボックスとその中) に入っているか
+ * Input : p, scope = 範囲のボックスの id, blockId = 調べるボックス (null なら「入っていない」)
  * Output: true = 範囲の中 (scope 自身も含む)
  */
 export function isInScope(p: Project, scope: string, blockId: string | null): boolean {
@@ -223,7 +223,7 @@ export function isInScope(p: Project, scope: string, blockId: string | null): bo
 }
 
 /**
- * 大項目の箱は常に畳んだ状態にそろえる (All の図は大項目までしか出さず、中はタブで見る。大項目の中の箱は入れ子のまま見せる)。
+ * 大項目のボックスは常に畳んだ状態にそろえる (All の図は大項目までしか出さず、中はタブで見る。大項目の中のボックスは入れ子のまま見せる)。
  * 並べるときの大きさの計算もこの状態で行う
  * Input : p
  * Output: 大項目の collapsed を true にした複製 (変える物が無ければ p そのもの)
@@ -237,7 +237,7 @@ export function normalizeCollapsed(p: Project): Project {
 }
 
 /**
- * 箱が見える画面 (開いておくべきタブ)。大項目の中の箱ならその大項目のタブ、大項目そのものや上の階層なら All (null)
+ * ボックスが見える画面 (開いておくべきタブ)。大項目の中のボックスならその大項目のタブ、大項目そのものや上の階層なら All (null)
  * Input : p, blockId
  * Output: 大項目の id または null (= All)
  */
@@ -247,9 +247,9 @@ export function scopeFor(p: Project, blockId: string): string | null {
 }
 
 /**
- * 開いている箱から大項目までの道 (パンくず用)。大項目が先頭、開いている箱が末尾
- * Input : p, scope = 開いている箱の id
- * Output: 箱の配列 (scope が大項目なら 1 個)
+ * 開いているボックスから大項目までの道 (パンくず用)。大項目が先頭、開いているボックスが末尾
+ * Input : p, scope = 開いているボックスの id
+ * Output: ボックスの配列 (scope が大項目なら 1 個)
  */
 export function scopePath(p: Project, scope: string): Block[] {
   const out: Block[] = [];
@@ -298,7 +298,7 @@ let index: { ports: Project["ports"]; portsByBlock: Map<string, Port[]>; blocks:
 
 /**
  * fn の間だけ p の索引を使う
- * Input : p = 参照する Project, fn = その間に行う処理, opts.children = false なら childrenOf は索引を使わない (箱を差し替える処理向け)
+ * Input : p = 参照する Project, fn = その間に行う処理, opts.children = false なら childrenOf は索引を使わない (ボックスを差し替える処理向け)
  * Output: fn の戻り値
  */
 export function withIndex<T>(p: Project, fn: () => T, opts: { children?: boolean } = {}): T {
@@ -564,6 +564,12 @@ export function removeBlock(p: Project, blockId: string): Project {
   }
   for (const id of portIds) delete q.ports[id];
   for (const id of ids) delete q.blocks[id];
+  // 消したボックスの引き継ぎメモも消す (持ち主のいないメモを計画に残さない)。1 つも無くなったら項目ごと外す
+  if (q.handoffs) {
+    const rest = Object.fromEntries(Object.entries(q.handoffs).filter(([id]) => !ids.has(id)));
+    if (Object.keys(rest).length > 0) q.handoffs = rest;
+    else delete q.handoffs;
+  }
   return normalizePromotions(q);
 }
 
@@ -573,7 +579,7 @@ export function removeBlock(p: Project, blockId: string): Project {
  * Output: { project, portId }
  */
 export function addPort(p: Project, args: { blockId: string; direction: "in" | "out"; name: string }): { project: Project; portId: string } {
-  // 下の階層を持たない箱 (最上位以外) の出力は 1 本だけ。2 本目は足さない (下の階層ができれば足せる)
+  // 下の階層を持たないボックス (最上位以外) の出力は 1 本だけ。2 本目は足さない (下の階層ができれば足せる)
   if (args.direction === "out" && args.blockId !== ROOT_ID && !canAddOutput(p, args.blockId)) {
     return { project: p, portId: portsOf(p, args.blockId, "out")[0]?.id ?? "" };
   }
@@ -588,14 +594,14 @@ export function addPort(p: Project, args: { blockId: string; direction: "in" | "
   , required: true // 入力も既定は必須 (無くても着手できる入力だけ人が「任意」にする)
   , artifacts: []
   };
-  // プロジェクトの箱の出力は、最上位 (Outputs ノード) にも同名の出力を作って自動でつなぐ (最終成果物として外から見えるように)
+  // プロジェクトのボックスの出力は、最上位 (Outputs ノード) にも同名の出力を作って自動でつなぐ (最終成果物として外から見えるように)
   if (args.direction === "out" && kindOf(q.blocks[args.blockId]) === "project") mirrorProjectOutput(q, id);
   return { project: normalizePromotions(q), portId: id };
 }
 
 /**
- * プロジェクトの箱の出力ポートを最上位の出力に写す (同名の出力を作り、外側 → 内側の線でつなぐ)
- * Input : q = 変更中の Project (直接書き換える), portId = プロジェクトの箱の出力ポート
+ * プロジェクトのボックスの出力ポートを最上位の出力に写す (同名の出力を作り、外側 → 内側の線でつなぐ)
+ * Input : q = 変更中の Project (直接書き換える), portId = プロジェクトのボックスの出力ポート
  * Output: なし (すでに写っていれば何もしない)
  */
 function mirrorProjectOutput(q: Project, portId: string): void {
@@ -609,15 +615,15 @@ function mirrorProjectOutput(q: Project, portId: string): void {
   q.edges[eid] = { id: eid, from: { portId, side: "outer" }, to: { portId: rootOut.id, side: "inner" }, kind: "up", auto: true };
 }
 
-/** プロジェクトの箱の出力に対応する最上位の出力ポート (無ければ null) */
+/** プロジェクトのボックスの出力に対応する最上位の出力ポート (無ければ null) */
 function mirroredRootOutput(p: Project, portId: string): Port | null {
   const e = Object.values(p.edges).find((x) => x.from.portId === portId && x.from.side === "outer" && p.ports[x.to.portId]?.blockId === ROOT_ID);
   return e ? p.ports[e.to.portId] ?? null : null;
 }
 
-/** 出力を増やせるか: 最上位、下の階層を持つ箱、または出力がまだ無い箱 */
+/** 出力を増やせるか: 最上位、下の階層を持つボックス、または出力がまだ無いボックス */
 export function canAddOutput(p: Project, blockId: string): boolean {
-  if (kindOf(p.blocks[blockId]) === "project") return true; // プロジェクトの箱は包みなので出力をいくつでも持てる
+  if (kindOf(p.blocks[blockId]) === "project") return true; // プロジェクトのボックスは包みなので出力をいくつでも持てる
   if (blockId === ROOT_ID) return true;
   if (portsOf(p, blockId, "out").length === 0) return true;
   return childrenOf(p, blockId).length > 0;
@@ -632,7 +638,7 @@ export function updatePort(p: Project, portId: string, patch: Partial<Omit<Port,
   // 供給元のある入力の名前は入力側では変えられない (供給元の出力の名前が入力名。変えるなら供給元で)
   if (patch.name !== undefined && isInputNameLocked(q, portId)) patch = { ...patch, name: undefined } as typeof patch;
   Object.assign(x, Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)));
-  // プロジェクトの箱の出力の名前を変えたら、最上位の写しも同じ名前にする
+  // プロジェクトのボックスの出力の名前を変えたら、最上位の写しも同じ名前にする
   if (patch.name !== undefined && x.direction === "out" && kindOf(q.blocks[x.blockId]) === "project") {
     const mirror = mirroredRootOutput(q, portId);
     if (mirror) mirror.name = patch.name;
@@ -719,7 +725,7 @@ export function removePort(p: Project, portId: string): Project {
   const x = p.ports[portId];
   if (!x || x.promotedFrom) return p;
   const q = touch(p);
-  // プロジェクトの箱の出力を消したら、最上位の写しも (線ごと) 消す
+  // プロジェクトのボックスの出力を消したら、最上位の写しも (線ごと) 消す
   if (x.direction === "out" && kindOf(q.blocks[x.blockId]) === "project") {
     const mirror = mirroredRootOutput(q, portId);
     if (mirror) {
@@ -876,14 +882,14 @@ export interface Progress {
   white: number;
   gray: number;
   black: number;
-  /** 0〜1 (完了した箱の割合) */
+  /** 0〜1 (完了したボックスの割合) */
   ratio: number;
   /** 0〜100 (手入力の進捗と WhiteBox = 100 を合わせた実効の進捗) */
   percent: number;
 }
 
 /**
- * 箱の実効の進捗 (0〜100)
+ * ボックスの実効の進捗 (0〜100)
  *   WhiteBox なら 100。手入力があればそれ。下の階層があれば子の平均。それ以外は 0
  */
 export function effectiveProgress(p: Project, blockId: string): number {
@@ -907,7 +913,7 @@ export function computeProgress(p: Project, blockId: string): Progress {
   const count = (s: BlockStatus) => list.filter((b) => b.status === s).length;
   const white = count("white");
   const total = list.length;
-  // 実効の進捗: 最上位ならプロジェクトの箱の平均、それ以外は自分の実効値
+  // 実効の進捗: 最上位ならプロジェクトのボックスの平均、それ以外は自分の実効値
   const percent = blockId === ROOT_ID
     ? (() => { const pj = projectBlocks(p); return pj.length === 0 ? 0 : Math.round(pj.reduce((acc, b) => acc + effectiveProgress(p, b.id), 0) / pj.length); })()
     : effectiveProgress(p, blockId);
@@ -928,24 +934,34 @@ export function setProgress(p: Project, blockId: string, value: number | null, a
 
 /**
  * 入力がそろっているか (線の「用意できた」判定)
- *   出力ポート (outer): 成果物が付いている、または箱が WhiteBox
- *   入力ポート (inner, 親から中へ): その入力ポート自身に入力物が付いている、またはそこへ来る線が「用意できた」線
- *   最上位の入力: 入力物が付いていれば用意できている
+ *   境界ポートは反対側へ入る線の供給元をたどる。複数の供給元はすべて必要。
+ *   供給元が無いポートは成果物の有無、末端の出力はボックスの Done でも確定する。
+ *   親の状態や添付物で、未確定の中継を確定へ変えない。
  */
+function hasExternalInputArtifact(p: Project, portId: string, seen = new Set<string>()): boolean {
+  if (seen.has(portId)) return false;
+  const port = p.ports[portId];
+  if (!port || port.direction !== "in") return false;
+  if (port.artifacts.length > 0) return true;
+  // 未接続の入力を外へ伸ばした自動線は同じ資料の別表示。添付場所で状態を変えない。
+  const next = new Set(seen).add(portId);
+  return outgoingEdges(p, { portId, side: "inner" }).some((e) => e.auto && hasExternalInputArtifact(p, e.to.portId, next));
+}
+
 export function isSourceReady(p: Project, ep: Endpoint, seen: Set<string> = new Set()): boolean {
   const key = `${ep.portId}:${ep.side}`;
   if (seen.has(key)) return false;
-  seen.add(key);
   const port = p.ports[ep.portId];
   if (!port) return false;
-  if (port.direction === "out") {
-    const b = p.blocks[port.blockId];
-    return port.artifacts.length > 0 || b?.status === "white";
-  }
-  // 入力ポート (親の内側から子へ流す)
+  const nextSeen = new Set(seen).add(key);
+  // 境界は供給元ではなく中継点。親の完了・添付物で、途中の未確定を隠さない。
+  // 複数の供給元を束ねる出力は、すべてそろって初めて利用できる。
+  const backSide = ep.side === "outer" ? "inner" : "outer";
+  const upstream = incomingEdges(p, { portId: port.id, side: backSide });
+  if (upstream.length > 0) return upstream.every((e) => isSourceReady(p, e.from, nextSeen));
+  if (port.direction === "in") return hasExternalInputArtifact(p, port.id);
   if (port.artifacts.length > 0) return true;
-  const incoming = incomingEdges(p, { portId: port.id, side: "outer" });
-  return incoming.some((e) => isSourceReady(p, e.from, seen));
+  return port.direction === "out" && p.blocks[port.blockId]?.status === "white";
 }
 
 /** 線が「用意できた」線か */
@@ -953,12 +969,10 @@ export function isEdgeReady(p: Project, e: Edge): boolean {
   return isSourceReady(p, e.from);
 }
 
-/** 入力ポート (outer) に用意できた線が来ているか (箱の入力名に印を付ける用) */
+/** 入力ポート (outer) に用意できた線が来ているか (ボックスの入力名に印を付ける用) */
 export function isInputReady(p: Project, portId: string): boolean {
   const port = p.ports[portId];
-  if (!port || port.direction !== "in") return false;
-  if (port.artifacts.length > 0) return true;
-  return incomingEdges(p, { portId, side: "outer" }).some((e) => isEdgeReady(p, e));
+  return !!port && port.direction === "in" && isSourceReady(p, { portId, side: "inner" });
 }
 
 /**
@@ -1028,6 +1042,8 @@ export function fromJSON(text: string): Project {
   , nextKey: typeof d.nextKey === "number" ? d.nextKey : 1
   , inputGroups: Array.isArray(d.inputGroups) ? d.inputGroups : []
   };
+  if (typeof d.contextGuard === "boolean") q.contextGuard = d.contextGuard;
+  if (d.handoffs && typeof d.handoffs === "object") q.handoffs = d.handoffs;
   if (d.lang === "en" || d.lang === "ja") q.lang = d.lang; // CLI の文言の言語 (無ければ ja 扱い)
   // 無いグループを指している入力は既定の入力ノードに戻す
   for (const x of Object.values(q.ports)) if (x.groupId && !q.inputGroups!.some((gp) => gp.id === x.groupId)) delete x.groupId;
@@ -1049,8 +1065,8 @@ export function fromJSON(text: string): Project {
 }
 
 /**
- * 版 2 までのデータ (最上位に直接タスクがある) を、プロジェクトの箱で包む (版 3 の形)
- * 最上位にタスクが無い、または既にプロジェクトの箱だけなら何もしない
+ * 版 2 までのデータ (最上位に直接タスクがある) を、プロジェクトのボックスで包む (版 3 の形)
+ * 最上位にタスクが無い、または既にプロジェクトのボックスだけなら何もしない
  */
 export function wrapIntoProject(p: Project): Project {
   const topTasks = childrenOf(p, ROOT_ID).filter((b) => kindOf(b) !== "project");
@@ -1072,14 +1088,14 @@ export function wrapIntoProject(p: Project): Project {
   , activity: null
   , decisions: []
   };
-  // タスクを箱の中へ (位置は箱の内側の余白から)
+  // タスクをボックスの中へ (位置はボックスの内側の余白から)
   const minX = Math.min(...topTasks.map((b) => b.position.x));
   const minY = Math.min(...topTasks.map((b) => b.position.y));
   for (const b of topTasks) {
     q.blocks[b.id].parentId = pid;
     q.blocks[b.id].position = { x: b.position.x - minX + CHILD_PADDING.left, y: b.position.y - minY + childTop(q, pid) };
   }
-  // 最上位の出力へ上がっていた線は、箱の出力 (同名) を経由させる
+  // 最上位の出力へ上がっていた線は、ボックスの出力 (同名) を経由させる
   for (const e of Object.values(q.edges)) {
     const tp = q.ports[e.to.portId];
     const fp = q.ports[e.from.portId];
@@ -1094,7 +1110,7 @@ export function wrapIntoProject(p: Project): Project {
       }
       e.to = { portId: mid.id, side: "inner" };
     }
-    // 最上位の入力から下りていた線 (手動) は、箱の入力 (同名) を経由させる。自動の線は消して作り直す
+    // 最上位の入力から下りていた線 (手動) は、ボックスの入力 (同名) を経由させる。自動の線は消して作り直す
     if (e.kind === "down" && fp.blockId === ROOT_ID && e.from.side === "inner") {
       if (e.auto) {
         delete q.edges[e.id];
@@ -1110,10 +1126,10 @@ export function wrapIntoProject(p: Project): Project {
       e.from = { portId: mid.id, side: "inner" };
     }
   }
-  // 最上位の自動ポートは作り直す (箱を経由した形で再生成される)
+  // 最上位の自動ポートは作り直す (ボックスを経由した形で再生成される)
   for (const x of portsOf(q, ROOT_ID, "in")) if (x.promotedFrom) delete q.ports[x.id];
   for (const e of Object.values(q.edges)) if (!q.ports[e.from.portId] || !q.ports[e.to.portId]) delete q.edges[e.id];
-  // 箱の出力が 1 つも無ければ既定の出力を付け、最終成果物につなぐ
+  // ボックスの出力が 1 つも無ければ既定の出力を付け、最終成果物につなぐ
   if (portsOf(q, pid, "out").length === 0) {
     const out: Port = { id: newId(), blockId: pid, direction: "out", name: t("最終成果物"), description: "", required: true, artifacts: [] };
     q.ports[out.id] = out;
@@ -1263,6 +1279,8 @@ export function editDecisionAnswer(p: Project, blockId: string, decisionId: stri
   if (!b || !d || d.answer === undefined || !answer.trim() || answer.trim() === d.answer) return p;
   const q = touch(p);
   const qd = q.blocks[blockId].decisions.find((x) => x.id === decisionId)!;
+  delete qd.ackedAt;
+  delete qd.ackedBy;
   qd.answer = answer.trim();
   qd.answeredBy = by;
   qd.answeredAt = now();
@@ -1329,20 +1347,16 @@ export function answeredUnacked(p: Project): { block: Block; decision: Decision 
   return out.sort((a, b) => (b.decision.answeredAt ?? "").localeCompare(a.decision.answeredAt ?? ""));
 }
 
-/**
- * 回答が AI に引き取られたとみなせるか: ack の記録があるか、回答の後にその箱で AI の記録 (ログ) があるか
- * (この仕組みより前の回答も、AI が作業を記録していれば読まれている。古い回答が全部「未確認」に出ないように)
- */
-export function isAcked(p: Project, blockId: string, d: Decision): boolean {
-  if (d.ackedAt) return true;
+/** Human answers remain unread until an explicit acknowledgement is recorded.
+ * A later question/note is not evidence that the earlier decision was read. */
+export function isAcked(_p: Project, _blockId: string, d: Decision): boolean {
   if (d.answer === undefined) return false;
-  if (d.answeredBy && !isHumanActor(d.answeredBy)) return true; // AI が自分で答えた判断は読まれている
-  const at = d.answeredAt ?? "";
-  return p.log.some((e) => e.blockId === blockId && e.at > at && !isHumanActor(e.actor) && e.kind !== "answered");
+  if (d.ackedAt) return true;
+  return !!d.answeredBy && !isHumanActor(d.answeredBy);
 }
 
 /**
- * 回答を AI が引き取った記録を付ける (ack)。decisionId を省略すると、その箱の未確認の回答すべて
+ * 回答を AI が引き取った記録を付ける (ack)。decisionId を省略すると、そのボックスの未確認の回答すべて
  * Input : blockId, by = 引き取った AI の名前, decisionId
  * Output: 付けた複製 (付ける物が無ければ p そのもの)
  */
@@ -1382,7 +1396,7 @@ export interface Summary {
   answered: { block: Block; decision: Decision }[];
   /** 未着手で活動も無い black のブロック (次の候補) */
   next: Block[];
-  /** 期日を過ぎた未完了の箱 */
+  /** 期日を過ぎた未完了のボックス */
   overdue: Block[];
 }
 
@@ -1447,12 +1461,12 @@ export function splitBlock(
     q = r.project;
     made[b.title] = r.blockId;
     if (b.description) q.blocks[r.blockId].description = b.description;
-    if ((b.outputs ?? []).length > 1) errors.push(t("「{title}」の出力は 1 本にしました (下の階層を持たない箱の出力は 1 本。{omitted} は省略)", { title: b.title, omitted: b.outputs!.slice(1).join(", ") }));
+    if ((b.outputs ?? []).length > 1) errors.push(t("「{title}」の出力は 1 本にしました (下の階層を持たないボックスの出力は 1 本。{omitted} は省略)", { title: b.title, omitted: b.outputs!.slice(1).join(", ") }));
     for (const name of b.inputs ?? []) q = addPort(q, { blockId: r.blockId, direction: "in", name }).project;
   }
-  // 参照の解決: 題名にドットがあってもよいので、区切り方を左から順に試す。失敗の理由 (箱が無い / ポートが無い) も返す
+  // 参照の解決: 題名にドットがあってもよいので、区切り方を左から順に試す。失敗の理由 (ボックスが無い / ポートが無い) も返す
   const resolve = (ref: string, dir: "out" | "in"): { ep: Endpoint | null; why: string } => {
-    let why = t("箱が見つかりません");
+    let why = t("ボックスが見つかりません");
     for (const { title, portName } of refSplits(ref)) {
       const isParent = title === "parent" || title === parent.title || title === parentId;
       const blockId = isParent ? parentId : made[title] ?? findBlock(q, title).block?.id;
@@ -1530,7 +1544,7 @@ function toTemplateNode(p: Project, blockId: string): TemplateNode {
 
 /**
  * ブロックをテンプレートとして取り出す (状態・活動・成果物・担当は含めない。構造と説明だけ)
- * Input : blockId, name = テンプレート名 (省略時は箱の題名), tags
+ * Input : blockId, name = テンプレート名 (省略時はボックスの題名), tags
  * Output: BlockTemplate
  */
 export function extractTemplate(p: Project, blockId: string, opts: { name?: string; tags?: string[]; description?: string } = {}): BlockTemplate {
@@ -1693,7 +1707,7 @@ export function setSchedule(
   return q;
 }
 
-/** 期日を過ぎているか (完了していない箱だけ) */
+/** 期日を過ぎているか (完了していないボックスだけ) */
 export function isOverdue(b: Block, today = new Date()): boolean {
   if (!b.dueDate || b.status === "white") return false;
   const d = new Date(b.dueDate + "T23:59:59");
@@ -1708,7 +1722,7 @@ export function daysToDue(b: Block, today = new Date()): number | null {
   return Math.round((d.getTime() - t0.getTime()) / 86400000);
 }
 
-/** 題名・短い ID・説明で箱を検索する (大文字小文字を区別しない。ID の完全一致を先頭に) */
+/** 題名・短い ID・説明でボックスを検索する (大文字小文字を区別しない。ID の完全一致を先頭に) */
 export function searchBlocks(p: Project, text: string, limit = 20): Block[] {
   const q = text.trim().toLowerCase();
   if (!q) return [];
@@ -1751,17 +1765,17 @@ export function effectiveDescription(p: Project, portId: string): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* ドラッグ操作の補助: 階層の移動、箱へのドロップで結線                        */
+/* ドラッグ操作の補助: 階層の移動、ボックスへのドロップで結線                        */
 /* ------------------------------------------------------------------ */
 
 /**
- * 箱を別の階層へ移す (ドラッグで別の箱の中に落としたとき)
- * Input : blockId, newParentId = 移す先 (ROOT_ID は不可。プロジェクトの箱かタスク), position = 新しい親の座標系での位置
+ * ボックスを別の階層へ移す (ドラッグで別のボックスの中に落としたとき)
+ * Input : blockId, newParentId = 移す先 (ROOT_ID は不可。プロジェクトのボックスかタスク), position = 新しい親の座標系での位置
  * Output: Project。つながらなくなった線 (元の階層の兄弟との線) は外れ、浮いた入力は自動で上がる
  */
 /**
  * 階層のならびを上へたどる (自分の階層 → 親の階層 → ... → ROOT)
- * Input : scope = 階層 (= 箱の id。最上位は ROOT_ID)
+ * Input : scope = 階層 (= ボックスの id。最上位は ROOT_ID)
  * Output: [scope, parent, ..., ROOT_ID]
  */
 function scopeChain(p: Project, scope: string): string[] {
@@ -1774,7 +1788,7 @@ function scopeChain(p: Project, scope: string): string[] {
   return out;
 }
 
-/** 箱に同名のポートがあればそれを、無ければ作って返す (手で作ったものだけ。自動のものは別) */
+/** ボックスに同名のポートがあればそれを、無ければ作って返す (手で作ったものだけ。自動のものは別) */
 function findOrAddPort(q: Project, blockId: string, direction: "in" | "out", name: string): Port | null {
   const existing = portsOf(q, blockId, direction).find((x) => x.name === name && !x.promotedFrom);
   if (existing) return existing;
@@ -1784,9 +1798,9 @@ function findOrAddPort(q: Project, blockId: string, direction: "in" | "out", nam
 }
 
 /**
- * 階層が違う 2 つのポートを、間の箱のポートを経由してつなぐ (q を直接書き換える)
- *   出す側: 共通の階層に着くまで、各階層の箱に出力ポートを作って「中 → 箱の出力 (内側)」「箱の出力 (外側) → 次」と上げる
- *   受ける側: 共通の階層から、各階層の箱に入力ポートを作って「箱の入力 (外側) → 箱の入力 (内側) → 中」と下ろす
+ * 階層が違う 2 つのポートを、間のボックスのポートを経由してつなぐ (q を直接書き換える)
+ *   出す側: 共通の階層に着くまで、各階層のボックスに出力ポートを作って「中 → ボックスの出力 (内側)」「ボックスの出力 (外側) → 次」と上げる
+ *   受ける側: 共通の階層から、各階層のボックスに入力ポートを作って「ボックスの入力 (外側) → ボックスの入力 (内側) → 中」と下ろす
  * Input : from = 出す側の端点, to = 受ける側の端点
  * Output: なし (つなげない部分は無視。浮いた入力は normalizePromotions が上げる)
  */
@@ -1811,7 +1825,7 @@ export function routeConnect(q: Project, from: Endpoint, to: Endpoint): void {
     if (!r.error) Object.assign(q, r.project);
     f = { portId: via.id, side: "outer" };
   }
-  // 受ける側へ共通の階層から下ろす (上の箱から順に)
+  // 受ける側へ共通の階層から下ろす (上のボックスから順に)
   for (const sc of tChain.slice(0, tChain.indexOf(common)).reverse()) {
     if (sc === ROOT_ID) return;
     const via = findOrAddPort(q, sc, "in", toPort.name);
@@ -1840,10 +1854,10 @@ export function refSplits(ref: string): { title: string; portName: string }[] {
 }
 
 /**
- * ブロックを別の階層へ移す (ドラッグで箱の中へ落とす / 外へ出す)
- * 自分に付いていた線は切らず、間の箱のポートを経由して付け替える (routeConnect)。
+ * ブロックを別の階層へ移す (ドラッグでボックスの中へ落とす / 外へ出す)
+ * 自分に付いていた線は切らず、間のボックスのポートを経由して付け替える (routeConnect)。
  *   例: 中の階層から外へ出すと、元の兄弟との線は元の親の出力 / 入力を経由してつながったままになる
- * Input : blockId = 動かす箱, newParentId = 新しい親, position = 新しい親の座標系での位置
+ * Input : blockId = 動かすボックス, newParentId = 新しい親, position = 新しい親の座標系での位置
  * Output: 更新した Project (移せないときはそのまま)
  */
 export function moveBlockToParent(p: Project, blockId: string, newParentId: string, position: { x: number; y: number }): Project {
@@ -1868,7 +1882,7 @@ export function moveBlockToParent(p: Project, blockId: string, newParentId: stri
     const otherEp = mineIsFrom ? e.to : e.from;
     const otherPort = q.ports[otherEp.portId];
     if (!otherPort) continue;
-    // 相手が移動先の箱そのもの (外側) の線: 自分がその箱の中に入るので意味を失う (切る)
+    // 相手が移動先のボックスそのもの (外側) の線: 自分がそのボックスの中に入るので意味を失う (切る)
     if (otherEp.side === "outer" && otherPort.blockId === newParentId) continue;
     if (otherEp.side === "inner" && otherPort.blockId === oldParentId && oldParentId !== null) {
       // 相手が元の親の内側のポート (親から下りてくる / 親へ上がる線): 元の親の外側の相手と直接つなぎ直す
@@ -1884,7 +1898,7 @@ export function moveBlockToParent(p: Project, blockId: string, newParentId: stri
   }
   q.blocks[blockId].parentId = newParentId;
   q.blocks[blockId].position = { x: Math.max(CHILD_PADDING.left, position.x), y: Math.max(childTop(q, newParentId), position.y) };
-  // 新しい階層で、間の箱を経由してつなぎ直す
+  // 新しい階層で、間のボックスを経由してつなぎ直す
   for (const pr of pending) routeConnect(q, pr.from, pr.to);
   if (q.blocks[newParentId].status === "black") q.blocks[newParentId].status = "gray";
   q.blocks[newParentId].collapsed = false;
@@ -1893,20 +1907,20 @@ export function moveBlockToParent(p: Project, blockId: string, newParentId: stri
 }
 
 /**
- * 出力 (または親の入力) を、箱そのものにドロップしたときの結線
+ * 出力 (または親の入力) を、ボックスそのものにドロップしたときの結線
  * 空いている入力 (線が来ていない、自動の線だけの入力) があればそこへ、無ければ出力と同じ名前の入力を作ってつなぐ
- * Input : from = 出す側の端点, targetBlockId = 落とした箱
+ * Input : from = 出す側の端点, targetBlockId = 落としたボックス
  * Output: { project, error }
  */
 export function connectToBlock(p: Project, from: Endpoint, targetBlockId: string): { project: Project; error?: string } {
   const fp = p.ports[from.portId];
   const tb = p.blocks[targetBlockId];
   if (!fp || !tb || targetBlockId === ROOT_ID) return { project: p, error: t("つなぐ先が見つかりません") };
-  // 出す側の階層と、落とした箱の階層が合うか (同じ階層の箱、または出す側が親の入力ならその子)
+  // 出す側の階層と、落としたボックスの階層が合うか (同じ階層のボックス、または出す側が親の入力ならその子)
   const fromScope = scopeOf(p, from);
   const targetIsChildOfSource = fp.direction === "in" && from.side === "inner" && tb.parentId === fp.blockId;
   const sameScope = fromScope !== null && tb.parentId === fromScope;
-  // 落とした箱が出す側の親なら、親の出力 (内側) につなぐ
+  // 落としたボックスが出す側の親なら、親の出力 (内側) につなぐ
   const targetIsParent = fp.direction === "out" && from.side === "outer" && p.blocks[fp.blockId]?.parentId === targetBlockId;
   if (targetIsParent) {
     const outs = portsOf(p, targetBlockId, "out");
@@ -1914,7 +1928,7 @@ export function connectToBlock(p: Project, from: Endpoint, targetBlockId: string
     if (!free) return { project: p, error: t("親に出力がありません") };
     return connect(p, from, { portId: free.id, side: "inner" });
   }
-  if (!sameScope && !targetIsChildOfSource) return { project: p, error: t("同じ階層の箱 (または親子) にだけつなげます") };
+  if (!sameScope && !targetIsChildOfSource) return { project: p, error: t("同じ階層のボックス (または親子) にだけつなげます") };
   const ins = portsOf(p, targetBlockId, "in");
   let target = ins.find((i) => incomingEdges(p, { portId: i.id, side: "outer" }).every((e) => e.auto) && !i.promotedFrom);
   let q = p;
@@ -1926,15 +1940,15 @@ export function connectToBlock(p: Project, from: Endpoint, targetBlockId: string
   return connect(q, from, { portId: target.id, side: "outer" });
 }
 
-/** 箱と箱の間に要る間隔: 線は箱の縁から 36px 離れるので、両側で 72px + 線 1 本分。8px 単位で 96px */
+/** ボックスとボックスの間に要る間隔: 線はボックスの縁から 36px 離れるので、両側で 72px + 線 1 本分。8px 単位で 96px */
 const GAP = 96;
 
 type SizeOf = (p: Project, id: string) => { width: number; height: number };
 
 /**
- * 1 つの箱を、重なっている兄弟から押し出す (q を直接書き換える。箱のオブジェクトは差し替える = 元の Project は壊さない)
+ * 1 つのボックスを、重なっている兄弟から押し出す (q を直接書き換える。ボックスのオブジェクトは差し替える = 元の Project は壊さない)
  * Input : q = blocks が浅くコピーされた Project, blockId, sizeOf, against = 避ける兄弟の id (省略時は全部),
- *         siblings = 同じ階層の箱の id (childrenOf の走査を省くため呼び出し側で渡せる)
+ *         siblings = 同じ階層のボックスの id (childrenOf の走査を省くため呼び出し側で渡せる)
  * Output: 動かしたら true
  */
 function pushOut(q: Project, blockId: string, sizeOf: SizeOf, against?: Set<string>, siblings?: string[]): boolean {
@@ -1942,7 +1956,7 @@ function pushOut(q: Project, blockId: string, sizeOf: SizeOf, against?: Set<stri
   if (!b || b.parentId === null) return false;
   const sibIds = siblings ?? childrenOf(q, b.parentId).map((s) => s.id);
   const me = sizeOf(q, blockId);
-  // 確定済みの箱だけを避けるとき (全体の解消) は右か下にしか動かさない: 上や左へ戻すと、先に確定した別の箱に当たって
+  // 確定済みのボックスだけを避けるとき (全体の解消) は右か下にしか動かさない: 上や左へ戻すと、先に確定した別のボックスに当たって
   // 「下へ押す ↔ 上へ戻す」の往復になり、重なったまま終わる。右・下だけなら単調に進むので必ず終わる (回数の上限も大きく取る)
   const forwardOnly = !!against;
   let moved = false;
@@ -1951,7 +1965,7 @@ function pushOut(q: Project, blockId: string, sizeOf: SizeOf, against?: Set<stri
     let sib: Block | undefined;
     for (const id of sibIds) {
       if (id === blockId) continue;
-      if (against && !against.has(id)) continue; // まだ確定していない (後で動かす) 箱は避けない
+      if (against && !against.has(id)) continue; // まだ確定していない (後で動かす) ボックスは避けない
       const s = q.blocks[id];
       const sz = sizeOf(q, id);
       if (cur.position.x < s.position.x + sz.width + GAP && cur.position.x + me.width + GAP > s.position.x
@@ -1977,10 +1991,10 @@ function pushOut(q: Project, blockId: string, sizeOf: SizeOf, against?: Set<stri
 }
 
 /**
- * ドラッグで離した箱が同じ階層の箱と重なっていたら、最小の移動で押し出す
- * Input : blockId, sizeOf = 箱の大きさを返す関数 (size.ts の blockSize),
- *         against = 避ける兄弟の id (省略時は同じ階層の全部。resolveAllOverlaps は「先に確定した箱」だけを渡し、
- *         後ろの箱は順に玉突きで動かす。全部を避けると、左右の箱に挟まれたとき右へ押す ↔ 左へ戻すの往復で終わらない)
+ * ドラッグで離したボックスが同じ階層のボックスと重なっていたら、最小の移動で押し出す
+ * Input : blockId, sizeOf = ボックスの大きさを返す関数 (size.ts の blockSize),
+ *         against = 避ける兄弟の id (省略時は同じ階層の全部。resolveAllOverlaps は「先に確定したボックス」だけを渡し、
+ *         後ろのボックスは順に玉突きで動かす。全部を避けると、左右のボックスに挟まれたとき右へ押す ↔ 左へ戻すの往復で終わらない)
  * Output: 位置を直した Project (動かなければ元のまま)
  */
 export function resolveOverlap(p: Project, blockId: string, sizeOf: SizeOf, against?: Set<string>): Project {
@@ -1990,12 +2004,12 @@ export function resolveOverlap(p: Project, blockId: string, sizeOf: SizeOf, agai
 
 /**
  * すべての階層で、重なっている兄弟を押し出す (移動・幅の変化・追加のたびに呼ぶ。表示用の計画にも毎回掛ける)
- * 位置が上 (左) の箱を優先して残し、後の箱を動かす。
- * 各箱は「先に確定した箱」だけを避ける (玉突き): 1 つ目の箱が広がって 2 つ目を右へ押すと、3 つ目は押された 2 つ目を避けて右へ、と順に動く。
+ * 位置が上 (左) のボックスを優先して残し、後のボックスを動かす。
+ * 各ボックスは「先に確定したボックス」だけを避ける (玉突き): 1 つ目のボックスが広がって 2 つ目を右へ押すと、3 つ目は押された 2 つ目を避けて右へ、と順に動く。
  * (全部の兄弟を避けさせると、2 つ目が 1 つ目と 3 つ目に挟まれて右へ ↔ 左への往復になり、重なったまま終わることがある)
- * 速さのために: Project は複製せず、動いた箱だけ差し替える。大きさは箱ごとに 1 回だけ見積もる (深い階層から順に処理するので、
- * 開いた箱の大きさを見積もる時点で中の箱の位置は確定している)。何も動かなければ元の Project をそのまま返す
- * Input : sizeOf = 箱の大きさを返す関数 (size.ts の blockSize)
+ * 速さのために: Project は複製せず、動いたボックスだけ差し替える。大きさはボックスごとに 1 回だけ見積もる (深い階層から順に処理するので、
+ * 開いたボックスの大きさを見積もる時点で中のボックスの位置は確定している)。何も動かなければ元の Project をそのまま返す
+ * Input : sizeOf = ボックスの大きさを返す関数 (size.ts の blockSize)
  * Output: 位置を直した Project
  */
 export function resolveAllOverlaps(p: Project, sizeOf: SizeOf): Project {
@@ -2011,7 +2025,7 @@ export function resolveAllOverlaps(p: Project, sizeOf: SizeOf): Project {
   // 深さ (根からの段数)。深い階層の親から処理する
   const depthOf = (id: string): number => { let d = 0; let cur = q.blocks[id]?.parentId; while (cur) { d++; cur = q.blocks[cur]?.parentId; } return d; };
   const parents = [...kidsOf.keys()].sort((a, b) => depthOf(b) - depthOf(a));
-  // 大きさは箱ごとに 1 回 (位置は大きさに効かない。開いた箱は中の箱の位置に効くが、中の階層を先に済ませてから見積もる)
+  // 大きさはボックスごとに 1 回 (位置は大きさに効かない。開いたボックスは中のボックスの位置に効くが、中の階層を先に済ませてから見積もる)
   const sizes = new Map<string, { width: number; height: number }>();
   const cachedSize: SizeOf = (pp, id) => { let s = sizes.get(id); if (!s) { s = sizeOf(pp, id); sizes.set(id, s); } return s; };
   let moved = false;
@@ -2130,13 +2144,13 @@ export function issueKeyOf(url: string): string {
 /**
  * 1 本の線と「同じ信号」としてつながっている線の集合 (親の縁のポートを通り抜けて続く区間をすべて含む)
  *   出力 (外側) → 親の出力 (内側) → 親の出力 (外側) → 兄弟の入力 (外側) → 入力 (内側) → 子の入力 (外側) ... と、
- *   ポートの内側 / 外側で続く線をたどる。箱の中の処理 (入力 → 出力) はまたがない
+ *   ポートの内側 / 外側で続く線をたどる。ボックスの中の処理 (入力 → 出力) はまたがない
  * Input : edgeId
  * Output: 線 id の集合 (自分を含む)
  */
 /**
  * 1 本の線 (と、境界を越えた先の続き) が見えるタブの一覧
- * 線は「両端の箱が見える画面」に描かれる: 両端とも大項目の中なら、その大項目のタブ。大項目どうし・最上位の入出力との線は All (null)
+ * 線は「両端のボックスが見える画面」に描かれる: 両端とも大項目の中なら、その大項目のタブ。大項目どうし・最上位の入出力との線は All (null)
  * Input : edgeId
  * Output: タブ (大項目の id、All は null) の配列。出す側のタブから受ける側のタブへの順。重複なし
  */
@@ -2146,7 +2160,7 @@ export function wireNetTabs(p: Project, edgeId: string): (string | null)[] {
   const tabOf = (e: Edge): string | null => {
     const a = p.ports[e.from.portId]?.blockId;
     const b = p.ports[e.to.portId]?.blockId;
-    // 大項目の外側のポートどうし (兄弟の線) や最上位との線は All。片方が中の箱なら、その大項目のタブ
+    // 大項目の外側のポートどうし (兄弟の線) や最上位との線は All。片方が中のボックスなら、その大項目のタブ
     const ma = a && a !== ROOT_ID ? majorOf(p, a) : null;
     const mb = b && b !== ROOT_ID ? majorOf(p, b) : null;
     const inner = (id: string | undefined, side: "inner" | "outer") => !!id && id !== ROOT_ID && (majorOf(p, id) !== id || side === "inner");
