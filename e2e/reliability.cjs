@@ -75,7 +75,7 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
       await button.click();
       await reply({type:'load',text:withDescription('Changed outside'),version:2,name:'boxglow.json'});
       await page.waitForFunction(()=>!window.boxglow.store.getState().reloading);
-      check('Reload: says so when nothing changed', (await toast())==='Up to date (the file has not changed)');
+      check('Reload: says so when nothing changed', (await toast())==='Up to date (nothing has changed)');
       // 応答が無ければ、失敗として伝える (押せる状態に戻る)
       await button.click();
       await page.waitForFunction(()=>!window.boxglow.store.getState().reloading,null,{timeout:8000});
@@ -90,10 +90,27 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
       await page.context().close();
     }
     {
-      // ブラウザ内の計画 (つながっているファイルが無い) には、ボタンを出さない
+      // ボタンは、どの計画でも、いつも出ている (サンプルでも、ブラウザ内の計画でも)
       const {page} = await open(browser,{lang:'en',query:'?demo=1'});
       await page.waitForFunction(() => !!window.boxglow.store.getState().project);
-      check('Reload: hidden for a plan kept in the browser', (await page.getByRole('button',{name:'Reload',exact:true}).count())===0);
+      const button = page.getByRole('button',{name:'Reload',exact:true});
+      check('Reload: always shown, also for the sample', await button.isVisible());
+      await button.click();
+      await page.waitForFunction(()=>!window.boxglow.store.getState().reloading && !!window.boxglow.store.getState().toast);
+      check('Reload: the sample stays as it is', (await page.evaluate(()=>window.boxglow.store.getState().toast))==='Up to date (nothing has changed)');
+      // ブラウザ内の計画: このブラウザの保存先から読み直す (別のタブで変えた内容を取り込む)
+      await page.evaluate(()=>window.boxglow.store.getState().copyToMine());
+      await page.waitForFunction(()=>{const s=window.boxglow.store.getState();return s.source==='idb' && !s.ephemeral && s.saveState==='saved';});
+      check('Reload: shown for a plan kept in the browser', await button.isVisible());
+      const id = await page.evaluate(()=>window.boxglow.store.getState().project.id);
+      const other = await page.context().newPage();
+      await other.goto(page.url().split('?')[0].split('#')[0] + '#p=' + id);
+      await other.waitForFunction(() => window.boxglow?.store.getState().project && !window.boxglow.store.getState().ephemeral);
+      await other.evaluate(()=>{const s=window.boxglow.store.getState(); s.apply(p=>({...p,description:'Edited in another tab'})); s.saveNow();});
+      await other.waitForFunction(()=>window.boxglow.store.getState().saveState==='saved');
+      await button.click();
+      await page.waitForFunction(()=>!window.boxglow.store.getState().reloading);
+      check('Reload: picks up a change saved from another tab', (await page.evaluate(()=>window.boxglow.store.getState().project.description))==='Edited in another tab');
       await page.context().close();
     }
   } finally { await browser.close(); }

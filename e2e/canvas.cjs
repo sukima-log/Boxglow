@@ -115,6 +115,23 @@ async function drag(page, from, to) {
    check(`${theme}: 実行時のエラーが無い`,errors.length===0,errors.join(';'));
    await p.context().close();
   }
+  {
+   // 線の先端の矢印: どの線にも付く (ボックスの入力に入る線にも、出力のノード Outputs へ届く線にも)
+   const {page:p}=await open(browser,{query:'?demo=1&lang=ja'});
+   await p.waitForFunction(()=>window.boxglow?.store.getState().project);
+   const arrows=()=>p.evaluate(()=>[...document.querySelectorAll('.react-flow__edge')].filter(e=>e.getClientRects().length).map(e=>({id:e.getAttribute('data-id')||e.getAttribute('data-testid')||'',arrow:!!e.querySelector('.react-flow__edge-arrow')})));
+   await p.waitForFunction(()=>document.querySelectorAll('.react-flow__edge').length>0);
+   const all=await arrows();
+   check('矢印: 全体の図で、どの線にも先端の矢印がある',all.length>0&&all.every(e=>e.arrow),JSON.stringify(all.filter(e=>!e.arrow)));
+   // 大項目のタブ (Inputs / Outputs のノードが出る)
+   await p.locator('.tab-strip button').nth(1).click();
+   await p.waitForFunction(()=>[...document.querySelectorAll('.react-flow__edge')].some(e=>(e.getAttribute('data-id')||e.getAttribute('data-testid')||'').includes('scope-out')));
+   const tab=await arrows();
+   const toOutputs=tab.filter(e=>e.id.includes('scope-out'));
+   check('矢印: 出力のノード (Outputs) へ届く線にも矢印がある',toOutputs.length>0&&toOutputs.every(e=>e.arrow),JSON.stringify(tab));
+   check('矢印: タブの中の、どの線にも矢印がある',tab.every(e=>e.arrow),JSON.stringify(tab.filter(e=>!e.arrow)));
+   await p.context().close();
+  }
  } finally { await browser.close(); }
  const {passed,failed}=result();console.log(`${passed}/${passed+failed} passed`);process.exitCode=failed?1:0;
 })().catch(e=>{console.error(e);process.exitCode=1;});

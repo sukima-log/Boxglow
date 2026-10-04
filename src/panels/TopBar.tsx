@@ -145,9 +145,10 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
         {!ephemeral && <span className="save-chip__file">{fileName ?? t("ブラウザ内")}</span>}
         <span>{saveLabel}</span>
       </span>
-      {/* 手動の更新: つながっているファイルを、今すぐ読み直す (自動の更新を待たない)。ブラウザ内の計画には、読み直す先が無いので出さない */}
-      {!ephemeral && source !== "idb" && (
-        <button className="btn btn-ghost btn-sm" onClick={() => void reload()} disabled={reloading} title={t("最新の内容を読み込む (ファイルを今すぐ読み直す)")} aria-label="Reload">
+      {/* 手動の更新: 今すぐ読み直す (自動の更新を待たない)。どの計画でも、いつも同じ場所に出す (変更があるかどうかに関係なく)。
+          ファイルにつながっている計画はファイルを、ブラウザ内の計画はこのブラウザの保存先を読み直す */}
+      {(
+        <button className="btn btn-ghost btn-sm" onClick={() => void reload()} disabled={reloading} title={source === "idb" ? t("最新の内容を読み込む") : t("最新の内容を読み込む (ファイルを今すぐ読み直す)")} aria-label="Reload">
           <svg className={reloading ? "spin" : undefined} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M20 12a8 8 0 1 1-2.6-5.9" />
             <path d="M20 4v5h-5" />

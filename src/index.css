@@ -657,7 +657,7 @@ textarea.input { resize: vertical; min-height: 64px; }
    遠目では色相より「太さ」と「明るさ」の差で見分けるので、太さ 2 倍・明度も離す */
 .react-flow__edge-path { stroke: var(--wire); stroke-width: 2px; opacity: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; }
 .react-flow__edge.edge-ready .react-flow__edge-path { stroke: var(--wire-ready); stroke-width: 4px; }
-/* 矢印 (入力に入る線の先端): 線と同じ色の規則 (未確定 = 琥珀、確定 = 緑、選択 = 橙)。大きさは図の座標なので拡大縮小に追従する */
+/* 矢印 (線の先端。ボックスの入力に入る線にも、親の出力のノードへ届く線にも付く): 線と同じ色の規則 (未確定 = 琥珀、確定 = 緑、選択 = 橙)。大きさは図の座標なので拡大縮小に追従する */
 .react-flow__edge-arrow { fill: var(--wire); stroke: none; pointer-events: none; }
 .react-flow__edge.edge-ready .react-flow__edge-arrow { fill: var(--wire-ready); }
 .react-flow__edge.selected .react-flow__edge-arrow, .react-flow__edge.edge-net .react-flow__edge-arrow { fill: var(--accent); }
@@ -955,6 +955,8 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 @media (max-width: 600px) {
   .app-top > header.topbar { padding: 8px; }
   .topbar-identity, .topbar-tools { gap: 8px; }
+  /* 狭い画面では、左のまとまり (名前・保存の札・更新・Save) も折り返す (ボタンが画面の外へ出ないように) */
+  .topbar-identity { flex-wrap: wrap; }
   .topbar .summary-chip { flex-basis: 100%; justify-content: center; order: 2; }
   .topbar .save-chip { max-width: 144px; white-space: normal; font-size: 11px; }
   .topbar .save-chip__file { display: none; }

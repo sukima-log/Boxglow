@@ -63,7 +63,8 @@ interface State {
   saveNow: () => void;
   /**
    * 手動の更新: つながっているファイルを、今すぐ読み直して画面に反映する (自動の更新を待たずに取り直す)。
-   * ブラウザ内の計画 (つながっているファイルが無い) では、何もしない。未保存の編集があるときは、自動の更新と同じく、競合として両方を残す
+   * ブラウザ内の計画は、このブラウザの保存先から読み直す (サンプルは、読み直す先が無いので変わらない)。
+   * 未保存の編集があるときは、自動の更新と同じく、競合として両方を残す
    */
   reload: () => Promise<void>;
   /** 手動の更新の最中か (ボタンを押せなくする) */
@@ -177,7 +178,7 @@ let inFlight = false;
 let inFlightText = "";
 let refreshExternal: (() => Promise<void>) | null = null;
 /**
- * 手動の更新で呼ぶ「今すぐ読み直す」処理 (開き方ごとに差し替える。ブラウザ内の計画では null)。
+ * 手動の更新で呼ぶ「今すぐ読み直す」処理 (開き方ごとに差し替える。計画を開いていないときは null)。
  * Output: なし。読めなかったら例外 (理由を画面に出す)
  */
 let reloadNow: (() => Promise<void>) | null = null;
@@ -308,14 +309,14 @@ export const useProjectStore = create<State>((set, get) => {
   , saveNow: () => { if (saveTimer) clearTimeout(saveTimer); saveTimer = null; void persist(); }
   , reloading: false
   , reload: async () => {
-      // つながっているファイルが無い (ブラウザ内の計画)・すでに読み直している最中なら、何もしない
+      // 計画を開いていない・すでに読み直している最中なら、何もしない
       if (!reloadNow || get().reloading) return;
       const before = get().project;
       set({ reloading: true });
       try {
         await reloadNow();
         // 競合になったときは、競合の帯が出るので、ここでは知らせない。それ以外は、変わったかどうかを短く知らせる
-        if (!get().conflict) set({ toast: get().project === before ? t("最新です (ファイルに変更はありません)") : t("最新の内容を読み込みました") });
+        if (!get().conflict) set({ toast: get().project === before ? t("最新です (変更はありません)") : t("最新の内容を読み込みました") });
       } catch (e) {
         set({ toast: t("最新の内容を読み込めませんでした: {error}", { error: e instanceof Error ? e.message : String(e) }) });
       } finally {
@@ -483,6 +484,16 @@ export const useProjectStore = create<State>((set, get) => {
       baseText = toJSON(p) + "\n";
       set({ readonlyReason: null, project: p, ephemeral, source: "idb", readonly: (new URLSearchParams(location.search).get("readonly") === "1" || new URLSearchParams(location.search).get("view") === "article"), fileName: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: ephemeral ? "none" : "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(ephemeral ? null : p.id);
+      // 手動の更新: ブラウザ内の計画は、このブラウザの保存先から読み直す (別のタブで変えた内容を取り込む)。
+      // サンプル (保存しない計画) は、読み直す先が無いので、何も変えない (ボタンは、どの計画でも同じ場所に出す)
+      const generation = epoch;
+      reloadNow = async () => {
+        if (ephemeral) return;
+        const stored = await loadProject(p.id);
+        if (generation !== epoch) return;
+        if (!stored) throw new Error(t("このブラウザの保存先に、計画が見つかりません"));
+        acceptRemote(toJSON(stored) + "\n");
+      };
     }
 
   , openLocalFile: async (handle) => {

@@ -326,8 +326,8 @@ export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; se
     , targetHandle: handleId(tp.direction, tp.id, e.to.side)
     , hidden
     , selected: opts.selectedEdgeId === e.id
-      // 矢印は「入力に入る線」だけ (親の出力へ上がる線は出ていく線なので付けない)。色は CSS で線と同じにする
-    , data: { net: net.has(e.id) && opts.selectedEdgeId !== e.id, arrow: tp.direction === "in" }
+      // 矢印は、どの線の先端にも付ける (ボックスの入力に入る線も、親の出力のノードへ届く線も、流れの向きが分かるように)。色は CSS で線と同じにする
+    , data: { net: net.has(e.id) && opts.selectedEdgeId !== e.id, arrow: true }
       // ボックスを選んでいるときは、そのボックス (と中のボックス) につながる線だけ濃くし、ほかは薄くする
     , className: [
         e.auto ? "edge-auto" : ""
@@ -381,7 +381,8 @@ export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; se
       , targetHandle: handleId("out", port.id, "inner")
       , selectable: true
       , selected: pk.selected
-      , data: { net: pk.inNet && !pk.selected }
+        // 出力のノード (Outputs) へ届く線にも、先端に矢印を付ける (入力の側の線と同じ見た目にする)
+      , data: { arrow: true, net: pk.inNet && !pk.selected }
       , className: [ready ? "edge-ready" : "", pk.inNet && !pk.selected ? "edge-net" : ""].filter(Boolean).join(" ") || undefined
       , zIndex: 1
       }));

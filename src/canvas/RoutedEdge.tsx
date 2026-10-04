@@ -11,7 +11,7 @@ import { toRoundedPath, type Point } from "./routeEdge";
 export const RoutedEdge = memo(function RoutedEdge(props: EdgeProps) {
   const { id, sourceX, sourceY, targetX, targetY, markerEnd, style, label, labelStyle, labelBgStyle, selected, data } = props;
   const net = !!(data as { net?: boolean } | undefined)?.net; // 選んだ線とつながっている線
-  const arrow = !!(data as { arrow?: boolean } | undefined)?.arrow; // 入力に入る線は先端に矢印
+  const arrow = !!(data as { arrow?: boolean } | undefined)?.arrow; // 線の先端に矢印を付けるか (今は、どの線にも付ける)
   const path = ((data as { path?: Point[] } | undefined)?.path) ?? [{ x: sourceX, y: sourceY }, { x: targetX, y: targetY }];
   // 分岐の描き分け: 幹の区間はほかの線が描くので、自分の区間 (parts) だけをパスにする。分岐点 (corners) の角は丸めない
   // (当たり判定とラベルの位置は、下で元の経路 path の全体から作る。幹の上を押してもこの線を選べる)

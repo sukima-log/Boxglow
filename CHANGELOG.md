@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Reload button in the top bar (next to the save state): rereads the connected file right away instead of waiting for the automatic update. Shown for plans opened through `boxglow serve`, the VS Code extension or a directly opened local file; hidden for plans kept in the browser. Automatic updates are unchanged. With unsaved edits, the reread content is kept as a conflict, never written over them.
+- Wires that reach an output node (the Outputs node of a tab, and a parent's output) now end in an arrowhead like the wires into inputs.
+- Reload button in the top bar (next to the save state): rereads the plan right away instead of waiting for the automatic update. Always shown: a plan connected to a file (`boxglow serve`, the VS Code extension, a directly opened local file) rereads the file, a plan kept in the browser rereads the browser's storage (picks up a change from another tab). Automatic updates are unchanged. With unsaved edits, the reread content is kept as a conflict, never written over them.
 - The VS Code extension (0.4.0) is on the Visual Studio Marketplace: https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode. The README now points to it.
 - Real-host VS Code checks (`e2e/vscode-host`) assert their expectations and fail the run when a step fails; each run uses its own test folder, and the Windows-lock check runs against a live writer that releases its own lock.
 - Merge: record timestamps (`descriptionUpdatedAt`, `statusChangedAt`, an agent's `lastSeen`) are no longer reported as conflicts; the later one is kept. Two people setting the same description a few milliseconds apart used to produce a conflict.
