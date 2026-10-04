@@ -546,9 +546,10 @@ export function moveBlock(p: Project, blockId: string, position: { x: number; y:
   const b = q.blocks[blockId];
   if (!b) return p;
   const nested = b.parentId !== null && b.parentId !== ROOT_ID;
+  // 座標だけを置き換える (位置のオブジェクトに、この版が知らない項目があっても落とさない)
   b.position = nested
-    ? { x: Math.max(CHILD_PADDING.left, position.x), y: Math.max(childTop(q, b.parentId!), position.y) }
-    : position;
+    ? { ...b.position, x: Math.max(CHILD_PADDING.left, position.x), y: Math.max(childTop(q, b.parentId!), position.y) }
+    : { ...b.position, ...position };
   return q;
 }
 
@@ -1119,7 +1120,7 @@ export function wrapIntoProject(p: Project): Project {
   const minY = Math.min(...topTasks.map((b) => b.position.y));
   for (const b of topTasks) {
     q.blocks[b.id].parentId = pid;
-    q.blocks[b.id].position = { x: b.position.x - minX + CHILD_PADDING.left, y: b.position.y - minY + childTop(q, pid) };
+    q.blocks[b.id].position = { ...b.position, x: b.position.x - minX + CHILD_PADDING.left, y: b.position.y - minY + childTop(q, pid) };
   }
   // 最上位の出力へ上がっていた線は、ボックスの出力 (同名) を経由させる
   for (const e of Object.values(q.edges)) {
@@ -1176,7 +1177,8 @@ export function wrapIntoProject(p: Project): Project {
 function appendLog(q: Project, ev: { actor: string; kind: LogKind; blockId?: string; message: string }): void {
   q.log.push({ id: newId(), at: now(), ...ev });
   if (q.log.length > LOG_LIMIT) q.log.splice(0, q.log.length - LOG_LIMIT);
-  q.agents[ev.actor] = { lastSeen: now() };
+  // 「最後に見た時刻」だけを更新する (同じ人 / AI の記録に、この版が知らない項目があっても落とさない)
+  q.agents[ev.actor] = { ...q.agents[ev.actor], lastSeen: now() };
 }
 
 /**
@@ -1188,7 +1190,9 @@ export function setActivity(p: Project, blockId: string, actor: string, state: A
   const q = touch(p);
   const b = q.blocks[blockId];
   if (!b || blockId === ROOT_ID) return p;
-  b.activity = { actor, state, note, since: now() };
+  // 同じ人 / AI が続けている活動の更新なら、活動の記録にある「この版が知らない項目」を引き継ぐ。
+  // 別の人 / AI の活動に替わるときは、新しい記録にする (前の人の記録に付いていた項目を、別の人の活動へ持ち込まない)
+  b.activity = { ...(b.activity && b.activity.actor === actor ? b.activity : {}), actor, state, note, since: now() };
   if (state === "working" && b.status === "black") { b.status = "gray"; b.statusChangedAt = now(); }
   const kind: LogKind = state === "working" ? "started" : state === "blocked" ? "blocked" : "note";
   // 状態ごとに 1 文として訳す (英語は語順が変わるので、題名と状態を別々に訳してつなげない)
@@ -1926,7 +1930,7 @@ export function moveBlockToParent(p: Project, blockId: string, newParentId: stri
     pending.push(mineIsFrom ? { from: myEp, to: otherEp } : { from: otherEp, to: myEp });
   }
   q.blocks[blockId].parentId = newParentId;
-  q.blocks[blockId].position = { x: Math.max(CHILD_PADDING.left, position.x), y: Math.max(childTop(q, newParentId), position.y) };
+  q.blocks[blockId].position = { ...q.blocks[blockId].position, x: Math.max(CHILD_PADDING.left, position.x), y: Math.max(childTop(q, newParentId), position.y) };
   // 新しい階層で、間のボックスを経由してつなぎ直す
   for (const pr of pending) routeConnect(q, pr.from, pr.to);
   if (q.blocks[newParentId].status === "black") { q.blocks[newParentId].status = "gray"; q.blocks[newParentId].statusChangedAt = now(); }
@@ -2013,7 +2017,7 @@ function pushOut(q: Project, blockId: string, sizeOf: SizeOf, against?: Set<stri
     const ok = moves.filter((m) => !nested || (m.x >= CHILD_PADDING.left && m.y >= childTop(q, cur.parentId!)));
     const best = (ok.length > 0 ? ok : moves).sort((a, c) => a.d - c.d)[0];
     if (!best) break;
-    q.blocks[blockId] = { ...cur, position: { x: best.x, y: best.y } };
+    q.blocks[blockId] = { ...cur, position: { ...cur.position, x: best.x, y: best.y } };
     moved = true;
   }
   return moved;

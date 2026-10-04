@@ -9,9 +9,10 @@ import { createHash } from "node:crypto";
 import { addBlock, createProject, defaultTaskParent, fromJSON, moveBlockToParent, toJSON, updateBlock } from "../model/graph";
 import type { Project } from "../model/types";
 import {
-  baseSet, decide, PENDING_MAX_AGE_MS, protectedDeletions, pullRecovered, pullWritten, pullNotWritten, pushAccepted, pushRejected, recordPending
-, type Content, type Decision, type Pending, type Remote, type SyncState
+  baseSet, decide, PENDING_MAX_AGE_MS, protectedDeletions, pullRecovered, pullWritten, pullNotWritten, pushAccepted, pushRejected, recordPending, recoveryToken, SyncStateError
+, type Content, type Decision, type Pending, type PendingPull, type PendingPush, type Remote, type SyncState
 } from "./engine";
+import { setActivity, moveBlock } from "../model/graph";
 
 const hashOf = (text: string): string => createHash("sha256").update(text).digest("hex");
 const content = (text: string): Content => ({ hash: hashOf(text), text });
@@ -41,8 +42,13 @@ class FakeServer {
     if (this.deleted) return { kind: "deleted", epoch: this.epoch };
     return this.head ? { kind: "present", epoch: this.epoch, revision: this.head.revision, content: this.head.content } : { kind: "absent", epoch: this.epoch };
   }
-  /** Output: { accepted: 版 } または { rejected: true } (前提の版が違う) */
-  put(opId: string, c: Content, expected: string | null): { accepted: string } | { rejected: true } {
+  /**
+   * Input : opId = 操作 ID, c = 中身, expected = 前提の版 (作成は null), epoch = クライアントが操作を記録したときの履歴の世代
+   * Output: { accepted: 版 } / { rejected: true } (前提の版が違う) / { history: 今の世代 } (履歴の世代が違う。最初に確かめる)
+   */
+  put(opId: string, c: Content, expected: string | null, epoch: string = this.epoch): { accepted: string } | { rejected: true } | { history: string } {
+    if (epoch !== this.epoch) return { history: this.epoch };
+    if (this.deleted) return { rejected: true };
     const done = this.ops.get(opId);
     if (done) {
       if (done.hash !== c.hash || done.expected !== expected) throw new Error("same op id, different request");
@@ -65,7 +71,7 @@ class Device {
   constructor(readonly name: string, readonly server: FakeServer) {}
   decide(extra: { approvedDeletion?: string; now?: Date } = {}): Decision {
     return decide({
-      state: this.state, local: this.local, remote: this.server.remote()
+      state: this.state, local: this.local, remote: this.server.remote(), bindingId: this.name
     , baseText: this.state.base ? this.objects.get(this.state.base.hash) ?? null : null
     , now: extra.now ?? NOW, hashOf, approvedDeletion: extra.approvedDeletion
     });
@@ -78,7 +84,8 @@ class Device {
    */
   step(crash?: "after-record" | "after-effect", extra: { approvedDeletion?: string; now?: Date } = {}): Decision {
     const d = this.decide(extra);
-    if (d.kind === "set-base") { if (this.local) this.keep(this.local); this.state = baseSet(this.state, d.epoch, d.base); }
+    // 写しは、判断が返した中身をそのまま置く (サーバーから取り直さない)
+    if (d.kind === "set-base") { for (const c of d.keep) this.keep(c); this.state = baseSet(this.state, d.epoch, d.base); }
     if (d.kind === "push") {
       const pending: Pending = { kind: "push", opId: `${this.name}-${++this.ops}`, hash: d.content.hash, expected: d.expected, at: NOW.toISOString() };
       this.keep(d.content);
@@ -88,24 +95,31 @@ class Device {
     }
     if (d.kind === "resend") this.send(false);
     if (d.kind === "pull") {
-      this.keep(d.write); this.keep(this.server.remote().kind === "present" ? (this.server.remote() as { content: Content }).content : d.write);
+      for (const c of d.keep) this.keep(c);
       this.state = recordPending(this.state, d.epoch, d.pending);
       if (crash === "after-record") return d;
-      this.local = d.write; // 手元に書く
+      { const hook = this.beforeWrite; this.beforeWrite = null; hook?.(); }                                   // (試験用: 手元に書く直前の割り込み)
+      // 手元に書く: 前提の中身のままなら置き換える。違っていたら「行われなかった」と確定するので、操作を片付けて次の判断でやり直す
+      if ((this.local?.hash ?? null) !== d.pending.expectedLocal) { this.state = pullNotWritten(this.state, d.pending); return d; }
+      this.local = d.write;
       if (crash === "after-effect") return d;
-      this.state = pullWritten(this.state);
+      this.state = pullWritten(this.state, d.pending);
     }
-    if (d.kind === "finish-pull") this.state = pullWritten(this.state);
+    if (d.kind === "finish-pull") this.state = pullWritten(this.state, d.pending);
     return d;
   }
   /** 残っている送りの操作を送る (crash = true なら、サーバーが処理した直後・状態を進める前に落ちる) */
   send(crash: boolean) {
     const pending = this.state.pending;
     if (pending?.kind !== "push") throw new Error("no pending push");
-    const result = this.server.put(pending.opId, { hash: pending.hash, text: this.objects.get(pending.hash)! }, pending.expected);
+    const result = this.server.put(pending.opId, { hash: pending.hash, text: this.objects.get(pending.hash)! }, pending.expected, this.state.epoch ?? undefined);
     if (crash) return;
-    this.state = "accepted" in result ? pushAccepted(this.state, result.accepted) : pushRejected(this.state);
+    // 履歴の世代が違うと言われたら、操作を残したままにする (断られたのとは違う)
+    if ("history" in result) return;
+    this.state = "accepted" in result ? pushAccepted(this.state, pending.opId, result.accepted) : pushRejected(this.state, pending.opId);
   }
+  /** 手元に書く直前に 1 回だけ実行する処理 (試験で、割り込みを再現する) */
+  beforeWrite: (() => void) | null = null;
   /** noop か halt になるまで進める (回りすぎたら失敗) */
   sync(extra: { approvedDeletion?: string } = {}): Decision {
     for (let i = 0; i < 20; i++) { const d = this.step(undefined, extra); if (d.kind === "noop" || d.kind === "halt") return d; }
@@ -251,7 +265,8 @@ describe("途中で落ちたときの再開", () => {
     expect(d.kind === "halt" && d.halt.reason).toBe("recover-pull");
     const head = server.head!.revision;
     expect(B.project.blocks[a].title).toBe("新");                         // 止まっている間、何も書かない・送らない
-    B.state = pullRecovered(B.state, true);                               // 人が「反映済みとして続ける」を選ぶ
+    // 人が「反映済みとして続ける」を選ぶ (印は、表示したときの状態と手元の中身に結び付いている)
+    B.state = pullRecovered(B.state, { token: recoveryToken(B.state, B.local!.hash, hashOf), applied: true }, B.local!.hash, hashOf);
     B.sync(); A.sync();
     for (const dev of [A, B]) { expect(dev.project.blocks[a].title).toBe("A"); expect(dev.project.blocks[b].description).toBe("AI の追記"); }
     expect(server.head!.revision).not.toBe(head);
@@ -264,7 +279,7 @@ describe("途中で落ちたときの再開", () => {
     B.local = original;                                                   // 書いた後で、人が元の中身に戻した
     const d = B.sync();
     expect(d.kind === "halt" && d.halt.reason).toBe("recover-pull");
-    expect(pullNotWritten(B.state).pending).toBeNull();
+    expect(pullNotWritten(B.state, B.state.pending as PendingPull).pending).toBeNull();
   });
   it("残っている送りの操作が 21 日より古い・日時が読めない・未来の日時のときは、自動で送り直さずに止まる", () => {
     const { A, a } = twoDevices();
@@ -383,5 +398,228 @@ describe("保護する項目の削除を確かめる", () => {
     const d = A.sync();
     expect(d.kind === "halt" && d.halt.reason).toBe("protected-deletion");
     if (d.kind === "halt" && d.halt.reason === "protected-deletion") expect(d.halt.keys).toEqual(["workflowPolicy"]);
+  });
+});
+
+// ---- Codex のレビュー 10 の反例 (T01〜T06、T08) と、足りなかった場面 ----
+describe("基準の中身が無い・壊れているとき", () => {
+  /** B に保護する設定を足して両方に配り、B の手元からその設定を消した状態を作る */
+  const droppedSetting = () => {
+    const { server, A, B } = twoDevices();
+    const d = JSON.parse(A.local!.text); d.futureSetting = 1; A.local = content(JSON.stringify(d, null, 2) + "\n");
+    A.sync(); B.sync();
+    const e = JSON.parse(B.local!.text); delete e.futureSetting; B.local = content(JSON.stringify(e, null, 2) + "\n");
+    return { server, A, B };
+  };
+  it("基準の写しが無くても、サーバーの中身が基準と同じなら、それを使って削除を確かめる (確認を飛ばして送らない)", () => {
+    const { B } = droppedSetting();
+    B.objects.clear();
+    const d = B.sync();
+    expect(d.kind === "halt" && d.halt.reason).toBe("protected-deletion");
+  });
+  it("写しが壊れている (ハッシュが合わない) ときは、その写しを使わない", () => {
+    const { B } = droppedSetting();
+    B.objects.set(B.state.base!.hash, "{ 壊れた写し");
+    const d = B.sync();
+    expect(d.kind === "halt" && d.halt.reason).toBe("protected-deletion");
+  });
+  it("写しも無く、サーバーも先へ進んでいて基準の中身が手に入らないときは、送らずに止まる", () => {
+    const { A, B, a } = twoDevices();
+    B.edit((p) => updateBlock(p, a, { title: "B 改" }));
+    B.objects.clear();
+    A.edit((p) => updateBlock(p, a, { description: "A の説明" })); A.sync();
+    const d = B.sync();
+    expect(d.kind === "halt" && d.halt.reason).toBe("base-missing");
+  });
+});
+
+describe("生の文字列を検査してから使う", () => {
+  /** 存在しない入出力を指す線を足した、不正な計画の文字列 */
+  const broken = (text: string): Content => {
+    const d = JSON.parse(text);
+    d.edges["bad-edge"] = { id: "bad-edge", from: { portId: "no-such-port", side: "outer" }, to: { portId: "no-such-port-2", side: "outer" }, kind: "sibling", auto: false };
+    return content(JSON.stringify(d, null, 2) + "\n");
+  };
+  it("手元が不正なら送らない。サーバーが不正なら書かない。両方が同じ不正な文字列でも、基準にしない", () => {
+    const { server, A, B } = twoDevices();
+    A.local = broken(A.local!.text);
+    const l = A.sync();
+    expect(l.kind === "halt" && l.halt.reason).toBe("invalid-local");
+    const bad = broken(B.local!.text);
+    server.head = { revision: "e1.7", content: bad };
+    const r = B.sync();
+    expect(r.kind === "halt" && r.halt.reason).toBe("invalid-remote");
+    B.local = bad;
+    const same = B.sync();
+    expect(same.kind === "halt" && same.halt.reason).toBe("invalid-remote");
+  });
+});
+
+describe("統合した結果が手元と同じ場合 (書かずに基準だけ進める)", () => {
+  it("新しい基準 (サーバーの中身) の写しを置いてから進めるので、その後の「消えた設定の確認」が働く", () => {
+    const { A, B, a } = twoDevices();
+    const d = JSON.parse(A.local!.text); d.futureSetting = 1; A.local = content(JSON.stringify(d, null, 2) + "\n");
+    A.sync(); B.sync();
+    // サーバー: 説明を変更。手元: 同じ説明の変更をすでに含み、さらに題名を変え、設定を消している
+    A.edit((p) => updateBlock(p, a, { description: "説明" })); A.sync();
+    const withChange = JSON.parse(A.local!.text);
+    withChange.blocks[a].title = "B が変えた題名"; delete withChange.futureSetting;
+    B.local = content(JSON.stringify(withChange, null, 2) + "\n");
+    const first = B.step();
+    expect(first.kind).toBe("set-base");
+    expect(B.objects.has(B.state.base!.hash)).toBe(true);     // 新しい基準の写しがある
+    const next = B.sync();
+    expect(next.kind === "halt" && next.halt.reason).toBe("protected-deletion");
+  });
+  it("版だけが進んで中身が同じときは、書き込みも送信もせずに基準だけ進め、繰り返さない", () => {
+    const { server, A, a } = twoDevices();
+    server.head = { revision: "e1.5", content: server.head!.content };
+    expect(A.step().kind).toBe("set-base");
+    expect(A.sync().kind).toBe("noop");
+    // 手元は変わっているが、サーバーの中身は基準と同じ (版だけ違う): 受け取りは「手元のまま」、その後に送る
+    A.edit((p) => updateBlock(p, a, { title: "A 改" }));
+    server.head = { revision: "e1.6", content: server.head!.content };
+    expect(A.step().kind).toBe("set-base");
+    expect(A.step().kind).toBe("push");
+    expect(A.sync().kind).toBe("noop");
+  });
+});
+
+describe("状態を進める関数は、操作が合わないと進めない", () => {
+  const idle: SyncState = { generation: 3, epoch: "e1", base: { hash: "b", revision: "e1.1" }, pending: null };
+  const push = (opId: string): PendingPush => ({ kind: "push", opId, hash: "s-" + opId, expected: "e1.1", at: NOW.toISOString() });
+  const pull: PendingPull = { kind: "pull", hash: "m", expectedLocal: "l", remote: { hash: "r", revision: "e1.2" }, at: NOW.toISOString() };
+  it("やりかけの操作があるのに次を記録できない。基準だけを進めることもできない", () => {
+    const busy = recordPending(idle, "e1", push("Q"));
+    expect(() => recordPending(busy, "e1", push("P"))).toThrow(SyncStateError);
+    expect(() => baseSet(busy, "e1", { hash: "x", revision: "e1.9" })).toThrow(SyncStateError);
+  });
+  it("別の操作の応答では、基準を進めない・操作を消さない", () => {
+    const busy = recordPending(idle, "e1", push("P"));
+    expect(() => pushAccepted(busy, "Q", "e1.2")).toThrow(SyncStateError);
+    expect(() => pushRejected(busy, "Q")).toThrow(SyncStateError);
+    expect(pushAccepted(busy, "P", "e1.2").base).toEqual({ hash: "s-P", revision: "e1.2" });
+    const pulling = recordPending(idle, "e1", pull);
+    expect(() => pullWritten(pulling, { ...pull, hash: "other" })).toThrow(SyncStateError);
+    expect(() => pushAccepted(pulling, "P", "e1.2")).toThrow(SyncStateError);
+  });
+  it("復旧の選択は、表示したときの状態・手元の中身のときだけ有効 (状態や手元が変わっていたら進めない)", () => {
+    const pulling = recordPending(idle, "e1", pull);
+    const token = recoveryToken(pulling, "local-1", hashOf);
+    expect(() => pullRecovered(pulling, { token, applied: true }, "local-2", hashOf)).toThrow(SyncStateError);
+    expect(() => pullRecovered({ ...pulling, generation: pulling.generation + 2 }, { token, applied: true }, "local-1", hashOf)).toThrow(SyncStateError);
+    expect(pullRecovered(pulling, { token, applied: true }, "local-1", hashOf).base).toEqual(pull.remote);
+    expect(pullRecovered(pulling, { token, applied: false }, "local-1", hashOf).base).toEqual(idle.base);
+  });
+});
+
+describe("承認の印の範囲", () => {
+  it("別の結び付け・別の履歴の世代・別の基準では、前の承認が通らない", () => {
+    const { A, B } = twoDevices();
+    const d = JSON.parse(A.local!.text); d.futureSetting = 1; A.local = content(JSON.stringify(d, null, 2) + "\n");
+    A.sync(); B.sync();
+    const e = JSON.parse(B.local!.text); delete e.futureSetting; B.local = content(JSON.stringify(e, null, 2) + "\n");
+    const halted = B.decide();
+    if (halted.kind !== "halt" || halted.halt.reason !== "protected-deletion") throw new Error("expected a halt");
+    const approval = halted.halt.approval;
+    const input = { state: B.state, local: B.local, remote: B.server.remote(), baseText: B.objects.get(B.state.base!.hash)!, now: NOW, hashOf, approvedDeletion: approval };
+    expect(decide({ ...input, bindingId: "B" }).kind).toBe("push");
+    // 状態の世代が進んだだけ (基準・手元・消えた項目が同じ) なら、同じ判断への承認として有効
+    expect(decide({ ...input, bindingId: "B", state: { ...B.state, generation: B.state.generation + 2 } }).kind).toBe("push");
+    // 別の結び付け (同じ計画を複製して、別に結び付けた)
+    expect(decide({ ...input, bindingId: "copy" }).kind).toBe("halt");
+    // 別の履歴の世代
+    expect(decide({ ...input, bindingId: "B", state: { ...B.state, epoch: "e2" }, remote: { ...(B.server.remote() as Extract<Remote, { kind: "present" }>), epoch: "e2" } }).kind).toBe("halt");
+  });
+});
+
+describe("やりかけの送りと、サーバーの履歴の世代", () => {
+  it("新しく作る操作を記録した後で世代が変わったら (復旧で計画が無くなった)、送り直さずに止まる。操作は残る", () => {
+    const { p } = plan();
+    const server = new FakeServer();
+    const A = new Device("A", server);
+    A.local = content(textOf(p));
+    A.step("after-record");                                   // 作成の操作 (前提の版なし) を記録したところ
+    server.epoch = "e2";                                      // サーバーが復旧して、履歴の世代が変わった
+    const d = A.sync();
+    expect(d.kind === "halt" && d.halt.reason).toBe("history-changed");
+    expect(A.state.pending?.kind).toBe("push");
+    expect(server.head).toBeNull();                           // 新しい世代の上に、勝手に作っていない
+  });
+  it("取得と送信の間に世代が変わった場合も、サーバーが断り、操作は残る (断られた扱いにしない)", () => {
+    const { server, A, a } = twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "A 改" }));
+    A.step("after-record");
+    const before = A.state;
+    server.epoch = "e2";
+    A.send(false);
+    expect(A.state).toEqual(before);
+  });
+});
+
+describe("受け取りの途中の割り込み", () => {
+  it("手元に書く直前に別の編集が入ったら、書かずに操作を片付け、次の判断で統合する (どちらの変更も残る)", () => {
+    const { A, B, a, b } = twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "A 改" })); A.sync();
+    B.beforeWrite = () => B.edit((p) => updateBlock(p, b, { title: "AI が書いた" }));
+    expect(B.step().kind).toBe("pull");
+    expect(B.state.pending).toBeNull();                       // 行われなかったと確定したので、操作は残さない
+    expect(B.project.blocks[b].title).toBe("AI が書いた");
+    B.sync(); A.sync();
+    for (const d of [A, B]) { expect(d.project.blocks[a].title).toBe("A 改"); expect(d.project.blocks[b].title).toBe("AI が書いた"); }
+  });
+  it("受け取りを記録した直後 (書く前) に落ち、人が「反映されていない」を選べば、基準を変えずにやり直して受け取る", () => {
+    const { A, B, a, b } = twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "A 改" })); A.sync();
+    B.step("after-record");
+    B.edit((p) => updateBlock(p, b, { description: "無関係な編集" }));
+    const d = B.sync();
+    expect(d.kind === "halt" && d.halt.reason).toBe("recover-pull");
+    B.state = pullRecovered(B.state, { token: recoveryToken(B.state, B.local!.hash, hashOf), applied: false }, B.local!.hash, hashOf);
+    B.sync();
+    expect(B.project.blocks[a].title).toBe("A 改");
+    expect(B.project.blocks[b].description).toBe("無関係な編集");
+  });
+  it("サーバーの中身を取得した後で別の端末が更新しても、置く写しは判断に使った中身。次の送りは断られ、新しい中身を受け取る", () => {
+    const { A, B, a, b } = twoDevices();
+    A.edit((p) => updateBlock(p, a, { title: "1" })); A.sync();
+    B.edit((p) => updateBlock(p, b, { title: "B 改" }));
+    B.beforeWrite = () => { A.edit((p) => updateBlock(p, a, { title: "2" })); A.sync(); }; // B が R1 を取得した後に、A が R2 を送った
+    B.step();
+    expect(B.objects.has(B.state.base!.hash)).toBe(true);     // 基準 (R1) の写しがある
+    B.sync(); A.sync();
+    for (const d of [A, B]) { expect(d.project.blocks[a].title).toBe("2"); expect(d.project.blocks[b].title).toBe("B 改"); }
+  });
+});
+
+describe("基準があるのに手元が無い", () => {
+  it("手元のファイルが無くなっていたら、削除として送らず、作り直しもせずに止まる", () => {
+    const { server, A } = twoDevices();
+    const head = server.head!.revision;
+    A.local = null;
+    const d = A.sync();
+    expect(d.kind === "halt" && d.halt.reason).toBe("local-missing");
+    expect(server.head!.revision).toBe(head);
+  });
+});
+
+// 入れ子の実体 (同じ人の記録、同じ人が続ける活動、位置) の部分更新で、この版が知らない項目を落とさない
+describe("入れ子の知らない項目を、通常の操作で落とさない", () => {
+  it("活動の記録・移動のあとも、同じ人の記録・活動・位置にある知らない項目が残る", () => {
+    const { p, a } = plan();
+    const raw = JSON.parse(toJSON(setActivity(p, a, "codex", "working", "開始")));
+    raw.agents.codex.futureAgent = "keep";
+    raw.blocks[a].activity.futureActivity = "keep";
+    raw.blocks[a].position.futurePosition = "keep";
+    let q = fromJSON(JSON.stringify(raw));
+    q = setActivity(q, a, "codex", "blocked", "詰まった");
+    q = moveBlock(q, a, { x: 400, y: 300 });
+    const out = JSON.parse(toJSON(q));
+    expect(out.agents.codex.futureAgent).toBe("keep");
+    expect(out.blocks[a].activity.futureActivity).toBe("keep");
+    expect(out.blocks[a].activity.state).toBe("blocked");
+    expect(out.blocks[a].position.futurePosition).toBe("keep");
+    // 別の人の活動に替わるときは、前の人の記録の項目を持ち込まない
+    expect(JSON.parse(toJSON(setActivity(q, a, "claude-code", "working", "交代"))).blocks[a].activity.futureActivity).toBeUndefined();
   });
 });

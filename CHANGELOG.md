@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Merge: record timestamps (`descriptionUpdatedAt`, `statusChangedAt`, an agent's `lastSeen`) are no longer reported as conflicts; the later one is kept. Two people setting the same description a few milliseconds apart used to produce a conflict.
+- Fields this version does not know are also kept inside an agent's record, an activity continued by the same actor, and a box position when those are updated (they used to be rebuilt from known fields only).
 - Experimental, not announced yet: `boxglow sync` (one-shot sync of the plan file with a sync server) and its building blocks under `src/sync` and `cli/sync`. There is no public server; the command is for development of the upcoming paid Sync.
 
 - Fields this version does not know are kept. Reading and writing a plan no longer drops unknown top-level fields (boxes, ports and edges already kept theirs), so saving with an older writer from this version on will not remove settings added by a newer one.

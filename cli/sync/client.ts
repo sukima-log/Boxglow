@@ -11,8 +11,9 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { commitFile, FileBusy, FileConflict, revisionOf } from "../file-store";
+import { basename } from "node:path";
 import {
-  baseSet, decide, pullNotWritten, pullRecovered, pullWritten, pushAccepted, pushRejected, recordPending
+  baseSet, decide, pullNotWritten, pullRecovered, pullWritten, pushAccepted, pushRejected, recordPending, recoveryToken as engineRecoveryToken, SyncStateError
 , type Content, type Halt, type PendingPush, type Remote, type SyncState
 } from "../../src/sync/engine";
 import { bindingDir, hashOf, normalizeServer, StateStore, type Binding, type StoredState } from "./state-store";
@@ -54,7 +55,7 @@ export interface SyncOptions {
 
 /** 止まっている「受け取りの再開」の印: やりかけの操作と、今の手元の中身に結び付ける (表示のあとで手元が変わったら、選び直しになる) */
 export function recoveryToken(state: SyncState, localHash: string | null): string {
-  return hashOf(JSON.stringify([state.generation, state.pending, localHash])).slice(0, 16);
+  return engineRecoveryToken(state, localHash, hashOf);
 }
 
 /**
@@ -151,16 +152,19 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       const state: SyncState = stored ?? { generation: 0, epoch: null, base: null, pending: null };
       const remoteOptions = { server, remoteId: binding.remoteId, token: options.token, fetch: doFetch };
       // ---- 止まっている「受け取りの再開」に、人の選択が渡されたら進める (印が今の状態と合うときだけ) ----
-      if (state.pending?.kind === "pull" && options.recover && round === 0 && options.recover.token === recoveryToken(state, local?.hash ?? null)) {
-        save(pullRecovered(state, options.recover.applied), binding);
-        continue;
+      if (state.pending?.kind === "pull" && options.recover && round === 0) {
+        try {
+          save(pullRecovered(state, options.recover, local?.hash ?? null, hashOf), binding);
+          continue;
+        } catch (e) {
+          // 表示のあとで状態や手元が変わっていて、印が合わない。進めずに、今の状態でもう一度止まって表示し直す
+          if (!(e instanceof SyncStateError)) throw e;
+        }
       }
-      // ---- 読む: サーバー (やりかけの送りがあるときは、送り直しが先なので取得しない) ----
-      const remote: Remote = state.pending?.kind === "push"
-        ? { kind: "absent", epoch: state.epoch ?? "" }
-        : await fetchRemote(remoteOptions);
+      // ---- 読む: サーバー (やりかけの送りがあるときも取得する。履歴の世代が変わっていないかを、送り直しの前に確かめるため) ----
+      const remote: Remote = await fetchRemote(remoteOptions);
       const decision = decide({
-        state, local, remote
+        state, local, remote, bindingId: basename(store.dir)
       , baseText: state.base ? store.getObject(state.base.hash) : null
       , now: now(), hashOf, approvedDeletion: options.approvedDeletion
       });
@@ -171,27 +175,27 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
         case "halt":
           return { status: "halted", halt: decision.halt };
         case "set-base":
-          if (local) store.putObject(local.text);
+          // 新しい基準が指す中身 (判断に使った、取得済みのサーバーの中身) を先に置く
+          for (const c of decision.keep) store.putObject(c.text);
           save(baseSet(state, decision.epoch, decision.base), { ...binding, planId: binding.planId || planId || "" });
           break;
         case "finish-pull":
-          save(pullWritten(state), binding);
+          save(pullWritten(state, decision.pending), binding);
           break;
         case "pull": {
           // 写しを先に置く (書く中身と、新しい基準になるサーバーの中身) → 操作を記録 → 手元に書く → 基準を進める
-          store.putObject(decision.write.text);
-          if (remote.kind === "present") store.putObject(remote.content.text);
+          for (const c of decision.keep) store.putObject(c.text);
           save(recordPending(state, decision.epoch, decision.pending), binding);
           try {
             commitFile(file, decision.write.text, local === null ? null : revisionOf(local.text));
           } catch (e) {
             // 「行われなかった」と確定できる失敗 (手元が先に変わった / 他が書き込み中): 操作を片付けて、やり直すか、今回は譲る
-            if (e instanceof FileConflict) { save(pullNotWritten(stored!), binding); break; }
-            if (e instanceof FileBusy) { save(pullNotWritten(stored!), binding); return { status: "busy", what: "file" }; }
+            if (e instanceof FileConflict) { save(pullNotWritten(stored!, decision.pending), binding); break; }
+            if (e instanceof FileBusy) { save(pullNotWritten(stored!, decision.pending), binding); return { status: "busy", what: "file" }; }
             throw e; // それ以外は、書けたかどうか分からない。操作を残したまま (次の実行で、人に確かめる)
           }
           options.onStep?.("pull:written"); // (試験用: 手元に書いた直後・基準を進める前)
-          save(pullWritten(stored!), { ...binding, planId: binding.planId || planIdOf(decision.write.text) || "" });
+          save(pullWritten(stored!, decision.pending), { ...binding, planId: binding.planId || planIdOf(decision.write.text) || "" });
           pulled++;
           break;
         }
@@ -208,8 +212,8 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
           const result = await sendPush({ ...remoteOptions, epoch: stored!.epoch }, pending, text);
           options.onStep?.("push:sent"); // (試験用: サーバーが応答した直後・状態を進める前)
           if ("history" in result) return { status: "halted", halt: { reason: "history-changed", expected: stored!.epoch ?? "", actual: result.history } };
-          if ("accepted" in result) { save(pushAccepted(stored!, result.accepted), stored!.binding); pushed++; }
-          else save(pushRejected(stored!), stored!.binding);
+          if ("accepted" in result) { save(pushAccepted(stored!, pending.opId, result.accepted), stored!.binding); pushed++; }
+          else save(pushRejected(stored!, pending.opId), stored!.binding);
           break;
         }
       }

@@ -12,7 +12,7 @@
  */
 import { fromJSON, toJSON, KNOWN_PROJECT_KEYS } from "../model/graph";
 import { mergeProjects, type MergeConflict } from "../model/merge";
-import { projectProblem } from "../model/validate-file";
+import { projectProblem, validateProjectText } from "../model/validate-file";
 import type { Project } from "../model/types";
 
 /** サーバーが発行する版。「履歴の世代」と番号の組だが、クライアントは中身を解釈しない 1 つの文字列として扱う */
@@ -113,6 +113,8 @@ export interface SyncInput {
   now: Date;
   /** 文字列のハッシュを計算する関数 (統合した結果のハッシュに使う) */
   hashOf: (text: string) => string;
+  /** 結び付けの印 (承認の印を、この結び付けに限るために使う。同じ計画を複製した別の結び付けでは、前の承認が通らない) */
+  bindingId: string;
   /** 人が承認した「保護する項目の削除」の印 (protected-deletion の approval と同じ値なら、その削除を通す) */
   approvedDeletion?: string;
 }
@@ -121,10 +123,14 @@ export interface SyncInput {
 export type Decision =
   /** 何もしない (手元とサーバーは、基準と同じ) */
   | { kind: "noop" }
-  /** 基準だけを進める (手元とサーバーが同じ中身だと確かめられた。書き込みも送信も無い) */
-  | { kind: "set-base"; epoch: string; base: Base }
+  /**
+   * 基準だけを進める (手元とサーバーが同じ中身だと確かめられた。書き込みも送信も無い)。
+   * keep = 状態を進める前に、写しとして置いておく中身 (新しい基準が指す中身を含む)。pull の keep も同じ。
+   * 呼び出し側は、判断に使った中身をそのまま置く (サーバーから取り直さない。取り直すと、その間に進んだ別の版を置いてしまう)
+   */
+  | { kind: "set-base"; epoch: string; base: Base; keep: Content[] }
   /** 受け取り: write を手元に書く (前提 = expectedLocal)。書く前に pending を記録し、書けたら pullWritten で基準を進める */
-  | { kind: "pull"; epoch: string; write: Content; pending: PendingPull }
+  | { kind: "pull"; epoch: string; write: Content; pending: PendingPull; keep: Content[] }
   /** 送り: content を、前提の版 expected で送る。送る前に pending (操作 ID は呼び出し側が決める) を記録する */
   | { kind: "push"; epoch: string; content: Content; expected: Revision | null }
   /** 残っている送りの操作を、同じ操作 ID・同じ中身・同じ前提で送り直す */
@@ -164,9 +170,10 @@ export function protectedDeletions(base: Record<string, unknown>, local: Record<
  */
 function read(text: string): { project: Project; raw: Record<string, unknown> } | { problem: string } {
   try {
+    // 生の文字列を、補正の前に検査する。fromJSON は壊れた参照を捨てたり、不正な値を補ったりするので、
+    // 補正した後のものを検査すると、「検査に通ったもの」と「実際に送る / 書く文字列」が食い違う
+    validateProjectText(text);
     const project = fromJSON(text);
-    const problem = projectProblem(project);
-    if (problem) return { problem };
     return { project, raw: JSON.parse(text) as Record<string, unknown> };
   } catch (e) {
     return { problem: e instanceof Error ? e.message : String(e) };
@@ -185,6 +192,9 @@ export function decide(input: SyncInput): Decision {
 
   // ---- 1. 残っている操作があれば、先にそれを片付ける ----
   if (state.pending?.kind === "push") {
+    // サーバーの履歴の世代が、操作を記録したときと違っていたら、送り直さない (操作は残したまま、人に確かめる)。
+    // 特に「新しく作る」操作は前提の版を持たないので、世代を見ないと、復旧後の別の履歴の上に作ってしまう
+    if (state.epoch !== null && remote.epoch !== state.epoch) return halt({ reason: "history-changed", expected: state.epoch, actual: remote.epoch });
     // 日時が読めない・未来・古すぎる操作は、自動では送り直さない
     // (サーバーの記録が消えていると、受理済みの操作を「断られた」と読み違えるおそれがある)
     const at = Date.parse(state.pending.at);
@@ -215,9 +225,9 @@ export function decide(input: SyncInput): Decision {
     if ("problem" in r) return halt({ reason: "invalid-remote", problem: r.problem });
     const remoteBase: Base = { hash: remote.content.hash, revision: remote.revision };
     if (!local) {
-      return { kind: "pull", epoch: remote.epoch, write: remote.content, pending: { kind: "pull", hash: remote.content.hash, expectedLocal: null, remote: remoteBase, at: now.toISOString() } };
+      return { kind: "pull", epoch: remote.epoch, write: remote.content, keep: [remote.content], pending: { kind: "pull", hash: remote.content.hash, expectedLocal: null, remote: remoteBase, at: now.toISOString() } };
     }
-    if (local.hash === remote.content.hash) return { kind: "set-base", epoch: remote.epoch, base: remoteBase };
+    if (local.hash === remote.content.hash) return { kind: "set-base", epoch: remote.epoch, base: remoteBase, keep: [remote.content] };
     // 両方に違う中身がある。共通の祖先が分からないので、自動では統合しない
     return halt({ reason: "first-link", localHash: local.hash, remoteRevision: remote.revision });
   }
@@ -230,19 +240,24 @@ export function decide(input: SyncInput): Decision {
   const remoteChanged = remote.revision !== base.revision;
   if (!localChanged && !remoteChanged) return { kind: "noop" };
   const remoteBase: Base = { hash: remote.content.hash, revision: remote.revision };
+  // 基準の中身: 写しのハッシュが基準と合うものだけを使う (「何か読めた」では足りない)。
+  // 写しが無い・壊れているときは、サーバーの中身が基準と同じなら、それを基準の中身として使える
+  const baseContent = baseText !== null && input.hashOf(baseText) === base.hash ? baseText
+    : remote.content.hash === base.hash ? remote.content.text : null;
 
   // ---- 4a. 受け取り (サーバーが進んでいる) ----
   if (remoteChanged) {
-    // 手元とサーバーが同じ中身なら、書き込みは要らない (版だけが進んでいる)
-    if (local.hash === remote.content.hash) return { kind: "set-base", epoch: remote.epoch, base: remoteBase };
+    // 新しく受け取った中身は、手元と同じ文字列でも、検査してから使う
     const r = read(remote.content.text);
     if ("problem" in r) return halt({ reason: "invalid-remote", problem: r.problem });
+    // 手元とサーバーが同じ中身なら、書き込みは要らない (版だけが進んでいる)
+    if (local.hash === remote.content.hash) return { kind: "set-base", epoch: remote.epoch, base: remoteBase, keep: [remote.content] };
     const pendingFor = (write: Content): PendingPull => ({ kind: "pull", hash: write.hash, expectedLocal: local.hash, remote: remoteBase, at: now.toISOString() });
     // 手元は基準のまま: サーバーの中身を、受け取った文字列のまま書く
-    if (!localChanged) return { kind: "pull", epoch: remote.epoch, write: remote.content, pending: pendingFor(remote.content) };
+    if (!localChanged) return { kind: "pull", epoch: remote.epoch, write: remote.content, keep: [remote.content], pending: pendingFor(remote.content) };
     // 両方が変わった: 基準から 3 方向で統合する
-    if (baseText === null) return halt({ reason: "base-missing" });
-    const b = read(baseText);
+    if (baseContent === null) return halt({ reason: "base-missing" });
+    const b = read(baseContent);
     if ("problem" in b) return halt({ reason: "base-missing" });
     const l = read(local.text);
     if ("problem" in l) return halt({ reason: "invalid-local", problem: l.problem });
@@ -254,77 +269,114 @@ export function decide(input: SyncInput): Decision {
     if (problem) return halt({ reason: "invalid-merge", problem });
     const text = toJSON(merged.project) + "\n";
     const write: Content = { hash: input.hashOf(text), text };
-    // 統合した結果が手元と同じなら (サーバーの変更を手元がすでに含んでいる)、書かずに基準だけ進める
-    if (write.hash === local.hash) return { kind: "set-base", epoch: remote.epoch, base: remoteBase };
-    return { kind: "pull", epoch: remote.epoch, write, pending: pendingFor(write) };
+    // 統合した結果が手元と同じなら (サーバーの変更を手元がすでに含んでいる)、書かずに基準だけ進める。
+    // 新しい基準が指すのはサーバーの中身 R なので、R の写しを置いてから進める (手元の写しだけでは、次の判断で基準の中身が見つからない)
+    if (write.hash === local.hash) return { kind: "set-base", epoch: remote.epoch, base: remoteBase, keep: [remote.content] };
+    return { kind: "pull", epoch: remote.epoch, write, keep: [write, remote.content], pending: pendingFor(write) };
   }
 
   // ---- 4b. 送り (手元だけが変わっている。基準 = サーバーの最新) ----
   const l = read(local.text);
   if ("problem" in l) return halt({ reason: "invalid-local", problem: l.problem });
-  // 基準に在った「保護する項目」が消えていたら、送る前に一度確かめる (古い版が落としただけかもしれない)
-  if (baseText !== null) {
-    const b = read(baseText);
-    if (!("problem" in b)) {
-      const keys = protectedDeletions(b.raw, l.raw);
-      if (keys.length > 0) {
-        // 承認の印は、基準の版・手元の中身・消えた項目の一覧に結び付ける (別の編集が入ったら、確かめ直しになる)
-        const approval = input.hashOf(JSON.stringify([base.revision, local.hash, keys]));
-        if (input.approvedDeletion !== approval) return halt({ reason: "protected-deletion", keys, approval });
-      }
-    }
+  // 基準に在った「保護する項目」が消えていたら、送る前に一度確かめる (古い版が落としただけかもしれない)。
+  // 基準の中身が無い・読めないときは、消えたかどうかを調べられない。「消えていない」とはみなさずに止まる
+  if (baseContent === null) return halt({ reason: "base-missing" });
+  let baseRaw: Record<string, unknown>;
+  try { baseRaw = JSON.parse(baseContent) as Record<string, unknown>; } catch { return halt({ reason: "base-missing" }); }
+  const keys = protectedDeletions(baseRaw, l.raw);
+  if (keys.length > 0) {
+    // 承認の印は、結び付け・基準 (履歴の世代・版・中身)・手元の中身・消えた項目の一覧に結び付ける。
+    // 別の編集が入った、基準が進んだ、別の結び付けに持ち込んだ、のどれでも、確かめ直しになる
+    const approval = input.hashOf(JSON.stringify([input.bindingId, state.epoch, base.revision, base.hash, local.hash, keys]));
+    if (input.approvedDeletion !== approval) return halt({ reason: "protected-deletion", keys, approval });
   }
   return { kind: "push", epoch: remote.epoch, content: local, expected: base.revision };
 }
 
 // ---- 状態を進める関数 (どれも新しい状態を返し、世代を 1 つ進める) ----
+// 呼ぶ順序を間違えたとき (別の操作の応答を当てる、やりかけの操作があるのに次を記録する、古い選択を当てる) は、例外にして状態を進めない
 
-/** 操作を記録する (送る前・手元に書く前に呼ぶ) */
+/** 呼び出しの順序の誤り (状態は変えていない) */
+export class SyncStateError extends Error {}
+
+/** 2 つの操作が同じものか (記録した内容がすべて同じ) */
+const samePending = (a: Pending | null, b: Pending): boolean => a !== null && JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * 操作を記録する (送る前・手元に書く前に呼ぶ)
+ * Input : state = やりかけの操作が無い状態, epoch = 判断したときのサーバーの履歴の世代, pending = これから行う操作
+ * Output: 操作を記録した状態。やりかけの操作が残っているのに呼んだら SyncStateError (前の操作を上書きしない)
+ */
 export function recordPending(state: SyncState, epoch: string, pending: Pending): SyncState {
+  if (state.pending !== null) throw new SyncStateError("another operation is still pending");
   return { ...state, generation: state.generation + 1, epoch, pending };
 }
 
 /**
  * 送りが受理された (前に受理されていた場合も含む)
- * Input : state = 送りの操作が残っている状態, revision = 受理された版
- * Output: 基準を「送った中身 S とその版」に進め、操作を消した状態。送信の間に手元が変わっていても、基準は S (変わった分は次の回で送る)
+ * Input : state = 送りの操作が残っている状態, opId = 応答が返ってきた操作の ID, revision = 受理された版
+ * Output: 基準を「送った中身 S とその版」に進め、操作を消した状態。送信の間に手元が変わっていても、基準は S (変わった分は次の回で送る)。
+ *         残っている操作と opId が違えば SyncStateError (別の操作の応答で、基準を進めない)
  */
-export function pushAccepted(state: SyncState, revision: Revision): SyncState {
-  if (state.pending?.kind !== "push") throw new Error("no pending push");
+export function pushAccepted(state: SyncState, opId: string, revision: Revision): SyncState {
+  if (state.pending?.kind !== "push" || state.pending.opId !== opId) throw new SyncStateError("the response does not belong to the pending push");
   return { ...state, generation: state.generation + 1, base: { hash: state.pending.hash, revision }, pending: null };
 }
 
-/** 送りが、受理されないことが確定した (前提の版が違う)。操作を消す (基準は変えない。次の判断で受け取りからやり直す) */
-export function pushRejected(state: SyncState): SyncState {
-  if (state.pending?.kind !== "push") throw new Error("no pending push");
+/**
+ * 送りが、受理されないことが確定した (前提の版が違う)。操作を消す (基準は変えない。次の判断で受け取りからやり直す)。
+ * 「サーバーの履歴の世代が違う」「通信できなかった」ときには呼ばない (操作を残したままにする)
+ */
+export function pushRejected(state: SyncState, opId: string): SyncState {
+  if (state.pending?.kind !== "push" || state.pending.opId !== opId) throw new SyncStateError("the response does not belong to the pending push");
   return { ...state, generation: state.generation + 1, pending: null };
 }
 
 /**
- * 受け取りを手元に書けた
+ * 受け取りを手元に書けた (書き込みの成功を確かめた、または手元の中身が書く予定の中身と同じだと確かめた)
+ * Input : state = 受け取りの操作が残っている状態, pending = 実行した操作 (判断が返したもの)
  * Output: 基準を「取り込んだサーバーの中身 R」に進め、操作を消した状態 (統合した M を書いた場合も、基準は R。M と R の差は、まだ送っていない変更)
  */
-export function pullWritten(state: SyncState): SyncState {
-  if (state.pending?.kind !== "pull") throw new Error("no pending pull");
-  return { ...state, generation: state.generation + 1, base: state.pending.remote, pending: null };
+export function pullWritten(state: SyncState, pending: PendingPull): SyncState {
+  if (!samePending(state.pending, pending)) throw new SyncStateError("the pull does not match the pending operation");
+  return { ...state, generation: state.generation + 1, base: pending.remote, pending: null };
 }
 
-/** 受け取りが、手元の前提が違って行われなかったと確定した (書き込みの手順が断った)。操作を消して、次の判断でやり直す */
-export function pullNotWritten(state: SyncState): SyncState {
-  if (state.pending?.kind !== "pull") throw new Error("no pending pull");
+/**
+ * 受け取りが「行われなかった」と確定した (手元の前提が違って、書き込みの手順が断った)。操作を消して、次の判断でやり直す。
+ * 書けたかどうか分からない失敗 (途中のエラーなど) には呼ばない (操作を残したままにして、人に確かめる)
+ */
+export function pullNotWritten(state: SyncState, pending: PendingPull): SyncState {
+  if (!samePending(state.pending, pending)) throw new SyncStateError("the pull does not match the pending operation");
   return { ...state, generation: state.generation + 1, pending: null };
 }
 
-/** 基準だけを進める (set-base の実行) */
+/** 基準だけを進める (set-base の実行)。やりかけの操作があるときは呼べない */
 export function baseSet(state: SyncState, epoch: string, base: Base): SyncState {
+  if (state.pending !== null) throw new SyncStateError("an operation is still pending");
   return { ...state, generation: state.generation + 1, epoch, base };
 }
 
 /**
- * 止まっていた「受け取りの再開」を、人の選択で進める
- * Input : state = 受け取りの操作が残っている状態, applied = true なら「反映済みとして続ける」、false なら「反映されていないものとして続ける」
- * Output: applied なら基準を R に進めた状態、そうでなければ基準を変えずに操作を消した状態
+ * 止まっている「受け取りの再開」の印: やりかけの操作・状態の世代・今の手元の中身に結び付ける
+ * (表示のあとで、状態や手元が変わっていたら、前の印では進めない)
+ * Input : state = 受け取りの操作が残っている状態, localHash = 今の手元の中身のハッシュ (ファイルが無ければ null), hashOf
+ * Output: 印 (短い文字列)
  */
-export function pullRecovered(state: SyncState, applied: boolean): SyncState {
-  return applied ? pullWritten(state) : pullNotWritten(state);
+export function recoveryToken(state: SyncState, localHash: string | null, hashOf: (text: string) => string): string {
+  return hashOf(JSON.stringify([state.generation, state.pending, localHash])).slice(0, 16);
+}
+
+/**
+ * 止まっていた「受け取りの再開」を、人の選択で進める
+ * Input : state = 受け取りの操作が残っている状態,
+ *         choice = { token = 表示したときの印, applied = true なら「反映済みとして続ける」/ false なら「反映されていないものとして続ける」 },
+ *         localHash = 今の手元の中身のハッシュ, hashOf
+ * Output: applied なら基準を R に進めた状態、そうでなければ基準を変えずに操作を消した状態。
+ *         印が今の状態と合わなければ SyncStateError (表示のあとで変わっている。表示し直してから選んでもらう)
+ */
+export function pullRecovered(state: SyncState, choice: { token: string; applied: boolean }, localHash: string | null, hashOf: (text: string) => string): SyncState {
+  if (state.pending?.kind !== "pull") throw new SyncStateError("no pending pull");
+  if (choice.token !== recoveryToken(state, localHash, hashOf)) throw new SyncStateError("the recovery choice was made for a different state");
+  return choice.applied ? pullWritten(state, state.pending) : pullNotWritten(state, state.pending);
 }
