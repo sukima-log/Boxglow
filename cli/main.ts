@@ -10,6 +10,7 @@ import { startServe } from "./serve";
 import { commitFile, describeLock, FileConflict, inspectLock, lockTokenOf, removeLock, revisionOf, sleepSync } from "./file-store";
 import { contextReceipt, isCurrentToken, requireContext } from "./context";
 import { setupAgent } from "./setup-agent";
+import { runSyncCommand } from "./sync/command";
 import { projectProblem } from "../src/model/validate-file";
 import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
 import { resumeSummary, resumeReport } from "../src/model/resume";
@@ -306,6 +307,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  blocked / review / leave / checkpoint は --context-token <context で得た contextToken> が要る (読んだ後に指示・回答・引き継ぎが変わっていたら拒否)。
                                                  人 (--actor human) には要求しない。AI が off にするときは --context-token が要る
   version [--json]                               boxglow の版と、保存の取り決めの版を出す (--version でも可)
+  sync [--server <URL>] [--project <ID>]           (試験中) 計画のファイルを同期サーバーとそろえる。初回は --server で結び付ける。止まったら理由と次の操作を表示
+                                                 --adopt <印> = 消えた設定の削除を採って送る / --recover <印> --applied|--not-applied = 途中で終わった受け取りを続ける
   unlock [--remove --lock-token <印> --actor human]  残った保存ロックの状態 (持ち主・判定) を出す (読むだけ。AI も使える)。--remove は人が解除する:
                                                  この計画を開いている Boxglow を止めてから、表示された印を付けて実行する。持ち主が動いているロックは解除できない
   status [--brief] [--json]                     全体の状況 (Markdown)。--brief は全階層を省略し、判断・回答・活動・次の候補を表示
@@ -382,6 +385,8 @@ Usage (npx boxglow <command> ...):
                                                  blocked / review / leave / checkpoint need --context-token <contextToken from context> (rejected if instructions, answers or handoff notes changed after reading).
                                                  People (--actor human) are not asked for it. An AI needs --context-token to turn it off
   version [--json]                               Print the boxglow version and the save-protocol version (--version also works)
+  sync [--server <URL>] [--project <ID>]           (experimental) Bring the plan file in line with a sync server. Bind with --server the first time. When it stops, it prints why and what to do
+                                                 --adopt <token> = send the deletion of settings / --recover <token> --applied|--not-applied = continue an interrupted pull
   unlock [--remove --lock-token <token> --actor human]  Show a leftover save lock (owner and verdict; read-only, agents may use it). --remove is for a person:
                                                  stop every Boxglow that has this plan open, then run it with the token shown. A lock whose owner is running cannot be removed
   status [--brief] [--json]                     Overall status (Markdown). --brief omits the tree; keeps decisions, answers, activity and next actions
@@ -1175,6 +1180,25 @@ if (argv[0] === "mcp") {
   if (str(options.actor)) process.env.BOXGLOW_ACTOR = str(options.actor)!; // 記録者の名前 (各ツールの実行に引き継ぐ)
   if (str(options.lang)) process.env.BOXGLOW_LANG = str(options.lang)!; // ツールの説明の言語 (各コマンドの文言は計画の言語)
   startMcp(runCli).catch((e) => { console.error(`[boxglow mcp] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });
+} else if (argv[0] === "sync") {
+  // 同期 (通信を待つので、ほかのコマンドとは別扱い)
+  const { options } = parseArgs(argv.slice(1));
+  // 出力の先 (| head など) が先に閉じても、エラーの山を出さずに終わる
+  process.stdout.on("error", (e: NodeJS.ErrnoException) => { if (e.code === "EPIPE") process.exit(process.exitCode ?? 0); else throw e; });
+  (async () => {
+    setLang(explicitLang(options) ?? "ja");
+    const file = locateFile(str(options.file));
+    try { setLang(explicitLang(options) ?? load(file).lang ?? "ja"); } catch { /* 読めない計画でも、止まった理由は表示する */ }
+    process.exitCode = await runSyncCommand({
+      file
+    , server: str(options.server)
+    , project: str(options.project)
+    , adopt: str(options.adopt)
+    , recover: str(options.recover)
+    , applied: !!options.applied
+    , notApplied: !!options["not-applied"]
+    }, out);
+  })().catch((e) => { console.error(`[boxglow sync] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });
 } else if (argv[0] === "serve") {
   // ローカルサーバ: 同梱の Web アプリを配信し、boxglow.json を API で読み書きする (どのブラウザでも開ける)
   const { options } = parseArgs(argv.slice(1));

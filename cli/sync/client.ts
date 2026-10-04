@@ -1,0 +1,227 @@
+/**
+ * 同期の実行 (手元のファイル・状態の置き場・サーバーとの通信をつなぐ)
+ * 判断は src/sync/engine.ts の decide に任せ、ここは「読む → 判断 → 記録 → 実行 → 状態を進める」を、noop か halt になるまで繰り返す。
+ * 守る手順:
+ *   - 送る前・手元に書く前に、必ず操作を state.json に記録する (途中で落ちても、再開で確かめられる)。
+ *   - 中身の写し (objects) は、state.json がそのハッシュを指す前に置く。
+ *   - 手元への書き込みは、今の保存の手順 (commitFile: ロック + 版の照合 + 原子的な置換) を通す。計画のファイルのロックを、通信の間は持たない。
+ *   - 状態用のロックを、1 回の同期の間持つ (同じ結び付けを扱う同期の処理は 1 つだけ)。
+ */
+import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { resolve } from "node:path";
+import { commitFile, FileBusy, FileConflict, revisionOf } from "../file-store";
+import {
+  baseSet, decide, pullNotWritten, pullRecovered, pullWritten, pushAccepted, pushRejected, recordPending
+, type Content, type Halt, type PendingPush, type Remote, type SyncState
+} from "../../src/sync/engine";
+import { bindingDir, hashOf, normalizeServer, StateStore, type Binding, type StoredState } from "./state-store";
+import { APP_VERSION, SAVE_PROTOCOL } from "../../src/model/version";
+
+/** 同期の結果 */
+export type SyncResult =
+  /** 手元とサーバーがそろった (pulled = 受け取って手元に書いた回数, pushed = 送って受理された回数) */
+  | { status: "synced"; pulled: number; pushed: number; revision: string | null }
+  /** 人に確かめる必要があって止まった */
+  | { status: "halted"; halt: Halt | { reason: "binding-mismatch"; expected: string; actual: string } }
+  /** 他の処理が動いていて、今回は進められなかった (待てば直る)。what = "sync" (他の同期の処理) / "file" (計画のファイルが書き込み中) */
+  | { status: "busy"; what: "sync" | "file" };
+
+/** サーバーとの通信の失敗 (やりかけの操作は残したまま。後でやり直せる) */
+export class SyncNetworkError extends Error {}
+
+/** 同期の指定 */
+export interface SyncOptions {
+  /** 計画のファイル */
+  file: string;
+  /** サーバーの場所 (URL) */
+  server: string;
+  /** サーバー側の計画の ID。初めて結び付けるときに省くと、新しい ID を作る。結び付いた後は、記録した ID を使う */
+  remoteId?: string;
+  /** アクセストークン (開発用のサーバーでは省ける) */
+  token?: string;
+  /** 人が承認した「保護する項目の削除」の印 */
+  approvedDeletion?: string;
+  /** 止まっている「受け取りの再開」への人の選択: 印 (recoveryToken の値) と、反映済みとして続けるか */
+  recover?: { token: string; applied: boolean };
+  /** 今の時刻 (試験で差し替える) */
+  now?: () => Date;
+  /** 通信の関数 (試験で差し替える) */
+  fetch?: typeof fetch;
+  /** 1 手ごとに呼ばれる (試験で、途中に割り込むために使う) */
+  onStep?: (kind: string) => void;
+}
+
+/** 止まっている「受け取りの再開」の印: やりかけの操作と、今の手元の中身に結び付ける (表示のあとで手元が変わったら、選び直しになる) */
+export function recoveryToken(state: SyncState, localHash: string | null): string {
+  return hashOf(JSON.stringify([state.generation, state.pending, localHash])).slice(0, 16);
+}
+
+/**
+ * サーバーの今の状態を取得する
+ * Input : server・remoteId・token・fetch
+ * Output: Remote (在る / まだ無い / 消されている)。通信できなければ SyncNetworkError
+ */
+async function fetchRemote(o: { server: string; remoteId: string; token?: string; fetch: typeof fetch }): Promise<Remote> {
+  let res: Response;
+  try {
+    res = await o.fetch(`${o.server}/v1/projects/${encodeURIComponent(o.remoteId)}`, { headers: headers(o.token) });
+  } catch (e) { throw new SyncNetworkError(String(e)); }
+  const epoch = res.headers.get("x-boxglow-epoch");
+  if (!epoch) throw new SyncNetworkError(`unexpected response ${res.status} (no epoch)`);
+  if (res.status === 404) return { kind: "absent", epoch };
+  if (res.status === 410) return { kind: "deleted", epoch };
+  if (res.status !== 200) throw new SyncNetworkError(`unexpected response ${res.status}`);
+  const revision = unquote(res.headers.get("etag"));
+  if (!revision) throw new SyncNetworkError("no ETag");
+  const text = await res.text();
+  return { kind: "present", epoch, revision, content: { hash: hashOf(text), text } };
+}
+
+/** 要求に付ける共通のヘッダ (トークン、クライアントの版と保存の取り決めの版) */
+function headers(token?: string): Record<string, string> {
+  return { ...(token ? { authorization: `Bearer ${token}` } : {}), "x-boxglow-version": APP_VERSION, "x-boxglow-protocol": String(SAVE_PROTOCOL) };
+}
+/** ETag の値から、前後の二重引用符を取る */
+const unquote = (etag: string | null): string | null => etag ? etag.replace(/^W\//, "").replace(/^"|"$/g, "") : null;
+
+/**
+ * やりかけの送りの操作を送る (初めて送るときも、送り直すときも同じ要求)
+ * Output: { accepted: 版 } / { rejected: true } (前提の版が違う。受理されないことが確定) / { history: 世代 } (サーバーの履歴の世代が違う)
+ *         通信できない・想定外の応答は SyncNetworkError (操作は残したまま)
+ */
+async function sendPush(o: { server: string; remoteId: string; token?: string; fetch: typeof fetch; epoch: string | null }, pending: PendingPush, text: string):
+  Promise<{ accepted: string } | { rejected: true } | { history: string }> {
+  let res: Response;
+  try {
+    res = await o.fetch(`${o.server}/v1/projects/${encodeURIComponent(o.remoteId)}`, {
+      method: "PUT"
+    , headers: {
+        ...headers(o.token)
+      , "content-type": "application/json"
+      , "x-boxglow-op": pending.opId
+      , ...(o.epoch ? { "x-boxglow-epoch": o.epoch } : {})
+      , ...(pending.expected === null ? { "if-none-match": "*" } : { "if-match": `"${pending.expected}"` })
+      }
+    , body: text
+    });
+  } catch (e) { throw new SyncNetworkError(String(e)); }
+  if (res.status === 200 || res.status === 201) {
+    const revision = unquote(res.headers.get("etag"));
+    if (!revision) throw new SyncNetworkError("no ETag");
+    return { accepted: revision };
+  }
+  if (res.status === 412) return { rejected: true };
+  if (res.status === 409) return { history: res.headers.get("x-boxglow-epoch") ?? "" };
+  throw new SyncNetworkError(`unexpected response ${res.status}: ${(await res.text()).slice(0, 200)}`);
+}
+
+/**
+ * 1 回の同期 (手元とサーバーがそろうか、止まるまで)
+ * Input : options = SyncOptions
+ * Output: SyncResult。通信の失敗は SyncNetworkError (やりかけの操作は残る。もう一度実行すれば続きから)
+ */
+export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
+  const now = options.now ?? (() => new Date());
+  const doFetch = options.fetch ?? fetch;
+  const server = normalizeServer(options.server);
+  const file = existsSync(options.file) ? realpathSync(options.file) : resolve(options.file);
+  const store = new StateStore(bindingDir(file, server));
+  const unlock = store.lock();
+  if (!unlock) return { status: "busy", what: "sync" };
+  try {
+    let stored = store.read();
+    let pulled = 0, pushed = 0;
+    // 状態を書く (世代の照合つき)。書いた後の状態を覚え直す
+    const save = (next: SyncState, binding: Binding) => {
+      const value: StoredState = { ...next, version: 1, binding };
+      store.write(value, stored?.generation ?? null);
+      stored = value;
+    };
+    for (let round = 0; round < 12; round++) {
+      // ---- 読む: 手元のファイル ----
+      const localText = existsSync(file) ? readFileSync(file, "utf8") : null;
+      const local: Content | null = localText === null ? null : { hash: hashOf(localText), text: localText };
+      const planId = localText === null ? null : planIdOf(localText);
+      // 結び付け: 初めてなら作る (サーバー側の ID は手元で決める)。同じパスに別の計画が置かれていたら、同期しない
+      const binding: Binding = stored?.binding ?? { file, server, remoteId: options.remoteId ?? randomUUID(), planId: planId ?? "" };
+      if (stored && planId !== null && binding.planId !== "" && planId !== binding.planId) {
+        return { status: "halted", halt: { reason: "binding-mismatch", expected: binding.planId, actual: planId } };
+      }
+      const state: SyncState = stored ?? { generation: 0, epoch: null, base: null, pending: null };
+      const remoteOptions = { server, remoteId: binding.remoteId, token: options.token, fetch: doFetch };
+      // ---- 止まっている「受け取りの再開」に、人の選択が渡されたら進める (印が今の状態と合うときだけ) ----
+      if (state.pending?.kind === "pull" && options.recover && round === 0 && options.recover.token === recoveryToken(state, local?.hash ?? null)) {
+        save(pullRecovered(state, options.recover.applied), binding);
+        continue;
+      }
+      // ---- 読む: サーバー (やりかけの送りがあるときは、送り直しが先なので取得しない) ----
+      const remote: Remote = state.pending?.kind === "push"
+        ? { kind: "absent", epoch: state.epoch ?? "" }
+        : await fetchRemote(remoteOptions);
+      const decision = decide({
+        state, local, remote
+      , baseText: state.base ? store.getObject(state.base.hash) : null
+      , now: now(), hashOf, approvedDeletion: options.approvedDeletion
+      });
+      options.onStep?.(decision.kind);
+      switch (decision.kind) {
+        case "noop":
+          return { status: "synced", pulled, pushed, revision: state.base?.revision ?? null };
+        case "halt":
+          return { status: "halted", halt: decision.halt };
+        case "set-base":
+          if (local) store.putObject(local.text);
+          save(baseSet(state, decision.epoch, decision.base), { ...binding, planId: binding.planId || planId || "" });
+          break;
+        case "finish-pull":
+          save(pullWritten(state), binding);
+          break;
+        case "pull": {
+          // 写しを先に置く (書く中身と、新しい基準になるサーバーの中身) → 操作を記録 → 手元に書く → 基準を進める
+          store.putObject(decision.write.text);
+          if (remote.kind === "present") store.putObject(remote.content.text);
+          save(recordPending(state, decision.epoch, decision.pending), binding);
+          try {
+            commitFile(file, decision.write.text, local === null ? null : revisionOf(local.text));
+          } catch (e) {
+            // 「行われなかった」と確定できる失敗 (手元が先に変わった / 他が書き込み中): 操作を片付けて、やり直すか、今回は譲る
+            if (e instanceof FileConflict) { save(pullNotWritten(stored!), binding); break; }
+            if (e instanceof FileBusy) { save(pullNotWritten(stored!), binding); return { status: "busy", what: "file" }; }
+            throw e; // それ以外は、書けたかどうか分からない。操作を残したまま (次の実行で、人に確かめる)
+          }
+          options.onStep?.("pull:written"); // (試験用: 手元に書いた直後・基準を進める前)
+          save(pullWritten(stored!), { ...binding, planId: binding.planId || planIdOf(decision.write.text) || "" });
+          pulled++;
+          break;
+        }
+        case "push":
+        case "resend": {
+          let pending: PendingPush;
+          if (decision.kind === "push") {
+            store.putObject(decision.content.text);
+            pending = { kind: "push", opId: randomUUID(), hash: decision.content.hash, expected: decision.expected, at: now().toISOString() };
+            save(recordPending(state, decision.epoch, pending), { ...binding, planId: binding.planId || planId || "" });
+          } else pending = decision.pending;
+          const text = store.getObject(pending.hash);
+          if (text === null) throw new Error("the content of a pending push is missing from the sync state folder");
+          const result = await sendPush({ ...remoteOptions, epoch: stored!.epoch }, pending, text);
+          options.onStep?.("push:sent"); // (試験用: サーバーが応答した直後・状態を進める前)
+          if ("history" in result) return { status: "halted", halt: { reason: "history-changed", expected: stored!.epoch ?? "", actual: result.history } };
+          if ("accepted" in result) { save(pushAccepted(stored!, result.accepted), stored!.binding); pushed++; }
+          else save(pushRejected(stored!), stored!.binding);
+          break;
+        }
+      }
+    }
+    // 他の端末や手元の書き手と競り負け続けた。今回は譲る (次の実行で続きから)
+    return { status: "busy", what: "sync" };
+  } finally {
+    unlock();
+  }
+}
+
+/** 計画の文字列から、計画の ID を取り出す (読めなければ null) */
+function planIdOf(text: string): string | null {
+  try { const id = (JSON.parse(text) as { id?: unknown }).id; return typeof id === "string" ? id : null; } catch { return null; }
+}

@@ -249,9 +249,8 @@ describe("統合した結果の検査", () => {
     expect(projectProblem(ours)).toBeNull();
     expect(projectProblem(theirs)).toBeNull();
     const r = mergeProjects(p, ours, theirs);
-    // ボックスの項目には競合が出ない (親を変えたのは別々のボックスなので、別々の項目の変更として合わさる)。
-    // 操作した人の「最後に見た時刻」(agents.*.lastSeen) は、2 つの操作の時刻が 1 ミリ秒でも違えば競合に数えられるので、ここでは見ない
-    expect(r.conflicts.filter((c) => !c.automatic && c.segments[0] === "blocks")).toEqual([]);
+    // 競合は出ない (親を変えたのは別々のボックスなので、別々の項目の変更として合わさる。記録の日時は競合にしない)
+    expect(r.conflicts.filter((c) => !c.automatic)).toEqual([]);
     expect(projectProblem(r.project)).not.toBeNull();
   });
   it("CLI の merge (Git 用) は、壊れた結果を書かずに失敗し、自分の側のファイルをそのまま残す", () => {
@@ -269,5 +268,30 @@ describe("統合した結果の検査", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+// 記録の日時 (説明・状態を変えた日時、最後に見た日時) は、人が選ぶものではない。両方が更新していても競合にせず、新しいほうを採る
+describe("記録の日時は競合にしない", () => {
+  it("2 人が同じ説明に直した時刻が違っても、競合は 0 件。別の説明にしたときは、説明だけが競合になる", () => {
+    const { p, a } = base();
+    const at = (project: typeof p, time: string) => ({ ...project, blocks: { ...project.blocks, [a]: { ...project.blocks[a], descriptionUpdatedAt: time } } });
+    const before = at(updateBlock(p, a, { description: "前" }), "2026-10-04T09:00:00.000Z");
+    const ours = at(updateBlock(before, a, { description: "同じ" }), "2026-10-04T10:00:00.000Z");
+    const theirs = at(updateBlock(before, a, { description: "同じ" }), "2026-10-04T10:00:00.005Z");
+    const same = mergeProjects(before, ours, theirs);
+    expect(same.conflicts).toEqual([]);
+    expect(same.project.blocks[a].descriptionUpdatedAt).toBe("2026-10-04T10:00:00.005Z");
+    const different = mergeProjects(before, ours, at(updateBlock(before, a, { description: "別" }), "2026-10-04T10:00:00.005Z"));
+    expect(different.conflicts.map((c) => c.path)).toEqual([`blocks.${a}.description`]);
+    // 説明は既定で自分の側を採るので、日時も自分の側のものにそろう
+    expect(different.project.blocks[a].descriptionUpdatedAt).toBe("2026-10-04T10:00:00.000Z");
+  });
+  it("操作した人の「最後に見た時刻」が両方で進んでいても、競合にしない", () => {
+    const { p } = base();
+    const seen = (time: string) => ({ ...p, agents: { human: { id: "human", lastSeen: time } } }) as unknown as typeof p;
+    const r = mergeProjects(seen("2026-10-04T09:00:00.000Z"), seen("2026-10-04T10:00:00.000Z"), seen("2026-10-04T11:00:00.000Z"));
+    expect(r.conflicts).toEqual([]);
+    expect((r.project.agents as unknown as Record<string, { lastSeen: string }>).human.lastSeen).toBe("2026-10-04T11:00:00.000Z");
   });
 });

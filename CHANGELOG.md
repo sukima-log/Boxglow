@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Merge: record timestamps (`descriptionUpdatedAt`, `statusChangedAt`, an agent's `lastSeen`) are no longer reported as conflicts; the later one is kept. Two people setting the same description a few milliseconds apart used to produce a conflict.
+- Experimental, not announced yet: `boxglow sync` (one-shot sync of the plan file with a sync server) and its building blocks under `src/sync` and `cli/sync`. There is no public server; the command is for development of the upcoming paid Sync.
+
 - Fields this version does not know are kept. Reading and writing a plan no longer drops unknown top-level fields (boxes, ports and edges already kept theirs), so saving with an older writer from this version on will not remove settings added by a newer one.
 - Merge (the Git merge driver and the conflict dialog): a change to the plan language (`lang`) made only on the other side was silently ignored, as was any top-level field not listed by name. All top-level fields are now merged three ways; unknown ones are compared as whole values and reported as conflicts when both sides changed them.
 - Merge: `boxglow merge` checks the merged plan before writing. Two valid edits can combine into an invalid plan without any conflict (each side moved a box into the other); in that case nothing is written, your side of the file is left as is, and the command fails so Git reports a conflict.

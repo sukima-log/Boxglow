@@ -53,6 +53,9 @@ function pick(path: string[], base: unknown, ours: unknown, theirs: unknown, r: 
   return adopted === "theirs" ? theirs : ours;
 }
 
+/** 記録の日時の項目 (両方が更新していても競合にせず、新しいほうを採る) */
+const TIMESTAMP_KEYS: ReadonlySet<string> = new Set(["descriptionUpdatedAt", "statusChangedAt", "lastSeen"]);
+
 /**
  * オブジェクトを項目ごとに 3 方向で合わせる (ボックス 1 つ、ポート 1 つなど)
  */
@@ -65,6 +68,13 @@ function mergeObject(path: string[], base: Dict | undefined, ours: Dict, theirs:
     const t = theirs[k];
     // 配列や入れ子のオブジェクトは丸ごと 1 つの値として比べる (artifacts, decisions, position など)
     // 項目が無い側は undefined として比べる (片方が消し、もう片方が変えていなければ消える。両方が別々に変えた・消したなら競合)
+    // 記録の日時 (説明や状態を変えた日時、最後に見た日時) は、両方が別の時刻に更新していても競合にしない。新しいほうを採る。
+    // 日時は「いつ変えたか」の付随情報で、人が選ぶものではない (同じ説明に直した 2 人の時刻が 1 ミリ秒違うだけで、競合として止まってしまう)。
+    // 説明・状態については、採用した値を書いた側の日時に、mergeProjects の最後でそろえ直す
+    if (TIMESTAMP_KEYS.has(k) && typeof o === "string" && typeof t === "string" && !same(o, t) && !same(o, b) && !same(t, b)) {
+      out[k] = Date.parse(t) > Date.parse(o) ? t : o;
+      continue;
+    }
     const value = pick([...path, k], b, o, t, r);
     if (value !== undefined) out[k] = value;
   }
