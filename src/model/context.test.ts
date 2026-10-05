@@ -103,7 +103,10 @@ describe("短いコンテキスト", () => {
     expect([a.error, b.error]).toEqual([undefined, undefined]);
     const c = briefContext(q, target);
     const input = c.target.inputs.find((i) => i.name === "外の資料")!;
-    expect(input.sources).toEqual([expect.objectContaining({ title: "外の供給元", output: "外の資料", via: expect.any(String) })]);
+    expect(input.sources).toEqual([expect.objectContaining({ title: "外の供給元", output: "外の資料", via: [q.blocks[parent].key ?? "親"] })]);
+    // 関係するボックスの並び: 対象へ供給するボックスが先、次に親、その後にそれ以外
+    const order = c.related.map((r) => (r.feedsTarget ? "feeds" : r.relation));
+    expect(order.lastIndexOf("feeds")).toBeLessThan(order.indexOf("parent"));
     expect(c.related.find((r) => r.title === "外の供給元")?.feedsTarget).toEqual(["外の資料"]);
     expect(c.related.find((r) => r.title === "上流")?.feedsTarget).toEqual(["上流の出力"]);
     void upstream;
@@ -123,14 +126,70 @@ describe("短いコンテキスト", () => {
     // 範囲を設定済みの親は、説明を省く。未設定の上流は、説明に制約があるかもしれないので残す
     expect("description" in parent).toBe(false);
     expect(upstream.description).toBe("上流の説明 (制約: 形式は JSON)");
-    // 上流の未回答は、質問だけ (材料と選択肢は省く)
-    expect(upstream.openQuestions).toEqual([expect.objectContaining({ question: "形式は?" })]);
-    expect(JSON.stringify(upstream)).not.toContain("上流の判断の材料");
+    // 上流の未回答も、材料と選択肢を残す
+    expect(upstream.openQuestions).toEqual([expect.objectContaining({ question: "形式は?", options: ["JSON", "YAML"], context: "上流の判断の材料" })]);
     expect(JSON.stringify(c)).not.toContain("上流の引き継ぎ");
     // 省いたもの: 種類ごとの件数 (0 件の種類は出さない) と、取り方
-    expect(c.omitted).toEqual(expect.objectContaining({ descriptions: 1, decisionHistory: 1, decisionOptions: 1, handoffs: 1, relatedBlocks: full.blocks.length - 1 }));
+    expect(c.omitted).toEqual(expect.objectContaining({ descriptions: 1, decisionHistory: 1, handoffs: 1, relatedBlocks: full.blocks.length - 1 }));
+    // 供給元として出した出力の成果物は、省いた数に入れない (この計画では、ほかに省いた成果物は無い)
+    expect("artifacts" in c.omitted).toBe(false);
     expect(c.omitted.howToGet).toContain("boxglow context");
     expect(JSON.stringify(c).length).toBeLessThan(JSON.stringify(full).length);
+  });
+
+  it("R27-01: 計画全体の説明は省かない (計画の説明にだけ書かれた制約が読める)", () => {
+    const { p, target } = fixture();
+    p.description = "GLOBAL_CONSTRAINT: 保存はオフラインだけ";
+    expect(briefContext(p, target).project).toEqual({ name: "Brief", description: "GLOBAL_CONSTRAINT: 保存はオフラインだけ" });
+  });
+
+  it("R27-02: 回答済みの判断は、親・上流・対象のどれでも、材料と選択肢を残す (回答だけでは意味が分からないため)", () => {
+    const { p, parent, upstream, target } = fixture();
+    let q = structuredClone(p);
+    for (const id of [parent, upstream, target]) {
+      const asked = askDecision(q, id, "codex", "Which proposal?", ["A", "B"], "A = local-only; B = external service"); q = asked.project;
+      q = answerDecision(q, id, asked.decisionId!, "A", "human");
+    }
+    const c = briefContext(q, target);
+    const expected = expect.objectContaining({ question: "Which proposal?", answer: "A", options: ["A", "B"], context: "A = local-only; B = external service" });
+    expect(c.target.decisions).toContainEqual(expected);
+    expect(c.related.find((r) => r.title === "親")!.decisions).toContainEqual(expected);
+    expect(c.related.find((r) => r.title === "上流")!.decisions).toContainEqual(expected);
+  });
+
+  it("供給元: 出力の説明を出す。ボックス全体の成果物は数だけ。束ねた出力は、資料が無いとき中の出力を展開する", () => {
+    const { p, parent, upstream, target } = fixture();
+    let q = structuredClone(p);
+    portsOf(q, upstream, "out")[0].description = "形式: JSON Lines";
+    q.blocks[upstream].artifacts = [createArtifact("上流の全体の資料", "docs/whole.md")];
+    // 親の隣に「束ねる親」を作り、その中の子の出力を、親の出力に束ねて、対象の親の入力 → 対象へ渡す
+    const bundle = addBlock(q, { parentId: q.blocks[parent].parentId!, title: "束ねる親", outputName: "束ねた出力" }); q = bundle.project;
+    const child = addBlock(q, { parentId: bundle.blockId, title: "中の子", outputName: "子の出力" }); q = child.project;
+    portsOf(q, child.blockId, "out")[0].artifacts = [createArtifact("子の資料", "docs/child.md")];
+    const bundleOut = portsOf(q, bundle.blockId, "out")[0];
+    const boundary = addPort(q, { blockId: parent, direction: "in", name: "束ねた出力" }); q = boundary.project;
+    const inner = addPort(q, { blockId: target, direction: "in", name: "束ねた出力" }); q = inner.project;
+    const edges = [
+      connect(q, { portId: portsOf(q, child.blockId, "out")[0].id, side: "outer" }, { portId: bundleOut.id, side: "inner" })
+    ];
+    q = edges[0].project;
+    edges.push(connect(q, { portId: bundleOut.id, side: "outer" }, { portId: boundary.portId, side: "outer" })); q = edges[1].project;
+    edges.push(connect(q, { portId: boundary.portId, side: "inner" }, { portId: inner.portId, side: "outer" })); q = edges[2].project;
+    expect(edges.map((e) => e.error)).toEqual([undefined, undefined, undefined]);
+    const c = briefContext(q, target);
+    const direct = c.target.inputs.find((i) => i.name === "上流の出力")!.sources[0];
+    expect(direct).toMatchObject({ description: "形式: JSON Lines", otherArtifacts: 1 });
+    expect(direct.artifacts.map((a) => a.url)).toEqual(["docs/spec.md"]);
+    // 束ねた出力には資料が無い: 中の出力 (実体) を展開する。子の出力に資料があるので、用意できている
+    const bundled = c.target.inputs.find((i) => i.name === "束ねた出力")!;
+    expect(bundled.ready).toBe(true);
+    expect(bundled.sources[0]).toMatchObject({ title: "束ねる親", output: "束ねた出力", bundles: 1, inner: [{ title: "中の子", output: "子の出力" }] });
+    expect(bundled.sources[0].inner![0].artifacts.map((a) => a.url)).toEqual(["docs/child.md"]);
+    // 束ねた出力そのものに資料を付けて用意できていれば、展開しない (数だけ)
+    portsOf(q, bundle.blockId, "out")[0].artifacts = [createArtifact("まとめ", "docs/bundle.md")];
+    const again = briefContext(q, target).target.inputs.find((i) => i.name === "束ねた出力")!.sources[0];
+    expect(again.bundles).toBe(1);
+    expect("inner" in again).toBe(false);
   });
 
   it("無いボックスは、全部の出力と同じく断る", () => {

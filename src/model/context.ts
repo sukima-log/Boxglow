@@ -3,7 +3,7 @@
  * 対象のボックス・その親 (上の階層すべて)・入力の供給元 (上流) のボックスについて、説明・判断 (確認済みの回答も含む)・
  * 入出力の条件・成果物・引き継ぎメモを集める。CLI の context と、確認トークン (cli/context.ts) の元になる
  */
-import { ancestorsOf, incomingEdges, isInputReady, portsOf } from "./graph";
+import { ancestorsOf, incomingEdges, isInputReady, isSourceReady, portsOf } from "./graph";
 import { freshnessText, descriptionReminder } from "./workflow";
 
 import { t } from "../i18n/core";
@@ -84,10 +84,11 @@ export function agentContext(p: Project, blockId: string) {
  * 短いコンテキスト (最初に読む用): 対象のボックスの情報は削らず、親・上流は「題名・状態・有効な判断・対象につながる出力」に絞る。
  * 計画が大きくなっても、最初に読む量が、対象のボックスの大きさで決まるようにする (全部の出力は agentContext のまま残す)。
  * 線引き (docs/AGENTS_SNIPPET.md にも書く):
- *   必ず出す : 対象の範囲と親の範囲、対象の説明・状態・入出力・成果物・引き継ぎ、取得範囲 (対象・親・上流) にある有効な判断 (回答済み) と未回答の質問、
- *             対象の入力ごとの供給元 (どのボックスのどの出力か・その成果物の参照・用意できているか)
+ *   必ず出す : 計画全体の説明、対象の範囲と親の範囲、対象の説明・状態・入出力・成果物・引き継ぎ、
+ *             取得範囲 (対象・親・上流) にある判断 (回答済みも未回答も、材料と選択肢つき。回答の意味は、材料と選択肢が無いと読めないことがある)、
+ *             対象の入力ごとの供給元 (どのボックスのどの出力か・その出力の説明と成果物の参照・用意できているか)
  *   省く     : 親・上流の説明 (範囲 scope を設定済みのボックスだけ。未設定なら、説明に制約が書かれているかもしれないので省かない)、
- *             親・上流の入出力の一覧・引き継ぎ・成果物、判断の履歴 (前の回答) と選択肢、対象につながらない線
+ *             親・上流の入出力の一覧・引き継ぎ・成果物 (供給元として出した出力のものは除く)、判断の履歴 (前の回答)、対象につながらない線
  *   省いたものは、種類ごとの件数と、取り方を omitted に入れる (文字数や段数では切らない)
  * Input : p = 計画, blockId = ボックスの内部 id
  * Output: 短いコンテキスト (brief: true)。確認トークンは、全部の出力 (agentContext) から作ったものを、呼び出し側が付ける
@@ -98,36 +99,66 @@ export function briefContext(p: Project, blockId: string) {
   const byId = new Map(full.blocks.map((b) => [b.id, b] as const));
   const target = byId.get(blockId)!;
   const nameOf = (id: string) => { const b = p.blocks[id]; return b ? { key: b.key, title: b.title } : { key: undefined, title: id }; };
-  /** 判断を、有効な回答 (回答済み) と、未回答の質問に分ける。履歴 (前の回答) は数だけ数える */
+  /**
+   * 判断を、有効な回答 (回答済み) と、未回答の質問に分ける。履歴 (前の回答) は数だけ数える
+   * 材料 (context) と選択肢 (options) は、どのボックスの判断でも残す: 回答は自由記述で、「A」のように、材料や選択肢を見ないと意味が分からないことがある (R27-02)
+   */
   const split = (decisions: typeof target.decisions) => ({
-    answered: decisions.filter((d) => d.answer !== undefined).map((d) => ({ id: d.id, question: d.question, answer: d.answer }))
+    answered: decisions.filter((d) => d.answer !== undefined).map((d) => ({ id: d.id, question: d.question, context: d.context, options: d.options, answer: d.answer }))
   , open: decisions.filter((d) => d.answer === undefined).map((d) => ({ id: d.id, question: d.question, context: d.context, options: d.options }))
   , history: decisions.reduce((n, d) => n + (d.history?.length ?? 0), 0)
   });
   // 対象の入力ごとに、供給元 (つながっている上流の出力) と、用意できているかをまとめる
   // 対象の入力につながっている出力を持つボックス → その出力の名前 (related の feedsTarget に出す)
   const feeds = new Map<string, string[]>();
+  // 供給元として出した出力 (その成果物は表示済みなので、省いた数に入れない)
+  const shownPorts = new Set<string>();
   // 並びは画面と同じ (portsOf の順)。id 順だと、毎回の並びが作った順と合わない
   const targetPorts = [...portsOf(p, blockId, "in"), ...portsOf(p, blockId, "out")];
   const inputs = targetPorts.filter((port) => port.direction === "in").map((port) => {
     // 供給元をさかのぼる。親の入力 (境界) を通ってくる線は中継なので、その先の、実際に出力を持つボックスまでたどる
     // (中継の先に線が無ければ、その親の入力そのものが供給元。外から渡された資料が付いていることがある)
-    const sources: { key?: string; title: string; output: string; status?: string; artifacts: Project["ports"][string]["artifacts"]; via?: string }[] = [];
-    const trace = (portId: string, side: "outer" | "inner", seen: Set<string>, via?: string) => {
+    type Source = {
+      key?: string; title: string; output: string; description?: string; status?: string; artifacts: Project["ports"][string]["artifacts"]
+      /** 通ってきた親の入力 (境界)。対象に近い順 */
+      via?: string[]
+      /** そのボックス全体に付いた成果物の数 (出力には付いていないもの。読むには、そのボックスの context) */
+      otherArtifacts?: number
+      /** 中のボックスの出力を束ねた出力のとき: 束ねている出力の数と、その中身 (親の出力に資料が無い・まだ用意できていないときだけ展開する) */
+      bundles?: number; inner?: { key?: string; title: string; output: string; status?: string; artifacts: Project["ports"][string]["artifacts"] }[]
+    };
+    const sources: Source[] = [];
+    const trace = (portId: string, side: "outer" | "inner", seen: Set<string>, via: string[] = []) => {
       for (const e of incomingEdges(p, { portId, side })) {
         const from = p.ports[e.from.portId];
         if (!from || seen.has(from.id)) continue;
         seen.add(from.id);
         const owner = p.blocks[from.blockId];
         const relayed = from.direction === "in" ? incomingEdges(p, { portId: from.id, side: "outer" }) : [];
-        if (relayed.length > 0) { trace(from.id, "outer", seen, owner?.key ?? owner?.title); continue; }
+        if (relayed.length > 0) { trace(from.id, "outer", seen, [...via, owner?.key ?? owner?.title ?? from.blockId]); continue; }
+        // 中のボックスの出力を束ねた出力か (親の出力に、子の出力がつながっている)
+        const bundled = from.direction === "out" ? incomingEdges(p, { portId: from.id, side: "inner" }) : [];
+        const sourceReady = isSourceReady(p, e.from);
+        shownPorts.add(from.id);
         // 供給元の出力の名前・成果物の参照・どのボックスの出力か (上流の名前だけでは、読む場所が分からないため)
         feeds.set(from.blockId, [...(feeds.get(from.blockId) ?? []), from.name]);
         sources.push({
-          ...nameOf(from.blockId), output: from.name, status: owner?.status
-          // 出力に付いた成果物だけ (ボックス全体の成果物は、そのボックスの context で読む)
+          ...nameOf(from.blockId), output: from.name
+          // 出力の説明 (受け渡しの条件が書かれていることがある)
+        , ...(from.description ? { description: from.description } : {})
+        , status: owner?.status
+          // 出力に付いた成果物だけ (ボックス全体の成果物を混ぜると、別の用途のものまで今回の入力に見える。数だけ出す)
         , artifacts: from.artifacts
-        , ...(via ? { via } : {})
+        , ...(owner?.artifacts.length ? { otherArtifacts: owner.artifacts.length } : {})
+        , ...(via.length ? { via } : {})
+        , ...(bundled.length ? { bundles: bundled.length } : {})
+          // 束ねた出力に資料が無い・用意できていないときは、中のどの出力が実体か・どれが未完了かを見せる
+        , ...(bundled.length && (from.artifacts.length === 0 || !sourceReady) ? { inner: bundled.flatMap((b) => {
+            const child = p.ports[b.from.portId];
+            if (!child) return [];
+            shownPorts.add(child.id);
+            return [{ ...nameOf(child.blockId), output: child.name, status: p.blocks[child.blockId]?.status, artifacts: child.artifacts }];
+          }) } : {})
         });
       }
     };
@@ -144,8 +175,12 @@ export function briefContext(p: Project, blockId: string) {
   const mine = split(target.decisions);
   // 親 (上の階層) と、それ以外 (上流) を分けて、絞った形にする
   const parents = new Set(ancestorsOf(p, blockId).map((b) => b.id));
-  const omitted = { descriptions: 0, ports: 0, decisionHistory: mine.history, decisionOptions: 0, handoffs: 0, artifacts: 0, connections: 0 };
-  const related = full.blocks.filter((b) => b.id !== blockId).map((b) => {
+  // 省いたものの数。どれも「親・上流のボックスについて、短い形に出さなかったもの」(decisionHistory だけは、対象の判断の履歴も含む)
+  const omitted = { descriptions: 0, ports: 0, decisionHistory: mine.history, handoffs: 0, artifacts: 0, connections: 0 };
+  // 並び: 対象へ実際に供給するボックス → 親 (近い順) → それ以外の上流 (親の入力の供給元など)
+  const parentOrder = ancestorsOf(p, blockId).map((b) => b.id);
+  const rank = (id: string) => feeds.has(id) ? 0 : parents.has(id) ? 1 + (parentOrder.indexOf(id) + 1) / (parentOrder.length + 1) : 2;
+  const related = full.blocks.filter((b) => b.id !== blockId).sort((a, b) => rank(a.id) - rank(b.id)).map((b) => {
     const d = split(b.decisions);
     const hasScope = !!b.scope && Object.values(b.scope).some((v) => typeof v === "string" && v.trim() !== "");
     // 範囲を設定済みのボックスは、制約が範囲に書かれているとみなして、説明を省く。未設定のボックスは、説明に制約が残っているかもしれないので、省かない
@@ -153,17 +188,17 @@ export function briefContext(p: Project, blockId: string) {
     if (hasScope && b.description) omitted.descriptions++;
     omitted.ports += b.ports.length;
     omitted.decisionHistory += d.history;
-    omitted.decisionOptions += d.open.filter((o) => o.options.length > 0 || o.context).length;
     if (b.handoff) omitted.handoffs++;
-    omitted.artifacts += b.artifacts.length + b.ports.reduce((n, port) => n + port.artifacts.length, 0);
+    // (供給元として出した出力の成果物は、表示済みなので数えない)
+    omitted.artifacts += b.artifacts.length + b.ports.reduce((n, port) => n + (shownPorts.has(port.id) ? 0 : port.artifacts.length), 0);
     return {
       key: b.key, title: b.title, relation: parents.has(b.id) ? "parent" as const : "upstream" as const, status: b.freshness.status
     , ...(hasScope && !parents.has(b.id) ? { scope: b.scope } : {})   // (親の範囲は workScope に出ている)
     , ...(keepDescription ? { description: b.description } : {})
     , ...(feeds.has(b.id) ? { feedsTarget: feeds.get(b.id) } : {})
-      // 取得範囲にある有効な判断は、親・上流のものも全部残す (対象の実装を縛ることがある)。未回答は、質問だけ (材料と選択肢は、そのボックスの context で読む)
+      // 取得範囲にある判断は、親・上流のものも全部、材料と選択肢つきで残す (対象の実装を縛ることがある)。省くのは履歴 (前の回答) だけ
     , ...(d.answered.length ? { decisions: d.answered } : {})
-    , ...(d.open.length ? { openQuestions: d.open.map((o) => ({ id: o.id, question: o.question })) } : {})
+    , ...(d.open.length ? { openQuestions: d.open } : {})
     };
   });
   // 対象につながらない線は省く (対象に入る線・対象から出る線は、inputs の sources と outputs で分かる)
@@ -173,14 +208,15 @@ export function briefContext(p: Project, blockId: string) {
   , workScope: full.workScope
   , focus: full.focus
   , workflowPolicy: full.workflowPolicy
-  , project: { name: full.project.name }
+    // 計画全体の説明は省かない (計画の説明にだけ書かれた制約がある。R27-01)
+  , project: full.project
   , task: full.task
   , instructions: full.instructions
   , target: {
       id: target.id, key: target.key, title: target.title, description: target.description, status: target.freshness.status
     , freshness: target.freshness
-      // 対象の判断は削らない: 回答に加えて、材料と選択肢 (選ばなかった候補) も付ける。前の回答 (履歴) だけ省く
-    , decisions: target.decisions.filter((d) => d.answer !== undefined).map((d) => ({ id: d.id, question: d.question, context: d.context, options: d.options, answer: d.answer }))
+      // 対象の判断: 回答・材料・選択肢 (選ばなかった候補)。前の回答 (履歴) だけ省く
+    , decisions: mine.answered
     , openQuestions: mine.open
     , handoff: target.handoff
     , inputs, outputs
@@ -193,7 +229,7 @@ export function briefContext(p: Project, blockId: string) {
   , omitted: {
       ...Object.fromEntries(Object.entries(omitted).filter(([, n]) => n > 0))
     , relatedBlocks: related.length
-    , howToGet: "boxglow context <block> prints everything (same contextToken). For one related box in full: boxglow context <its key>."
+    , howToGet: "Counts are what was left out of the related boxes (ancestors and upstream). boxglow context <block> prints everything (same contextToken). For one related box in full: boxglow context <its key>."
     }
   };
 }
