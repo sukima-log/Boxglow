@@ -13,15 +13,18 @@ import { commitFile, FileBusy, FileConflict, revisionOf } from "../file-store";
 import { basename } from "node:path";
 import {
   baseSet, decide, previewRecovery, pullNotWritten, pullRecovered, pullWritten, pushAccepted, pushRefused, pushRejected, recordPending, recoveryToken as engineRecoveryToken, remoteMark, SyncStateError
-, type Content, type Halt, type PendingPush, type RecoveryOutcome, type Remote, type RemoteMark, type SyncState
+, relinkFinished, relinkPreview, relinkStarted
+, type Content, type Halt, type PendingPush, type RecoveryOutcome, type RelinkPreview, type Remote, type RemoteMark, type SyncState
 } from "../../src/sync/engine";
-import { bindingDir, bindingsOf, hashOf, lockFileSync, normalizeServer, realFile, StateStore, type Binding, type StoredState } from "./state-store";
+import { bindingDir, bindingsOf, hashOf, lockFileSync, normalizeServer, realFile, StateStore, stateVersionOf, type Binding, type StoredState } from "./state-store";
 import { APP_VERSION, SAVE_PROTOCOL } from "../../src/model/version";
 
 /** 同期の結果 */
 export type SyncResult =
   /** 手元とサーバーがそろった (pulled = 受け取って手元に書いた回数, pushed = 送って受理された回数) */
   | { status: "synced"; pulled: number; pushed: number; edited: number; revision: string | null
+      /** この実行で結び直しをした場合の、控えを置いた場所 */
+    ; relinkBackup?: string
       /** 「そろった」と確かめたときの、手元の中身のハッシュ (ファイルが無ければ null)。この後でファイルが変わっていたら、その変更はまだ送られていない */
     ; localHash: string | null }
   /**
@@ -30,6 +33,10 @@ export type SyncResult =
    */
   | { status: "halted"; halt: Halt | ClientHalt
     ; recovery?: { token: string; applied: RecoveryOutcome; notApplied: RecoveryOutcome }
+      /** 結び直しの見比べ (サーバーの履歴が変わって止まったとき・結び直しの途中で選び直しになったとき) */
+    ; relink?: RelinkPreview
+      /** 結び直しの控えを置いた場所 (この実行で結び直しを始めていた場合) */
+    ; relinkBackup?: string
       /** 止まる前に、この実行で行ったこと (受け取って手元に書いた回数、送って受理された回数、手元だけを書き換えた回数) */
     ; pulled: number; pushed: number; edited: number
       /** 表示するコマンドに付ける、同期の対象 (サーバー・サーバー側の計画の ID・ファイル) */
@@ -50,7 +57,7 @@ export type ClientHalt =
   /** 状態を読めない結び付けのフォルダがあり、このファイルがすでに結び付いているかを確かめられない (新しい結び付けを作らない) */
   | { reason: "unreadable-bindings"; dirs: string[] }
   /** 渡された人の選択 (初回の選択・競合の解決) が、今の状態には当てはまらなかった (選択なしの同期として進めない) */
-  | { reason: "choice-not-applied"; choice: "firstLink" | "resolution" }
+  | { reason: "choice-not-applied"; choice: "firstLink" | "resolution" | "relink" }
   /** この結び付けは、別の利用者のもの (サーバーが答えた利用者が、結び付けたときと違う)。基準もやりかけの操作も使わず、何も送らない・書かない */
   | { reason: "account-mismatch"; bound: string; actual: string }
   /** この結び付けには、利用者の記録がまだ無い (記録するようになる前に作った状態)。今の利用者のものだと、人が確かめるまで同期しない */
@@ -96,6 +103,8 @@ export interface SyncOptions {
   firstLink?: { token: string; prefer: "local" | "remote" };
   /** 止まっている「受け取りの再開」への人の選択: 印 (recoveryToken の値) と、反映済みとして続けるか */
   recover?: { token: string; applied: boolean };
+  /** サーバーの履歴が変わって止まった後の「結び直し」への人の選択: 印と、どちらを採るか (選べるものが 1 つなら省く) */
+  relink?: { token: string; prefer?: "local" | "remote" };
   /** 利用者の記録が無い結び付けを「この利用者のもの」と人が確かめた、その利用者の ID (account-unconfirmed で表示した値) */
   confirmAccount?: string;
   /** 今の時刻 (試験で差し替える) */
@@ -265,8 +274,10 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
   const target = { server, remoteId: options.remoteId ?? "", file };
   // 最後に読んだ手元の中身のハッシュ (結果に入れる。常時の同期が、「確かめた後で変わった編集」に気づくために使う)
   let lastLocal: string | null | undefined;
-  const halted = (halt: Halt | ClientHalt, extra: { recovery?: { token: string; applied: RecoveryOutcome; notApplied: RecoveryOutcome } } = {}): SyncResult =>
-    ({ status: "halted", halt, pulled, pushed, edited, target, localHash: lastLocal, ...extra });
+  // この実行で置いた、結び直しの控えの場所 (結果に入れて、表示する)
+  let relinkBackup: string | undefined;
+  const halted = (halt: Halt | ClientHalt, extra: { recovery?: { token: string; applied: RecoveryOutcome; notApplied: RecoveryOutcome }; relink?: RelinkPreview } = {}): SyncResult =>
+    ({ status: "halted", halt, pulled, pushed, edited, target, localHash: lastLocal, ...(relinkBackup ? { relinkBackup } : {}), ...extra });
   // 同じファイルを扱う同期は、サーバーが違っても 1 つだけ (下の「別のサーバーに結び付いていないか」の確認と、結び付けの作成の間に割り込ませない)
   const unlockFile = lockFileSync(file);
   if (!unlockFile) return { status: "busy", what: "sync" };
@@ -290,7 +301,8 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
     }
     // 状態を書く (世代の照合つき)。書いた後の状態を覚え直す
     const save = (next: SyncState, binding: Binding) => {
-      const value: StoredState = { ...next, version: 1, binding };
+      // (結び直しの途中の状態だけ、形式の版を 2 にする。結び直しを知らない版には、読めない状態として止まってもらう)
+      const value: StoredState = { ...next, version: stateVersionOf(next), binding };
       store.write(value, stored?.generation ?? null);
       stored = value;
     };
@@ -348,6 +360,8 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       , now: now(), hashOf
       , approvedDeletion: options.approvedDeletion, restoreDeletion: options.restoreDeletion
       , resolution: options.resolution, firstLink: options.firstLink
+        // (人の選択は、最初の判断にだけ渡す。結び直しを始めた後の判断は、状態に書いた記録に従う)
+      , relink: round === 0 ? options.relink : undefined
       };
       const decision = decide(input);
       await options.onStep?.(decision.kind);
@@ -357,10 +371,42 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
         const used = "usedChoice" in decision ? decision.usedChoice : undefined;
         if (options.firstLink && used !== "firstLink") return halted({ reason: "choice-not-applied", choice: "firstLink" });
         if (options.resolution && used !== "resolution") return halted({ reason: "choice-not-applied", choice: "resolution" });
+        if (options.relink && used !== "relink") return halted({ reason: "choice-not-applied", choice: "relink" });
       }
       switch (decision.kind) {
         case "noop":
-          return { status: "synced", pulled, pushed, edited, revision: state.base?.revision ?? null, localHash: local?.hash ?? null };
+          return { status: "synced", pulled, pushed, edited, revision: state.base?.revision ?? null, localHash: local?.hash ?? null, ...(relinkBackup ? { relinkBackup } : {}) };
+        case "relink": {
+          // ---- 結び直しを始める: 控えを取る → 状態を 1 回で置き換える。その先 (受け取り・送り) は、次の判断が、記録に従って決める ----
+          // 控えに入れるのは、判断に使った中身そのもの (読み直さない。読み直すと、人が見比べたものと違う中身を「控え」にしてしまう)
+          const at = now().toISOString();
+          const files: Record<string, string> = {};
+          if (stored) files["state.json"] = JSON.stringify(stored, null, 2) + "\n";
+          if (local) files["local.json"] = local.text;
+          if (remote.kind === "present") files["remote.json"] = remote.content.text;
+          const baseCopy = state.base ? store.getObject(state.base.hash) : null;
+          if (baseCopy !== null) files["base.json"] = baseCopy;
+          // 残っていた古い操作の中身 (送る予定だった中身 / 手元に書く予定だった中身)。新しい履歴へは送らない・書かない
+          const pendingCopy = state.pending ? store.getObject(state.pending.hash) : null;
+          if (pendingCopy !== null) files["pending-content.json"] = pendingCopy;
+          const name = `${at.replace(/[:.]/g, "-")}-${options.relink!.token}`;
+          relinkBackup = store.putRelinkBackup(name, files, {
+            at, server, remoteId: binding.remoteId, account, file
+          , choice: decision.target.choice
+          , previousEpoch: state.epoch, remote: decision.target.remote
+          , localHash: decision.target.localHash
+          , base: state.base ? { ...state.base, saved: baseCopy !== null } : null
+          , pending: state.pending ? { ...state.pending, saved: pendingCopy !== null } : null
+          });
+          await options.onStep?.("relink:backup");
+          // 古い受け取りの途中だけ持っていた仮の ID は、古い操作と一緒に捨てる (控えの state.json には残っている)
+          save(relinkStarted(state, decision.target, name, at), notWritten(binding));
+          await options.onStep?.("relink:started");
+          break;
+        }
+        case "relink-done":
+          save(relinkFinished(state), binding);
+          break;
         case "halt":
           // 受け取りの再開で止まったときは、選ぶための印と、2 つの続け方それぞれの結果を添える (人に、過去の出来事を当てさせない)
           if (decision.halt.reason === "recover-pull" && remote.kind === "present") {
@@ -375,6 +421,8 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
             const notApplied = mismatch(binding.planId, state.base !== null) ? stop(preview.notApplied) : preview.notApplied;
             return halted(decision.halt, { recovery: { token: recoveryToken(state, local?.hash ?? null, remoteMark(remote), bindingId), applied, notApplied } });
           }
+          // 履歴が変わって止まったとき・結び直しの途中で選び直しになったときは、見比べと、選ぶための印を添える
+          if (decision.halt.reason === "history-changed" || decision.halt.reason === "relink-stale") return halted(decision.halt, { relink: relinkPreview(input) ?? undefined });
           return halted(decision.halt);
         case "edit-local":
           // 手元だけを書き換える (消えた項目を戻す)。前提が違えば何もせず、次の判断で確かめ直す

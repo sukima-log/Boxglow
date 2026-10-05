@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Experimental sync, not announced yet: `boxglow sync --relink <token> [--prefer local|remote]`. When the server's history changed (a restore from backup), sync used to stop with no way to continue in the same folder. It now shows how the plan on the server and the local plan differ and lets you keep one of them; the previous state (local plan, sync records, any unfinished operation) is saved under the binding's `relinks/` folder first. Nothing is merged automatically from the old base, and an unfinished push from before the restore is never sent again. While a relink is in progress the local sync state uses format version 2, so 0.5.2 and earlier stop on it instead of treating it as a first link.
+
 ## 0.5.2 (2026-10-05)
 
 Goes with the VS Code extension 0.4.1. Update the CLI, `serve` and the extension together. (0.5.1 and 0.5.2 are the same content: the 0.5.1 upload was held by npm for a while and appeared only after 0.5.2 had been sent.)

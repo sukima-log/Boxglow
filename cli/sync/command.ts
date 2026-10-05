@@ -8,6 +8,7 @@
  *   boxglow sync --resolve <印> --prefer local|remote                 止まっていた競合を、表示した項目について手元 / サーバーの値に決める
  *   boxglow sync --link <印> --prefer local|remote                    初めて結び付けるときに中身が違った場合に、どちらを採るかを決める
  *   boxglow sync --recover <印> --applied | --not-applied             止まっていた「受け取りの再開」を、人の選択で進める
+ *   boxglow sync --relink <印> [--prefer local|remote]                サーバーの履歴が変わって止まった後に、見比べて選んで、結び直す
  *   boxglow sync --account <利用者の ID>                              利用者の記録が無い結び付けを、表示された利用者のものとして続ける
  * 止まったとき (競合・確認が要る場面) は、理由と次の操作を表示して、終了コード 2 で終わる。通信の失敗は終了コード 1 (もう一度実行すれば続きから)。
  *   boxglow sync --watch                                              常時の同期 (Ctrl+C で終了)。この端末の、同じサーバーに結び付いた計画すべてを受け持つ
@@ -34,6 +35,8 @@ export interface SyncCommandOptions {
   /** --prefer の値 (local / remote)。--resolve と --link で使う */
   prefer?: string;
   recover?: string;
+  /** サーバーの履歴が変わって止まった後の、結び直しの印 (どちらを採るかは --prefer。選べるものが 1 つなら要らない) */
+  relink?: string;
   applied?: boolean;
   notApplied?: boolean;
   /** 利用者の記録が無い結び付けを、この利用者のものとして続ける (表示された利用者の ID) */
@@ -64,6 +67,7 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
   if (!server) return 1;
   if (o.recover && o.applied === o.notApplied) { out(t("--recover には --applied (反映済みとして続ける) か --not-applied (反映されていないものとして続ける) のどちらかを付けてください")); return 1; }
   if ((o.resolve || o.link) && o.prefer !== "local" && o.prefer !== "remote") { out(t("--resolve / --link には --prefer local (手元を採る) か --prefer remote (サーバーを採る) を付けてください")); return 1; }
+  if (o.relink && o.prefer !== undefined && o.prefer !== "local" && o.prefer !== "remote") { out(t("--relink には、選べるものが 2 つあるときは --prefer local (手元を採る) か --prefer remote (サーバーを採る) を付けてください")); return 1; }
   const prefer = o.prefer as "local" | "remote";
   let result: SyncResult;
   try {
@@ -74,6 +78,7 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
     , resolution: o.resolve ? { token: o.resolve, prefer } : undefined
     , firstLink: o.link ? { token: o.link, prefer } : undefined
     , recover: o.recover ? { token: o.recover, applied: !!o.applied } : undefined
+    , relink: o.relink ? { token: o.relink, prefer: o.prefer as "local" | "remote" | undefined } : undefined
     , confirmAccount: o.account
     });
   } catch (e) {
@@ -89,6 +94,7 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
     throw e;
   }
   if (result.status === "synced") {
+    if (result.relinkBackup) out(t("結び直しの前の状態 (手元の計画・同期の記録) を、次のフォルダに控えました (自動では消しません。要らなくなったら、フォルダごと消せます): {path}", { path: result.relinkBackup }));
     if (result.edited > 0) out(t("消えていた設定を、手元のファイルに戻しました。"));
     out(result.pulled || result.pushed
       ? t("同期しました (受け取り {pulled} 回、送り {pushed} 回)。サーバーの版: {revision}", { pulled: result.pulled, pushed: result.pushed, revision: result.revision ?? "-" })
@@ -117,6 +123,7 @@ export function describeHalt(result: Extract<SyncResult, { status: "halted" }>, 
   const fullTarget = ` --server ${quote(result.target.server)} --project ${quote(result.target.remoteId)}${target}`;
   // 止まる前に行ったことを、そのまま伝える (1 回の実行は何手か進むので、受け取りを書いた後で止まることがある)
   out(t("同期を止めました。"));
+  if (result.relinkBackup) out(t("結び直しの前の状態 (手元の計画・同期の記録) を、次のフォルダに控えました (自動では消しません。要らなくなったら、フォルダごと消せます): {path}", { path: result.relinkBackup }));
   if (result.pulled > 0) out(t("止まる前に、サーバーの変更を手元のファイルに書きました ({count} 回)。", { count: result.pulled }));
   if (result.pushed > 0) out(t("止まる前に、手元の変更をサーバーへ送りました ({count} 回)。", { count: result.pushed }));
   if (result.edited > 0) out(t("止まる前に、消えていた設定を手元のファイルに戻しました。"));
@@ -172,8 +179,32 @@ export function describeHalt(result: Extract<SyncResult, { status: "halted" }>, 
       break;
     }
     case "history-changed":
-      out(t("サーバーの履歴が、前回そろえたときから変わっています (バックアップからの復旧など)。前回の続きとしては同期できません。サービスの案内を確かめてください"));
+    case "relink-stale": {
+      out(halt.reason === "history-changed" ? t("サーバーの履歴が、前回そろえたときから変わっています (バックアップからの復旧など)。前回の続きとしては同期できません。") : t("結び直しの途中で、選んだときから手元かサーバーの中身が変わりました (または、選んだ送信が断られました)。選んだ内容は使っていません。今の内容で、選び直してください。"));
+      const preview = result.relink;
+      // (サーバーで計画が消されているときは、見比べは無い。結び直しでも作り直さない)
+      if (!preview) { out(t("サーバー側で、この計画は消されています。結び直しでは作り直しません")); break; }
+      const command = (prefer?: "local" | "remote") => `  boxglow sync --relink ${preview.token}${prefer ? ` --prefer ${prefer}` : ""}${target}`;
+      out("  " + t("サーバーの今の版: {remote} (前回そろえた版: {base})", { remote: preview.remoteRevision ?? t("なし"), base: preview.baseRevision ?? t("なし") }));
+      if (halt.reason === "history-changed") out("  " + (preview.localChanged === null ? t("手元: 前回そろえた後に変えたかどうかは、確かめられません (前回の中身の写しがありません)") : preview.localChanged ? t("手元: 前回そろえた後の変更があります") : t("手元: 前回そろえた後の変更はありません")));
+      if (preview.pending === "push") out("  " + t("前回の送信が、途中のまま残っています (届いたかどうかは分かりません)。送り直しません。中身は控えに残します"));
+      if (preview.pending === "pull") out("  " + t("前回の受け取りが、途中のまま残っています。続きは行いません。書く予定だった中身は控えに残します"));
+      if (preview.relation === "differs") {
+        out(t("サーバーの計画と、手元の計画は、中身が違います。手元の計画を採った場合に、サーバーの計画に起きる変化:"));
+        for (const line of preview.differences) out("  - " + line);
+        out(t("どちらを採るかを選んでください。古い中身を元にした自動の統合はしません (復旧の後は、手元の作業を消す方向に働くことがあるため)。"));
+        out(t("A. サーバーの計画を採る (手元のファイルを置き換える。前の中身は <ファイル名>.before-sync-....json と、控えのフォルダに残します):"));
+        out(command("remote"));
+        out(t("B. 手元の計画を採る (サーバーの計画を置き換える。サーバーの前の中身は、サーバーの履歴に残ります):"));
+        out(command("local"));
+        out(t("項目ごとに選び分けたいときは、手元のファイルを採りたい内容に直してから、もう一度 boxglow sync を実行して B を選んでください"));
+      } else {
+        out(preview.relation === "same" ? t("サーバーの計画と、手元の計画は、同じ中身です。次を実行すると、今の中身を新しい出発点として、同期を続けます:") : preview.relation === "none" ? t("サーバーにも手元にも、この計画はありません。次を実行すると、結び付けだけを残して、止まった状態を解きます:") : preview.relation === "remote-only" ? t("手元の計画のファイルがありません。次を実行すると、サーバーの計画を手元に書いて、同期を続けます:") : t("復旧先の時点では、この計画はサーバーにありません。次を実行すると、手元の計画を、サーバーに新しく送ります:"));
+        out(command());
+      }
+      out(t("この選択は、この端末の中身についてのものです。ほかの端末でも同じ確認が出ます (先に、どの端末の中身を正とするか決めてください)。手元の計画を別の計画として残したいときは、ファイルを別のフォルダへ写して、そこで結び付けてください"));
       break;
+    }
     case "stale-operation":
       out(t("前回の送信の記録が古すぎる、または日時が読めないため、自動では続けられません"));
       break;
@@ -203,7 +234,7 @@ export function describeHalt(result: Extract<SyncResult, { status: "halted" }>, 
       out(t("同期の状態を読めないフォルダがあるため、この計画がすでに結び付いているかを確かめられません。新しい結び付けは作りません (フォルダは消さずに、中身を確かめてください): {list}", { list: halt.dirs.join(", ") }));
       break;
     case "choice-not-applied":
-      out(halt.choice === "firstLink"
+      out(halt.choice === "relink" ? t("--relink の選択は、今の状態には当てはまりません (表示のあとで、手元かサーバーが変わった・選べる内容が違う)。何もしていません。boxglow sync でもう一度確かめてください") : halt.choice === "firstLink"
         ? t("--link の選択は、今の状態には当てはまりません (同期の対象が、選択を表示したときと違う可能性があります)。何もしていません。表示されたコマンドを、--server・--project・--file を付けたまま実行してください")
         : t("--resolve の選択は、今の状態には当てはまりません (競合がもう無い、または対象が違います)。何もしていません。boxglow sync でもう一度確かめてください"));
       break;

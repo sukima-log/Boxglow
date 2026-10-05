@@ -315,6 +315,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  --adopt <印> = 消えた設定の削除を採って送る / --restore <印> = 消えた設定を手元に戻す
                                                  --resolve <印> --prefer local|remote = 競合を手元 / サーバーの値に決める / --link <印> --prefer local|remote = 初回に中身が違うときの選択
                                                  --recover <印> --applied|--not-applied = 途中で終わった受け取りを続ける
+                                                 --relink <印> [--prefer local|remote] = サーバーの履歴が変わって止まった後に、見比べて選んで結び直す
                                                  --account <利用者の ID> = 利用者の記録が無い結び付けを、表示された利用者のものとして続ける
   login [--server <URL>] [--name <端末の名前>]   (試験中) 同期サーバーにサインインする (GitHub のアカウント。表示されたコードを、ブラウザで入力する)
   logout [--server <URL>] / whoami [--server <URL>]  サインアウトする (サーバー側のトークンも取り消す) / 今の利用者・端末・保存量を出す
@@ -400,6 +401,7 @@ Usage (npx boxglow <command> ...):
                                                  --adopt <token> = send the deletion of settings / --restore <token> = put the deleted settings back locally
                                                  --resolve <token> --prefer local|remote = settle conflicts / --link <token> --prefer local|remote = choose a side on first link
                                                  --recover <token> --applied|--not-applied = continue an interrupted pull
+                                                 --relink <token> [--prefer local|remote] = after the server's history changed: compare, choose and bind again
                                                  --account <account id> = continue a binding that has no account recorded, as the account shown
   login [--server <URL>] [--name <device name>]  (experimental) Sign in to a sync server (GitHub account; enter the code shown in your browser)
   logout [--server <URL>] / whoami [--server <URL>]  Sign out (also revokes the token on the server) / show the current account, devices and storage
@@ -1223,7 +1225,7 @@ if (argv[0] === "mcp") {
     const file = locateFile(str(options.file));
     try { setLang(explicitLang(options) ?? load(file).lang ?? "ja"); } catch { /* 読めない計画でも、止まった理由は表示する */ }
     // 知らない指定 (まだ無い --watch など) を、黙って「1 回の同期」として実行しない
-    const known = new Set(["file", "lang", "actor", "watch", "server", "project", "adopt", "restore", "resolve", "link", "prefer", "recover", "applied", "not-applied", "account"]);
+    const known = new Set(["file", "lang", "actor", "watch", "server", "project", "adopt", "restore", "resolve", "link", "prefer", "recover", "applied", "not-applied", "account", "relink"]);
     const unknown = Object.keys(options).filter((k) => !known.has(k));
     if (unknown.length > 0) { out(t("boxglow sync が知らない指定です: {list}", { list: unknown.map((k) => "--" + k).join(", ") })); process.exitCode = 1; return; }
     process.exitCode = await (options.watch ? runWatchCommand : runSyncCommand)({
@@ -1236,6 +1238,7 @@ if (argv[0] === "mcp") {
     , link: str(options.link)
     , prefer: str(options.prefer)
     , recover: str(options.recover)
+    , relink: str(options.relink)
     , applied: !!options.applied
     , notApplied: !!options["not-applied"]
     , account: str(options.account)

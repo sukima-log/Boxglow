@@ -77,8 +77,10 @@ export type Halt =
   | { reason: "recover-pull"; pending: PendingPull; localHash: string | null }
   /** 基準に在った「保護する項目」が手元で消えている。誰が書いたかにかかわらず、送る前に一度確かめる */
   | { reason: "protected-deletion"; keys: string[]; approval: string }
-  /** サーバーの履歴の世代が変わった (バックアップからの復旧など)。古い基準や操作を、そのまま使えない */
+  /** サーバーの履歴の世代が変わった (バックアップからの復旧など)。古い基準や操作を、そのまま使えない。続けるには、人が見比べて選ぶ (結び直し) */
   | { reason: "history-changed"; expected: string; actual: string }
+  /** 結び直しの途中で、選んだときから手元かサーバーが変わった (または、選んだ送信が断られた)。選んだ内容は使わない。人が、今の内容で選び直す */
+  | { reason: "relink-stale" }
   /** 残っている送りの操作が古すぎる、または日時が信頼できない (サーバーの記録が消えているかもしれない) */
   | { reason: "stale-operation"; pending: PendingPush }
   /** 初めて結び付けるときに、手元とサーバーの両方に違う中身がある。どちらを採るかを人が選ぶ */
@@ -97,6 +99,33 @@ export interface SyncState {
   epoch: string | null;
   base: Base | null;
   pending: Pending | null;
+  /**
+   * 結び直しの途中だけ持つ記録 (人が選んだ内容と、その対象)。基準が決まったら消す。
+   * これがある状態は、「初めての結び付け」と同じ形 (基準なし) でも、初めての結び付けとしては扱わない (記録と今の内容を照合してから進む)
+   */
+  relink?: RelinkRecord;
+}
+
+/** 結び直しで、人が選んだ内容: remote = サーバーの計画を採る / local = 手元の計画を採る / same = 中身が同じ (どちらも無い場合を含む) */
+export type RelinkChoice = "remote" | "local" | "same";
+
+/** 結び直しの対象: 選んだときのサーバーの状態と、手元の中身。再開のときに、すべて今の状態と照合する */
+export interface RelinkTarget {
+  choice: RelinkChoice;
+  /** サーバーの状態 (世代・計画の有無・版・中身のハッシュ)。計画が無ければ版とハッシュは null */
+  remote: { kind: "present" | "absent"; epoch: string; revision: Revision | null; hash: string | null };
+  /** 手元の中身のハッシュ (ファイルが無ければ null) */
+  localHash: string | null;
+}
+
+/** 状態に持つ、結び直しの記録 */
+export interface RelinkRecord extends RelinkTarget {
+  /** 控えのフォルダの名前 (状態のフォルダの relinks/ の下) */
+  backup: string;
+  /** 選んだ日時 (ISO 8601) */
+  at: string;
+  /** この選択で行った送信が、受理されないと確定した (同じ選択を、もう一度は使わない) */
+  spent?: boolean;
 }
 
 /** サーバーの今の状態 */
@@ -129,11 +158,13 @@ export interface SyncInput {
   resolution?: { token: string; prefer: "local" | "remote" };
   /** 初めて結び付けるときに、手元とサーバーの中身が違った場合の人の選択: 印 (first-link の token) と、どちらを採るか */
   firstLink?: { token: string; prefer: "local" | "remote" };
+  /** 結び直しへの人の選択: 印 (relinkPreview の token) と、どちらを採るか (選べるものが 1 つだけのときは、prefer は要らない) */
+  relink?: { token: string; prefer?: "local" | "remote" };
 }
 
 /** 次に行うこと */
 /** 人の選択のうち、この判断が使ったもの (渡された選択が使われなかったことに、呼び出し側が気づけるようにする) */
-export type UsedChoice = "firstLink" | "resolution" | "restore" | "adopt";
+export type UsedChoice = "firstLink" | "resolution" | "restore" | "adopt" | "relink";
 
 export type Decision =
   /** 何もしない (手元とサーバーは、基準と同じ) */
@@ -160,6 +191,13 @@ export type Decision =
   | { kind: "resend"; pending: PendingPush }
   /** 残っている受け取りの操作は、手元に書けていた。基準を進める (pullWritten) */
   | { kind: "finish-pull"; pending: PendingPull }
+  /**
+   * 結び直しを始める (人の選択が、今の状態と合っていた)。呼び出し側は、控えを取ってから、状態を
+   * 「基準なし・操作なし・結び直しの記録つき」に 1 回で置き換える (relinkStarted)。その次の判断で、記録に従って進む
+   */
+  | { kind: "relink"; target: RelinkTarget; usedChoice: "relink" }
+  /** 結び直しが、何もせずに終わった (手元にもサーバーにも計画が無い)。記録を消す (relinkFinished) */
+  | { kind: "relink-done" }
   /** 止まって、人に確かめる */
   | { kind: "halt"; halt: Halt };
 
@@ -212,6 +250,31 @@ const halt = (h: Halt): Decision => ({ kind: "halt", halt: h });
  */
 export function decide(input: SyncInput): Decision {
   const { state, local, remote, baseText, now } = input;
+
+  // ---- 0. サーバーの履歴の世代が変わった後 (結び直し) ----
+  // 世代が違うと分かったら、残っている操作 (送り・受け取り) にも進まない: 古い世代の操作を、新しい履歴の上で片付けない。
+  // 受け取りの途中だった場合も同じ (書けたか分からない受け取りを「反映済み」としても、その基準は古い世代のもの)。
+  // 結び直しの途中 (記録があり、基準も操作も無い) も、ここで扱う: 「初めての結び付け」の経路へは、記録を確かめずに流さない
+  const stale = state.epoch !== null && remote.epoch !== state.epoch;
+  const resuming = state.relink !== undefined && state.pending === null && state.base === null;
+  if (stale || resuming) {
+    // 消されている計画は、結び直しでも作り直さない
+    if (remote.kind === "deleted") return halt({ reason: "remote-deleted" });
+    // 途中からの再開: 記録が、今のサーバー・手元と全部同じなら、選んだとおりに進む (もう一度は聞かない)
+    if (resuming && !stale && relinkStillValid(state.relink!, local, remote)) return relinkAct(state.relink!, local, remote, now);
+    // 人の選択: 印が、今の状態・手元・サーバーと合っていれば、結び直しを始める
+    const preview = relinkPreview(input);
+    if (preview && input.relink?.token === preview.token) {
+      const choice: RelinkChoice | undefined = preview.options.length === 1 ? preview.options[0] : input.relink.prefer;
+      if (choice && preview.options.includes(choice)) {
+        // 採る側の中身が、計画として読めること (読めないものを、新しい基準にしない)
+        if (choice !== "remote" && local) { const l = read(local.text); if ("problem" in l) return halt({ reason: "invalid-local", problem: l.problem }); }
+        if (choice !== "local" && remote.kind === "present") { const r = read(remote.content.text); if ("problem" in r) return halt({ reason: "invalid-remote", problem: r.problem }); }
+        return { kind: "relink", usedChoice: "relink", target: { choice, remote: relinkRemoteMark(remote), localHash: local?.hash ?? null } };
+      }
+    }
+    return halt(stale ? { reason: "history-changed", expected: state.epoch!, actual: remote.epoch } : { reason: "relink-stale" });
+  }
 
   // ---- 1. 残っている操作があれば、先にそれを片付ける ----
   if (state.pending?.kind === "push") {
@@ -392,7 +455,7 @@ export function pushRefused(state: SyncState, opId: string, status: number, at: 
  */
 export function pushAccepted(state: SyncState, opId: string, revision: Revision): SyncState {
   if (state.pending?.kind !== "push" || state.pending.opId !== opId) throw new SyncStateError("the response does not belong to the pending push");
-  return { ...state, generation: state.generation + 1, base: { hash: state.pending.hash, revision }, pending: null };
+  return withoutRelink({ ...state, generation: state.generation + 1, base: { hash: state.pending.hash, revision }, pending: null });
 }
 
 /**
@@ -401,7 +464,8 @@ export function pushAccepted(state: SyncState, opId: string, revision: Revision)
  */
 export function pushRejected(state: SyncState, opId: string): SyncState {
   if (state.pending?.kind !== "push" || state.pending.opId !== opId) throw new SyncStateError("the response does not belong to the pending push");
-  return { ...state, generation: state.generation + 1, pending: null };
+  // 結び直しの途中の送信が断られたら、その選択は使い切ったことにする (同じ選択で、別の版へ送り直さない。人が、今の内容で選び直す)
+  return { ...state, generation: state.generation + 1, pending: null, ...(state.relink ? { relink: { ...state.relink, spent: true } } : {}) };
 }
 
 /**
@@ -411,7 +475,7 @@ export function pushRejected(state: SyncState, opId: string): SyncState {
  */
 export function pullWritten(state: SyncState, pending: PendingPull): SyncState {
   if (!samePending(state.pending, pending)) throw new SyncStateError("the pull does not match the pending operation");
-  return { ...state, generation: state.generation + 1, base: pending.remote, pending: null };
+  return withoutRelink({ ...state, generation: state.generation + 1, base: pending.remote, pending: null });
 }
 
 /**
@@ -426,7 +490,105 @@ export function pullNotWritten(state: SyncState, pending: PendingPull): SyncStat
 /** 基準だけを進める (set-base の実行)。やりかけの操作があるときは呼べない */
 export function baseSet(state: SyncState, epoch: string, base: Base): SyncState {
   if (state.pending !== null) throw new SyncStateError("an operation is still pending");
-  return { ...state, generation: state.generation + 1, epoch, base };
+  return withoutRelink({ ...state, generation: state.generation + 1, epoch, base });
+}
+
+/** 結び直しの記録を外した状態 (基準が決まったときに使う) */
+function withoutRelink(state: SyncState): SyncState {
+  const { relink: _done, ...rest } = state;
+  return rest;
+}
+
+// ---- 結び直し (サーバーの履歴の世代が変わった後に、人が見比べて選ぶ) ----
+
+/** サーバーの今の状態から、結び直しの対象として記録する部分を取り出す (消されている計画は対象にしない) */
+function relinkRemoteMark(remote: Exclude<Remote, { kind: "deleted" }>): RelinkTarget["remote"] {
+  return remote.kind === "present"
+    ? { kind: "present", epoch: remote.epoch, revision: remote.revision, hash: remote.content.hash }
+    : { kind: "absent", epoch: remote.epoch, revision: null, hash: null };
+}
+
+/** 結び直しの記録が、今のサーバー・手元と全部同じか (世代・計画の有無・版・中身・手元の中身。使い切った選択は、合わない扱い) */
+function relinkStillValid(record: RelinkRecord, local: Content | null, remote: Exclude<Remote, { kind: "deleted" }>): boolean {
+  return !record.spent && JSON.stringify(record.remote) === JSON.stringify(relinkRemoteMark(remote)) && record.localHash === (local?.hash ?? null);
+}
+
+/**
+ * 結び直しの記録に従って、次に行うことを決める (記録が今の状態と合っていると確かめた後に呼ぶ)
+ * Input : record = 結び直しの記録, local = 手元の中身, remote = サーバーの今の状態, now = 今の時刻
+ * Output: same → 基準を作る (どちらにも無ければ、記録を消すだけ) / remote → 受け取り (手元を控えてから置き換える) / local → 送り (サーバーの今の版を前提に。無ければ新しく作る)
+ */
+function relinkAct(record: RelinkRecord, local: Content | null, remote: Exclude<Remote, { kind: "deleted" }>, now: Date): Decision {
+  if (remote.kind === "present") {
+    const remoteBase: Base = { hash: remote.content.hash, revision: remote.revision };
+    if (record.choice === "same") return { kind: "set-base", epoch: remote.epoch, base: remoteBase, keep: [remote.content] };
+    if (record.choice === "remote") {
+      return { kind: "pull", epoch: remote.epoch, write: remote.content, keep: [remote.content], backup: local !== null
+      , pending: { kind: "pull", hash: remote.content.hash, expectedLocal: local?.hash ?? null, remote: remoteBase, at: now.toISOString() } };
+    }
+  }
+  if (record.choice === "local" && local) return { kind: "push", epoch: remote.epoch, content: local, expected: remote.kind === "present" ? remote.revision : null };
+  // 手元にもサーバーにも計画が無い (same)。結び付けだけが残る
+  if (record.choice === "same" && remote.kind === "absent" && !local) return { kind: "relink-done" };
+  // 記録と状態の組み合わせが成り立たない (照合を通っていれば、ここには来ない)。進めずに、選び直してもらう
+  return halt({ reason: "relink-stale" });
+}
+
+/** 結び直しの見比べ (止まったときに表示する。何も書き換えない) */
+export interface RelinkPreview {
+  /** 選ぶための印 (状態・手元・サーバーのどれかが変わると、別の値になる) */
+  token: string;
+  /** サーバーの計画と手元の計画の関係: same = 中身が同じ / differs = 両方にあって違う / remote-only = サーバーにだけある / local-only = 手元にだけある / none = どちらにも無い */
+  relation: "same" | "differs" | "remote-only" | "local-only" | "none";
+  /** 選べるもの (1 つだけなら、どちらを採るかの指定は要らない) */
+  options: RelinkChoice[];
+  /** 前回そろえた後に、手元を変えていたか (基準の写しが無くて分からなければ null) */
+  localChanged: boolean | null;
+  /** 残っている古い操作 (送り直さない・片付けない。控えに写すだけ) */
+  pending: "push" | "pull" | null;
+  /** 手元の計画を採った場合に、サーバーの計画に起きる変化 (両方にあって違うときだけ) */
+  differences: string[];
+  /** サーバーの今の版 (計画が無ければ null) と、前回そろえた版 (基準が無ければ null) */
+  remoteRevision: Revision | null; baseRevision: Revision | null;
+}
+
+/**
+ * 結び直しの見比べを作る
+ * Input : input = 判断の入力 (世代が変わって止まっている状態、または、結び直しの途中の状態)
+ * Output: 見比べ。サーバーで計画が消されているときは null (結び直しの対象にしない)
+ *         印には、結び付け・状態の世代・古い世代・結び直しの記録・残っている操作・サーバーの状態 (世代・有無・版・中身)・手元の中身を入れる
+ */
+export function relinkPreview(input: SyncInput): RelinkPreview | null {
+  const { state, local, remote, baseText } = input;
+  if (remote.kind === "deleted") return null;
+  const mark = relinkRemoteMark(remote);
+  const token = input.hashOf(JSON.stringify(["relink", input.bindingId, state.generation, state.epoch, state.relink ?? null, state.pending, mark, local?.hash ?? null])).slice(0, 16);
+  const relation: RelinkPreview["relation"] = remote.kind === "present"
+    ? (local ? (local.hash === remote.content.hash ? "same" : "differs") : "remote-only")
+    : (local ? "local-only" : "none");
+  const options: RelinkChoice[] = relation === "differs" ? ["remote", "local"] : relation === "remote-only" ? ["remote"] : relation === "local-only" ? ["local"] : ["same"];
+  return {
+    token, relation, options
+  , localChanged: state.base === null ? null : baseText === null ? null : (local?.hash ?? null) !== state.base.hash
+  , pending: state.pending?.kind ?? null
+  , differences: relation === "differs" && remote.kind === "present" && local ? describeChanges(remote.content.text, local.text) : []
+  , remoteRevision: mark.revision, baseRevision: state.base?.revision ?? null
+  };
+}
+
+/**
+ * 結び直しを始めた状態にする (控えを取った後に呼ぶ)
+ * Input : state = 止まっている状態, target = 人が選んだ内容と対象 (判断が返したもの), backup = 控えのフォルダの名前, at = 日時
+ * Output: 基準なし・操作なし・世代なしで、結び直しの記録を持つ状態 (古い基準・古い操作は、控えにだけ残る)
+ */
+export function relinkStarted(state: SyncState, target: RelinkTarget, backup: string, at: string): SyncState {
+  return { generation: state.generation + 1, epoch: null, base: null, pending: null, relink: { ...target, backup, at } };
+}
+
+/** 結び直しが、何もせずに終わった (手元にもサーバーにも計画が無い)。記録を消す */
+export function relinkFinished(state: SyncState): SyncState {
+  if (state.pending !== null || state.base !== null) throw new SyncStateError("the relink is not at its end");
+  return withoutRelink({ ...state, generation: state.generation + 1 });
 }
 
 /**

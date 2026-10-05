@@ -44,10 +44,17 @@ export interface Binding {
 
 /** state.json の中身 */
 export interface StoredState extends SyncState {
-  /** この形式の版 */
-  version: 1;
+  /**
+   * この形式の版。ふだんは 1。結び直しの途中 (relink の記録がある間) だけ 2 にする:
+   * 結び直しを知らない版の Boxglow が、その状態を「初めての結び付け」と読み違えて送受信しないように、読めない版として止まってもらう。
+   * 結び直しが終わると (基準が決まると) 1 に戻るので、ふだんの状態は、前の版の Boxglow でもそのまま読める
+   */
+  version: 1 | 2;
   binding: Binding;
 }
+
+/** 状態の中身から、書くときの形式の版を決める (結び直しの記録があれば 2) */
+export const stateVersionOf = (state: SyncState): 1 | 2 => (state.relink ? 2 : 1);
 
 /** state.json が読めない・形が合わない (壊れている。自動では直さない) */
 export class SyncStateUnreadable extends Error {
@@ -63,7 +70,20 @@ export function stateProblem(value: unknown): string | null {
   const text = (x: unknown): x is string => typeof x === "string" && x.length > 0;
   const obj = (x: unknown): x is Record<string, unknown> => typeof x === "object" && x !== null && !Array.isArray(x);
   if (!obj(value)) return "not an object";
-  if (value.version !== 1) return "unknown version";
+  if (value.version !== 1 && value.version !== 2) return "unknown version";
+  // 版 2 は、結び直しの途中の状態だけ。版と中身が合わないものは読まない
+  if ((value.version === 2) !== (value.relink !== undefined)) return "relink version";
+  if (value.relink !== undefined) {
+    const r = value.relink;
+    if (!obj(r) || (r.choice !== "remote" && r.choice !== "local" && r.choice !== "same") || !text(r.backup) || !text(r.at)) return "relink";
+    if (r.localHash !== null && !text(r.localHash)) return "relink local";
+    const m = r.remote;
+    if (!obj(m) || !text(m.epoch)) return "relink remote";
+    if (m.kind === "present" ? !(text(m.revision) && text(m.hash)) : !(m.kind === "absent" && m.revision === null && m.hash === null)) return "relink remote";
+    if (r.spent !== undefined && typeof r.spent !== "boolean") return "relink spent";
+    // 結び直しの途中に、古い基準は持たない (基準が決まったら、記録は消える)
+    if (value.base !== null) return "relink with base";
+  }
   if (!Number.isSafeInteger(value.generation) || (value.generation as number) < 0) return "generation";
   if (value.epoch !== null && !text(value.epoch)) return "epoch";
   const b = value.binding;
@@ -231,6 +251,25 @@ export class StateStore {
       if (this.getObject(hash) === null) throw new Error("could not store a content copy in the sync state folder: " + hash);
     }
     return hash;
+  }
+
+  /**
+   * 結び直しの前の控えを置く (状態を置き換える前に呼ぶ。置けなければ例外にして、状態を進ませない)
+   * 一時の名前のフォルダに全部書き、最後に manifest.json (complete: true) を書いてから、本来の名前に改名する。
+   * 途中で落ちたものは「.partial」の名前のまま残り、完了した控えとは区別できる
+   * Input : name = 控えのフォルダの名前 (relinks/ の下), files = ファイル名 → 中身 (無いものは入れない), manifest = 何を・いつ・何と比べて選んだかの記録
+   * Output: 控えのフォルダの絶対パス
+   */
+  putRelinkBackup(name: string, files: Record<string, string>, manifest: Record<string, unknown>): string {
+    const root = join(this.dir, "relinks");
+    const final = join(root, name), partial = join(root, `${name}.partial`);
+    mkdirSync(partial, { recursive: true, mode: 0o700 });
+    for (const [file, text] of Object.entries(files)) writeAtomic(join(partial, file), text);
+    // 書いたものを読み戻して確かめる (控えが壊れたまま、状態を置き換えない)
+    for (const [file, text] of Object.entries(files)) if (readFileSync(join(partial, file), "utf8") !== text) throw new Error("could not store the relink backup: " + file);
+    writeAtomic(join(partial, "manifest.json"), JSON.stringify({ ...manifest, files: Object.keys(files), complete: true }, null, 2) + "\n");
+    renameSync(partial, final);
+    return final;
   }
 
   /** 中身の写しを読む。無い・中身がハッシュと合わない (壊れている) なら null */
