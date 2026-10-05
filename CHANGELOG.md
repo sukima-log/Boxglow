@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 (2026-10-05)
+
+Goes with the VS Code extension 0.4.1. Update the CLI, `serve` and the extension together.
 
 - Visual update of the canvas (by Codex): confirmed wires are solid green and unconfirmed wires dashed amber; a selected wire (and its continuation across tabs) is the moving orange dashed line as before, and returns to its state colour when deselected; the wire details say why it counts as confirmed or not. Boxes put the title first and show category, ID, progress and ordinary due dates when selected; open questions get a small badge even without an activity record. In-progress boxes use a thin band and the progress bar instead of full hatching and a constant glow. Below 65% zoom in View mode the canvas switches to an overview that simplifies port labels (sizes, handles and saved data are unchanged).
 - Home: opening an existing file no longer sits under an AI-only heading. One "Open a file" section offers the three ways side by side (open to view, copy and edit in the browser, edit and save through `serve` or VS Code), followed by "Create a new plan".

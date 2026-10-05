@@ -2,6 +2,8 @@
 
 ## 0.4.1
 
+- Follows boxglow 0.5.1. Update together with the CLI.
+- Visual update of the canvas: confirmed wires are solid green and unconfirmed wires dashed amber; a selected wire is the moving orange dashed line; boxes put the title first and show details when selected; open questions get a small badge; below 65% zoom in View mode the canvas shows a simplified overview.
 - Opening an empty `boxglow.json`: asks for a plan name and creates the plan in that file (it used to show the browser start page with an unrelated notice).
 - The start page inside VS Code no longer shows browser-only guidance (sample, plans kept in the browser, `serve`); those plans were copies inside VS Code and never reached the file. A file that cannot be read as a plan, or content that does not arrive, is explained in full instead of being cut off.
 - No Home button inside VS Code (the editor is bound to one file).
