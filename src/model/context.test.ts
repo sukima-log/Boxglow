@@ -210,10 +210,14 @@ describe("短いコンテキスト", () => {
     wire(out(grand).id, "outer", out(child).id, "inner");
     const childEdge = wire(out(child).id, "outer", out(bundle).id, "inner");
     wire(out(bundle).id, "outer", input.portId, "outer");
-    // 全部の出力に、中のボックス (子・孫) が入る。束ねていない「別の子」は入らない
-    const titles = agentContext(q, target).blocks.map((b) => b.title);
-    expect(titles).toEqual(expect.arrayContaining(["束ねる親", "子", "孫"]));
-    expect(titles).not.toContain("別の子");
+    // 全部の出力に、束ねられた中の出力 (子・孫) が入る。束ねていない「別の子」は入らない。中のボックスを丸ごとは入れない
+    const full = agentContext(q, target);
+    expect(full.bundledOutputs.map((o) => [o.title, o.name]).sort()).toEqual([["子", "子の出力"], ["孫", "孫の出力"]].sort());
+    expect(full.blocks.map((b) => b.title)).toEqual(expect.not.arrayContaining(["子", "孫", "別の子"]));
+    // 成果物の確認の記録 (checkedAt / state) は、ほかの成果物と同じく、トークンに入れない
+    const checked = structuredClone(q);
+    Object.assign(portsOf(checked, grand, "out")[0].artifacts[0], { checkedAt: "2026-10-05T00:00:00.000Z" });
+    expect(contextReceipt(checked, target).contextToken).toBe(contextReceipt(q, target).contextToken);
     const before = briefReceipt(q, target);
     expect(before.contextToken).toBe(contextReceipt(q, target).contextToken);
     expect(() => requireContext(q, target, before.contextToken, "codex")).not.toThrow();

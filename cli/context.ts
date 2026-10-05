@@ -51,6 +51,8 @@ export function contextReceipt(p: Project, id: string) {
     , artifacts: artifactsForToken(b.artifacts)
     , ports: b.ports.map((port) => ({ ...port, artifacts: artifactsForToken(port.artifacts) }))
     }))
+    // 束ねた出力の中身 (中の出力の説明・資料の参照・束ね先) も、変わったら読み直しを求める
+  , bundledOutputs: context.bundledOutputs.map((o) => ({ ...o, artifacts: artifactsForToken(o.artifacts) }))
   };
   const token = createHash("sha256").update(JSON.stringify(stable(forToken))).digest("hex");
   return { contextToken: token, context };
