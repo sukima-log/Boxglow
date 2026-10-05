@@ -1,8 +1,10 @@
 /**
  * プロジェクトを開いていないときの画面 (Home)
- * 上から: サンプルを試す / 「自分の計画で始める」の引き出し (リポジトリの boxglow.json を開く・ブラウザ内に新規作成・JSON 読み込み。
+ * 上から: サンプルを試す / 「自分の計画で始める」の引き出し (ファイルを開く = 見る・コピーして編集・serve で編集して保存 / 新しい計画を作る。
  *         保存済みの計画や前回のファイルがあれば最初から開く) /
- * このブラウザに保存した計画の一覧。リポジトリのファイル (AI と共有) と、ブラウザ内だけの計画 (同期しない) を分けて見せる。
+ * このブラウザに保存した計画の一覧。
+ * 既にあるファイルを開く入口は、AI を使うかどうかに関係なく使うものなので、「ファイルを開く」の 1 か所にまとめる。
+ * VS Code の中では、開いているファイルのための案内だけを出す (ブラウザ向けの案内は出さない)。
  */
 import { useEffect, useState } from "react";
 import { useProjectStore } from "../store/useProjectStore";
@@ -132,21 +134,22 @@ export function HomeDialog() {
           <p>{t("何ができた？ 何を決めれば進める？ ボックスと線で、次の一歩が見えてきます。")}</p>
           <button className="btn btn-primary" onClick={openSample}>{t("サンプルを試す")}</button>
         </section>
-        {/* 自分の計画を開く・作る操作の引き出し。上: リポジトリのファイル (AI と共有)、下: ブラウザ内だけの計画。
+        {/* 自分の計画を開く・作る操作の引き出し。上: 既にあるファイルを開く、下: 新しい計画を作る。
             保存済みの計画や前回のファイルがある人 (2 回目以降) には最初から開いて見せ、何も無い初回だけ閉じておく。
             利用者が自分で開閉したら、その状態を優先する (ownOpen) */}
         <details className="home-disclosure" open={ownOpen ?? hasOwn} onToggle={(e) => { const now = e.currentTarget.open; if (now !== (ownOpen ?? hasOwn)) setOwnOpen(now); }}>
           <summary>{t("自分の計画で始める")}</summary>
+        {/* 既にあるファイルを開く: AI を使うかどうかに関係なく、ここから開く (見る / コピーして編集 / 編集してファイルに保存、の 3 通りを 1 か所に並べる) */}
         <section className="home-section home-section--shared" aria-labelledby="home-shared">
-          <div className="label">{t("AI と一緒に使う")}</div>
-          <h2 id="home-shared" className="font-head text-[18px]">{t("リポジトリの計画を開く")}</h2>
-          <p className="home-description">{t("AI と同じ boxglow.json を見ながら作業できます。共同編集には、下のコマンドでローカルサーバーを起動してください。")}</p>
-          {canOpenLocalFile() && <div className="flex flex-wrap gap-2">
-            <button className="btn btn-primary" onClick={() => void openFile()}>{t("ファイルを閲覧")}</button>
-            {last && <button className="btn" onClick={() => void openFile(last)} title={t("前回開いたファイル")}>Reopen {last.name}</button>}
-          </div>}
+          <h2 id="home-shared" className="font-head text-[18px]">{t("ファイルを開く")}</h2>
+          <p className="home-description">{t("手元の boxglow.json を開きます。")}</p>
+          <div className="flex flex-wrap gap-2">
+            {canOpenLocalFile() && <button className="btn btn-primary" onClick={() => void openFile()} title={t("ファイルを開いて、図として見ます (閲覧専用。ファイルが変わると、画面も変わります)")}>{t("開いて見る")}</button>}
+            {canOpenLocalFile() && last && <button className="btn" onClick={() => void openFile(last)} title={t("前回開いたファイル")}>Reopen {last.name}</button>}
+            <button className="btn" onClick={() => void doImport()} title={t("ファイルの中身を、このブラウザにコピーして編集します (元のファイルは変わりません)")}>{t("コピーして編集")}</button>
+          </div>
           <div className="home-server">
-            <p className="home-description">{t("WSL・Firefox・Safari でも使うには、計画のあるフォルダーで実行します。")}</p>
+            <p className="home-description">{t("編集してファイルに保存するには、計画のあるフォルダーで実行します (AI と一緒に使うときも、これです)。VS Code の拡張でも開けます。")}</p>
             <div className="home-command">
               <code>npx boxglow serve --open</code>
               <button className="btn btn-sm" onClick={() => void copyCommand()}>{t("コピー")}</button>
@@ -155,11 +158,8 @@ export function HomeDialog() {
         </section>
 
         <section className="home-section" aria-labelledby="home-browser">
-          <h2 id="home-browser" className="font-head text-[18px]">{t("まずブラウザで試す")}</h2>
-          <p className="home-description">{t("作成・インポートした計画は、このブラウザに保存されます。元のファイルや AI とは自動で同期しません。")}</p>
-          <div className="flex flex-wrap gap-2">
-            <button className="btn" onClick={() => void doImport()}>Import JSON</button>
-          </div>
+          <h2 id="home-browser" className="font-head text-[18px]">{t("新しい計画を作る")}</h2>
+          <p className="home-description">{t("作った計画と、コピーした計画は、このブラウザに保存されます。元のファイルや AI とは、自動では同期しません。")}</p>
           <div className="home-create">
             <label className="sr-only" htmlFor="home-project-name">{t("新しい計画の名前")}</label>
             <input id="home-project-name" className="input" placeholder={t("新しい計画の名前")} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => {

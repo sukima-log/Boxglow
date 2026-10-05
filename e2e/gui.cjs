@@ -60,7 +60,7 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     // (その一覧の計画は、ファイルとは別の、VS Code の中だけのコピーで、開いても boxglow.json には保存されないため)
     const lost=await open(browser,{vscode:true});
     const homeText=await lost.page.locator('.home-dialog').innerText();
-    check('VS Code: ブラウザ向けの案内と、ブラウザ内の計画の一覧を出さない',!/ブラウザ|サンプルを試す|serve|Import JSON/.test(homeText),homeText.slice(0,160));
+    check('VS Code: ブラウザ向けの案内と、ブラウザ内の計画の一覧を出さない',!/ブラウザ|サンプルを試す|serve|コピーして編集/.test(homeText),homeText.slice(0,160));
     await lost.page.waitForFunction(()=>window.boxglow.store.getState().vscodeFile?.state==='timeout',null,{timeout:8000});
     check('VS Code: ファイルが届かないときは、その旨を Home に出す',await lost.page.getByText('VS Code から、ファイルの中身を受け取れていません',{exact:false}).isVisible());
     // 拡張がファイルを直接読み書きできない窓: 計画は表示し、閲覧専用にして理由を帯に出す (保存の要求は送らない)

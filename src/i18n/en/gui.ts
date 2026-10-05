@@ -65,4 +65,13 @@ export const gui: Record<string, string> = {
   "もう一度読み込む": "Load again",
   "VS Code から、ファイルの中身を受け取れていません": "The file content has not arrived from VS Code",
   "拡張を最新にして、窓を読み込み直してください。WSL の中のファイルは、WSL の窓 (左下に「WSL: ...」と出る窓) で開いてください。": "Update the extension and reload the window. Open a file inside WSL in a WSL window (the one showing \"WSL: ...\" at the bottom left).",
+  "ファイルを開く": "Open a file",
+  "手元の boxglow.json を開きます。": "Open a boxglow.json on your machine.",
+  "開いて見る": "Open to view",
+  "ファイルを開いて、図として見ます (閲覧専用。ファイルが変わると、画面も変わります)": "Open the file as a diagram (read-only; the view follows the file)",
+  "コピーして編集": "Copy and edit",
+  "ファイルの中身を、このブラウザにコピーして編集します (元のファイルは変わりません)": "Copy the file's content into this browser and edit it (the original file is not changed)",
+  "編集してファイルに保存するには、計画のあるフォルダーで実行します (AI と一緒に使うときも、これです)。VS Code の拡張でも開けます。": "To edit and save to the file, run this in the folder containing your plan (also the way to work with an AI agent). The VS Code extension opens it too.",
+  "新しい計画を作る": "Create a new plan",
+  "作った計画と、コピーした計画は、このブラウザに保存されます。元のファイルや AI とは、自動では同期しません。": "Plans you create or copy are kept in this browser. They do not automatically sync with the original file or your AI agent.",
 };
