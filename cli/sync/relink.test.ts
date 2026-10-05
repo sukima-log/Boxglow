@@ -310,6 +310,15 @@ describe("結び直し: レビュー 32 の指摘", () => {
     expect(await A.sync({ relink: { token: preview.token, prefer: "remote" } })).toMatchObject({ status: "synced", pulled: 1 });
   });
 
+  it("R33-01: 同期の結果には、ロックの中で確かめた状態の世代番号が入る (止まった・そろった・譲った、のどれでも)", async () => {
+    const { A } = await restored();
+    const halted = await A.sync() as { stateGeneration?: number };
+    expect(halted.stateGeneration).toBe(A.store().read()!.generation);
+    const preview = previewOf(await A.sync());
+    const synced = await A.sync({ relink: { token: preview.token, prefer: "remote" } }) as { stateGeneration?: number };
+    expect(synced.stateGeneration).toBe(A.store().read()!.generation);
+  });
+
   it("途中から再開して終えた実行も、前の実行が置いた控えの場所を結果に入れる", async () => {
     const { A } = await restored();
     const preview = previewOf(await A.sync());

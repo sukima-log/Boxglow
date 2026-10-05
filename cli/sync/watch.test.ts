@@ -3,13 +3,16 @@
  * ファイル・状態の置き場・HTTP (試験用のサーバー) は実物を使う
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addBlock, createProject, defaultTaskParent, fromJSON, toJSON, updateBlock } from "../../src/model/graph";
 import type { Project } from "../../src/model/types";
 import { syncOnce } from "./client";
 import { bindingDir, StateStore } from "./state-store";
+import { relinkStarted } from "../../src/sync/engine";
+import { createHash } from "node:crypto";
+const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 import { TestSyncServer } from "./test-server";
 import { DEBOUNCE_MS, IDLE_POLL_MS, lockWatch, MAX_WAIT_MS, POLL_MS, SyncWatcher, type WatchEvent } from "./watch";
 
@@ -326,6 +329,51 @@ describe("止まった計画と、読めない状態", () => {
     edit(file, (p) => updateBlock(p, a, { title: "結び直しの後の編集" }));
     await advance(w, 100); await advance(w, DEBOUNCE_MS + 100);
     expect(JSON.parse(server.project("p1")!.head!.text).blocks[a].title).toBe("結び直しの後の編集");
+  });
+
+  it("R33-01: 同期がロックを外した直後に、別の実行が結び直しを始めても、見落とさずに次の tick で続きを行う", async () => {
+    const { file, a } = planFile("p1");
+    await syncOnce({ file, server: server.url, remoteId: "p1" });
+    const v1 = readFileSync(file, "utf8");
+    const store = new StateStore(bindingDir(file, server.url));
+    const w = watcher();
+    await w.tick();
+    edit(file, (p) => updateBlock(p, a, { title: "手元の編集" }));
+    restoreServer("e2", v1);
+    await advance(w, POLL_MS * 1.2);
+    expect(halts().length).toBe(1);
+    // 同期の結果に入っている世代番号は、ロックの中で確かめたもの
+    expect((halts()[0].result as { stateGeneration?: number }).stateGeneration).toBe(store.read()!.generation);
+    // 同期がロックを外した後の、最初の状態の読み取りの直前に、別の実行が結び直しを始めて、状態の置き換えの直後に落ちる
+    // (StateStore.read に割り込む。ロックの中の読み取りを 1 度見てから、ロックが外れた後の最初の読み取りで割り込む。
+    //  ロックを外した後に読み直して覚える作りだと、その読み直しがこの割り込みの後の値を拾い、「自分が処理した」と取り違えて続きを見落とす)
+    const original = StateStore.prototype.read;
+    const lockMarker = `${store.dir}/state.json.boxglow-lock`;
+    let armed = false, injected = false;
+    edit(file, (p) => updateBlock(p, a, { title: "手元の編集 2" }));     // (もう一度止まる同期を起こす)
+    const spy = vi.spyOn(StateStore.prototype, "read").mockImplementation(function (this: StateStore) {
+      if (this.dir === store.dir && !injected) {
+        if (existsSync(lockMarker)) armed = true;
+        else if (armed) {
+        injected = true;
+        const current = original.call(this)!;
+        const local = readFileSync(file, "utf8");
+        const target = { choice: "remote" as const, remote: { kind: "present" as const, epoch: "e2", revision: "e2.1", hash: sha(v1) }, localHash: sha(local) };
+        this.putRelinkBackup("injected", { "local.json": local }, { choice: "remote" });
+        this.write({ ...relinkStarted(current, target, "injected", "2026-10-05T00:00:00.000Z"), version: 2, binding: current.binding }, current.generation);
+        }
+      }
+      return original.call(this);
+    });
+    try {
+      await advance(w, 100); await advance(w, DEBOUNCE_MS + 100);   // (止まる同期。その直後の読み取りに割り込む)
+      expect(injected).toBe(true);
+      // 手元もサーバーも変わっていないが、次の tick で、別の実行の記録のとおりに受け取って終える
+      await advance(w, 1000);
+    } finally { spy.mockRestore(); }
+    expect(store.read()).toMatchObject({ version: 1, epoch: "e2", base: { revision: "e2.1" } });
+    expect(readFileSync(file, "utf8")).toBe(v1);
+    expect(events.at(-1)).toMatchObject({ kind: "synced", file, pulled: 1 });
   });
 
   it("R32-03: 止まっている間に、別の実行が結び直しを終えたら (手元を採る・同じ中身)、常時の同期は止まった状態を解く", async () => {

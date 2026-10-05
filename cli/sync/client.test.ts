@@ -671,7 +671,7 @@ describe("初めての受け取りの、仮の ID の扱い", () => {
     let unlock: (() => void) | undefined;
     const r = await C.sync({ remoteId: "seen", firstLink: choice, onStep: (kind) => { if (kind === "pull:recorded") unlock = lockFile(C.file); } });
     unlock!();
-    expect(r).toEqual({ status: "busy", what: "file" });
+    expect(r).toMatchObject({ status: "busy", what: "file" });
     const state = C.store().read()!;
     expect(state.pending).toBeNull();
     expect(state.binding.pendingPlanId).toBeUndefined();

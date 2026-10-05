@@ -25,6 +25,8 @@ export type SyncResult =
   | { status: "synced"; pulled: number; pushed: number; edited: number; revision: string | null
       /** この実行で結び直しをした場合の、控えを置いた場所 */
     ; relinkBackup?: string
+      /** ロックの中で最後に確かめた状態の世代番号 (SyncResultWithGeneration を参照) */
+    ; stateGeneration?: number
       /** 「そろった」と確かめたときの、手元の中身のハッシュ (ファイルが無ければ null)。この後でファイルが変わっていたら、その変更はまだ送られていない */
     ; localHash: string | null }
   /**
@@ -42,9 +44,16 @@ export type SyncResult =
       /** 表示するコマンドに付ける、同期の対象 (サーバー・サーバー側の計画の ID・ファイル) */
     ; target: { server: string; remoteId: string; file: string }
       /** 止まると判断したときの、手元の中身のハッシュ (まだ読んでいなければ undefined) */
-    ; localHash?: string | null }
+    ; localHash?: string | null
+    ; stateGeneration?: number }
   /** 他の処理が動いていて、今回は進められなかった (待てば直る)。what = "sync" (他の同期の処理) / "file" (計画のファイルが書き込み中) */
-  | { status: "busy"; what: "sync" | "file" };
+  | { status: "busy"; what: "sync" | "file"; stateGeneration?: number };
+
+/**
+ * どの結果にも付ける: この実行が、ロックの中で最後に確かめた (または書いた) 同期の状態の世代番号 (状態がまだ無ければ undefined)。
+ * 常時の同期が「自分が処理した状態」を覚えるのに使う。ロックを外した後に読み直した値は、別の実行が進めた分を含むことがあるので、根拠にしない (R33-01)
+ */
+export type SyncResultWithGeneration = SyncResult & { stateGeneration?: number };
 
 /** 実行の側 (結び付けの確認) で止まる理由 */
 export type ClientHalt =
@@ -279,11 +288,15 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
   // 送信・確定の応答で「履歴の世代が変わった」と分かって、読み直しに回ったか (1 回の実行で 1 度だけ読み直す)
   let historyRetried = false;
   const halted = (halt: Halt | ClientHalt, extra: { recovery?: { token: string; applied: RecoveryOutcome; notApplied: RecoveryOutcome }; relink?: RelinkPreview } = {}): SyncResult =>
-    ({ status: "halted", halt, pulled, pushed, edited, target, localHash: lastLocal, ...(relinkBackup ? { relinkBackup } : {}), ...extra });
+    ({ status: "halted", halt, pulled, pushed, edited, target, localHash: lastLocal, ...(relinkBackup ? { relinkBackup } : {}), ...extra, ...generation() });
+  // (ロックの中で最後に読んだ・書いた状態の世代番号。結果に付ける)
+  const generation = (): { stateGeneration?: number } => (stored?.generation === undefined ? {} : { stateGeneration: stored.generation });
   // 同じファイルを扱う同期は、サーバーが違っても 1 つだけ (下の「別のサーバーに結び付いていないか」の確認と、結び付けの作成の間に割り込ませない)
   const unlockFile = lockFileSync(file);
   if (!unlockFile) return { status: "busy", what: "sync" };
   let unlock: (() => void) | null = null;
+  // 読んだ・書いた同期の状態 (ロックの中で更新する)
+  let stored: StoredState | null = null;
   try {
     // 1 つのファイルの結び付けは 1 つだけ: 別のサーバーに結び付いているファイルを、新しいサーバーへ結び付けない
     // (2 つのサーバーへ同時に結び付けると、片方から受け取った変更をもう片方へ送ることになる。その扱いは決めていない)
@@ -293,7 +306,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
     const store = new StateStore(bindingDir(file, server));
     unlock = store.lock();
     if (!unlock) return { status: "busy", what: "sync" };
-    let stored = store.read();
+    stored = store.read();
     // 新しい結び付けを作ることになる場合: 状態を読めないフォルダがあると、このファイルがすでに結び付いているかを確かめられない。
     // 確かめられないまま、別の結び付けを作らない (読めるものだけを見て「未接続」とみなさない)
     if (!stored && known.unreadable.length > 0) return halted({ reason: "unreadable-bindings", dirs: known.unreadable });
@@ -379,7 +392,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       }
       switch (decision.kind) {
         case "noop":
-          return { status: "synced", pulled, pushed, edited, revision: state.base?.revision ?? null, localHash: local?.hash ?? null, ...(relinkBackup ? { relinkBackup } : {}) };
+          return { status: "synced", pulled, pushed, edited, revision: state.base?.revision ?? null, localHash: local?.hash ?? null, ...(relinkBackup ? { relinkBackup } : {}), ...generation() };
         case "relink": {
           // ---- 結び直しを始める: 控えを取る → 状態を 1 回で置き換える。その先 (受け取り・送り) は、次の判断が、記録に従って決める ----
           // 控えに入れるのは、判断に使った中身そのもの (読み直さない。読み直すと、人が見比べたものと違う中身を「控え」にしてしまう)
@@ -434,7 +447,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
             commitFile(file, decision.write.text, `"${decision.expectedLocal}"`);
             edited++;
           } catch (e) {
-            if (e instanceof FileBusy) return { status: "busy", what: "file" };
+            if (e instanceof FileBusy) return { status: "busy", what: "file", ...generation() };
             if (!(e instanceof FileConflict)) throw e;
           }
           break;
@@ -464,7 +477,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
           } catch (e) {
             // 「行われなかった」と確定できる失敗 (手元が先に変わった / 他が書き込み中): 操作を片付けて、やり直すか、今回は譲る
             if (e instanceof FileConflict) { save(pullNotWritten(stored!, decision.pending), notWritten(pullBinding)); break; }
-            if (e instanceof FileBusy) { save(pullNotWritten(stored!, decision.pending), notWritten(pullBinding)); return { status: "busy", what: "file" }; }
+            if (e instanceof FileBusy) { save(pullNotWritten(stored!, decision.pending), notWritten(pullBinding)); return { status: "busy", what: "file", ...generation() }; }
             throw e; // それ以外は、書けたかどうか分からない。操作を残したまま (次の実行で、人に確かめる)
           }
           await options.onStep?.("pull:written");
@@ -519,7 +532,11 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       }
     }
     // 他の端末や手元の書き手と競り負け続けた。今回は譲る (次の実行で続きから)
-    return { status: "busy", what: "sync" };
+    return { status: "busy", what: "sync", ...generation() };
+  } catch (e) {
+    // 例外で終わるときも、ロックの中で最後に確かめた状態の世代番号を、例外に添える (常時の同期が、自分が処理した状態を覚えるため)
+    if (e instanceof Error) (e as Error & { stateGeneration?: number }).stateGeneration = stored?.generation;
+    throw e;
   } finally {
     unlock?.();
     unlockFile();

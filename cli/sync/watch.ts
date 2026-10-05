@@ -301,13 +301,16 @@ export class SyncWatcher {
   private async syncOne(w: Watched, at: number): Promise<boolean> {
     const file = w.binding.file;
     let result: SyncResult;
-    // 自分の同期が進めた状態の世代番号を覚え直す (自分で進めた分を、「別の実行が進めた」と数えて、同期を繰り返さないように)
-    const remember = () => { try { w.generation = new StateStore(bindingDir(file, this.options.server)).read()?.generation ?? w.generation; } catch { /* 読めない状態は、次の tick の一覧の取り直しが扱う */ } };
     try {
       result = await syncOnce({ file, server: this.options.server, token: this.options.token, fetch: this.options.fetch, now: () => new Date(this.wall()) });
-      remember();
+      // 自分の同期が処理した状態の世代番号を覚え直す (自分で進めた分を「別の実行が進めた」と数えて、同期を繰り返さないように)。
+      // 値は、同期がロックの中で確かめたもの (結果に入っている)。ロックを外した後に読み直すと、その隙に別の実行が進めた分を「自分が処理した」と
+      // 取り違えて、その実行の続き (結び直しなど) を見落とす (R33-01)
+      if (result.stateGeneration !== undefined) w.generation = result.stateGeneration;
     } catch (e) {
-      remember();
+      // (例外で終わった同期も、ロックの中で最後に確かめた世代番号を例外に添えてくる。無ければ変えず、次の一覧の取り直しに任せる)
+      const generation = (e as { stateGeneration?: number }).stateGeneration;
+      if (generation !== undefined) w.generation = generation;
       if (e instanceof SyncNetworkError) { this.fail(at, e); return false; }
       // 状態が読めないなど: この計画は止めておき、ほかの計画は続ける
       w.halted = { hash: contentHash(file), head: w.head }; w.remoteAhead = false; w.firstChangeAt = w.lastChangeAt = null;
