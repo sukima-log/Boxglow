@@ -3,7 +3,7 @@
  * 対象のボックス・その親 (上の階層すべて)・入力の供給元 (上流) のボックスについて、説明・判断 (確認済みの回答も含む)・
  * 入出力の条件・成果物・引き継ぎメモを集める。CLI の context と、確認トークン (cli/context.ts) の元になる
  */
-import { ancestorsOf } from "./graph";
+import { ancestorsOf, incomingEdges, isInputReady, portsOf } from "./graph";
 import { freshnessText, descriptionReminder } from "./workflow";
 
 import { t } from "../i18n/core";
@@ -77,5 +77,123 @@ export function agentContext(p: Project, blockId: string) {
   , connections: Object.values(p.edges)
       .filter((e) => ids.has(p.ports[e.to.portId]?.blockId) && ids.has(p.ports[e.from.portId]?.blockId))
       .sort((a, b) => a.id.localeCompare(b.id))
+  };
+}
+
+/**
+ * 短いコンテキスト (最初に読む用): 対象のボックスの情報は削らず、親・上流は「題名・状態・有効な判断・対象につながる出力」に絞る。
+ * 計画が大きくなっても、最初に読む量が、対象のボックスの大きさで決まるようにする (全部の出力は agentContext のまま残す)。
+ * 線引き (docs/AGENTS_SNIPPET.md にも書く):
+ *   必ず出す : 対象の範囲と親の範囲、対象の説明・状態・入出力・成果物・引き継ぎ、取得範囲 (対象・親・上流) にある有効な判断 (回答済み) と未回答の質問、
+ *             対象の入力ごとの供給元 (どのボックスのどの出力か・その成果物の参照・用意できているか)
+ *   省く     : 親・上流の説明 (範囲 scope を設定済みのボックスだけ。未設定なら、説明に制約が書かれているかもしれないので省かない)、
+ *             親・上流の入出力の一覧・引き継ぎ・成果物、判断の履歴 (前の回答) と選択肢、対象につながらない線
+ *   省いたものは、種類ごとの件数と、取り方を omitted に入れる (文字数や段数では切らない)
+ * Input : p = 計画, blockId = ボックスの内部 id
+ * Output: 短いコンテキスト (brief: true)。確認トークンは、全部の出力 (agentContext) から作ったものを、呼び出し側が付ける
+ *         (短い表示で省いた部分が変わっても、トークンは変わる。見張る範囲を狭めない)
+ */
+export function briefContext(p: Project, blockId: string) {
+  const full = agentContext(p, blockId);
+  const byId = new Map(full.blocks.map((b) => [b.id, b] as const));
+  const target = byId.get(blockId)!;
+  const nameOf = (id: string) => { const b = p.blocks[id]; return b ? { key: b.key, title: b.title } : { key: undefined, title: id }; };
+  /** 判断を、有効な回答 (回答済み) と、未回答の質問に分ける。履歴 (前の回答) は数だけ数える */
+  const split = (decisions: typeof target.decisions) => ({
+    answered: decisions.filter((d) => d.answer !== undefined).map((d) => ({ id: d.id, question: d.question, answer: d.answer }))
+  , open: decisions.filter((d) => d.answer === undefined).map((d) => ({ id: d.id, question: d.question, context: d.context, options: d.options }))
+  , history: decisions.reduce((n, d) => n + (d.history?.length ?? 0), 0)
+  });
+  // 対象の入力ごとに、供給元 (つながっている上流の出力) と、用意できているかをまとめる
+  // 対象の入力につながっている出力を持つボックス → その出力の名前 (related の feedsTarget に出す)
+  const feeds = new Map<string, string[]>();
+  // 並びは画面と同じ (portsOf の順)。id 順だと、毎回の並びが作った順と合わない
+  const targetPorts = [...portsOf(p, blockId, "in"), ...portsOf(p, blockId, "out")];
+  const inputs = targetPorts.filter((port) => port.direction === "in").map((port) => {
+    // 供給元をさかのぼる。親の入力 (境界) を通ってくる線は中継なので、その先の、実際に出力を持つボックスまでたどる
+    // (中継の先に線が無ければ、その親の入力そのものが供給元。外から渡された資料が付いていることがある)
+    const sources: { key?: string; title: string; output: string; status?: string; artifacts: Project["ports"][string]["artifacts"]; via?: string }[] = [];
+    const trace = (portId: string, side: "outer" | "inner", seen: Set<string>, via?: string) => {
+      for (const e of incomingEdges(p, { portId, side })) {
+        const from = p.ports[e.from.portId];
+        if (!from || seen.has(from.id)) continue;
+        seen.add(from.id);
+        const owner = p.blocks[from.blockId];
+        const relayed = from.direction === "in" ? incomingEdges(p, { portId: from.id, side: "outer" }) : [];
+        if (relayed.length > 0) { trace(from.id, "outer", seen, owner?.key ?? owner?.title); continue; }
+        // 供給元の出力の名前・成果物の参照・どのボックスの出力か (上流の名前だけでは、読む場所が分からないため)
+        feeds.set(from.blockId, [...(feeds.get(from.blockId) ?? []), from.name]);
+        sources.push({
+          ...nameOf(from.blockId), output: from.name, status: owner?.status
+          // 出力に付いた成果物だけ (ボックス全体の成果物は、そのボックスの context で読む)
+        , artifacts: from.artifacts
+        , ...(via ? { via } : {})
+        });
+      }
+    };
+    trace(port.id, "outer", new Set([port.id]));
+    // 用意できているかは、画面の印・着手の判定 (missingRequiredInputs) と同じ関数で決める
+    const ready = isInputReady(p, port.id);
+    return {
+      name: port.name, description: port.description, required: port.required, artifacts: port.artifacts, sources, ready
+      // 不足: 必須の入力なのに、用意できていない (供給元が未完了・つながっていない・資料が付いていない)
+    , missing: !!port.required && !ready
+    };
+  });
+  const outputs = targetPorts.filter((port) => port.direction === "out").map((port) => ({ name: port.name, description: port.description, artifacts: port.artifacts }));
+  const mine = split(target.decisions);
+  // 親 (上の階層) と、それ以外 (上流) を分けて、絞った形にする
+  const parents = new Set(ancestorsOf(p, blockId).map((b) => b.id));
+  const omitted = { descriptions: 0, ports: 0, decisionHistory: mine.history, decisionOptions: 0, handoffs: 0, artifacts: 0, connections: 0 };
+  const related = full.blocks.filter((b) => b.id !== blockId).map((b) => {
+    const d = split(b.decisions);
+    const hasScope = !!b.scope && Object.values(b.scope).some((v) => typeof v === "string" && v.trim() !== "");
+    // 範囲を設定済みのボックスは、制約が範囲に書かれているとみなして、説明を省く。未設定のボックスは、説明に制約が残っているかもしれないので、省かない
+    const keepDescription = !hasScope && !!b.description;
+    if (hasScope && b.description) omitted.descriptions++;
+    omitted.ports += b.ports.length;
+    omitted.decisionHistory += d.history;
+    omitted.decisionOptions += d.open.filter((o) => o.options.length > 0 || o.context).length;
+    if (b.handoff) omitted.handoffs++;
+    omitted.artifacts += b.artifacts.length + b.ports.reduce((n, port) => n + port.artifacts.length, 0);
+    return {
+      key: b.key, title: b.title, relation: parents.has(b.id) ? "parent" as const : "upstream" as const, status: b.freshness.status
+    , ...(hasScope && !parents.has(b.id) ? { scope: b.scope } : {})   // (親の範囲は workScope に出ている)
+    , ...(keepDescription ? { description: b.description } : {})
+    , ...(feeds.has(b.id) ? { feedsTarget: feeds.get(b.id) } : {})
+      // 取得範囲にある有効な判断は、親・上流のものも全部残す (対象の実装を縛ることがある)。未回答は、質問だけ (材料と選択肢は、そのボックスの context で読む)
+    , ...(d.answered.length ? { decisions: d.answered } : {})
+    , ...(d.open.length ? { openQuestions: d.open.map((o) => ({ id: o.id, question: o.question })) } : {})
+    };
+  });
+  // 対象につながらない線は省く (対象に入る線・対象から出る線は、inputs の sources と outputs で分かる)
+  omitted.connections = full.connections.filter((e) => p.ports[e.to.portId]?.blockId !== blockId && p.ports[e.from.portId]?.blockId !== blockId).length;
+  return {
+    brief: true as const
+  , workScope: full.workScope
+  , focus: full.focus
+  , workflowPolicy: full.workflowPolicy
+  , project: { name: full.project.name }
+  , task: full.task
+  , instructions: full.instructions
+  , target: {
+      id: target.id, key: target.key, title: target.title, description: target.description, status: target.freshness.status
+    , freshness: target.freshness
+      // 対象の判断は削らない: 回答に加えて、材料と選択肢 (選ばなかった候補) も付ける。前の回答 (履歴) だけ省く
+    , decisions: target.decisions.filter((d) => d.answer !== undefined).map((d) => ({ id: d.id, question: d.question, context: d.context, options: d.options, answer: d.answer }))
+    , openQuestions: mine.open
+    , handoff: target.handoff
+    , inputs, outputs
+    , artifacts: target.artifacts
+      // 入力の不足を、先頭で分かるようにまとめる
+    , missingInputs: inputs.filter((i) => i.missing).map((i) => i.name)
+    }
+  , related
+    // 省いたもの (種類ごとの件数) と、取り方。0 件の種類は出さない
+  , omitted: {
+      ...Object.fromEntries(Object.entries(omitted).filter(([, n]) => n > 0))
+    , relatedBlocks: related.length
+    , howToGet: "boxglow context <block> prints everything (same contextToken). For one related box in full: boxglow context <its key>."
+    }
   };
 }

@@ -175,6 +175,7 @@ export const cli: Record<string, string> = {
   // ---- MCP ツールの説明 (mcp.ts) ----
 , "階層の一覧を省く (判断・活動・次の候補は残す)": "Omit the full hierarchy; keep decisions, activity and next actions"
 , "作業の再開用の概要: 引き継ぎメモ・AI 未確認の回答・作業中・次の候補 (回答は確認済みにならない)": "Resume work: recent handoffs, unread human answers, active tasks and next candidates. Does not acknowledge answers."
+, "短い形で読む (対象の情報は全部、親と入力元は題名・状態・有効な判断・対象につながる出力だけ。確認トークンは同じ)": "Read the short form: everything about the target, and for ancestors and upstream boxes only title, status, decisions in effect and the outputs that feed the target. The contextToken is the same."
 , "ボックスのコンテキストを読む: 親と入力元の判断・入出力の条件・引き継ぎメモ。guard 付きの変更に使う contextToken を返す (自分の操作でコンテキストが変わると、その操作の出力に新しい確認トークンが出る)": "Read persistent task context, ancestor and upstream decisions, contracts and handoff notes. Returns contextToken for guarded changes (when your own command changes the context, its output ends with the new context token)."
 , "中断や引き継ぎの前に、分かったこと・次の手順・未解決の点を計画に残す": "Persist findings, next steps and unresolved questions before interruption or handoff."
   // ---- ローカルサーバ (serve.ts) の応答 ----

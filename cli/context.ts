@@ -6,7 +6,7 @@
  * (トークンは「どの版を取得したか」の照合であって、AI が内容を理解したことの証明ではない)
  */
 import { createHash } from "node:crypto";
-import { agentContext } from "../src/model/context";
+import { agentContext, briefContext } from "../src/model/context";
 import { isHumanActor } from "../src/model/graph";
 import type { Artifact, Project } from "../src/model/types";
 // 文言を今の言語 (日本語 / 英語) で出す
@@ -54,6 +54,17 @@ export function contextReceipt(p: Project, id: string) {
   };
   const token = createHash("sha256").update(JSON.stringify(stable(forToken))).digest("hex");
   return { contextToken: token, context };
+}
+
+/**
+ * ボックスの短いコンテキストと、確認トークンを作る (CLI の context --brief / MCP の boxglow_context の brief)
+ * 確認トークンは、全部のコンテキスト (contextReceipt) と同じ値。短い表示で省いた部分が変わっても、トークンは変わる
+ * (短い表示は「見せ方」を変えるだけで、「何が変わったら読み直しを求めるか」は変えない)
+ * Input : p = 計画, id = ボックスの内部 id
+ * Output: { contextToken, context = briefContext の結果 }
+ */
+export function briefReceipt(p: Project, id: string) {
+  return { contextToken: contextReceipt(p, id).contextToken, context: briefContext(p, id) };
 }
 
 /**

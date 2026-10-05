@@ -81,7 +81,7 @@ MCP provides `boxglow_context`, `boxglow_checkpoint`, and `contextToken` on guar
 | `setup-agent [--agent codex\|claude-code\|all]` | Install only the selected agent’s instructions and skill (default: `all`). Claude Code also gets a SessionStart hook and `.mcp.json`. Existing unrelated settings are preserved; malformed settings stop setup. |
 | `mcp [--file path]` | MCP server over stdio: every command above as a tool (`boxglow_status`, `boxglow_add`, `boxglow_split`, `boxglow_start`, `boxglow_done`, `boxglow_ask`, `boxglow_answer`, ... and `boxglow_run` for the rest) |
 | `serve [--port 4174] [--open]` | Local server: the bundled web app at `http://localhost:4174/?serve=1` reading and writing your `boxglow.json` through a small API, with live reload when the CLI or an agent changes the file. Works in any browser (Firefox, Safari) |
-| `context <block>` / `checkpoint <block> --note ... --context-token ...` | Read persistent context with a receipt / record a durable handoff |
+| `context <block> [--brief]` / `checkpoint <block> --note ... --context-token ...` | Read persistent context with a receipt (`--brief`: short form to read first, same token) / record a durable handoff |
 | `guard on\|off` | Enable or disable context checks (setup-agent enables them) |
 | `resume [--json]` | Handoff notes, answers not yet acknowledged and next actions in one overview (read-only) |
 | `status [--brief]` | Markdown summary (`--brief` omits the full tree): pending decisions, who is working where, tree with ids, next candidates |

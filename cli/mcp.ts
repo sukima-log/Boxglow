@@ -66,7 +66,7 @@ export async function startMcp(run: Run): Promise<void> {
   }, async a => {
     const argv = ["policy"]; opt(argv, "start", a.start); opt(argv, "done", a.done); opt(argv, "context-token", a.contextToken); return safe(run, argv);
   });
-  server.registerTool("boxglow_context", { description: t("ボックスのコンテキストを読む: 親と入力元の判断・入出力の条件・引き継ぎメモ。guard 付きの変更に使う contextToken を返す (自分の操作でコンテキストが変わると、その操作の出力に新しい確認トークンが出る)"), inputSchema: { block }, annotations: { readOnlyHint: true } }, async ({ block: b }) => safe(run, ["context", b]));
+  server.registerTool("boxglow_context", { description: t("ボックスのコンテキストを読む: 親と入力元の判断・入出力の条件・引き継ぎメモ。guard 付きの変更に使う contextToken を返す (自分の操作でコンテキストが変わると、その操作の出力に新しい確認トークンが出る)"), inputSchema: { block, brief: z.boolean().optional().describe(t("短い形で読む (対象の情報は全部、親と入力元は題名・状態・有効な判断・対象につながる出力だけ。確認トークンは同じ)")) }, annotations: { readOnlyHint: true } }, async ({ block: b, brief }) => safe(run, ["context", b, ...(brief ? ["--brief"] : [])]));
   server.registerTool("boxglow_checkpoint", { description: t("中断や引き継ぎの前に、分かったこと・次の手順・未解決の点を計画に残す"), inputSchema: { block, note: z.string(), contextToken: z.string().optional() } }, async (a) => { const argv = ["checkpoint", a.block, "--note", a.note]; opt(argv, "context-token", a.contextToken); return safe(run, argv); });
   server.registerTool("boxglow_show", { description: t("ボックスの詳細 (入出力・線・判断・成果物)"), inputSchema: { block }, annotations: { readOnlyHint: true } }, async ({ block: b }) => safe(run, ["show", b]));
   server.registerTool("boxglow_add", {

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { startMcp } from "./mcp";
 import { startServe } from "./serve";
 import { commitFile, describeLock, FileConflict, inspectLock, lockTokenOf, removeLock, revisionOf, sleepSync } from "./file-store";
-import { contextReceipt, isCurrentToken, requireContext } from "./context";
+import { briefReceipt, contextReceipt, isCurrentToken, requireContext } from "./context";
 import { setupAgent } from "./setup-agent";
 import { runSyncCommand, runWatchCommand } from "./sync/command";
 import { runLogin, runLogout, runWhoami } from "./sync/login";
@@ -303,7 +303,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   policy [--start warn|reject] [--done warn|reject]  入力待ちの開始 / 成果物なしの完了。既定 warn。人の操作は拒否しない
                                                  reject の start も --reason があれば通す。done は既存の出力成果物も数える。set --status white にも適用
                                                  guard 有効時の scope 設定・focus 設定・policy 設定は --context-token が必要
-  context <block>                                ボックスのコンテキスト (親と入力元の説明・判断・入出力の条件・引き継ぎ) と確認トークン contextToken を JSON で出す
+  context <block> [--brief]                      ボックスのコンテキスト (親と入力元の説明・判断・入出力の条件・引き継ぎ) と確認トークン contextToken を JSON で出す
+                                                 --brief = 短い形: 対象の情報は全部、親・上流は題名・状態・有効な判断・対象につながる出力だけ。省いたものの件数と取り方を出す (確認トークンは同じ)
   checkpoint <block> --note <メモ>               引き継ぎメモ (分かったこと・次の手順・未解決の点) を計画に残す。中断や引き継ぎの前に使う
   guard on|off                                   確認トークンの要求を有効 / 無効にする (setup-agent は有効にする)。有効な間、AI の start / done / set / split / artifact / ack /
                                                  blocked / review / leave / checkpoint は --context-token <context で得た contextToken> が要る (読んだ後に指示・回答・引き継ぎが変わっていたら拒否)。
@@ -387,7 +388,8 @@ Usage (npx boxglow <command> ...):
   policy [--start warn|reject] [--done warn|reject]  Missing-input starts / artifact-free completion; default warn. Human actions are never rejected
                                                  A start reason overrides reject. Existing output artifacts count for done; set --status white also checks policy
                                                  With guard on, scope/focus/policy writes require --context-token
-  context <block>                                Print a box's context (descriptions, decisions, input/output contracts and handoff notes of its parents and input providers) and its contextToken as JSON
+  context <block> [--brief]                      Print a box's context (descriptions, decisions, input/output contracts and handoff notes of its parents and input providers) and its contextToken as JSON
+                                                 --brief = short form: everything about the box itself; parents and input providers reduced to title, status, answered decisions and the outputs feeding it; says what was left out (same contextToken)
   checkpoint <block> --note <note>               Save a handoff note (findings, next steps, unresolved questions) in the plan. Use it before an interruption or a handoff
   guard on|off                                   Turn the context-token requirement on / off (setup-agent turns it on). While on, an AI's start / done / set / split / artifact / ack /
                                                  blocked / review / leave / checkpoint need --context-token <contextToken from context> (rejected if instructions, answers or handoff notes changed after reading).
@@ -629,7 +631,8 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     }
     case "context": {
       // ボックスのコンテキストと確認トークンを JSON で出す (読むだけ)
-      out(JSON.stringify(contextReceipt(p, mustFind(p, rest[0]).id), null, 2));
+      // --brief: 短いコンテキスト (対象の情報は全部、親・上流は絞る)。確認トークンは、全部の出力と同じ
+      out(JSON.stringify((options.brief ? briefReceipt : contextReceipt)(p, mustFind(p, rest[0]).id), null, 2));
       return;
     }
     case "guard": {

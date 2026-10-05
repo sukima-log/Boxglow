@@ -1,0 +1,140 @@
+/**
+ * 短いコンテキスト (briefContext) の検査
+ * 対象の情報は削らない・親と上流の有効な判断は残す・省いたものは件数で示す・確認トークンは全部の出力と同じ、を確かめる
+ */
+import { describe, expect, it } from "vitest";
+import { addBlock, addPort, answerDecision, askDecision, connect, createArtifact, createProject, defaultTaskParent, editDecisionAnswer, portsOf, updateBlock } from "./graph";
+import { agentContext, briefContext } from "./context";
+import { briefReceipt, contextReceipt } from "../../cli/context";
+import type { Project } from "./types";
+
+/**
+ * 検査用の計画を作る
+ * Input : なし
+ * Output: { p = 計画, parent / upstream / target / child = 各ボックスの id }
+ *   親 (範囲あり・説明あり・回答済みの判断あり) の中に、上流 (範囲なし・説明あり・出力に成果物) → 対象 (入力 2 つ) を置く
+ */
+function fixture() {
+  let p: Project = createProject("Brief");
+  const add = (parentId: string, title: string) => { const r = addBlock(p, { parentId, title, outputName: `${title}の出力` }); p = r.project; return r.blockId; };
+  const parent = add(defaultTaskParent(p), "親");
+  const upstream = add(parent, "上流");
+  const target = add(parent, "対象");
+  p = updateBlock(p, parent, { description: "親の長い説明", scope: { goal: "親の目的", nonGoals: "公開しない" } });
+  p = updateBlock(p, upstream, { description: "上流の説明 (制約: 形式は JSON)" });
+  p = updateBlock(p, target, { description: "対象の説明", scope: { goal: "対象の目的", acceptance: "検査が通る" } });
+  // 判断: 親に回答済み (回答を 1 度直した = 履歴あり)、上流に未回答 (材料と選択肢つき)、対象に回答済みと未回答
+  const ask = (id: string, question: string, options: string[] = [], context = "") => { const r = askDecision(p, id, "codex", question, options, context); p = r.project; return r.decisionId!; };
+  const d1 = ask(parent, "保存先は?", ["A", "B"]);
+  p = answerDecision(p, parent, d1, "A", "human");
+  p = editDecisionAnswer(p, parent, d1, "B", "human");
+  // (前の回答の記録。短い表示では省かれ、件数だけ出る)
+  p.blocks[parent].decisions[0].history = [{ answer: "A", by: "human", at: "2026-10-04T00:00:00.000Z" }];
+  ask(upstream, "形式は?", ["JSON", "YAML"], "上流の判断の材料");
+  const d3 = ask(target, "名前は?");
+  p = answerDecision(p, target, d3, "brief", "human");
+  ask(target, "既定にする?", ["する", "しない"], "対象の判断の材料");
+  // 上流の出力 → 対象 (線でつなぐ)。上流の出力に成果物を付ける
+  const out = portsOf(p, upstream, "out")[0];
+  out.artifacts = [createArtifact("仕様", "docs/spec.md")];
+  const wired = addPort(p, { blockId: target, direction: "in", name: "上流の出力" }); p = wired.project;
+  const c = connect(p, { portId: out.id, side: "outer" }, { portId: wired.portId, side: "outer" }); p = c.project;
+  expect(c.error).toBeUndefined();
+  // つながっていない必須の入力 (不足として出るはず)
+  const lonely = addPort(p, { blockId: target, direction: "in", name: "未接続の入力" }); p = lonely.project;
+  p.blocks[target].artifacts = [createArtifact("対象の資料", "docs/target.md")];
+  p.handoffs = { [target]: { note: "次: 検査を足す", actor: "codex", at: "2026-10-05T00:00:00.000Z" }, [upstream]: { note: "上流の引き継ぎ", actor: "codex", at: "2026-10-05T00:00:00.000Z" } };
+  return { p, parent, upstream, target };
+}
+
+describe("短いコンテキスト", () => {
+  it("確認トークンは全部の出力と同じ (省いた部分が変わっても変わる)", () => {
+    const { p, upstream, target } = fixture();
+    expect(briefReceipt(p, target).contextToken).toBe(contextReceipt(p, target).contextToken);
+    // 短い表示では省かれる「上流の引き継ぎ」を変えても、トークンは変わる
+    const q = structuredClone(p); q.handoffs![upstream].note = "上流の引き継ぎを更新";
+    expect(JSON.stringify(briefContext(q, target))).toBe(JSON.stringify(briefContext(p, target)));
+    expect(briefReceipt(q, target).contextToken).not.toBe(briefReceipt(p, target).contextToken);
+  });
+
+  it("対象の情報は削らない: 説明・範囲・判断・引き継ぎ・入出力・成果物", () => {
+    const { p, target } = fixture();
+    const c = briefContext(p, target);
+    expect(c.brief).toBe(true);
+    expect(c.workScope.target).toEqual({ goal: "対象の目的", acceptance: "検査が通る" });
+    expect(c.workScope.parents.map((x) => x.scope?.nonGoals)).toContain("公開しない");
+    expect(c.target.description).toBe("対象の説明");
+    expect(c.target.decisions).toEqual([expect.objectContaining({ question: "名前は?", answer: "brief" })]);
+    // 対象の未回答の質問は、材料と選択肢も付ける
+    expect(c.target.openQuestions).toEqual([expect.objectContaining({ question: "既定にする?", options: ["する", "しない"], context: "対象の判断の材料" })]);
+    expect(c.target.handoff?.note).toBe("次: 検査を足す");
+    expect(c.target.artifacts.map((a) => a.url)).toEqual(["docs/target.md"]);
+    expect(c.target.outputs.map((o) => o.name)).toEqual(["対象の出力"]);
+  });
+
+  it("入力ごとに、供給元の出力・成果物・用意できているかを示し、不足を先頭にまとめる", () => {
+    const { p, upstream, target } = fixture();
+    const c = briefContext(p, target);
+    const wired = c.target.inputs.find((i) => i.name === "上流の出力")!;
+    expect(wired.sources).toEqual([expect.objectContaining({ title: "上流", output: "上流の出力" })]);
+    expect(wired.sources[0].artifacts.map((a) => a.url)).toEqual(["docs/spec.md"]);
+    // 出力に成果物が付いているので、用意できている
+    expect(wired.ready).toBe(true);
+    expect(c.target.missingInputs).toEqual(["未接続の入力"]);
+    // 成果物を外すと、上流が未完了なので不足になる。完了にすると用意できる
+    const q = structuredClone(p); portsOf(q, upstream, "out")[0].artifacts = [];
+    expect(briefContext(q, target).target.missingInputs).toEqual(["上流の出力", "未接続の入力"]);
+    q.blocks[upstream].status = "white";
+    expect(briefContext(q, target).target.missingInputs).toEqual(["未接続の入力"]);
+    // 任意の入力は、不足に数えない
+    const lonely = portsOf(q, target, "in").find((x) => x.name === "未接続の入力")!; lonely.required = false;
+    expect(briefContext(q, target).target.missingInputs).toEqual([]);
+  });
+
+  it("親の入力 (境界) を通る線は、その先の実際の供給元までたどる", () => {
+    const { p, parent, upstream, target } = fixture();
+    let q = structuredClone(p);
+    // 親の外に供給元を作り、親の入力 → 中の子の入力へ中継する
+    const outside = addBlock(q, { parentId: q.blocks[parent].parentId!, title: "外の供給元", outputName: "外の資料" }); q = outside.project;
+    const boundary = addPort(q, { blockId: parent, direction: "in", name: "外の資料" }); q = boundary.project;
+    const inner = addPort(q, { blockId: target, direction: "in", name: "外の資料" }); q = inner.project;
+    const a = connect(q, { portId: portsOf(q, outside.blockId, "out")[0].id, side: "outer" }, { portId: boundary.portId, side: "outer" }); q = a.project;
+    const b = connect(q, { portId: boundary.portId, side: "inner" }, { portId: inner.portId, side: "outer" }); q = b.project;
+    expect([a.error, b.error]).toEqual([undefined, undefined]);
+    const c = briefContext(q, target);
+    const input = c.target.inputs.find((i) => i.name === "外の資料")!;
+    expect(input.sources).toEqual([expect.objectContaining({ title: "外の供給元", output: "外の資料", via: expect.any(String) })]);
+    expect(c.related.find((r) => r.title === "外の供給元")?.feedsTarget).toEqual(["外の資料"]);
+    expect(c.related.find((r) => r.title === "上流")?.feedsTarget).toEqual(["上流の出力"]);
+    void upstream;
+  });
+
+  it("親・上流は絞る: 有効な判断は残し、説明は範囲が未設定のボックスだけ残す。省いた件数を示す", () => {
+    const { p, target } = fixture();
+    const c = briefContext(p, target);
+    const full = agentContext(p, target);
+    const parent = c.related.find((r) => r.title === "親")!;
+    const upstream = c.related.find((r) => r.title === "上流")!;
+    expect(parent.relation).toBe("parent");
+    expect(upstream.relation).toBe("upstream");
+    // 親の判断は、今の回答だけ (前の回答 = 履歴は省く)
+    expect(parent.decisions).toEqual([expect.objectContaining({ question: "保存先は?", answer: "B" })]);
+    expect(JSON.stringify(parent)).not.toContain("history");
+    // 範囲を設定済みの親は、説明を省く。未設定の上流は、説明に制約があるかもしれないので残す
+    expect("description" in parent).toBe(false);
+    expect(upstream.description).toBe("上流の説明 (制約: 形式は JSON)");
+    // 上流の未回答は、質問だけ (材料と選択肢は省く)
+    expect(upstream.openQuestions).toEqual([expect.objectContaining({ question: "形式は?" })]);
+    expect(JSON.stringify(upstream)).not.toContain("上流の判断の材料");
+    expect(JSON.stringify(c)).not.toContain("上流の引き継ぎ");
+    // 省いたもの: 種類ごとの件数 (0 件の種類は出さない) と、取り方
+    expect(c.omitted).toEqual(expect.objectContaining({ descriptions: 1, decisionHistory: 1, decisionOptions: 1, handoffs: 1, relatedBlocks: full.blocks.length - 1 }));
+    expect(c.omitted.howToGet).toContain("boxglow context");
+    expect(JSON.stringify(c).length).toBeLessThan(JSON.stringify(full).length);
+  });
+
+  it("無いボックスは、全部の出力と同じく断る", () => {
+    const { p } = fixture();
+    expect(() => briefContext(p, "missing")).toThrow();
+  });
+});

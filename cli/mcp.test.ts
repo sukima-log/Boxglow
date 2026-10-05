@@ -42,6 +42,9 @@ it("reports failed validation as an MCP error, recovers, and honors the server a
     const missing = await client.callTool({name:"boxglow_start",arguments:{block:"Task"}}); expect(missing.isError).toBe(true);
     const context = await client.callTool({name:"boxglow_context",arguments:{block:"Task"}});
     const receipt = JSON.parse((context.content as {text:string}[])[0].text);
+    // 短い形 (brief) でも、同じ確認トークンが返る
+    const brief = JSON.parse(((await client.callTool({name:"boxglow_context",arguments:{block:"Task",brief:true}})).content as {text:string}[])[0].text);
+    expect(brief.context.brief).toBe(true); expect(brief.contextToken).toBe(receipt.contextToken);
     const started = await client.callTool({name:"boxglow_start",arguments:{block:"Task",contextToken:receipt.contextToken}}); expect(started.isError).not.toBe(true);
     const checkpoint = await client.callTool({name:"boxglow_checkpoint",arguments:{block:"Task",note:"Resume from this note",contextToken:receipt.contextToken}}); expect(checkpoint.isError).not.toBe(true);
     const stale = await client.callTool({name:"boxglow_set",arguments:{block:"Task",title:"Must not apply",contextToken:receipt.contextToken}}); expect(stale.isError).toBe(true);
