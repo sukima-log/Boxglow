@@ -56,11 +56,13 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.context().close();
 
     // VS Code の中: 拡張からファイルが届かないとき (Windows の窓で WSL のファイルを開き、拡張が読めない場合など)、
-    // 黙って空の画面にせず、Home に「届いていない・一覧はファイルと別のコピー」と出す
+    // 黙って空の画面にせず、「届いていない」と出す。VS Code の中では、ブラウザ向けの案内 (サンプル・ブラウザ内の計画の一覧・serve) は出さない
+    // (その一覧の計画は、ファイルとは別の、VS Code の中だけのコピーで、開いても boxglow.json には保存されないため)
     const lost=await open(browser,{vscode:true});
-    check('VS Code: Home の一覧がファイルとは別のコピーだと明示する',await lost.page.getByText('VS Code の中では、この一覧は VS Code 内のコピーです',{exact:false}).isVisible());
-    await lost.page.waitForFunction(()=>!!window.boxglow.store.getState().hostNotice,null,{timeout:8000});
-    check('VS Code: ファイルが届かないときは、その旨を Home に出す',await lost.page.getByText('VS Code からファイルの中身を受け取れていません',{exact:false}).isVisible());
+    const homeText=await lost.page.locator('.home-dialog').innerText();
+    check('VS Code: ブラウザ向けの案内と、ブラウザ内の計画の一覧を出さない',!/ブラウザ|サンプルを試す|serve|Import JSON/.test(homeText),homeText.slice(0,160));
+    await lost.page.waitForFunction(()=>window.boxglow.store.getState().vscodeFile?.state==='timeout',null,{timeout:8000});
+    check('VS Code: ファイルが届かないときは、その旨を Home に出す',await lost.page.getByText('VS Code から、ファイルの中身を受け取れていません',{exact:false}).isVisible());
     // 拡張がファイルを直接読み書きできない窓: 計画は表示し、閲覧専用にして理由を帯に出す (保存の要求は送らない)
     const sample=fs.readFileSync(path.join(ROOT,'examples/notes-app/boxglow.json'),'utf8');
     const reason='この窓からは保存できません (閲覧専用)。確認用の理由';

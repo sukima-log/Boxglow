@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- VS Code extension 0.4.1: an empty `boxglow.json` asks for a plan name and creates the plan in that file; the start page inside VS Code shows only what concerns the open file (no browser-only guidance, no Home button), and explains an unreadable file or missing content without cutting the text off.
 - Wires that reach an output node (the Outputs node of a tab, and a parent's output) now end in an arrowhead like the wires into inputs.
 - Reload button in the top bar (next to the save state): rereads the plan right away instead of waiting for the automatic update. Always shown: a plan connected to a file (`boxglow serve`, the VS Code extension, a directly opened local file) rereads the file, a plan kept in the browser rereads the browser's storage (picks up a change from another tab). Automatic updates are unchanged. With unsaved edits, the reread content is kept as a conflict, never written over them.
 - The VS Code extension (0.4.0) is on the Visual Studio Marketplace: https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode. The README now points to it.

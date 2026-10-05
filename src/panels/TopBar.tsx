@@ -133,13 +133,14 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
     <header className="topbar">
       <div className="topbar-identity">
       <button className="btn btn-ghost btn-sm" onClick={onToggleDrawer} title={t("階層 / 絞り込み / メンバー / 部品")}>☰</button>
-      <button className="btn btn-ghost btn-sm" onClick={closeProject} title={t("Home (プロジェクト一覧へ)")} aria-label="Home">
+      {/* VS Code の中では、Home へ戻るボタンを出さない: 開いているのは 1 つのファイルで、戻る先の一覧 (ブラウザ内の計画) は、ファイルとは別のコピーのため */}
+      {source !== "vscode" && <button className="btn btn-ghost btn-sm" onClick={closeProject} title={t("Home (プロジェクト一覧へ)")} aria-label="Home">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <path d="M3 11.5 12 4l9 7.5" />
           <path d="M5.5 10.5V20h13v-9.5" />
           <path d="M10 20v-5h4v5" />
         </svg>
-      </button>
+      </button>}
       <button className="project-name" onClick={() => select({ project: true })} title={project.name}>{project.name}</button>
       <span className={`save-chip ${saveState === "unsaved" ? "unsaved" : ""}`} title={saveTitle}>
         {!ephemeral && <span className="save-chip__file">{fileName ?? t("ブラウザ内")}</span>}

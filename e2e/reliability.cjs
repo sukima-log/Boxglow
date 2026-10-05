@@ -113,6 +113,58 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
       check('Reload: picks up a change saved from another tab', (await page.evaluate(()=>window.boxglow.store.getState().project.description))==='Edited in another tab');
       await page.context().close();
     }
+    // ---- VS Code の中: 空のファイル・読めないファイル・届かない場合の案内 ----
+    {
+      // 空のファイル: 名前を付けると、そのファイルに計画を作る (ブラウザ向けの案内は出ない)
+      const {page} = await open(browser,{vscode:true,lang:'en'});
+      await page.evaluate(() => window.postMessage({type:'load',text:'\n',version:1,name:'boxglow.json'},'*'));
+      await page.getByRole('heading',{name:'This file is still empty'}).waitFor();
+      const body = await page.locator('.home-dialog').innerText();
+      check('VS Code empty file: asks for a name for this file', body.includes('boxglow.json') && await page.getByPlaceholder('New project name').isVisible());
+      check('VS Code: no browser-only guidance (sample, browser plans, serve)', !/browser|Try the sample|serve|Import JSON/i.test(body), body.slice(0,200));
+      check('VS Code empty file: Create is disabled until a name is given', await page.getByRole('button',{name:'Create',exact:true}).isDisabled());
+      await page.getByPlaceholder('New project name').fill('My new plan');
+      await page.getByRole('button',{name:'Create',exact:true}).click();
+      await page.waitForFunction(() => window.__posted.some(m=>m.type==='save'));
+      const save = await page.evaluate(() => window.__posted.find(m=>m.type==='save'));
+      const st = () => page.evaluate(()=>{const s=window.boxglow.store.getState();return {source:s.source,save:s.saveState,name:s.project&&s.project.name,file:s.fileName,edit:s.editMode};});
+      check('VS Code empty file: the new plan is saved to the file (based on the empty content)', save.baseText==='\n' && save.version===1 && JSON.parse(save.text).name==='My new plan');
+      check('VS Code empty file: not Saved until the host acknowledges', (await st()).save==='saving' && (await st()).source==='vscode');
+      await page.evaluate(m=>window.postMessage(m,'*'),{type:'saved',requestId:save.requestId,version:2});
+      await page.waitForFunction(()=>window.boxglow.store.getState().saveState==='saved');
+      const done = await st();
+      check('VS Code empty file: opens the plan connected to the file', done.source==='vscode' && done.name==='My new plan' && done.file==='boxglow.json' && done.edit===true);
+      check('VS Code: the save chip names the file, not the browser', (await page.locator('.save-chip').innerText()).includes('boxglow.json'));
+      check('VS Code: no Home button (the editor is bound to one file)', (await page.getByRole('button',{name:'Home',exact:true}).count())===0);
+      await page.context().close();
+    }
+    {
+      // 計画として読めない中身: 理由を出す。後から正しい中身が届いたら、開く
+      const {page} = await open(browser,{vscode:true,lang:'en'});
+      await page.evaluate(() => window.postMessage({type:'load',text:'{ "not": "a plan"',version:1,name:'boxglow.json'},'*'));
+      await page.getByRole('heading',{name:'This file cannot be read as a Boxglow plan'}).waitFor();
+      const note = page.locator('.home-vscode__note');
+      const box = await note.evaluate(e=>({clipped:e.scrollWidth>e.clientWidth+1||e.scrollHeight>e.clientHeight+1,inside:e.getBoundingClientRect().right<=innerWidth}));
+      check('VS Code invalid file: the reason is fully visible (not clipped)', (await note.isVisible()) && !box.clipped && box.inside);
+      check('VS Code invalid file: no name input, no browser guidance', (await page.getByPlaceholder('New project name').count())===0 && !/Try the sample|Import JSON/.test(await page.locator('.home-dialog').innerText()));
+      await page.evaluate(text => window.postMessage({type:'update',text,version:2,name:'boxglow.json'},'*'),original);
+      await page.waitForFunction(() => window.boxglow.store.getState().source==='vscode');
+      check('VS Code invalid file: opens once valid content arrives', true);
+      await page.context().close();
+    }
+    {
+      // 拡張から何も届かない: 4 秒後に、その旨を出す (見切れない)
+      const {page} = await open(browser,{vscode:true,lang:'en'});
+      check('VS Code: shows loading while waiting for the host', (await page.locator('.home-dialog').innerText()).includes('Loading the file'));
+      await page.getByRole('heading',{name:'The file content has not arrived from VS Code'}).waitFor({timeout:8000});
+      const fits = await page.locator('.home-vscode').evaluate(e=>[...e.querySelectorAll('h2,p')].every(x=>x.scrollWidth<=x.clientWidth+1&&x.getBoundingClientRect().right<=innerWidth));
+      check('VS Code timeout: the message is fully visible', fits);
+      const before = await page.evaluate(()=>window.__posted.filter(m=>m.type==='ready').length);
+      await page.getByRole('button',{name:'Load again',exact:true}).click();
+      await page.waitForFunction(n=>window.__posted.filter(m=>m.type==='ready').length>n,before);
+      check('VS Code timeout: Load again asks the host again', true);
+      await page.context().close();
+    }
   } finally { await browser.close(); }
   const {passed,failed}=result();console.log(`${passed}/${passed+failed} passed`);process.exitCode=failed?1:0;
 })().catch(e=>{console.error(e);process.exitCode=1;});

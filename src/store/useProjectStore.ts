@@ -75,6 +75,14 @@ interface State {
   readonlyReason: string | null;
   /** VS Code の中で、拡張からファイルの中身をまだ受け取れていないときの案内 (Home 画面に出す)。受け取れたら null */
   hostNotice: string | null;
+  /**
+   * VS Code の中で、まだ計画を表示できていないときの、ファイルの状態 (Home の画面が、これに合わせた案内を出す)。計画を表示できたら null
+   *   waiting = 拡張からの中身を待っている, empty = ファイルが空 (名前を付けて、このファイルに計画を作れる),
+   *   invalid = 中身はあるが、計画として読めない (error = 理由), timeout = 拡張から中身が届かない
+   */
+  vscodeFile: { state: "waiting" | "empty" | "invalid" | "timeout"; name: string; error?: string } | null;
+  /** VS Code の中: 空のファイルに、名前を付けて計画を作る (作った計画は、そのファイルに保存される) */
+  createInVsCode: (name: string) => void;
   conflict: { text: string; revision: string; paths: string[] } | null;
   previewConflict: () => MergeResult | null;
   resolveConflict: (choice: "merge" | "remote", choices?: ConflictChoices, revision?: string) => boolean;
@@ -184,6 +192,8 @@ let refreshExternal: (() => Promise<void>) | null = null;
 let reloadNow: (() => Promise<void>) | null = null;
 /** VS Code の中: 読み直しを頼んだ後、拡張から中身が届くのを待っている処理 (届いたら呼ぶ) */
 let vscodeReloadWaiter: (() => void) | null = null;
+/** VS Code の中: 拡張から届いた「空のファイル」の中身と版 (名前を付けて計画を作るときの、保存の基準にする) */
+let vscodeEmpty: { text: string; version: number; name: string } | null = null;
 let messageHandler: ((ev: MessageEvent) => void) | null = null;
 const pendingSaves = new Map<string, { resolve: (version: number) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
 function saveToVsCode(text: string): Promise<number> {
@@ -267,7 +277,7 @@ export const useProjectStore = create<State>((set, get) => {
   };
   const canLeave = () => !["unsaved", "saving"].includes(get().saveState) || confirm(t("未保存の編集があります。必要なら先に JSON を書き出してください。編集を破棄して移動しますか？"));
   const stopWatching = () => {
-    epoch++; inFlight = false; inFlightText = ""; refreshExternal = null; reloadNow = null; vscodeReloadWaiter = null;
+    epoch++; inFlight = false; inFlightText = ""; refreshExternal = null; reloadNow = null; vscodeReloadWaiter = null; vscodeEmpty = null;
     if (saveTimer) clearTimeout(saveTimer); saveTimer = null;
     if (watchTimer) clearInterval(watchTimer); watchTimer = null; fileHandle = null;
     serveEvents?.close(); serveEvents = null;
@@ -326,6 +336,17 @@ export const useProjectStore = create<State>((set, get) => {
   , peerVersion: null
   , readonlyReason: null
   , hostNotice: null
+  , vscodeFile: null
+  , createInVsCode: (name) => {
+      // 拡張から受け取った「空のファイル」の中身と版を基準にして、新しい計画を、そのファイルへ保存する
+      const pending = vscodeEmpty;
+      if (!pending || get().vscodeFile?.state !== "empty" || get().readonly) return;
+      const p = createProject(name || t("無題のプロジェクト"));
+      baseText = pending.text; vscodeVersion = pending.version; vscodeEmpty = null;
+      set({ project: p, ephemeral: false, source: "vscode", fileName: pending.name, vscodeFile: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "unsaved", meId: loadMe(p), editMode: true });
+      // すぐに保存する (保存できるまでは Unsaved のまま。失敗したら、いつもの保存の失敗の帯が出る)
+      void persist();
+    }
   , saveError: null
   , conflict: null
   , previewConflict: () => {
@@ -629,8 +650,20 @@ export const useProjectStore = create<State>((set, get) => {
           const readonlyReason = typeof msg.readonlyReason === "string" ? msg.readonlyReason : null;
           set({ readonlyReason, readonly: readonlyReason !== null, hostNotice: null });
           if (get().source !== "vscode") {
-            const p = fromJSON(msg.text); baseText = msg.text; vscodeVersion = msg.version ?? 0;
-            set({ project: p, ephemeral: false, source: "vscode", fileName: msg.name ?? "boxglow.json", past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+            const fileName = typeof msg.name === "string" ? msg.name : "boxglow.json";
+            // 空のファイル: 読めないエラーにせず、「名前を付けて、このファイルに計画を作る」案内を出す
+            if (msg.text.trim() === "") {
+              vscodeEmpty = { text: msg.text, version: msg.version ?? 0, name: fileName };
+              set({ vscodeFile: { state: "empty", name: fileName } });
+              return;
+            }
+            vscodeEmpty = null;
+            let p: Project;
+            // 中身はあるが、計画として読めない: 理由を案内に出す (ブラウザ向けの Home の画面は出さない)
+            try { p = fromJSON(msg.text); } catch (e) { set({ vscodeFile: { state: "invalid", name: fileName, error: e instanceof Error ? e.message : String(e) } }); return; }
+            baseText = msg.text; vscodeVersion = msg.version ?? 0;
+            set({ vscodeFile: null });
+            set({ project: p, ephemeral: false, source: "vscode", fileName, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
           } else { acceptRemote(msg.text, String(msg.version)); if (get().saveState === "saved") vscodeVersion = msg.version ?? vscodeVersion; }
         } catch (e) { set({ saveError: String(e) }); }
       };
@@ -645,9 +678,10 @@ export const useProjectStore = create<State>((set, get) => {
       vscodeApi.postMessage({ type: "ready" });
       // 拡張から中身が届かないまま時間が経ったら、その旨を Home 画面に出す
       // (黙って空の画面にすると、一覧にある「VS Code 内のコピー」をファイルだと思って開いてしまう)
-      set({ hostNotice: null });
+      set({ hostNotice: null, vscodeFile: { state: "waiting", name: "boxglow.json" } });
       setTimeout(() => {
-        if (generation === epoch && get().source !== "vscode") set({ hostNotice: t("VS Code からファイルの中身を受け取れていません。下の一覧の計画は VS Code 内のコピーで、開いても boxglow.json には保存されません。拡張を最新にして窓を読み込み直すか、WSL のファイルは WSL の窓で開いてください") });
+        // 4 秒たっても、拡張から何も届いていない (空・読めない、の案内も出ていない) ときだけ、届かない旨を出す
+        if (generation === epoch && get().source !== "vscode" && get().vscodeFile?.state === "waiting") set({ vscodeFile: { state: "timeout", name: "boxglow.json" } });
       }, 4000);
     }
 

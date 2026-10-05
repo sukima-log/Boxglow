@@ -28,6 +28,11 @@ export function HomeDialog() {
   const openLocalFile = useProjectStore((s) => s.openLocalFile);
   // VS Code の中で、拡張からファイルをまだ受け取れていないときの案内
   const hostNotice = useProjectStore((s) => s.hostNotice);
+  // VS Code の中: 開いているファイルの状態 (空・計画として読めない・届かない) と、空のファイルに計画を作る操作、閲覧専用の理由
+  const vscodeFile = useProjectStore((s) => s.vscodeFile);
+  const createInVsCode = useProjectStore((s) => s.createInVsCode);
+  const readonlyReason = useProjectStore((s) => s.readonlyReason);
+  const reload = useProjectStore((s) => s.reload);
   // VS Code の拡張の中で動いているか (一覧の計画がファイルとは別のコピーであることを明示するため)
   const inVsCode = typeof window !== "undefined" && !!window.acquireVsCodeApi;
   const [name, setName] = useState("");
@@ -87,6 +92,38 @@ export function HomeDialog() {
           <button className="btn btn-ghost btn-sm" onClick={() => setLang(lang === "en" ? "ja" : "en")} aria-label={t("画面の文言の言語を切り替える")}>{lang === "en" ? "日本語" : "English"}</button>
         </div>
 
+        {/* VS Code の中では、開いているファイルのための案内だけを出す。
+            ブラウザ向けの案内 (サンプル・ブラウザ内の計画・ファイルを開く・serve) は出さない: VS Code の中の「ブラウザ内」は、
+            ファイルとは別の、VS Code の中だけのコピーで、編集しても boxglow.json には保存されないため */}
+        {inVsCode ? (
+          <section className="home-welcome home-vscode" aria-live="polite">
+            {(!vscodeFile || vscodeFile.state === "waiting") && <p>{t("ファイルを読み込んでいます…")}</p>}
+            {vscodeFile?.state === "empty" && <>
+              <h2>{t("このファイルは、まだ空です")}</h2>
+              <p>{t("計画の名前を入力すると、このファイル ({file}) に計画を作ります。", { file: vscodeFile.name })}</p>
+              {readonlyReason ? <p className="home-vscode__note" role="alert">{readonlyReason}</p> : (
+                <div className="home-create">
+                  <label className="sr-only" htmlFor="home-vscode-name">{t("新しい計画の名前")}</label>
+                  <input id="home-vscode-name" className="input" autoFocus placeholder={t("新しい計画の名前")} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.nativeEvent.isComposing && e.keyCode !== 229 && name.trim()) createInVsCode(name.trim());
+                  }} />
+                  <button className="btn btn-primary" disabled={!name.trim()} onClick={() => createInVsCode(name.trim())}>Create</button>
+                </div>
+              )}
+            </>}
+            {vscodeFile?.state === "invalid" && <>
+              <h2>{t("このファイルは、Boxglow の計画として読めません")}</h2>
+              <p className="home-vscode__note" role="alert">{vscodeFile.error}</p>
+              <p>{t("テキストエディタで開いて、中身を確かめてください (ファイルを右クリック → Open With → Text Editor)。新しく始めるなら、中身を空にしてから開き直すと、名前を付けて計画を作れます。")}</p>
+              <button className="btn" onClick={() => void reload()}>{t("もう一度読み込む")}</button>
+            </>}
+            {vscodeFile?.state === "timeout" && <>
+              <h2>{t("VS Code から、ファイルの中身を受け取れていません")}</h2>
+              <p>{t("拡張を最新にして、窓を読み込み直してください。WSL の中のファイルは、WSL の窓 (左下に「WSL: ...」と出る窓) で開いてください。")}</p>
+              <button className="btn" onClick={() => void reload()}>{t("もう一度読み込む")}</button>
+            </>}
+          </section>
+        ) : <>
         {/* 最初の案内: 初めて来た人向けの見出しと、主な操作「サンプルを試す」1 つだけ (説明の札や流れ図は置かない: 文字を減らす) */}
         {/* VS Code の中: 拡張からファイルが届いていないとき、または一覧のコピーを開こうとしているときに、ファイルとは別物だと明示する */}
         {hostNotice && <p className="save-notice" role="alert">{hostNotice}</p>}
@@ -150,6 +187,7 @@ export function HomeDialog() {
             </div>
           )}
         </section>
+        </>}
         <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>
           <a className="underline" href="https://github.com/sukima-log/Boxglow#readme" target="_blank" rel="noopener noreferrer">{t("使い方・CLI の手順")}</a>
           <span aria-hidden="true"> · </span>

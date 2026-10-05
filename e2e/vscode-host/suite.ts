@@ -94,6 +94,25 @@ export async function run(): Promise<void> {
       assert.equal(fs.existsSync(lock), false);
       return { version, onDisk: JSON.parse(fs.readFileSync(target, "utf8")).name, lockLeft: fs.existsSync(lock) };
     });
+    // 空のファイルから始める: 画面は、空の中身を基準にして、新しい計画を保存する (名前を付けて計画を作る操作の、拡張の側)
+    await step("空のファイルに、新しい計画を保存できる", async () => {
+      const emptyPath = path.join(path.dirname(target), "empty-boxglow.json");
+      fs.writeFileSync(emptyPath, "");
+      const emptyDoc = await vscode.workspace.openTextDocument(vscode.Uri.file(emptyPath));
+      assert.equal(emptyDoc.getText(), "");
+      const emptyAdapter = {
+        path: emptyPath, text: () => emptyDoc.getText(), version: () => emptyDoc.version
+      , replace: (text: string) => { const edit = new vscode.WorkspaceEdit(); edit.replace(emptyDoc.uri, new vscode.Range(0, 0, emptyDoc.lineCount, 0), text); return vscode.workspace.applyEdit(edit); }
+      , save: () => emptyDoc.save()
+      };
+      // 新しい計画の中身は、確認用の計画の名前だけを変えたもの (計画として正しい中身)
+      const fresh = renamed("空のファイルから作った計画");
+      await saveDocument(emptyAdapter, { text: fresh, baseText: "", version: emptyDoc.version }, "");
+      assert.equal(JSON.parse(fs.readFileSync(emptyPath, "utf8")).name, "空のファイルから作った計画");
+      assert.equal(emptyDoc.isDirty, false);
+      assert.equal(fs.existsSync(`${emptyPath}.boxglow-lock`), false);
+      return { onDisk: JSON.parse(fs.readFileSync(emptyPath, "utf8")).name };
+    });
     // 3) 図のエディタとして開ける (拡張の読み込み処理が例外にならない)
     await step("図のエディタで開ける", async () => {
       await vscode.commands.executeCommand("vscode.openWith", vscode.Uri.file(target), "boxglow.editor");

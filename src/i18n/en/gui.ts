@@ -57,4 +57,12 @@ export const gui: Record<string, string> = {
   "最新の内容を読み込めませんでした: {error}": "Could not load the latest content: {error}",
   "最新の内容を読み込む (ファイルを今すぐ読み直す)": "Load the latest content (reread the file now)",
   "VS Code から応答がありません": "No response from VS Code",
+  "ファイルを読み込んでいます…": "Loading the file…",
+  "このファイルは、まだ空です": "This file is still empty",
+  "計画の名前を入力すると、このファイル ({file}) に計画を作ります。": "Enter a name to create a plan in this file ({file}).",
+  "このファイルは、Boxglow の計画として読めません": "This file cannot be read as a Boxglow plan",
+  "テキストエディタで開いて、中身を確かめてください (ファイルを右クリック → Open With → Text Editor)。新しく始めるなら、中身を空にしてから開き直すと、名前を付けて計画を作れます。": "Open it in the text editor and check its content (right-click the file → Open With → Text Editor). To start fresh, empty the file and reopen it; you can then name and create a plan.",
+  "もう一度読み込む": "Load again",
+  "VS Code から、ファイルの中身を受け取れていません": "The file content has not arrived from VS Code",
+  "拡張を最新にして、窓を読み込み直してください。WSL の中のファイルは、WSL の窓 (左下に「WSL: ...」と出る窓) で開いてください。": "Update the extension and reload the window. Open a file inside WSL in a WSL window (the one showing \"WSL: ...\" at the bottom left).",
 };

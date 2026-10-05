@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1
+
+- Opening an empty `boxglow.json`: asks for a plan name and creates the plan in that file (it used to show the browser start page with an unrelated notice).
+- The start page inside VS Code no longer shows browser-only guidance (sample, plans kept in the browser, `serve`); those plans were copies inside VS Code and never reached the file. A file that cannot be read as a plan, or content that does not arrive, is explained in full instead of being cut off.
+- No Home button inside VS Code (the editor is bound to one file).
+- Reload button next to the save state rereads the file on demand; the view still follows the file automatically.
+- Wires that reach an output node end in an arrowhead.
+
 ## 0.4.0
 
 - Follows boxglow 0.5.0: the details panel shows a box's scope (goal, non-goals, acceptance, when to consult) when it has one, the Next tab separates ready boxes from boxes waiting for inputs, and the project panel has the optional "AI の作業確認" policy. Update together with the CLI.

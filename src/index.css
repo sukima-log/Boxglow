@@ -1079,3 +1079,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin 0.8s linear infinite; transform-origin: 50% 50%; }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+/* VS Code の中の Home: 開いているファイルのための案内だけ。長い理由 (読めない理由・閲覧専用の理由) は、折り返して全部見せる */
+.home-vscode p { overflow-wrap: anywhere; }
+.home-vscode__note { padding: 8px 12px; border: 2px solid var(--line-soft); border-radius: 8px; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
