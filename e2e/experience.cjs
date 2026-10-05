@@ -1,6 +1,6 @@
 /**
  * 使い始めの体験の検査 (ライト / ダーク): 最初の画面に出す操作と隠す操作、同じ出力の線の幹が 1 回だけ描かれること、
- * ボックスの見た目 (New = 濃い、In Progress = 細い斜線帯、Done = テーマに応じた明るい面、選択 = 輪郭) と線の太さ (確定 4px / 未確定 2px)、
+ * ボックスの見た目 (New = 濃い、In Progress = 薄いティールと斜線、Done = テーマに応じた明るい面、選択 = 輪郭) と線の太さ (確定 4px / 未確定 2px)、
  * ミニマップの出し方、質問への回答が残ること、Home の最初の案内。
  * 撮影は確認用で、リポジトリには書き出さない: OS の一時フォルダ (<tmp>/boxglow-e2e-shots。環境変数 BOXGLOW_E2E_SHOTS で変えられる) に出す。
  * 使い方: e2e/run.sh から呼ばれる (PLAYWRIGHT と LD_LIBRARY_PATH は run.sh が設定。プレビューが 4173 番で動いていること)
@@ -24,15 +24,15 @@ const settle=p=>p.waitForTimeout(500);
      const lum=s=>{const v=(s||'').match(/[\d.]+/g)?.slice(0,3).map(Number)??[0,0,0];return (.2126*v[0]+.7152*v[1]+.0722*v[2])/255;};
      return {
        black:lum(css('.bg-block.status-black:not(.expanded)','backgroundColor')), white:lum(css('.bg-block.status-white:not(.expanded)','backgroundColor')),
-       hatch:css('.bg-block.status-gray:not(.expanded)','backgroundImage'), blackBorder:css('.bg-block.status-black:not(.expanded)','borderTopStyle'),
-       cat:css('.bg-block.has-cat:not(.status-gray)','display','::before'), stripe:css('.bg-block.status-gray:not(.expanded)','backgroundImage','::before'),
+       hatch:css('.bg-block.status-gray:not(.expanded)','backgroundImage'), parentHatch:css('.bg-block.status-gray.expanded','backgroundImage'), blackBorder:css('.bg-block.status-black:not(.expanded)','borderTopStyle'),
+       cat:css('.bg-block.has-cat:not(.status-gray)','display','::before'), stripe:css('.bg-block.status-gray:not(.expanded)','display','::before'),
        ready:css('.react-flow__edge.edge-ready .react-flow__edge-path','strokeWidth'), pending:css('.react-flow__edge:not(.edge-ready) .react-flow__edge-path','strokeWidth'),
        progress:css('.bg-block__progress > span','backgroundColor'), primary:getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()
      };
    });
    check(`${theme}: New より明るい Done、ダークでは白い面を抑える`,look.black!==null&&look.white!==null&&look.black<.35&&(theme==='light'?look.white>.75:look.white>look.black&&look.white<.4),JSON.stringify(look));
-   check(`${theme}: In Progress の全面に斜線を敷かない`,look.hatch===null||look.hatch==='none',JSON.stringify(look.hatch));
-   check(`${theme}: カテゴリの色の帯を外し、作業中だけ細い斜線帯`,(look.cat===null||look.cat==='none')&&(look.stripe===null||/gradient/.test(look.stripe)),JSON.stringify([look.cat,look.stripe]));
+   check(`${theme}: In Progress は薄い斜線、展開した親は無地`,/gradient/.test(look.hatch)&&look.parentHatch==='none',JSON.stringify([look.hatch,look.parentHatch]));
+   check(`${theme}: カテゴリ帯と上端の斜線帯を重ねない`,(look.cat===null||look.cat==='none')&&(look.stripe===null||look.stripe==='none'||look.stripe==='normal'),JSON.stringify([look.cat,look.stripe]));
    check(`${theme}: 進捗バーは作業中を示すティール`,look.progress===null||(()=>{const v=look.progress.match(/\d+/g).slice(0,3).map(Number);const h=look.primary.slice(1);return v.every((c,i)=>c===parseInt(h.slice(i*2,i*2+2),16));})(),JSON.stringify(look.progress));
    check(`${theme}: 線の太さは確定 4px / 未確定 2px`,(look.ready===null||look.ready==='4px')&&(look.pending===null||look.pending==='2px'),JSON.stringify([look.ready,look.pending]));
    check(`${theme}: 同じ出力の分岐点に丸が出る`,await p.locator('.react-flow__edge-junction').count()>0);

@@ -42,9 +42,11 @@
   --box-black-text: #e8eaed;
   --box-black-border: #6b7075;
   --status-new: #c8ccd2; /* New の印 (濃いボックスの上なので明るい灰) */
-  --box-gray-bg: #e4e7ea;
+  --box-gray-bg: #deefec;
+  --box-gray-border: #75a8a2;
+  --box-gray-track: #bcd6d2;
   --box-gray-bg-open: #eef0f2; /* 展開中 (中にボックスがある) の GrayBox: 斜線なしの地色 */
-  --box-gray-hatch: rgba(58, 63, 70, 0.16);
+  --box-gray-hatch: rgba(0, 106, 106, 0.075);
   --box-gray-text: #2f343a;
   --box-white-bg: #fbfbfb; /* Done = WhiteBox: 名前どおり紙色 */
   --box-white-text: #2f343a;
@@ -85,9 +87,11 @@
   --box-black-text: #c8ccd2;
   --box-black-border: #5b626b;
   --status-new: #9aa1a9;
-  --box-gray-bg: #2c3136;
+  --box-gray-bg: #243d3d;
+  --box-gray-border: #527f7b;
+  --box-gray-track: #3d5b58;
   --box-gray-bg-open: #23272b;
-  --box-gray-hatch: rgba(232, 234, 237, 0.12);
+  --box-gray-hatch: rgba(116, 211, 211, 0.075);
   --box-gray-text: #e8eaed;
   --box-white-bg: #353c44;
   --box-white-text: #e8eaed;
@@ -228,10 +232,10 @@ textarea.input { resize: vertical; min-height: 64px; }
   border-style: dashed;
   border-color: var(--box-black-border);
 }
-/* GrayBox: 中間の明度 + 細い進捗バー (斜線は見出しの帯だけ) */
+/* GrayBox: 薄いティールと控えめな斜線。親の面は無地のまま階層を分ける。 */
 .bg-block.status-gray {
   background-color: var(--box-gray-bg);
-  background-image: none;
+  background-image: repeating-linear-gradient(135deg, transparent 0 10px, var(--box-gray-hatch) 10px 12px);
   color: var(--box-gray-text);
 }
 /* 展開中 (中にボックスが見えている) の GrayBox は斜線を消して地色だけにする。
@@ -1090,7 +1094,8 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .bg-block { border-radius: 8px; border-color: var(--line-soft); }
 .bg-block.status-black { border-style: solid; }
 .bg-block.has-cat::before { display: none; }
-.bg-block.status-gray:not(.expanded)::before { content: ""; display: block; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 8px 8px 0 0; background: repeating-linear-gradient(125deg, var(--primary) 0 5px, var(--primary-soft) 5px 8px); pointer-events: none; }
+.bg-block.status-gray:not(.expanded) { border-color: var(--box-gray-border); }
+.bg-block.status-gray:not(.expanded) .bg-block__progress { background: var(--box-gray-track); }
 .bg-block__title { font-family: var(--font-body); font-weight: 600; }
 .bg-block__meta { gap: 6px; overflow: hidden; }
 .bg-block__meta > .status-icon { width: 14px; height: 14px; }
