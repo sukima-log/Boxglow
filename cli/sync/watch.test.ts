@@ -256,6 +256,106 @@ describe("止まった計画と、読めない状態", () => {
     for (let i = 0; i < 3; i++) await advance(w, POLL_MS + 1000);
     expect(halts().length).toBe(2);
   });
+  /** サーバーを「復旧した」状態にする (世代を変え、計画 p1 を指定の中身に戻す) */
+  const restoreServer = (epoch: string, text: string, revision = `${epoch}.1`) => {
+    server.epoch = epoch;
+    const p = server.project("p1")!;
+    p.head = { revision, text }; p.seq = Number(revision.split(".")[1]); p.ops = new Map(); p.versions = [];
+  };
+  const halts = () => events.filter((e) => e.kind === "halted") as Extract<WatchEvent, { kind: "halted" }>[];
+
+  it("R32-02: 履歴が変わって止まった後、見比べる相手 (サーバーの版・手元) が変わったら、新しい印でもう一度知らせる。同じ内容は繰り返さない", async () => {
+    const { file, a } = planFile("p1");
+    await syncOnce({ file, server: server.url, remoteId: "p1" });
+    const v1 = readFileSync(file, "utf8");
+    const w = watcher();
+    await w.tick();
+    edit(file, (p) => updateBlock(p, a, { title: "手元の編集" }));
+    restoreServer("e2", v1);
+    await advance(w, POLL_MS * 1.2);
+    expect(halts().length).toBe(1);
+    expect(halts()[0].result.halt.reason).toBe("history-changed");
+    const first = halts()[0].result.relink!.token;
+    // 何も変わらなければ、繰り返さない
+    await advance(w, POLL_MS * 1.2); await advance(w, POLL_MS * 1.2);
+    expect(halts().length).toBe(1);
+    // 別の端末が、同じ世代でサーバーを進めた: 新しい見比べと印を知らせる
+    restoreServer("e2", v1.replace('"A"', '"別の端末の A"'), "e2.2");
+    await advance(w, POLL_MS * 1.2);
+    expect(halts().length).toBe(2);
+    expect(halts()[1].result.relink!.token).not.toBe(first);
+    expect(halts()[1].result.relink!.remoteRevision).toBe("e2.2");
+    // 手元を変えたとき
+    edit(file, (p) => updateBlock(p, a, { title: "手元の編集 2" }));
+    await advance(w, 100); await advance(w, DEBOUNCE_MS + 100);
+    expect(halts().length).toBe(3);
+    // もう一度復旧された (世代だけが変わり、版の文字列と中身は同じ)
+    restoreServer("e3", server.project("p1")!.head!.text, "e3.2");
+    await advance(w, POLL_MS * 1.2);
+    expect(halts().length).toBe(4);
+  });
+
+  it("R32-03: 止まっている間に、別の実行が結び直しを始めて途中で終わったら、手元もサーバーも同じままでも、常時の同期が続きを行う", async () => {
+    const { file, a } = planFile("p1");
+    await syncOnce({ file, server: server.url, remoteId: "p1" });
+    const v1 = readFileSync(file, "utf8");
+    // (この計画そのものへの要求の数を数える: 同期を 1 回行うと、取得が 1 回以上ある)
+    let requests = 0;
+    const counting = ((...args: Parameters<typeof fetch>) => { if (String(args[0]).includes("/v1/projects/p1")) requests++; return fetch(...args); }) as typeof fetch;
+    const w = watcher({ fetch: counting });
+    await w.tick();
+    edit(file, (p) => updateBlock(p, a, { title: "手元の編集" }));
+    restoreServer("e2", v1);
+    await advance(w, POLL_MS * 1.2);
+    const token = halts()[0].result.relink!.token;
+    // 別の端末画面から「サーバーを採る」を選び、状態を置き換えた直後に落ちた (受け取りは、まだ)
+    await expect(syncOnce({ file, server: server.url, relink: { token, prefer: "remote" }, onStep: (kind) => { if (kind === "relink:started") throw new Error("crash"); } })).rejects.toThrow("crash");
+    const store = new StateStore(bindingDir(file, server.url));
+    expect(store.read()).toMatchObject({ version: 2, pending: null, base: null });
+    expect(read(file).blocks[a].title).toBe("手元の編集");
+    // 次の tick で、記録のとおりに受け取って終える
+    await advance(w, 1000);
+    expect(store.read()).toMatchObject({ version: 1, epoch: "e2", base: { revision: "e2.1" } });
+    expect(readFileSync(file, "utf8")).toBe(v1);
+    expect(events.at(-1)).toMatchObject({ kind: "synced", file, pulled: 1 });
+    // 自分の同期が進めた分で、同期を繰り返さない
+    const before = requests;
+    await advance(w, 1000); await advance(w, 1000);
+    expect(requests).toBe(before);
+    // その後の編集は、ふつうに送られる
+    edit(file, (p) => updateBlock(p, a, { title: "結び直しの後の編集" }));
+    await advance(w, 100); await advance(w, DEBOUNCE_MS + 100);
+    expect(JSON.parse(server.project("p1")!.head!.text).blocks[a].title).toBe("結び直しの後の編集");
+  });
+
+  it("R32-03: 止まっている間に、別の実行が結び直しを終えたら (手元を採る・同じ中身)、常時の同期は止まった状態を解く", async () => {
+    const { file, a } = planFile("p1");
+    await syncOnce({ file, server: server.url, remoteId: "p1" });
+    const v1 = readFileSync(file, "utf8");
+    const w = watcher();
+    await w.tick();
+    // 同じ中身のまま復旧された
+    restoreServer("e2", v1);
+    await advance(w, POLL_MS * 1.2);
+    expect(halts().length).toBe(1);
+    expect(halts()[0].result.relink).toMatchObject({ relation: "same" });
+    expect(await syncOnce({ file, server: server.url, relink: { token: halts()[0].result.relink!.token } })).toMatchObject({ status: "synced" });
+    await advance(w, 1000);
+    expect(events.at(-1)).toMatchObject({ kind: "synced", file });
+    // 手元を採る: 別の実行が送り終えた後、常時の同期は「そろった」と確かめるだけ (二重に送らない)
+    edit(file, (p) => updateBlock(p, a, { title: "手元の編集" }));
+    restoreServer("e3", v1);
+    await advance(w, POLL_MS * 1.2);
+    const token = halts().at(-1)!.result.relink!.token;
+    expect(halts().at(-1)!.result.relink).toMatchObject({ relation: "differs" });
+    expect(await syncOnce({ file, server: server.url, relink: { token, prefer: "local" } })).toMatchObject({ status: "synced", pushed: 1 });
+    const puts = server.puts, count = halts().length;
+    await advance(w, 1000); await advance(w, POLL_MS * 1.2);
+    expect(server.puts).toBe(puts);
+    expect(halts().length).toBe(count);
+    expect(events.at(-1)).toMatchObject({ kind: "synced", file });
+  });
+
   it("見張っている計画の状態が読めなくなったら、黙って外さずに 1 回知らせる。ほかの計画は続け、直ったら再開する", async () => {
     const one = planFile("p1"), two = planFile("p2");
     await syncOnce({ file: one.file, server: server.url, remoteId: "p1" });

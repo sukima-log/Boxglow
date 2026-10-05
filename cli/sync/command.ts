@@ -85,6 +85,7 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
     if (e instanceof SyncRejectedError) { out(t("サーバーが、この計画の同期を受け付けませんでした (待っても直りません)。やりかけの操作は残してあります: {status} {detail}", { status: e.status, detail: rejectionHint(e.status) }));
       // 手元を直すだけでは、残った操作の中身は変わらない。次の実行で、その操作を片付けてから、今の中身で送り直すことを伝える
       out(t("手元のファイルを直してから、もう一度 boxglow sync を実行してください。断られた送信は送り直さず、サーバーで受理済みか・取り消すかを確定させてから、今の手元の内容で送り直します"));
+      out(t("結び直しの途中の送信だった場合は、確定の後で、今の内容をもう一度選ぶことになります (同じ選択で、送り直しません)"));
       return 2;
     }
     // 使ったトークンの出どころ (環境変数 / 保存済みのサインイン / 無し) に合わせて、直し方を案内する
@@ -182,13 +183,13 @@ export function describeHalt(result: Extract<SyncResult, { status: "halted" }>, 
     case "relink-stale": {
       out(halt.reason === "history-changed" ? t("サーバーの履歴が、前回そろえたときから変わっています (バックアップからの復旧など)。前回の続きとしては同期できません。") : t("結び直しの途中で、選んだときから手元かサーバーの中身が変わりました (または、選んだ送信が断られました)。選んだ内容は使っていません。今の内容で、選び直してください。"));
       const preview = result.relink;
-      // (サーバーで計画が消されているときは、見比べは無い。結び直しでも作り直さない)
-      if (!preview) { out(t("サーバー側で、この計画は消されています。結び直しでは作り直しません")); break; }
+      // 見比べが無い = 今の内容をまだ読めていない (消されている計画は、別の理由 remote-deleted で止まる)。もう一度の実行を案内する (R32-04)
+      if (!preview) { out(t("サーバーの履歴が、同期の途中で変わりました。何も送っていません・書いていません。もう一度 boxglow sync を実行すると、今の内容との見比べを表示します")); break; }
       const command = (prefer?: "local" | "remote") => `  boxglow sync --relink ${preview.token}${prefer ? ` --prefer ${prefer}` : ""}${target}`;
       out("  " + t("サーバーの今の版: {remote} (前回そろえた版: {base})", { remote: preview.remoteRevision ?? t("なし"), base: preview.baseRevision ?? t("なし") }));
       if (halt.reason === "history-changed") out("  " + (preview.localChanged === null ? t("手元: 前回そろえた後に変えたかどうかは、確かめられません (前回の中身の写しがありません)") : preview.localChanged ? t("手元: 前回そろえた後の変更があります") : t("手元: 前回そろえた後の変更はありません")));
-      if (preview.pending === "push") out("  " + t("前回の送信が、途中のまま残っています (届いたかどうかは分かりません)。送り直しません。中身は控えに残します"));
-      if (preview.pending === "pull") out("  " + t("前回の受け取りが、途中のまま残っています。続きは行いません。書く予定だった中身は控えに残します"));
+      if (preview.pending === "push") out("  " + t("前回の送信が、途中のまま残っています (届いたかどうかは分かりません)。送り直しません。中身の写しが残っていれば、控えに入れます"));
+      if (preview.pending === "pull") out("  " + t("前回の受け取りが、途中のまま残っています。続きは行いません。書く予定だった中身の写しが残っていれば、控えに入れます"));
       if (preview.relation === "differs") {
         out(t("サーバーの計画と、手元の計画は、中身が違います。手元の計画を採った場合に、サーバーの計画に起きる変化:"));
         for (const line of preview.differences) out("  - " + line);

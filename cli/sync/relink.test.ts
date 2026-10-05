@@ -203,6 +203,122 @@ describe("結び直し: 選んで続ける", () => {
   });
 });
 
+describe("結び直し: レビュー 32 の指摘", () => {
+  /** 何も変わっていないこと (送信・手元・状態・控え) を確かめるための、今の様子 */
+  const snapshot = (d: Device) => ({ puts: server.puts, text: existsSync(d.file) ? d.text : null, state: JSON.stringify(d.store().read()), backups: d.backups().join(",") });
+
+  it("R32-01: 選べないものを指定したら、選べるものに読み替えずに止まる (手元にだけある + remote / サーバーにだけある + local / 同じ中身 + どちらか)", async () => {
+    // 手元にだけある (サーバーに計画が無い) のに、サーバーを採ると指定した: 手元を送らない
+    const { A, B } = await restored({ to: "absent" });
+    const localOnly = previewOf(await A.sync());
+    expect(localOnly.options).toEqual(["local"]);
+    let before = snapshot(A);
+    const wrong = await A.sync({ relink: { token: localOnly.token, prefer: "remote" } });
+    expect(wrong.status === "halted" && wrong.halt.reason).toBe("history-changed");
+    expect(snapshot(A)).toEqual(before);
+    expect(server.project("plan-1")).toBeUndefined();
+    // 指定を省くか、選べるものを指定すれば進む
+    expect(await A.sync({ relink: { token: localOnly.token, prefer: "local" } })).toMatchObject({ status: "synced", pushed: 1 });
+    // サーバーにだけある (手元のファイルが無い) のに、手元を採ると指定した: 手元に書かない
+    rmSync(B.file);
+    const remoteOnly = previewOf(await B.sync());
+    expect(remoteOnly.options).toEqual(["remote"]);
+    before = snapshot(B);
+    const wrong2 = await B.sync({ relink: { token: remoteOnly.token, prefer: "local" } });
+    expect(wrong2.status === "halted" && wrong2.halt.reason).toBe("history-changed");
+    expect(snapshot(B)).toEqual(before);
+    expect(await B.sync({ relink: { token: remoteOnly.token } })).toMatchObject({ status: "synced", pulled: 1 });
+    // 同じ中身のときは、どちらを採るかの指定は受け付けない (指定なしでだけ進む)
+    restoreServer("e3", B.text);
+    const same = previewOf(await B.sync());
+    expect(same.options).toEqual(["same"]);
+    before = snapshot(B);
+    for (const prefer of ["local", "remote"] as const) {
+      const r = await B.sync({ relink: { token: same.token, prefer } });
+      expect(r.status === "halted" && r.halt.reason).toBe("history-changed");
+    }
+    expect(snapshot(B)).toEqual(before);
+    expect(await B.sync({ relink: { token: same.token } })).toMatchObject({ status: "synced", pulled: 0, pushed: 0 });
+  });
+
+  it("R32-04: 送る直前に履歴が変わったら、送らずに、今の内容との見比べで止まる (「消されている」とは表示しない)。古い操作は新しい世代へ送らない", async () => {
+    const { A } = await restored();
+    const preview = previewOf(await A.sync());
+    const text = A.text;
+    // 取得の後、送信の直前に、もう一度復旧された (計画は在る)
+    const r = await A.sync({ relink: { token: preview.token, prefer: "local" }, onStep: (kind) => { if (kind === "push" && server.epoch === "e2") restoreServer("e3", server.project("plan-1")!.head!.text); } });
+    expect(r.status === "halted" && r.halt.reason).toBe("history-changed");
+    const next = previewOf(r);
+    expect(next).toMatchObject({ relation: "differs", pending: "push", remoteRevision: "e3.1" });
+    expect(server.project("plan-1")!.head!.revision).toBe("e3.1");
+    expect(A.text).toBe(text);
+    // 表示: 見比べと、新しい印のコマンド。「消されています」は出ない
+    process.env.BOXGLOW_CONFIG_DIR = A.config;
+    const lines: string[] = [];
+    expect(await runSyncCommand({ file: A.file }, (line) => lines.push(line))).toBe(2);
+    expect(lines.join("\n")).toContain(`--relink ${next.token} --prefer local`);
+    expect(lines.join("\n")).not.toContain("消されています");
+    // 新しい見比べから、結び直せる (残っていた送信は、控えに写るだけ)
+    expect(await A.sync({ relink: { token: next.token, prefer: "local" } })).toMatchObject({ status: "synced", pushed: 1, revision: "e3.2" });
+    expect(server.project("plan-1")!.head!.text).toBe(text);
+  });
+
+  it("R32-04: 断られた送信の確定の問い合わせの間に履歴が変わった場合も、今の内容との見比べで止まる", async () => {
+    const { A } = await restored({ unsent: false });
+    const preview = previewOf(await A.sync());
+    expect(await A.sync({ relink: { token: preview.token, prefer: "local" } })).toMatchObject({ status: "synced" });
+    // ふつうの送信が 413 で断られた状態を作る
+    A.edit((q) => ({ ...q, name: "大きすぎる編集" }));
+    const refuse = (async (...args: Parameters<typeof fetch>) =>
+      (args[1] as RequestInit | undefined)?.method === "PUT" ? new Response("{}", { status: 413, headers: { "x-boxglow-epoch": "e2" } }) : fetch(...args)) as typeof fetch;
+    await expect(A.sync({ fetch: refuse })).rejects.toThrow();
+    expect(A.store().read()!.pending).toMatchObject({ kind: "push", rejected: { status: 413 } });
+    // 次の実行: 取得は e2 のまま答え、確定の問い合わせの直前に e3 へ変わる
+    let moved = false;
+    const settleLate = (async (...args: Parameters<typeof fetch>) => {
+      if (!moved && String(args[0]).includes("/settle")) { moved = true; restoreServer("e3", server.project("plan-1")!.head!.text); }
+      return fetch(...args);
+    }) as typeof fetch;
+    const r = await A.sync({ fetch: settleLate });
+    expect(r.status === "halted" && r.halt.reason).toBe("history-changed");
+    expect(previewOf(r)).toMatchObject({ pending: "push", remoteRevision: "e3.1" });
+    expect(A.store().read()!.pending?.kind).toBe("push");
+  });
+
+  it("控えを置けなかったら、状態を変えない。途中の控え (.partial) は、完了した控えと区別できる", async () => {
+    const { A } = await restored();
+    const preview = previewOf(await A.sync());
+    const at = new Date("2026-10-05T10:00:00.000Z");
+    const name = `2026-10-05T10-00-00-000Z-${preview.token}`;
+    // 改名先に、空でないフォルダを置いておく (最後の改名だけが失敗する)
+    const relinks = join(A.store().dir, "relinks");
+    mkdirSync(join(relinks, name), { recursive: true });
+    writeFileSync(join(relinks, name, "occupied"), "x");
+    const before = { puts: server.puts, text: A.text, state: JSON.stringify(A.store().read()) };
+    await expect(A.sync({ relink: { token: preview.token, prefer: "remote" }, now: () => at })).rejects.toThrow();
+    expect({ puts: server.puts, text: A.text, state: JSON.stringify(A.store().read()) }).toEqual(before);
+    // 途中の控えは .partial の名前で残り、中身は書けている。完了の印 (manifest の complete) も、改名の前に書いてある
+    expect(A.backups()).toEqual([name, `${name}.partial`]);
+    expect(readFileSync(join(relinks, `${name}.partial`, "local.json"), "utf8")).toBe(A.text);
+    // 控えのフォルダそのものを作れない場合 (relinks がファイル)
+    rmSync(relinks, { recursive: true });
+    writeFileSync(relinks, "not a folder");
+    await expect(A.sync({ relink: { token: preview.token, prefer: "remote" } })).rejects.toThrow();
+    expect({ puts: server.puts, text: A.text, state: JSON.stringify(A.store().read()) }).toEqual(before);
+    // 直せば、同じ印で進める
+    rmSync(relinks);
+    expect(await A.sync({ relink: { token: preview.token, prefer: "remote" } })).toMatchObject({ status: "synced", pulled: 1 });
+  });
+
+  it("途中から再開して終えた実行も、前の実行が置いた控えの場所を結果に入れる", async () => {
+    const { A } = await restored();
+    const preview = previewOf(await A.sync());
+    await expect(A.sync({ relink: { token: preview.token, prefer: "remote" }, onStep: (kind) => { if (kind === "relink:started") throw new Error("crash"); } })).rejects.toThrow("crash");
+    const r = await A.sync();
+    expect(r.status === "synced" && r.relinkBackup).toBe(join(A.store().dir, "relinks", A.backups()[0]));
+  });
+});
+
 describe("結び直し: 古い操作が残っている場合 (R31-01)", () => {
   it("途中の送信が残っている: 送り直さない。控えに写して、選んだ中身を新しい操作として送る", async () => {
     const { A } = await restored({ unsent: false });

@@ -10,7 +10,7 @@
 import { randomUUID } from "node:crypto";
 import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { commitFile, FileBusy, FileConflict, revisionOf } from "../file-store";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
 import {
   baseSet, decide, previewRecovery, pullNotWritten, pullRecovered, pullWritten, pushAccepted, pushRefused, pushRejected, recordPending, recoveryToken as engineRecoveryToken, remoteMark, SyncStateError
 , relinkFinished, relinkPreview, relinkStarted
@@ -276,6 +276,8 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
   let lastLocal: string | null | undefined;
   // この実行で置いた、結び直しの控えの場所 (結果に入れて、表示する)
   let relinkBackup: string | undefined;
+  // 送信・確定の応答で「履歴の世代が変わった」と分かって、読み直しに回ったか (1 回の実行で 1 度だけ読み直す)
+  let historyRetried = false;
   const halted = (halt: Halt | ClientHalt, extra: { recovery?: { token: string; applied: RecoveryOutcome; notApplied: RecoveryOutcome }; relink?: RelinkPreview } = {}): SyncResult =>
     ({ status: "halted", halt, pulled, pushed, edited, target, localHash: lastLocal, ...(relinkBackup ? { relinkBackup } : {}), ...extra });
   // 同じファイルを扱う同期は、サーバーが違っても 1 つだけ (下の「別のサーバーに結び付いていないか」の確認と、結び付けの作成の間に割り込ませない)
@@ -325,6 +327,8 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       }
       target.remoteId = binding.remoteId;
       const state: SyncState = stored ?? { generation: 0, epoch: null, base: null, pending: null };
+      // 結び直しの途中から再開した実行でも、控えの場所を結果に入れる (前の実行が置いた控え)
+      if (stored?.relink) relinkBackup = join(store.dir, "relinks", stored.relink.backup);
       const remoteOptions = { server, remoteId: binding.remoteId, token: options.token, fetch: doFetch };
       // ---- 読む: サーバー (やりかけの送りがあるときも取得する。履歴の世代が変わっていないかを、送り直しの前に確かめるため) ----
       const { remote, account } = await fetchRemote(remoteOptions);
@@ -483,7 +487,10 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
           // 「今の時点で受理の記録が無い」だけでは消さない: 遅れている古い送信が後から受理されると、手元で取り消した編集が、確認なしで戻ってくる
           if (pending.rejected) {
             const op = await settleOperation({ ...remoteOptions, epoch: stored!.epoch ?? "" }, pending.opId);
-            if ("history" in op) return halted({ reason: "history-changed", expected: stored!.epoch ?? "", actual: op.history });
+            // 確定の問い合わせの間に、履歴の世代が変わった: 操作は残したまま、次の判断で、今の状態を読み直して見比べを作る
+            // (ここで止まると、見比べの無い「履歴が変わった」になり、次に何をすればよいかを示せない。R32-04)
+            // (読み直しても、取得の答えは前の世代のまま、という食い違いが続くなら、繰り返さずに止まる)
+            if ("history" in op) { if (historyRetried) return halted({ reason: "history-changed", expected: stored!.epoch ?? "", actual: op.history }); historyRetried = true; break; }
             // (取得と確定の間に、利用者が変わっていたら、答えを使わない)
             if (op.account !== account) return halted({ reason: "account-mismatch", bound: account, actual: op.account });
             if (op.revision !== null) { save(pushAccepted(stored!, pending.opId, op.revision), stored!.binding); pushed++; }
@@ -501,7 +508,8 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
             throw e;
           }
           await options.onStep?.("push:sent");
-          if ("history" in result) return halted({ reason: "history-changed", expected: stored!.epoch ?? "", actual: result.history });
+          // 送る直前に、履歴の世代が変わった (送信は受理されていない): 操作は残したまま、次の判断で、今の状態を読み直して見比べを作る (R32-04)
+          if ("history" in result) { if (historyRetried) return halted({ reason: "history-changed", expected: stored!.epoch ?? "", actual: result.history }); historyRetried = true; break; }
           // サーバーで計画が消されていた: 操作と送る予定の写しは残したまま止まる (送り直さない・作り直さない)
           if ("deleted" in result) return halted({ reason: "remote-deleted" });
           if ("accepted" in result) { save(pushAccepted(stored!, pending.opId, result.accepted), stored!.binding); pushed++; }

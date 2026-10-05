@@ -265,7 +265,9 @@ export function decide(input: SyncInput): Decision {
     // 人の選択: 印が、今の状態・手元・サーバーと合っていれば、結び直しを始める
     const preview = relinkPreview(input);
     if (preview && input.relink?.token === preview.token) {
-      const choice: RelinkChoice | undefined = preview.options.length === 1 ? preview.options[0] : input.relink.prefer;
+      // どちらを採るかの指定があれば、それが選べるものに入っていること (選べないものを指定されたら、別のものに読み替えずに止まる。R32-01)。
+      // 指定が無いときだけ、選べるものが 1 つならそれを採る (中身が同じ場合の same は、指定なしでだけ選べる)
+      const choice: RelinkChoice | undefined = input.relink.prefer ?? (preview.options.length === 1 ? preview.options[0] : undefined);
       if (choice && preview.options.includes(choice)) {
         // 採る側の中身が、計画として読めること (読めないものを、新しい基準にしない)
         if (choice !== "remote" && local) { const l = read(local.text); if ("problem" in l) return halt({ reason: "invalid-local", problem: l.problem }); }

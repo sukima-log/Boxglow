@@ -60,6 +60,11 @@ interface Watched {
   notified: string | null;
   /** 状態を読めなくなっている (知らせ済み)。読めるようになるまで、この計画は同期しない */
   broken: boolean;
+  /**
+   * 最後に確かめた、同期の状態の世代番号 (自分の同期の後に覚え直す)。
+   * これが変わっていたら、別の同期の実行 (別の端末画面からの結び直し・人の選択) が状態を進めている。手元もサーバーも変わっていなくても、もう一度判断する
+   */
+  generation: number | undefined;
 }
 
 /** 常時の同期の指定 */
@@ -123,7 +128,8 @@ export function lockWatch(server: string): { unlock: (() => void) | null; path: 
  */
 function haltKey(result: Extract<SyncResult, { status: "halted" }>): string {
   const h = result.halt as { reason: string; token?: string; approval?: string };
-  return JSON.stringify([h.reason, h.token ?? null, h.approval ?? null, result.recovery?.token ?? null]);
+  // (結び直しの印は、止まった理由の中ではなく、見比べ (relink) に入っている。見比べる相手が変わったら、別の内容として知らせる)
+  return JSON.stringify([h.reason, h.token ?? null, h.approval ?? null, result.recovery?.token ?? null, result.relink?.token ?? null]);
 }
 
 /** 常時の同期の本体。tick() を定期的に呼ぶ (呼ぶ間隔は 1 秒程度) */
@@ -244,6 +250,11 @@ export class SyncWatcher {
       if (this.states.has(file)) {
         // 読めるようになった (直された): もう一度、同期から始める
         if (w.broken) { w.broken = false; w.remoteAhead = true; w.halted = null; w.notified = null; }
+        // 別の同期の実行が、状態を進めていた (結び直しを始めて途中で終わった・人の選択で進んだ、など): 手元もサーバーも同じままでも、もう一度判断する (R32-03)
+        const generation = this.states.get(file)!.generation;
+        // (止まっていた印は消さない: そろったときに「止まった状態が解けた」と知らせるのに使う)
+        if (w.generation !== undefined && generation !== w.generation) w.remoteAhead = true;
+        w.generation = generation;
         continue;
       }
       if (broken.has(dir)) {
@@ -257,7 +268,7 @@ export class SyncWatcher {
       // 新しく見つけた計画は、最初に 1 回同期する (止まっている間の変更を取り込む)
       if (!this.watched.has(file)) {
         this.watched.set(file, { binding: state.binding, seen: signature(file), checkedHash: undefined, firstChangeAt: null, lastChangeAt: null
-        , remoteAhead: true, head: undefined, halted: null, notified: null, broken: false });
+        , remoteAhead: true, head: undefined, halted: null, notified: null, broken: false, generation: state.generation });
       }
     }
   }
@@ -290,9 +301,13 @@ export class SyncWatcher {
   private async syncOne(w: Watched, at: number): Promise<boolean> {
     const file = w.binding.file;
     let result: SyncResult;
+    // 自分の同期が進めた状態の世代番号を覚え直す (自分で進めた分を、「別の実行が進めた」と数えて、同期を繰り返さないように)
+    const remember = () => { try { w.generation = new StateStore(bindingDir(file, this.options.server)).read()?.generation ?? w.generation; } catch { /* 読めない状態は、次の tick の一覧の取り直しが扱う */ } };
     try {
       result = await syncOnce({ file, server: this.options.server, token: this.options.token, fetch: this.options.fetch, now: () => new Date(this.wall()) });
+      remember();
     } catch (e) {
+      remember();
       if (e instanceof SyncNetworkError) { this.fail(at, e); return false; }
       // 状態が読めないなど: この計画は止めておき、ほかの計画は続ける
       w.halted = { hash: contentHash(file), head: w.head }; w.remoteAhead = false; w.firstChangeAt = w.lastChangeAt = null;
