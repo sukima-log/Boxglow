@@ -7,6 +7,7 @@ const settle=p=>p.waitForTimeout(400);
 const core=async(p,id)=>p.locator(`.react-flow__edge[data-id="${id}"]`).evaluate(e=>({
  stroke:getComputedStyle(e.querySelector('.react-flow__edge-path')).stroke,
  dash:getComputedStyle(e.querySelector('.react-flow__edge-path')).strokeDasharray,
+ animation:getComputedStyle(e.querySelector('.react-flow__edge-path')).animationName,
  arrow:getComputedStyle(e.querySelector('.react-flow__edge-arrow')).fill,
  // 詳細欄の開閉で経路を再配置すると、共通幹の丸を描く担当edgeが変わる。数ではなく状態色を検査する。
  junctionsMatch:[...e.querySelectorAll('.react-flow__edge-junction')].every(q=>getComputedStyle(q).fill===getComputedStyle(e.querySelector('.react-flow__edge-path')).stroke)
@@ -25,15 +26,26 @@ const geometry=p=>p.evaluate(()=>window.boxglow.rf.getNodes().map(n=>[n.id,n.pos
     const before=await core(p,id);
     await p.evaluate(id=>window.boxglow.store.getState().select({edgeId:id}),id);await settle(p);
     const after=await core(p,id);
-    check(`${theme} ${ready?'確定':'未確定'}: 選択で芯・矢印・分岐の色と線種は変わらない`,before.junctionsMatch&&after.junctionsMatch&&JSON.stringify(before)===JSON.stringify(after),JSON.stringify({before,after}));
-    check(`${theme} ${ready?'確定':'未確定'}: 状態を線種でも区別する`,ready?after.dash==='none':after.dash!=='none');
+    const accent=await p.evaluate(()=>{const h=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim().slice(1);return 'rgb('+[0,2,4].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';});
+    check(`${theme} ${ready?'確定':'未確定'}: 選択経路はオレンジの動く破線`,after.stroke===accent&&after.arrow===accent&&after.junctionsMatch&&after.dash==='14px, 10px'&&after.animation==='edge-flow');
+    check(`${theme} ${ready?'確定':'未確定'}: 非選択時は元の線種`,ready?before.dash==='none':before.dash==='6px, 5px');
+    const offset=()=>p.locator(`.react-flow__edge[data-id="${id}"] .react-flow__edge-path`).evaluate(e=>getComputedStyle(e).strokeDashoffset);
+    const firstOffset=await offset();await p.waitForTimeout(160);
+    check(`${theme} ${ready?'確定':'未確定'}: 破線が実際に流れる`,firstOffset!==await offset());
     await p.locator(`.react-flow__edge[data-id="${id}"]`).focus();
-    check(`${theme} ${ready?'確定':'未確定'}: キーボードフォーカスでも状態色を維持`,JSON.stringify(before)===JSON.stringify(await core(p,id)));
+    check(`${theme} ${ready?'確定':'未確定'}: フォーカス時もオレンジの動く破線`,(await core(p,id)).stroke===accent&&(await core(p,id)).animation==='edge-flow');
+    await p.emulateMedia({reducedMotion:'reduce'});
+    check(`${theme} ${ready?'確定':'未確定'}: 動きを減らす設定では色を保って停止`,(await core(p,id)).stroke===accent&&(await core(p,id)).animation==='none');
+    await p.emulateMedia({reducedMotion:'no-preference'});
     check(`${theme} ${ready?'確定':'未確定'}: 状態と根拠が詳細欄に出る`,await p.locator('.wire-state').textContent()===(ready?'確定済み':'入力待ち')&&(await p.locator('.wire-reason').textContent()).length>10);
     check(`${theme} ${ready?'確定':'未確定'}: 選択輪郭が接続元から接続先まで続く`,await p.locator(`.react-flow__edge[data-id="${id}"]`).evaluate(e=>{
       const halo=e.querySelector('.react-flow__edge-halo'),hit=e.querySelector('.react-flow__edge-interaction');
-      return !!halo&&halo.getTotalLength()>hit.getTotalLength()&&getComputedStyle(halo).stroke!==getComputedStyle(e.querySelector('.react-flow__edge-path')).stroke;
+      return !!halo&&halo.getTotalLength()>hit.getTotalLength()&&getComputedStyle(halo).stroke===getComputedStyle(e.querySelector('.react-flow__edge-path')).stroke;
     }));
+    await p.getByRole('button',{name:'Fit',exact:true}).click();
+    await p.evaluate(()=>window.boxglow.store.getState().select({}));await settle(p);
+    const restored=await core(p,id);
+    check(`${theme} ${ready?'確定':'未確定'}: 選択解除で元の状態色と線種に戻る`,restored.stroke===before.stroke&&restored.dash===before.dash&&restored.animation==='none');
    }
    await p.evaluate(async()=>{window.boxglow.store.getState().select({});await window.boxglow.rf.zoomTo(1);});await settle(p);
    const normal=await geometry(p);

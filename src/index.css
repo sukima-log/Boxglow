@@ -490,8 +490,8 @@ textarea.input { resize: vertical; min-height: 64px; }
 .tab-list-icon { width: 18px; text-align: center; color: var(--text-muted); }
 .tab-list-prog { margin-left: auto; color: var(--text-muted); font-size: 11px; }
 .canvas-tab:hover { color: var(--text); }
-/* 選んだ線の続きがあるタブ: 選択輪郭と同じ色の点を題名の前に出す (選んだままタブを移ると続きが光っている) */
-.canvas-tab[data-marked="true"]::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--selection); flex: none; }
+/* 選んだ線の続きがあるタブ: 選択中の経路と同じ橙の点を題名の前に出す (選んだままタブを移ると続きが光っている) */
+.canvas-tab[data-marked="true"]::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
 /* パネルの境界のつまみ (ドラッグで幅を変える) */
 .resize-handle { position: absolute; top: 0; bottom: 0; width: 10px; cursor: col-resize; z-index: 25; }
 .resize-handle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; background: transparent; }
@@ -661,12 +661,12 @@ textarea.input { resize: vertical; min-height: 64px; }
 .react-flow__edge.edge-ready { --xy-edge-stroke-selected: var(--wire-ready); }
 .react-flow__edge-path { stroke: var(--wire); stroke-width: 2px; opacity: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-dasharray: 6 5; }
 .react-flow__edge.edge-ready .react-flow__edge-path { stroke: var(--wire-ready); stroke-width: 4px; stroke-dasharray: none; }
-/* 矢印 (線の先端。ボックスの入力に入る線にも、親の出力のノードへ届く線にも付く): 線と同じ色の規則 (未確定 = 琥珀、確定 = 緑。選択時も維持)。大きさは図の座標なので拡大縮小に追従する */
+/* 矢印 (線の先端。ボックスの入力に入る線にも、親の出力のノードへ届く線にも付く): 線と同じ色の規則 (未確定 = 琥珀、確定 = 緑。選択中の経路 = 橙)。大きさは図の座標なので拡大縮小に追従する */
 .react-flow__edge-arrow { fill: var(--wire); stroke: none; pointer-events: none; }
 .react-flow__edge.edge-ready .react-flow__edge-arrow { fill: var(--wire-ready); }
 .react-flow__edge.edge-dim .react-flow__edge-arrow { opacity: 0.45; }
 
-/* 選択・ホバー: 色は変えず、太さと縁取りだけ */
+/* 選択した経路に重ねる光 */
 .react-flow__edge-halo { fill: none; stroke: currentColor; stroke-opacity: 0.22; stroke-width: 12px; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; color: var(--wire-halo); }
 
 /* ボックスを選んだとき、つながる線 (edge-hot) は少しだけ太くする。光は付けない (束の線が 1 本の帯に潰れる)。
@@ -674,12 +674,26 @@ textarea.input { resize: vertical; min-height: 64px; }
 .react-flow__edge.edge-hot .react-flow__edge-path { stroke-width: 3px; }
 .react-flow__edge.edge-hot.edge-ready .react-flow__edge-path { stroke-width: 5px; }
 .react-flow__edge:hover .react-flow__edge-path { stroke-width: 5px; }
-/* 選択は外側の輪郭のみ。芯・矢印・分岐点は確定状態を保つ。 */
+/* 選んだ配線と境界を越えた続きは、従来のオレンジ色の動く破線で追う。 */
 .react-flow__edge.selected .react-flow__edge-path,
 .react-flow__edge.edge-net .react-flow__edge-path,
-.react-flow__edge:focus .react-flow__edge-path { opacity: 1 !important; }
-.react-flow__edge.selected .react-flow__edge-halo, .react-flow__edge.edge-net .react-flow__edge-halo { color: var(--selection); stroke-opacity: 0.28; stroke-width: 12px; }
+.react-flow__edge:focus .react-flow__edge-path {
+  stroke: var(--accent) !important;
+  stroke-width: 6px;
+  stroke-dasharray: 14 10;
+  animation: edge-flow 0.8s linear infinite;
+  opacity: 1 !important;
+}
+.react-flow__edge.selected .react-flow__edge-halo, .react-flow__edge.edge-net .react-flow__edge-halo { color: var(--accent); stroke-opacity: 0.25; stroke-width: 10px; }
+.react-flow__edge.selected .react-flow__edge-arrow, .react-flow__edge.edge-net .react-flow__edge-arrow,
+.react-flow__edge.selected .react-flow__edge-junction, .react-flow__edge.edge-net .react-flow__edge-junction { fill: var(--accent) !important; }
 .react-flow__edge.selected, .react-flow__edge.edge-net { z-index: 1000 !important; }
+@keyframes edge-flow { to { stroke-dashoffset: -24; } }
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__edge.selected .react-flow__edge-path,
+  .react-flow__edge.edge-net .react-flow__edge-path,
+  .react-flow__edge:focus .react-flow__edge-path { animation: none; }
+}
 /* ボックスを選んでいるとき、関係ない線は少し薄く (色はそのまま) */
 .react-flow__edge.edge-dim .react-flow__edge-path { opacity: 0.45; }
 .react-flow__edge.edge-dim .react-flow__edge-halo { display: none; }
@@ -1000,7 +1014,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .canvas-tools__legend span { display: inline-flex; align-items: center; gap: 6px; }
 .canvas-tools__legend i { width: 20px; border-top: 2px dashed var(--wire); }
 .canvas-tools__legend i.ready { border-top: 4px solid var(--wire-ready); }
-.canvas-tools__legend i.selected { border-top: 3px solid var(--wire-ready); box-shadow: 0 0 0 4px var(--selection-soft); }
+.canvas-tools__legend i.selected { border-top: 4px dashed var(--accent); }
 .canvas-tools__buttons { display: flex; flex-wrap: wrap; gap: 4px; }
 .canvas-tools__buttons button { min-width: 32px; min-height: 32px; padding: 4px 8px; border: 1px solid var(--line-soft); border-radius: 6px; background: var(--bg-card); color: var(--text); font-size: 12px; cursor: pointer; }
 .canvas-tools__buttons button:hover, .canvas-tools__buttons button[aria-pressed="true"] { background: var(--primary-soft); border-color: var(--primary); }
@@ -1029,7 +1043,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .menu-actions { display: none; flex-direction: column; gap: 4px; }
 .save-chip { border: none; background: var(--bg-paper); }
 .scope-path { border: 1px solid var(--line-soft); box-shadow: none; }
-/* 分岐点の丸 (同じ出力から分かれる線の幹と枝の接点): 線と同じ色の規則 (未確定 = 琥珀、確定 = 緑。選択時も維持) */
+/* 分岐点の丸 (同じ出力から分かれる線の幹と枝の接点): 線と同じ色の規則 (未確定 = 琥珀、確定 = 緑。選択中の経路 = 橙) */
 .react-flow__edge-junction { fill: var(--wire); pointer-events: none; }
 .react-flow__edge.edge-ready .react-flow__edge-junction { fill: var(--wire-ready); }
 /* キャンバスの操作欄の引き出し (View): 凡例・吸着・整列・ミニマップ・操作の説明を、押したときだけ上に開く */
