@@ -28,7 +28,7 @@ async function drag(page, from, to) {
    await p.locator('.mode-toggle').click();
    await p.getByRole('button',{name:'+ Block',exact:true}).click();
    const newId=await idOf(p,'新しいブロック');
-   await p.getByRole('button',{name:'I/O 0/1',exact:true}).click();
+   await p.getByRole('button',{name:'入出力 0/1',exact:true}).click();
    await p.getByRole('button',{name:'＋ 入力を追加',exact:true}).click();
    await p.locator('.panel.right button[title="閉じる (Esc)"]').click();
    await p.getByRole('button',{name:'Fit',exact:true}).click();await pause(p);
@@ -102,10 +102,11 @@ async function drag(page, from, to) {
    await p.evaluate(id=>window.boxglow.store.getState().apply(p=>{
      const q=structuredClone(p);q.blocks[id].title='AI エージェントとの連携で前の判断を読み返しながら長いタスクを進めるための確認';q.blocks[id].category='fix';return q;
    }),newId);await pause(p);
-   check(`${theme}: 長い題名とカテゴリの札が見出しの中に収まる (省略しない)`,await title.evaluate(e=>{
-     const r=e.getBoundingClientRect(),h=e.closest('.bg-block__head').getBoundingClientRect(),c=e.closest('.bg-block__head').querySelector('.bg-block__cat').getBoundingClientRect();
+   await p.evaluate(id=>window.boxglow.store.getState().select({blockId:id}),newId);await pause(p);
+   check(`${theme}: 長い題名が見出しに収まり、カテゴリは情報行で読める`,await title.evaluate(e=>{
+     const r=e.getBoundingClientRect(),h=e.closest('.bg-block__head').getBoundingClientRect(),c=e.closest('.bg-block').querySelector('.bg-block__meta .bg-block__cat').getBoundingClientRect();
      // 題名が切れていない (中身の高さ・幅が表示の枠を超えていない) ことも確かめる
-     return r.top>=h.top&&r.bottom<=h.bottom+1&&r.left>=c.right&&r.right<=h.right&&e.scrollHeight<=e.clientHeight+1&&e.scrollWidth<=e.clientWidth+1;
+     return r.top>=h.top&&r.bottom<=h.bottom+1&&r.left>=h.left&&r.right<=h.right&&c.width>0&&e.scrollHeight<=e.clientHeight+1&&e.scrollWidth<=e.clientWidth+1;
    }));
    const toggle=p.locator(`.topbar button[title="${theme==='dark'?'Light':'Dark'} mode"]`);
    await toggle.click();

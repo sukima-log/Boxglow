@@ -64,7 +64,7 @@ export const RoutedEdge = memo(function RoutedEdge(props: EdgeProps) {
   return (
     <>
       {/* 光 (halo) は線を 1 本選んだときだけ。ボックスを選んだとき (hot) は束になった線の光が重なって 1 本の帯に見えるので出さない */}
-      {(selected || net) && <path d={d} className="react-flow__edge-halo" />}
+      {(selected || net) && <path d={toRoundedPath(path)} className="react-flow__edge-halo" />}
       <BaseEdge id={id} path={d} markerEnd={markerEnd} style={style} interactionWidth={0} />
       {shared?.junctions.map((p) => <circle key={`${p.x},${p.y}`} cx={p.x} cy={p.y} r={3} className="react-flow__edge-junction" />)}
       {arrowD && <path d={arrowD} className="react-flow__edge-arrow" />}

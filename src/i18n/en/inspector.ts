@@ -1,5 +1,13 @@
 /** 英語の辞書 (inspector)。キー = ソースの日本語の文 */
 export const inspector: Record<string, string> = {
+  "日程": "Dates",
+  "その他": "More",
+  "配線": "Wire",
+  "入出力": "I/O",
+  "接続を外す": "Disconnect",
+  "供給元の完了・成果物、または上流の入力を確認できています。": "The source is complete, has an artifact, or has a confirmed upstream input.",
+  "供給元が未完了で成果物がない、または上流の入力がまだ確定していません。": "The source is incomplete without an artifact, or its upstream input is not yet confirmed.",
+
   // パネル共通
   // プロジェクト設定
   "ゴール (何を達成したいか)": "Goal (what to achieve)"

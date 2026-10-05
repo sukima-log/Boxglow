@@ -130,7 +130,7 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
   // 帯は 2 つのまとまり: 左 (topbar-identity) = 引き出し・Home・計画名・保存の札、右 (topbar-tools) = 状況・モード・検索・追加・メニュー。
   // 幅が狭いと右のまとまりが次の行へ折り返す (index.css の .topbar。検索やメニューが画面の外に出ないように)
   return (
-    <header className="topbar">
+    <header className="topbar" data-editing={editMode}>
       <div className="topbar-identity">
       <button className="btn btn-ghost btn-sm" onClick={onToggleDrawer} title={t("階層 / 絞り込み / メンバー / 部品")}>☰</button>
       {/* VS Code の中では、Home へ戻るボタンを出さない: 開いているのは 1 つのファイルで、戻る先の一覧 (ブラウザ内の計画) は、ファイルとは別のコピーのため */}
@@ -164,8 +164,7 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
         {busy > 0 && <span className="dot" />}
         {busy > 0 && <span><span className="summary-chip__txt">{t("作業中")} </span>{busy}</span>}
         {sum.blocked.length > 0 && <span><span className="summary-chip__txt">{t("詰まり・確認待ち")} </span>{sum.blocked.length}</span>}
-        {sum.decisions.length > 0 && <span className="dot decision" />}
-        {sum.decisions.length > 0 && <span><span className="summary-chip__txt">{t("判断待ち")} </span>{sum.decisions.length}</span>}
+        {sum.decisions.length > 0 && <span className="summary-decision"><span className="summary-chip__txt">{t("判断待ち")} </span>{sum.decisions.length}</span>}
         {/* 人が答えて AI がまだ読んでいない回答: 答えた直後に見失わないよう、引き取られるまで帯に出す */}
         {sum.answered.length > 0 && <span><span className="summary-chip__txt">{t("回答済み")} </span>{sum.answered.length}</span>}
         {busy === 0 && sum.blocked.length === 0 && sum.decisions.length === 0 && sum.answered.length === 0 && <span>Activity</span>}
@@ -200,7 +199,7 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
           <>
             {/* よく使う編集の操作は帯に出す (通常の幅)。760px 以下では帯から外し、⋯ メニューの中に同じ操作を出す (index.css の .desktop-action / .menu-actions) */}
             <button className="btn btn-primary btn-sm desktop-action" onClick={addSibling} title={t("ブロックを追加 (N)。ボックスを選んでいればその中に、選んでいなければプロジェクトの中に")}>+ Block</button>
-            <button className="btn btn-sm desktop-action" onClick={autoLayout} title={t("Auto Layout: 依存関係で並べ直す (大項目は畳んだ前提)")}>Auto Layout</button>
+            <button className="btn btn-sm desktop-action layout-action" onClick={autoLayout} title={t("Auto Layout: 依存関係で並べ直す (大項目は畳んだ前提)")}>Auto Layout</button>
             <button className="btn btn-ghost btn-sm desktop-action" onClick={undo} disabled={past === 0} title={t("元に戻す (Ctrl+Z)")} aria-label="Undo">↶</button>
             <button className="btn btn-ghost btn-sm desktop-action" onClick={redo} disabled={future === 0} title={t("やり直す (Ctrl+Y)")} aria-label="Redo">↷</button>
           </>
@@ -212,7 +211,7 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
               {/* 編集の操作: 帯に出せない狭い幅 (760px 以下) のときだけ、ここに出す (通常の幅では帯のボタンを使う) */}
               {!readonly && <div className="menu-actions">
                 <button className="btn btn-primary btn-sm" onClick={addSibling}>+ Block</button>
-                <button className="btn btn-sm" onClick={autoLayout}>Auto Layout</button>
+                <button className="btn btn-sm layout-action" onClick={autoLayout}>Auto Layout</button>
                 <button className="btn btn-ghost btn-sm" onClick={undo} disabled={past === 0}>Undo</button>
                 <button className="btn btn-ghost btn-sm" onClick={redo} disabled={future === 0}>Redo</button>
               </div>}

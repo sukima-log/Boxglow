@@ -6,7 +6,7 @@
  */
 import { WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
-import { isAcked as decisionIsAcked } from "../model/graph";
+import { isEdgeReady, isAcked as decisionIsAcked } from "../model/graph";
 import { useEffect, useMemo, useState } from "react";
 import { addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, disconnect, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, missingRequiredInputs, removeBlock, setCategory, setProgress, setSchedule, updateBlock, wireNetTabs } from "../model/graph";
 import { saveTemplate } from "../lib/templates";
@@ -215,7 +215,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         <button className="chip" style={{ fontFamily: "ui-monospace, monospace" }} title={t("短い ID (押すとコピー。検索や CLI で使えます)")} onClick={async () => { if (await copyText(b.key ?? "")) setToast(t("ID {key} をコピーしました", { key: b.key ?? "" })); }}>{b.key}</button>
         {!readonly && (
           <div className="relative">
-            <button className="btn btn-ghost btn-sm" onClick={() => setMenu(!menu)} title="More">⋯</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setMenu(!menu)} title={t("その他")}>⋯</button>
             {menu && (
               <div className="card absolute right-0 mt-1 p-1 flex flex-col z-30" style={{ minWidth: 200 }}>
                 <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); setScopeEditing(true); }}>{t("作業範囲を編集")}</button>
@@ -239,7 +239,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
 
       {/* タブ: 一度に 1 項目だけ見せる */}
       <div className="seg" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
-        {([["status", "Status"], ["io", "I/O"], ["owner", "Owner"], ["dates", "Dates"], ["more", "More"]] as const).map(([id, label]) => (
+        {([["status", t("状態")], ["io", t("入出力")], ["owner", t("担当")], ["dates", t("日程")], ["more", t("その他")]] as const).map(([id, label]) => (
           <button key={id} className="seg__btn" data-on={tab === id} onClick={() => setTab(id)} style={{ padding: "6px 2px", fontSize: 12 }}
             title={TAB_HELP[id]}>
             {label}
@@ -359,7 +359,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       {/* 2. 担当: 割り当て済みはチップ、追加は検索で */}
       {tab === "owner" && (
       <section className="sec">
-        <div className="sec__head"><span className="label">Owner</span></div>
+        <div className="sec__head"><span className="label">{t("担当")}</span></div>
         <div className="flex items-center gap-1 flex-wrap">
           {b.assigneeIds.map((id) => {
             const m = project.members.find((x) => x.id === id);
@@ -513,7 +513,11 @@ function EdgeInspector({ project, edgeId }: { project: Project; edgeId: string }
   const name = (blockId: string) => (blockId === ROOT_ID ? t("プロジェクト") : project.blocks[blockId]?.title ?? "?");
   return (
     <div className="flex flex-col gap-3 p-3">
-      <PanelHead title="Wire" />
+      <PanelHead title={t("配線")} />
+      <div className="wire-state" data-ready={isEdgeReady(project, e)}>{isEdgeReady(project, e) ? t("確定済み") : t("入力待ち")}</div>
+      <p className="wire-reason">{isEdgeReady(project, e)
+        ? t("供給元の完了・成果物、または上流の入力を確認できています。")
+        : t("供給元が未完了で成果物がない、または上流の入力がまだ確定していません。")}</p>
       <div className="text-[13px]">
         {/* 入出力の名前を囲む「」は英語では引用符にする */}
         <div><b>{name(fp.blockId)}</b>{t("「{name}」", { name: fp.name })}</div>
@@ -524,7 +528,7 @@ function EdgeInspector({ project, edgeId }: { project: Project; edgeId: string }
       {e.auto ? (
         <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("自動の線。手動でつなぐと置き換わります。")}</div>
       ) : (
-        !readonly && <button className="btn btn-sm self-start" onClick={() => { select({}); apply((p) => disconnect(p, edgeId)); }}>Disconnect</button>
+        !readonly && <button className="btn btn-sm self-start" onClick={() => { select({}); apply((p) => disconnect(p, edgeId)); }}>{t("接続を外す")}</button>
       )}
     </div>
   );

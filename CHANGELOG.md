@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Visual update of the canvas (by Codex): confirmed wires are solid green and unconfirmed wires dashed amber, and selecting a wire adds an outline instead of recolouring it; the wire details say why it counts as confirmed or not. Boxes put the title first and show category, ID, progress and ordinary due dates when selected; open questions get a small badge even without an activity record. In-progress boxes use a thin band and the progress bar instead of full hatching and a constant glow. Below 65% zoom in View mode the canvas switches to an overview that simplifies port labels (sizes, handles and saved data are unchanged).
 - Home: opening an existing file no longer sits under an AI-only heading. One "Open a file" section offers the three ways side by side (open to view, copy and edit in the browser, edit and save through `serve` or VS Code), followed by "Create a new plan".
 - VS Code extension 0.4.1: an empty `boxglow.json` asks for a plan name and creates the plan in that file; the start page inside VS Code shows only what concerns the open file (no browser-only guidance, no Home button), and explains an unreadable file or missing content without cutting the text off.
 - Wires that reach an output node (the Outputs node of a tab, and a parent's output) now end in an arrowhead like the wires into inputs.

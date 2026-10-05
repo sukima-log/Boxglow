@@ -19,7 +19,12 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
         return controls.every(e=>{const r=e.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth+1;});
       }));
     }
-    // 通常の幅 (上のループで最後に設定した 1280px): よく使う編集の操作は帯に出ている
+    // 閲覧では配置操作をメニューにまとめ、編集時には帯に戻す。
+    check('閲覧時: Auto Layout は帯に出さない',!await page.locator('.desktop-action.layout-action').isVisible());
+    await page.locator('.topbar button[title="Menu"]').click();
+    check('閲覧時: メニューから Auto Layout に到達できる',await page.locator('.menu-actions .layout-action').isVisible());
+    await page.locator('.mode-toggle').click();
+    // 編集時の通常幅: よく使う編集の操作は帯に出ている
     check('上の帯 1280px: Auto Layout と Undo / Redo が帯に出ている',await page.evaluate(()=>{
       const vis=(sel)=>[...document.querySelectorAll(sel)].some(e=>e.getClientRects().length>0);
       return vis('.topbar-tools > button.desktop-action[aria-label="Undo"]') && vis('.topbar-tools > button.desktop-action[aria-label="Redo"]') && [...document.querySelectorAll('.topbar-tools > button.desktop-action')].some(e=>e.textContent==='Auto Layout'&&e.getClientRects().length>0);
@@ -39,14 +44,14 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.getByRole('button',{name:'静的ホスティング',exact:true}).click();
     await page.getByText('AI未確認の回答',{exact:true}).waitFor();
     check('詳細パネル: 回答は AI が確認するまで残る',await page.getByText('静的ホスティング',{exact:true}).isVisible());
-    await page.getByRole('button',{name:'More',exact:true}).click();
+    await page.getByRole('button',{name:'その他',exact:true}).click();
     const attention=page.locator('.inspector-attention');
     check('詳細パネル: 別タブでもAI未確認の件数に気づける',await attention.isVisible() && (await attention.innerText()).includes('AI未確認 1') && !(await attention.innerText()).includes('回答待ち'));
     await attention.click();
     check('詳細パネル: 案内から回答を確認できる',await page.getByText('AI未確認の回答',{exact:true}).isVisible());
-    await page.getByRole('button',{name:'More',exact:true}).click();
+    await page.getByRole('button',{name:'その他',exact:true}).click();
     await search.fill('B4');await search.press('Enter');
-    check('詳細パネル: 別のボックスを選んでも開いているタブ (More) を保つ',await page.locator('.panel.right .seg__btn').filter({hasText:/^More$/}).getAttribute('data-on')==='true');
+    check('詳細パネル: 別のボックスを選んでも開いているタブ (More) を保つ',await page.locator('.panel.right .seg__btn').filter({hasText:/^その他$/}).getAttribute('data-on')==='true');
     await page.locator('.summary-chip').click();
     await page.getByRole('button',{name:/^Resume/}).click();
     check('Resume タブ: AI 未確認の回答が残り、引き継ぎメモが無いときの案内が出る',await page.getByText('引き継ぎメモはまだありません。各タスクの「AI への引き継ぎ」に残せます。').isVisible() && await page.getByText('静的ホスティング',{exact:true}).isVisible());

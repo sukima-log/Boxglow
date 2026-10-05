@@ -89,7 +89,7 @@ function squeezed(file) {
     await page.evaluate(() => window.boxglow.store.getState().select({ timeline: true }));
     await page.waitForTimeout(400);
     await page.locator("aside.right textarea").first().fill("Email magic link で進める");
-    await page.locator("aside.right").getByRole("button", { name: "Answer", exact: true }).first().click(); // タブの「Answered」と区別する
+    await page.locator("aside.right").getByRole("button", { name: "回答する", exact: true }).first().click(); // タブの「Answered」と区別する
     await page.waitForTimeout(600);
     const after = await page.locator("aside.right").innerText();
     const dec = await page.evaluate((id) => { const d = window.boxglow.store.getState().project.blocks[id].decisions[0]; return { answer: d.answer, by: d.answeredBy, acked: !!d.ackedAt }; }, signIn);

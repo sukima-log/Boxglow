@@ -38,3 +38,6 @@ node e2e/own.cjs
 
 # 着手・範囲・再開情報の画面検査 (サンプルのみ)
 node e2e/workflow.cjs
+
+# 状態と選択の分離・俯瞰表示
+node e2e/design.cjs

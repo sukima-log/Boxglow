@@ -1,5 +1,9 @@
 /** 英語の辞書 (canvas)。キー = ソースの日本語の文 */
 export const canvas: Record<string, string> = {
+  "判断待ち {n}": "Decisions {n}",
+  "俯瞰表示": "Overview",
+  "通常表示": "Standard",
+
   // ボックス (BlockNode): 題名の行
   "カテゴリ: {label}": "Category: {label}"
 , "{title} (部品: {name})": "{title} (part: {name})"

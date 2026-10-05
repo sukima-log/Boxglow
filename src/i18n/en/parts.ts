@@ -1,5 +1,7 @@
 /** 英語の辞書 (parts: 詳細パネルの部品・引き出し・タイムライン)。キー = ソースの日本語の文 */
 export const parts: Record<string, string> = {
+  "回答する": "Answer",
+
   // ---- parts.tsx: 成果物の一覧 ----
   "ファイルの移動を検出し、パスを付け替えました": "File move detected; path updated"
 , "現在のリポジトリに見つかりません (コミットからは取り出せます)": "Not found in the current repository (still available from the commit)"

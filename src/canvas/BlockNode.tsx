@@ -1,8 +1,8 @@
 /**
  * ブロック (ボックス) のノード
- * 状態はボックスの見た目で表す: black = 濃い塗り + 破線 + ?, gray = 斜線 + 進捗バー, white = 明るい塗り + チェック (光る)
+ * 状態はボックスの見た目で表す: black = 濃い塗り、gray = 細い斜線帯 + 進捗バー、white = 明るい塗り + チェック (完了時だけ光る)
  */
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { ancestorsOf, childrenOf, computeProgress, daysToDue, effectiveProgress, isInputReady, isOverdue, issueKeyOf, missingRequiredInputs, portsOf } from "../model/graph";
 import type { BlockStatus } from "../model/types";
@@ -28,7 +28,7 @@ export function StatusIcon({ status }: { status: BlockStatus }) {
     return (
       <svg className="status-icon done" width="18" height="18" viewBox="0 0 18 18" aria-label={label}>
         <circle cx="9" cy="9" r="8" />
-        <path d="M5 9.5l2.6 2.6L13 6.8" fill="none" stroke="#fbfbfb" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M5 9.5l2.6 2.6L13 6.8" fill="none" stroke="var(--on-primary)" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     );
   }
@@ -53,6 +53,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   const headerH = data.headerH ?? 44;
   /** ポート i 行目のハンドルの縦位置 (見出しの高さに追従) */
   const rowAt = (i: number) => headerH + i * 26 + 13;
+  const overviewZoom = useStore((s) => s.transform[2] < 0.65);
   const canEdit = useProjectStore((s) => !s.readonly && s.editMode);
   // ストアからはプロジェクト本体だけを取り (参照が変わるのは変更時だけ)、表示用の値は useMemo で導く。
   // セレクタで毎回新しい配列を作ると React が無限ループ (エラー #185) になるため。
@@ -74,11 +75,12 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     , progressText: `${prog.white}/${prog.total}`
     , ins: ins.map((q) => ({ id: q.id, name: q.name, required: q.required, promoted: !!q.promotedFrom, ready: isInputReady(p, q.id) }))
     , outs: outs.map((q) => ({ id: q.id, name: q.name }))
+    , pending: b?.decisions.filter((d) => d.answer === undefined).length ?? 0
     , activity: b?.activity ?? null
     , percent: effectiveProgress(p, blockId)
     , isProject: b?.kind === "project"
     , fromTemplate: b?.template?.name ?? null
-    , category: categoryOf(b?.category) ?? null // 色の帯と札 (未分類なら null)
+    , category: categoryOf(b?.category) ?? null // 詳細の札 (未分類なら null)
     , startable: !!b && b.status === "black" && b.kind !== "project" && ins.length > 0 && missingRequiredInputs(p, blockId).length === 0 // 必須の入力がそろった New
     , issue: b?.issue ? { url: b.issue, key: issueKeyOf(b.issue) } : null // 外部の課題 (JIRA / Redmine など)
     , depth: Math.min(4, Math.max(1, ancestorsOf(p, blockId).length)) // 階層の深さ (プロジェクトのボックス = 1)。枠線の太さと地色に使う
@@ -120,6 +122,8 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   , `depth-${view.depth}`
   , view.expanded ? "expanded" : ""
   , selected ? "selected" : ""
+  , overviewZoom && !canEdit ? "is-overview" : ""
+  , headerH > 60 ? "has-wrapped-title" : ""
   , data.dimmed ? "dimmed" : ""
   , glow ? "just-glowed" : ""
   , view.activity ? `activity-${view.activity.state}` : ""
@@ -133,11 +137,9 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   // 丸を押すだけで詳細パネルが開くと図の幅が変わり、クリックでの結線 (出力の丸 → 入力の丸) の途中で接続先がずれるため
   return (
     <div className={cls} style={{ width, height, ...(view.category ? ({ "--cat": view.category.color } as React.CSSProperties) : {}) }} onDoubleClick={onDoubleClick} onClick={(ev) => { if ((ev.target as HTMLElement).closest(".react-flow__handle")) ev.stopPropagation(); }}>
-      {/* 題名の行: 題名だけ (カテゴリとプロジェクトの札、畳むボタン以外は置かない) */}
+      {/* 題名の行: 題名、プロジェクトの札、畳むボタン */}
       <div className="bg-block__head" style={{ height: headerH - 24 }}>
-        {view.category && <span className={`bg-block__cat${view.category.neutral ? " neutral" : ""}`} title={t("カテゴリ: {label}", { label: t(view.category.label) })}>{t(view.category.label)}</span>}
         {view.isProject && <span className="bg-block__tag">Project</span>}
-        {!view.isProject && <StatusIcon status={view.status} />}
         <span className="bg-block__title" title={view.fromTemplate ? t("{title} (部品: {name})", { title: view.title, name: view.fromTemplate }) : view.title}>{view.title}</span>
         {(view.kids > 0 || data.major) && (
           <button className="bg-block__toggle nodrag" onClick={toggle} title={data.major ? t("この大項目のタブを開く (中のボックス {n} 個)", { n: view.kids }) : view.collapsed ? t("下の階層を展開する") : t("下の階層を畳む")}>
@@ -145,29 +147,32 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           </button>
         )}
       </div>
-      {/* 情報の行: 記号ではなく文字で (状態・担当・進捗・活動・期日・ID) */}
+      {/* 情報の行: 状態は記号と文字。細かな情報は選択時に表示 */}
       <div className="bg-block__meta">
+        {!view.isProject && <StatusIcon status={view.status} />}
         {!view.isProject && (
           <span className={`meta-chip status-${view.status}`} title={t("状態")}>{STATUS_LABEL[view.status]}</span>
         )}
-        {/* 担当はボックスには出さない (押して右パネルの Owner で見る)。自分の担当だけ左の帯で分かる */}
+        {/* 担当はボックスには出さない (押して右パネルの担当 で見る)。自分の担当だけ左の帯で分かる */}
         {view.status !== "white" && view.percent > 0 && (
-          <span className="meta-chip" title={view.kids > 0 ? t("下の階層の完了 {done}", { done: view.progressText }) : t("進捗")}>{view.percent}%</span>
+          <span className="meta-chip bg-block__secondary" title={view.kids > 0 ? t("下の階層の完了 {done}", { done: view.progressText }) : t("進捗")}>{view.percent}%</span>
         )}
-        {view.activity && (
+        {view.activity && !(view.pending > 0 && view.activity.state === "needs_decision") && (
           <span className={`meta-chip activity ${view.activity.state}`} title={`${view.activity.actor}: ${t(ACTIVITY_LABEL[view.activity.state])} ${view.activity.note}`}>
-            {t(ACTIVITY_LABEL[view.activity.state])} ({actorName(view.activity.actor)})
+            {t(ACTIVITY_LABEL[view.activity.state])}<span className="bg-block__actor-name"> ({actorName(view.activity.actor)})</span>
           </span>
         )}
+        {view.pending > 0 && <span className="meta-chip needs_decision">{t("判断待ち {n}", { n: view.pending })}</span>}
         {view.dueDate && view.status !== "white" && (
-          <span className={`meta-chip ${view.overdue ? "overdue" : ""}`} title={view.daysLeft === null ? t("期日 {date}", { date: view.dueDate }) : view.daysLeft < 0 ? t("期日 {date} ({d} 日超過)", { date: view.dueDate, d: -view.daysLeft }) : t("期日 {date} (あと {d} 日)", { date: view.dueDate, d: view.daysLeft })}>
+          <span className={`meta-chip ${view.overdue ? "overdue" : "bg-block__secondary"}`} title={view.daysLeft === null ? t("期日 {date}", { date: view.dueDate }) : view.daysLeft < 0 ? t("期日 {date} ({d} 日超過)", { date: view.dueDate, d: -view.daysLeft }) : t("期日 {date} (あと {d} 日)", { date: view.dueDate, d: view.daysLeft })}>
             {t("期日 {date}", { date: view.dueDate.slice(5).replace("-", "/") })}
           </span>
         )}
         {view.startable && <span className="meta-chip ready" title={t("必須の入力がそろっています (着手できます)")}>Ready</span>}
         {view.issue && <a className="meta-chip issue nodrag" href={view.issue.url} target="_blank" rel="noreferrer" title={t("外部の課題: {url}", { url: view.issue.url })} onClick={(e) => e.stopPropagation()}>{view.issue.key}</a>}
         {view.fromTemplate && <span className="meta-chip muted" title={t("部品: {name}", { name: view.fromTemplate })}>{t("部品")}</span>}
-        <span className="bg-block__key" title={t("ID (検索や CLI で使えます)")}>{view.key}</span>
+        {view.category && <span className={`bg-block__cat bg-block__secondary${view.category.neutral ? " neutral" : ""}`} title={t("カテゴリ: {label}", { label: t(view.category.label) })}>{t(view.category.label)}</span>}
+        <span className="bg-block__key bg-block__secondary" title={t("ID (検索や CLI で使えます)")}>{view.key}</span>
       </div>
 
       {!view.expanded && (

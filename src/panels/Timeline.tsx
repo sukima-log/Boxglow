@@ -91,7 +91,7 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
             <textarea className="input" rows={3} placeholder={d.options.length > 0 ? t("または自由に書く (複数行可)") : t("回答を書く (複数行可)")} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => submitKey(e, () => answer(text))} />
             <div className="flex items-center gap-2 justify-end">
               <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{t("Enter は改行。送るのはボタンか Ctrl+Enter")}</span>
-              <button className="btn btn-primary btn-sm" disabled={!text.trim()} onClick={() => answer(text)}>Answer</button>
+              <button className="btn btn-primary btn-sm" disabled={!text.trim()} onClick={() => answer(text)}>{t("回答する")}</button>
             </div>
           </div>
         </>

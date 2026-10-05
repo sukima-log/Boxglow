@@ -1,6 +1,6 @@
 /**
  * 使い始めの体験の検査 (ライト / ダーク): 最初の画面に出す操作と隠す操作、同じ出力の線の幹が 1 回だけ描かれること、
- * ボックスの見た目 (New = 濃い、In Progress = 斜線、Done = 紙色、カテゴリの帯、選択 = 橙) と線の太さ (確定 4px / 未確定 2px)、
+ * ボックスの見た目 (New = 濃い、In Progress = 細い斜線帯、Done = テーマに応じた明るい面、選択 = 輪郭) と線の太さ (確定 4px / 未確定 2px)、
  * ミニマップの出し方、質問への回答が残ること、Home の最初の案内。
  * 撮影は確認用で、リポジトリには書き出さない: OS の一時フォルダ (<tmp>/boxglow-e2e-shots。環境変数 BOXGLOW_E2E_SHOTS で変えられる) に出す。
  * 使い方: e2e/run.sh から呼ばれる (PLAYWRIGHT と LD_LIBRARY_PATH は run.sh が設定。プレビューが 4173 番で動いていること)
@@ -17,7 +17,7 @@ const settle=p=>p.waitForTimeout(500);
    const {page:p,errors}=await open(browser,{query:`?demo=1&lang=ja&theme=${theme}`});
    await p.setViewportSize({width:1120,height:720});
    await p.getByRole('tab',{name:'In Progress 実装する',exact:true}).click();await settle(p);
-   check(`${theme}: 最初の画面はミニマップを隠し、Auto Layout は帯に出す`,!await p.getByRole('button',{name:'ミニマップ',exact:true}).isVisible() && await p.locator('.react-flow__minimap').count()===0 && await p.locator('.topbar-tools > button.desktop-action').filter({hasText:/^Auto Layout$/}).isVisible());
+   check(`${theme}: 最初の画面はミニマップを隠し、Auto Layout は閲覧時に帯から隠す`,!await p.getByRole('button',{name:'ミニマップ',exact:true}).isVisible() && await p.locator('.react-flow__minimap').count()===0 && !await p.locator('.topbar-tools > button.desktop-action').filter({hasText:/^Auto Layout$/}).isVisible());
    // ボックスと線の見た目 (縮小しても状態と線の種類が見分けられる約束): 計算後のスタイルで確かめる
    const look=await p.evaluate(()=>{
      const css=(sel,prop,pseudo)=>{const e=document.querySelector(sel);return e?getComputedStyle(e,pseudo)[prop]:null;};
@@ -25,15 +25,15 @@ const settle=p=>p.waitForTimeout(500);
      return {
        black:lum(css('.bg-block.status-black:not(.expanded)','backgroundColor')), white:lum(css('.bg-block.status-white:not(.expanded)','backgroundColor')),
        hatch:css('.bg-block.status-gray:not(.expanded)','backgroundImage'), blackBorder:css('.bg-block.status-black:not(.expanded)','borderTopStyle'),
-       cat:css('.bg-block.has-cat','display','::before'), catH:css('.bg-block.has-cat','height','::before'),
+       cat:css('.bg-block.has-cat:not(.status-gray)','display','::before'), stripe:css('.bg-block.status-gray:not(.expanded)','backgroundImage','::before'),
        ready:css('.react-flow__edge.edge-ready .react-flow__edge-path','strokeWidth'), pending:css('.react-flow__edge:not(.edge-ready) .react-flow__edge-path','strokeWidth'),
-       progress:css('.bg-block__progress > span','backgroundColor'), ink:css('.bg-block__progress','borderTopColor')
+       progress:css('.bg-block__progress > span','backgroundColor'), primary:getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()
      };
    });
-   check(`${theme}: New は濃いボックス、Done は明るい紙色`,look.black!==null&&look.white!==null&&look.black<.35&&look.white>.75,JSON.stringify(look));
-   check(`${theme}: In Progress は斜線`,look.hatch===null||/gradient/.test(look.hatch),JSON.stringify(look.hatch));
-   check(`${theme}: カテゴリの色の帯が出ている`,look.cat===null||(look.cat!=='none'&&parseFloat(look.catH)>0),JSON.stringify([look.cat,look.catH]));
-   check(`${theme}: 進捗バーは墨色 (文字と同じ無彩色。主色のティールではない)`,look.progress===null||(()=>{const v=look.progress.match(/\d+/g).slice(0,3).map(Number);return Math.max(...v)-Math.min(...v)<24;})(),JSON.stringify(look.progress));
+   check(`${theme}: New より明るい Done、ダークでは白い面を抑える`,look.black!==null&&look.white!==null&&look.black<.35&&(theme==='light'?look.white>.75:look.white>look.black&&look.white<.4),JSON.stringify(look));
+   check(`${theme}: In Progress の全面に斜線を敷かない`,look.hatch===null||look.hatch==='none',JSON.stringify(look.hatch));
+   check(`${theme}: カテゴリの色の帯を外し、作業中だけ細い斜線帯`,(look.cat===null||look.cat==='none')&&(look.stripe===null||/gradient/.test(look.stripe)),JSON.stringify([look.cat,look.stripe]));
+   check(`${theme}: 進捗バーは作業中を示すティール`,look.progress===null||(()=>{const v=look.progress.match(/\d+/g).slice(0,3).map(Number);const h=look.primary.slice(1);return v.every((c,i)=>c===parseInt(h.slice(i*2,i*2+2),16));})(),JSON.stringify(look.progress));
    check(`${theme}: 線の太さは確定 4px / 未確定 2px`,(look.ready===null||look.ready==='4px')&&(look.pending===null||look.pending==='2px'),JSON.stringify([look.ready,look.pending]));
    check(`${theme}: 同じ出力の分岐点に丸が出る`,await p.locator('.react-flow__edge-junction').count()>0);
    check(`${theme}: 同じ出力の幹は 1 回だけ描く`,await p.evaluate(()=>{
@@ -49,9 +49,9 @@ const settle=p=>p.waitForTimeout(500);
    await p.evaluate(id=>window.boxglow.rf.fitView({nodes:[{id}],padding:.1,maxZoom:1}),scope);await settle(p);
    await p.getByTestId('rf__node-'+scope).screenshot({path:path.join(out,`experience-detail-${theme}.png`)});
    await p.setViewportSize({width:1120,height:720});
-   // ボックスを選ぶと橙 (--accent) の輪が付く (ティールではない)
+   // ボックスを選ぶと判断待ちとは別の輪郭が付く
    await p.locator('.react-flow__node-block .bg-block:not(.expanded) .bg-block__title').first().click();await settle(p);
-   check(`${theme}: 選んだボックスは橙の輪`,await p.evaluate(()=>{const e=document.querySelector('.bg-block.selected');const m=e&&getComputedStyle(e).boxShadow.match(/rgba?\((\d+), (\d+), (\d+)/);return !!m&&+m[1]>200&&+m[2]>100&&+m[2]<170&&+m[3]<130;}));
+   check(`${theme}: 選んだボックスは状態と独立した輪郭`,await p.evaluate(()=>{const e=document.querySelector('.bg-block.selected'),h=getComputedStyle(document.documentElement).getPropertyValue('--selection').trim().slice(1),rgb=[0,2,4].map(i=>parseInt(h.slice(i,i+2),16));return getComputedStyle(e).boxShadow.includes('rgb('+rgb.join(', ')+')');}));
    await p.screenshot({path:path.join(out,`experience-selected-${theme}.png`)});
    await p.keyboard.press('Escape');await settle(p);
    await p.getByRole('button',{name:'Fit',exact:true}).click();await settle(p);

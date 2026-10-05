@@ -24,7 +24,11 @@
      意味が直感で分かる色にする: 確定した線 (供給元が出来ている) = 緑で太く (OK・出来ている)、未確定の線 = 琥珀で細く (まだ・保留)。
      テーマごとに背景とのコントラスト 3.5:1 以上 */
   --wire: #a86f00;        /* 未確定の線 (細い、琥珀) */
-  --wire-halo: #a86f00;
+  --wire-halo: #52657d;
+  --selection: #52657d;
+  --selection-soft: rgba(82, 101, 125, 0.20);
+  --attention-bg: #fff0e8;
+  --attention-text: #9b431b;
   --wire-ready: #1f8a3a;  /* 確定した線 (太い、緑) */
   --primary-strong: #006a6a;
   --primary-soft: #e3f1f0;
@@ -64,7 +68,11 @@
   --line-soft: #3a4047;
   --primary: #3fb5b5;
   --wire: #e0b24a;
-  --wire-halo: #e0b24a;
+  --wire-halo: #b7c7df;
+  --selection: #b7c7df;
+  --selection-soft: rgba(183, 199, 223, 0.22);
+  --attention-bg: #493125;
+  --attention-text: #ffb28d;
   --wire-ready: #52c26b;
   --primary-strong: #74d3d3;
   --primary-soft: #1f3536;
@@ -81,9 +89,9 @@
   --box-gray-bg-open: #23272b;
   --box-gray-hatch: rgba(232, 234, 237, 0.12);
   --box-gray-text: #e8eaed;
-  --box-white-bg: #e8eaed;
-  --box-white-text: #1a1d21;
-  --box-white-glow: rgba(232, 234, 237, 0.45);
+  --box-white-bg: #353c44;
+  --box-white-text: #e8eaed;
+  --box-white-glow: rgba(183, 199, 223, 0.25);
   --nest-odd: #1c2024;
   --nest-even: #262b30;
   --shadow-card: 4px 4px 0 #0f1114;
@@ -220,10 +228,10 @@ textarea.input { resize: vertical; min-height: 64px; }
   border-style: dashed;
   border-color: var(--box-black-border);
 }
-/* GrayBox: 斜線の塗り + 進捗バー */
+/* GrayBox: 中間の明度 + 細い進捗バー (斜線は見出しの帯だけ) */
 .bg-block.status-gray {
   background-color: var(--box-gray-bg);
-  background-image: repeating-linear-gradient(135deg, transparent 0 8px, var(--box-gray-hatch) 8px 10px);
+  background-image: none;
   color: var(--box-gray-text);
 }
 /* 展開中 (中にボックスが見えている) の GrayBox は斜線を消して地色だけにする。
@@ -482,8 +490,8 @@ textarea.input { resize: vertical; min-height: 64px; }
 .tab-list-icon { width: 18px; text-align: center; color: var(--text-muted); }
 .tab-list-prog { margin-left: auto; color: var(--text-muted); font-size: 11px; }
 .canvas-tab:hover { color: var(--text); }
-/* 選んだ線の続きがあるタブ: 線と同じ橙の点を題名の前に出す (選んだままタブを移ると続きが光っている) */
-.canvas-tab[data-marked="true"]::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+/* 選んだ線の続きがあるタブ: 選択輪郭と同じ色の点を題名の前に出す (選んだままタブを移ると続きが光っている) */
+.canvas-tab[data-marked="true"]::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--selection); flex: none; }
 /* パネルの境界のつまみ (ドラッグで幅を変える) */
 .resize-handle { position: absolute; top: 0; bottom: 0; width: 10px; cursor: col-resize; z-index: 25; }
 .resize-handle::after { content: ""; position: absolute; top: 0; bottom: 0; left: 4px; width: 2px; background: transparent; }
@@ -519,7 +527,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 
 /* 自分の担当: 左にティールの帯 */
 .bg-block.mine { box-shadow: inset 5px 0 0 var(--primary); }
-.bg-block.mine.status-white { box-shadow: inset 5px 0 0 var(--primary), 0 0 18px 2px var(--box-white-glow); }
+.bg-block.mine.status-white { box-shadow: inset 3px 0 0 var(--primary); }
 .bg-block.mine.selected { box-shadow: inset 5px 0 0 var(--primary), 0 0 0 3px var(--primary); }
 /* 未担当: 点線の空アバター */
 .avatar.avatar-none { background: transparent; border: 2px dashed currentColor; color: inherit; opacity: 0.55; text-shadow: none; }
@@ -557,15 +565,11 @@ textarea.input { resize: vertical; min-height: 64px; }
   font-weight: 800;
 }
 :root[data-theme="dark"] .bg-block__actor { background: rgba(0, 0, 0, 0.45); color: #e8eaed; }
-/* 作業中は枠がゆっくり脈打つ */
-.bg-block.activity-working { animation: pulse-working 2.2s ease-in-out infinite; }
-@keyframes pulse-working {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(13, 128, 128, 0.0); }
-  50% { box-shadow: 0 0 0 6px rgba(13, 128, 128, 0.25); }
-}
+/* 作業中は細い帯と活動ラベルで示す */
+.bg-block.activity-working { animation: none; }
 .bg-block.activity-working.selected { animation: none; }
-/* 判断待ちは差し色の枠 */
-.bg-block.activity-needs_decision { border-color: var(--accent); border-style: solid; }
+/* 判断待ちは情報行の小さなバッジで示す */
+.bg-block.activity-needs_decision { border-style: solid; }
 
 /* ---------- ハンドル (ポートの丸) ---------- */
 
@@ -652,41 +656,30 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* ---------- React Flow の色 ---------- */
 
 .react-flow { background: var(--bg-paper); }
-/* 線は 2 種類だけ: 要素が確定している線 (太いティール) と、まだの線 (灰色)。太さはズームに関係なく画面上で一定 */
-/* 線は 2 種類だけ。未確定 = 細い薄い灰色、確定 (成果物あり) = 太いティール。
-   遠目では色相より「太さ」と「明るさ」の差で見分けるので、太さ 2 倍・明度も離す */
-.react-flow__edge-path { stroke: var(--wire); stroke-width: 2px; opacity: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; }
-.react-flow__edge.edge-ready .react-flow__edge-path { stroke: var(--wire-ready); stroke-width: 4px; }
-/* 矢印 (線の先端。ボックスの入力に入る線にも、親の出力のノードへ届く線にも付く): 線と同じ色の規則 (未確定 = 琥珀、確定 = 緑、選択 = 橙)。大きさは図の座標なので拡大縮小に追従する */
+/* 確定 = 緑の太い実線、未確定 = 琥珀の細い破線。線幅はズームによらず画面上で一定。 */
+.react-flow__edge { --xy-edge-stroke-selected: var(--wire); }
+.react-flow__edge.edge-ready { --xy-edge-stroke-selected: var(--wire-ready); }
+.react-flow__edge-path { stroke: var(--wire); stroke-width: 2px; opacity: 1; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-dasharray: 6 5; }
+.react-flow__edge.edge-ready .react-flow__edge-path { stroke: var(--wire-ready); stroke-width: 4px; stroke-dasharray: none; }
+/* 矢印 (線の先端。ボックスの入力に入る線にも、親の出力のノードへ届く線にも付く): 線と同じ色の規則 (未確定 = 琥珀、確定 = 緑。選択時も維持)。大きさは図の座標なので拡大縮小に追従する */
 .react-flow__edge-arrow { fill: var(--wire); stroke: none; pointer-events: none; }
 .react-flow__edge.edge-ready .react-flow__edge-arrow { fill: var(--wire-ready); }
-.react-flow__edge.selected .react-flow__edge-arrow, .react-flow__edge.edge-net .react-flow__edge-arrow { fill: var(--accent); }
 .react-flow__edge.edge-dim .react-flow__edge-arrow { opacity: 0.45; }
 
 /* 選択・ホバー: 色は変えず、太さと縁取りだけ */
 .react-flow__edge-halo { fill: none; stroke: currentColor; stroke-opacity: 0.22; stroke-width: 12px; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; color: var(--wire-halo); }
-.react-flow__edge.edge-ready .react-flow__edge-halo { color: var(--wire-ready); }
+
 /* ボックスを選んだとき、つながる線 (edge-hot) は少しだけ太くする。光は付けない (束の線が 1 本の帯に潰れる)。
    太さは線 1 本分 (+1px) にとどめ、16px 間隔の束でも 1 本ずつ見えるようにする */
 .react-flow__edge.edge-hot .react-flow__edge-path { stroke-width: 3px; }
 .react-flow__edge.edge-hot.edge-ready .react-flow__edge-path { stroke-width: 5px; }
 .react-flow__edge:hover .react-flow__edge-path { stroke-width: 5px; }
-/* 選んだ線: 一目で分かるように、アクセント色 (橙) の太い線 + 広い光 + 流れる破線。他の線は薄くなる
-   edge-net = 選んだ線と親の縁を越えてつながっている線 (出力から最終的な入力まで同じ強調) */
+/* 選択は外側の輪郭のみ。芯・矢印・分岐点は確定状態を保つ。 */
 .react-flow__edge.selected .react-flow__edge-path,
 .react-flow__edge.edge-net .react-flow__edge-path,
-.react-flow__edge:focus .react-flow__edge-path {
-  stroke: var(--accent) !important;
-  stroke-width: 6px;
-  stroke-dasharray: 14 10;
-  animation: edge-flow 0.8s linear infinite;
-  opacity: 1 !important;
-}
-.react-flow__edge.selected .react-flow__edge-halo, .react-flow__edge.edge-net .react-flow__edge-halo { color: var(--accent); stroke-opacity: 0.25; stroke-width: 10px; }
+.react-flow__edge:focus .react-flow__edge-path { opacity: 1 !important; }
+.react-flow__edge.selected .react-flow__edge-halo, .react-flow__edge.edge-net .react-flow__edge-halo { color: var(--selection); stroke-opacity: 0.28; stroke-width: 12px; }
 .react-flow__edge.selected, .react-flow__edge.edge-net { z-index: 1000 !important; }
-.react-flow__edge.edge-net .react-flow__edge-path { opacity: 1 !important; }
-@keyframes edge-flow { to { stroke-dashoffset: -24; } }
-@media (prefers-reduced-motion: reduce) { .react-flow__edge.selected .react-flow__edge-path { animation: none; } }
 /* ボックスを選んでいるとき、関係ない線は少し薄く (色はそのまま) */
 .react-flow__edge.edge-dim .react-flow__edge-path { opacity: 0.45; }
 .react-flow__edge.edge-dim .react-flow__edge-halo { display: none; }
@@ -897,14 +890,12 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 /* 線の見た目のパスはクリックを拾わない (当たり判定は別の透明な線。丸からのドラッグを邪魔しないため) */
 .react-flow__edge-path { pointer-events: none; }
 
-/* 選んだボックス: 選んだ線と同じ約束 (橙の太い輪 + 広い光)。状態や担当の影より優先する */
+/* 選択の輪郭は状態色と独立させ、見出しの色も変えない。 */
 .bg-block.selected, .bg-terminal.selected, .react-flow__node.selected .bg-terminal {
-  box-shadow: 0 0 0 4px var(--accent), 0 0 0 16px rgba(232, 135, 94, 0.28) !important;
+  box-shadow: 0 0 0 2px var(--selection), 0 0 0 6px var(--selection-soft) !important;
 }
-.bg-block.mine.selected { box-shadow: inset 5px 0 0 var(--primary), 0 0 0 4px var(--accent), 0 0 0 16px rgba(232, 135, 94, 0.28) !important; }
-.bg-block.kind-project.selected { box-shadow: 0 0 0 4px var(--accent), 0 0 0 16px rgba(232, 135, 94, 0.28), var(--shadow-card) !important; }
-.bg-block.selected > .bg-block__head > .bg-block__title { color: var(--accent-strong, #b5581a); }
-:root[data-theme="dark"] .bg-block.selected > .bg-block__head > .bg-block__title { color: var(--accent); }
+.bg-block.mine.selected { box-shadow: inset 3px 0 0 var(--primary), 0 0 0 2px var(--selection), 0 0 0 6px var(--selection-soft) !important; }
+.bg-block.kind-project.selected { box-shadow: 0 0 0 2px var(--selection), 0 0 0 6px var(--selection-soft) !important; }
 
 /* Home 画面: リポジトリのファイル (AI と共有、枠を強調) と、ブラウザ内だけの計画 (同期しない) を別の区画で見せる */
 .home-dialog { display: flex; flex-direction: column; gap: 24px; padding: 24px; width: min(640px, calc(100vw - 32px)); }
@@ -999,18 +990,17 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .bg-block__title { font-size: 15px; }
 .bg-block__cat { font-size: 11px; }
 .bg-block__port { font-size: 12px; }
-.bg-block.status-white:not(.expanded) .bg-block__port.ready { color: #006a6a; }
-.bg-block.status-white:not(.expanded) .status-icon.done circle { fill: #006a6a; }
-.bg-block.status-white:not(.expanded).selected > .bg-block__head > .bg-block__title { color: #8c3e10; }
+.bg-block.status-white:not(.expanded) .bg-block__port.ready { color: var(--primary-strong); }
+.bg-block.status-white:not(.expanded) .status-icon.done circle { fill: var(--primary-strong); }
 .react-flow__handle.connectingto.valid { outline: 4px solid var(--wire-ready); outline-offset: 3px; }
 .react-flow__handle.connectionindicator { cursor: crosshair; }
 .react-flow__handle.clickconnecting { outline: 3px solid var(--accent); outline-offset: 3px; }
 .canvas-tools { max-width: calc(100% - 32px); border: 1px solid var(--line-soft); border-radius: 12px; background: var(--bg-card); color: var(--text); box-shadow: var(--shadow-card); padding: 8px; }
 .canvas-tools__legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; padding: 0 4px 8px; }
 .canvas-tools__legend span { display: inline-flex; align-items: center; gap: 6px; }
-.canvas-tools__legend i { width: 20px; border-top: 2px solid var(--wire); }
+.canvas-tools__legend i { width: 20px; border-top: 2px dashed var(--wire); }
 .canvas-tools__legend i.ready { border-top: 4px solid var(--wire-ready); }
-.canvas-tools__legend i.selected { border-top: 4px dashed var(--accent); }
+.canvas-tools__legend i.selected { border-top: 3px solid var(--wire-ready); box-shadow: 0 0 0 4px var(--selection-soft); }
 .canvas-tools__buttons { display: flex; flex-wrap: wrap; gap: 4px; }
 .canvas-tools__buttons button { min-width: 32px; min-height: 32px; padding: 4px 8px; border: 1px solid var(--line-soft); border-radius: 6px; background: var(--bg-card); color: var(--text); font-size: 12px; cursor: pointer; }
 .canvas-tools__buttons button:hover, .canvas-tools__buttons button[aria-pressed="true"] { background: var(--primary-soft); border-color: var(--primary); }
@@ -1039,11 +1029,9 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .menu-actions { display: none; flex-direction: column; gap: 4px; }
 .save-chip { border: none; background: var(--bg-paper); }
 .scope-path { border: 1px solid var(--line-soft); box-shadow: none; }
-/* 分岐点の丸 (同じ出力から分かれる線の幹と枝の接点): 線と同じ色の規則 (未確定 = 琥珀、確定 = 緑、選択 = 橙) */
+/* 分岐点の丸 (同じ出力から分かれる線の幹と枝の接点): 線と同じ色の規則 (未確定 = 琥珀、確定 = 緑。選択時も維持) */
 .react-flow__edge-junction { fill: var(--wire); pointer-events: none; }
 .react-flow__edge.edge-ready .react-flow__edge-junction { fill: var(--wire-ready); }
-.react-flow__edge.edge-net .react-flow__edge-junction,
-.react-flow__edge.selected .react-flow__edge-junction { fill: var(--accent); }
 /* キャンバスの操作欄の引き出し (View): 凡例・吸着・整列・ミニマップ・操作の説明を、押したときだけ上に開く */
 .canvas-tools { padding: 4px; border-radius: 10px; }
 .canvas-tools__buttons { align-items: center; }
@@ -1083,3 +1071,45 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 /* VS Code の中の Home: 開いているファイルのための案内だけ。長い理由 (読めない理由・閲覧専用の理由) は、折り返して全部見せる */
 .home-vscode p { overflow-wrap: anywhere; }
 .home-vscode__note { padding: 8px 12px; border: 2px solid var(--line-soft); border-radius: 8px; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
+
+/* 採用デザイン: タイトル、状態、判断待ちを優先。寸法と接続点は通常/俯瞰で共通。 */
+.bg-block { border-radius: 8px; border-color: var(--line-soft); }
+.bg-block.status-black { border-style: solid; }
+.bg-block.has-cat::before { display: none; }
+.bg-block.status-gray:not(.expanded)::before { content: ""; display: block; position: absolute; top: 0; left: 0; right: 0; height: 3px; border-radius: 8px 8px 0 0; background: repeating-linear-gradient(125deg, var(--primary) 0 5px, var(--primary-soft) 5px 8px); pointer-events: none; }
+.bg-block__title { font-family: var(--font-body); font-weight: 600; }
+.bg-block__meta { gap: 6px; overflow: hidden; }
+.bg-block__meta > .status-icon { width: 14px; height: 14px; }
+.bg-block__meta > .meta-chip { border: 0; background: transparent; padding: 2px 4px; font-size: 11px; opacity: 1; }
+.bg-block__meta > .meta-chip.status-white { color: inherit; }
+.bg-block__meta > .meta-chip.activity { color: var(--primary-strong); font-weight: 500; }
+.bg-block__meta > .meta-chip.activity.blocked { color: var(--danger); }
+.bg-block__meta > .meta-chip.activity.waiting_review { color: inherit; }
+.bg-block__meta > .meta-chip.needs_decision { background: var(--attention-bg); color: var(--attention-text); border-radius: 4px; font-weight: 600; }
+.bg-block.status-black:not(.expanded) .meta-chip.activity:not(.blocked), .bg-block.status-black:not(.expanded) .meta-chip.ready { color: #8fe0e0; }
+.bg-block__meta > .meta-chip.overdue { background: var(--danger); color: #fbfbfb; }
+.bg-block__meta > .bg-block__cat { margin-left: auto; background: transparent; color: inherit; opacity: .8; border: 0; font-weight: 400; padding: 2px 4px; }
+.bg-block__secondary { display: none; }
+.bg-block.selected .bg-block__secondary { display: inline-flex; }
+.bg-block__progress { height: 3px; bottom: 6px; box-shadow: none; background: color-mix(in srgb, currentColor 12%, transparent); }
+.bg-block__progress > span { background: var(--primary); }
+.bg-block.is-overview:not(.selected) .bg-block__ports { visibility: hidden; }
+.bg-block.is-overview:not(.selected) .bg-block__progress,
+.bg-block.is-overview:not(.selected) .bg-block__actor-name,
+.bg-block.is-overview:not(.selected) .meta-chip.issue,
+.bg-block.is-overview:not(.selected) .meta-chip.muted { display: none; }
+.bg-block.is-overview:not(.selected):not(.has-wrapped-title) .bg-block__title { font-size: 18px; line-height: 18px; }
+.bg-block.is-overview:not(.selected) .bg-block__meta > .meta-chip { font-size: 13px; }
+.bg-block.is-overview:not(.selected) .bg-block__meta > .status-icon { width: 16px; height: 16px; }
+.canvas-density-label { font-size: 11px; padding: 0 8px; color: var(--text-muted); }
+.summary-chip .summary-decision { padding: 4px 8px; background: var(--attention-bg); color: var(--attention-text); border-radius: 6px; }
+.wire-state { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.wire-state::before { content: ""; width: 28px; border-top: 2px dashed var(--wire); }
+.wire-state[data-ready="true"]::before { border-top: 4px solid var(--wire-ready); }
+.wire-reason { font-size: 12px; color: var(--text-muted); padding: 8px 0; }
+@media (min-width: 761px) {
+  .topbar[data-editing="false"] .desktop-action.layout-action { display: none; }
+  .topbar[data-editing="false"] .menu-actions { display: flex; }
+  .topbar[data-editing="false"] .menu-actions > button:not(.layout-action) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .bg-block.just-glowed { animation: none; } }
