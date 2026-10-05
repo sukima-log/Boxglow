@@ -13,6 +13,7 @@ import type { Project } from "./types";
  * ボックスのコンテキストを作る
  * Input : p = 計画, blockId = ボックスの内部 id
  * Output: { project (名前・説明), task (ボックスの B 番号か id), instructions (AI への注意), blocks (関係するボックスの一覧), connections (その間の線) }
+ *         blocks = 対象・その親すべて・入力の供給元 (上流。親の入力の供給元も)・供給元の出力が束ねている中のボックス
  *         ここに含めた項目のどれかが変わると確認トークンが変わる (位置・状態・活動は含めない。
  *         成果物の確認の記録 checkedAt / state は、トークンを作る側 (cli/context.ts) が除く)
  */
@@ -27,6 +28,18 @@ export function agentContext(p: Project, blockId: string) {
     if (parent) visit(parent);
   };
   visit(blockId);
+  // 束ねた出力 (中のボックスの出力をまとめた、親の出力) の中身もたどる: 実際に資料を持っているのは中の出力のことがある。
+  // 供給元として使われている出力についてだけたどる (その親の中のボックスを全部入れるわけではない)。何段に束ねてあっても、中までたどる (R29-01)
+  const bundled = (portId: string, seenPorts = new Set<string>()) => {
+    if (seenPorts.has(portId)) return;
+    seenPorts.add(portId);
+    for (const e of incomingEdges(p, { portId, side: "inner" })) {
+      const child = p.ports[e.from.portId];
+      if (!child || child.direction !== "out") continue;
+      visit(child.blockId);
+      bundled(child.id, seenPorts);
+    }
+  };
   // 入力の供給元 (上流のボックス) と、その親もたどる (上流の条件や判断も作業の前提になるため)。seen で循環を止める
   const upstream = (id: string, seen = new Set<string>()) => {
     if (seen.has(id)) return;
@@ -35,7 +48,10 @@ export function agentContext(p: Project, blockId: string) {
     for (const e of Object.values(p.edges)) {
       const from = p.ports[e.from.portId];
       const to = p.ports[e.to.portId];
-      if (to?.blockId === id && to.direction === "in" && from && from.blockId !== id) upstream(from.blockId, seen);
+      if (to?.blockId === id && to.direction === "in" && from && from.blockId !== id) {
+        upstream(from.blockId, seen);
+        if (from.direction === "out") bundled(from.id);
+      }
     }
   };
   const visited = new Set<string>();

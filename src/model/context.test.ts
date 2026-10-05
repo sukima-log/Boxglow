@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { addBlock, addPort, answerDecision, askDecision, connect, createArtifact, createProject, defaultTaskParent, editDecisionAnswer, portsOf, updateBlock } from "./graph";
 import { agentContext, briefContext } from "./context";
-import { briefReceipt, contextReceipt } from "../../cli/context";
+import { briefReceipt, contextReceipt, requireContext } from "../../cli/context";
 import type { Project } from "./types";
 
 /**
@@ -190,6 +190,52 @@ describe("短いコンテキスト", () => {
     const again = briefContext(q, target).target.inputs.find((i) => i.name === "束ねた出力")!.sources[0];
     expect(again.bundles).toBe(1);
     expect("inner" in again).toBe(false);
+  });
+
+  it("R29-01: 束ねた出力の中の資料・つながりが変わると、確認トークンが変わる (古いトークンは通らない)。中身を表示していないときも同じ", () => {
+    // 束ねる親 (出力に資料なし) の中に、子 → 孫と 2 段に束ねた出力を作り、対象へ渡す
+    let q: Project = createProject("Bundle");
+    q.contextGuard = true;
+    const add = (parentId: string, title: string, out: string) => { const r = addBlock(q, { parentId, title, outputName: out }); q = r.project; return r.blockId; };
+    const top = defaultTaskParent(q);
+    const bundle = add(top, "束ねる親", "束ねた出力");
+    const child = add(bundle, "子", "子の出力");
+    const grand = add(child, "孫", "孫の出力");
+    add(bundle, "別の子", "別の出力");
+    const target = add(top, "対象", "対象の出力");
+    const out = (id: string) => portsOf(q, id, "out")[0];
+    out(grand).artifacts = [createArtifact("仕様", "docs/spec-v1.md")];
+    const input = addPort(q, { blockId: target, direction: "in", name: "束ねた出力" }); q = input.project;
+    const wire = (from: string, fromSide: "outer" | "inner", to: string, toSide: "outer" | "inner") => { const r = connect(q, { portId: from, side: fromSide }, { portId: to, side: toSide }); expect(r.error).toBeUndefined(); q = r.project; return r.edgeId!; };
+    wire(out(grand).id, "outer", out(child).id, "inner");
+    const childEdge = wire(out(child).id, "outer", out(bundle).id, "inner");
+    wire(out(bundle).id, "outer", input.portId, "outer");
+    // 全部の出力に、中のボックス (子・孫) が入る。束ねていない「別の子」は入らない
+    const titles = agentContext(q, target).blocks.map((b) => b.title);
+    expect(titles).toEqual(expect.arrayContaining(["束ねる親", "子", "孫"]));
+    expect(titles).not.toContain("別の子");
+    const before = briefReceipt(q, target);
+    expect(before.contextToken).toBe(contextReceipt(q, target).contextToken);
+    expect(() => requireContext(q, target, before.contextToken, "codex")).not.toThrow();
+    // 孫 (2 段下) の出力の参照先を変える: トークンが変わり、古いトークンは通らない
+    const changed = structuredClone(q);
+    portsOf(changed, grand, "out")[0].artifacts[0].url = "docs/spec-v2.md";
+    expect(briefReceipt(changed, target).contextToken).not.toBe(before.contextToken);
+    expect(() => requireContext(changed, target, before.contextToken, "codex")).toThrow();
+    // 子の出力のつなぎ先を変える (束ねから外す): トークンが変わる
+    const rewired = structuredClone(q);
+    delete rewired.edges[childEdge];
+    expect(briefReceipt(rewired, target).contextToken).not.toBe(before.contextToken);
+    // 親の出力に資料が付いて、短い形が中身を展開しなくなっても、中の変更でトークンは変わる
+    const shown = structuredClone(q);
+    portsOf(shown, bundle, "out")[0].artifacts = [createArtifact("まとめ", "docs/bundle.md")];
+    shown.blocks[child].status = "white"; shown.blocks[grand].status = "white";
+    const source = briefContext(shown, target).target.inputs[0].sources[0];
+    expect("inner" in source).toBe(false);
+    const hidden = structuredClone(shown);
+    portsOf(hidden, grand, "out")[0].artifacts[0].url = "docs/spec-v2.md";
+    expect(JSON.stringify(briefContext(hidden, target).target)).toBe(JSON.stringify(briefContext(shown, target).target));
+    expect(briefReceipt(hidden, target).contextToken).not.toBe(briefReceipt(shown, target).contextToken);
   });
 
   it("無いボックスは、全部の出力と同じく断る", () => {
