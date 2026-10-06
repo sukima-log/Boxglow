@@ -154,4 +154,7 @@ export const app: Record<string, string> = {
 , "退避した編集を読み込む": "Load saved edits"
 , "VS Code のエディタが、同期で受け取った最新の中身をまだ読み込んでいません。編集を退避してから、ファイルを閉じて開き直してください": "The VS Code editor has not loaded the latest content received by sync. Save a copy of your edits, then close and reopen the file"
 , "同期で受け取った中身があります。手元の編集と見比べてください": "Sync received new content. Compare it with your edits"
+, "Google でサインイン": "Sign in with Google"
+, "ブラウザで次のページを開き、Google のアカウントで許可してください": "Open this page in your browser and allow with your Google account"
+, "Google のサインインのページを開く": "Open the Google sign-in page"
 };

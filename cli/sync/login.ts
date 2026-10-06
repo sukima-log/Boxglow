@@ -27,6 +27,80 @@ export interface LoginOptions {
   cancelled?: () => boolean;
 }
 
+/**
+ * Google でのサインイン (サーバーが仲立ちする認可コード方式。設計書 3.2)。画面の裏方から使う
+ *   1. 秘密 (claimSecret) を作り、そのハッシュで取引を始める → 認可の URL を onUrl で画面へ
+ *   2. 利用者が外部のブラウザで許可するのを、claim の照会で待つ (期限まで)。中止されたら cancel を送る
+ *   3. トークンを受け取ったら、GitHub と同じ規則で保存する (別の利用者でサインイン済みなら置き換えない)
+ * Output: 終了コード (0 = 保存した)
+ */
+export async function runGoogleLogin(o: Omit<LoginOptions, "onCode"> & { onUrl?: (info: { url: string; expiresAt: string }) => void }): Promise<number> {
+  const { out } = o;
+  const doFetch = o.fetch ?? fetch;
+  const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const problem = serverProblem(o.server);
+  if (problem) { out(problem); return 1; }
+  const server = normalizeServer(o.server);
+  const { randomBytes, createHash } = await import("node:crypto");
+  const claimSecret = randomBytes(32).toString("base64url");
+  const claimHash = createHash("sha256").update(claimSecret).digest("hex");
+  try {
+    return await withCredentialsLock(server, async () => {
+      const stored = inspectCredentials(server);
+      if (stored.kind === "unusable") { out(t("保存済みの資格情報がありますが、安全に読めません: {reason}", { reason: stored.reason })); return 1; }
+      const previous = stored.kind === "valid" ? stored.credentials : null;
+      let started: { id: string; url: string; expiresAt: string };
+      try {
+        const res = await doFetch(`${server}/v1/auth/google/start`, { method: "POST", headers: headers(), redirect: "error", body: JSON.stringify({ claimHash }) });
+        if (res.status === 404) { out(t("このサーバーでは、Google でのサインインはまだ使えません")); return 1; }
+        if (res.status === 429 || res.status === 503) { out(t("サインインの要求が多すぎます。少し待ってから、もう一度実行してください")); return 1; }
+        if (!res.ok) { out(t("サインインを始められませんでした (サーバーの応答: {status})", { status: res.status })); return 1; }
+        started = await res.json() as typeof started;
+        if (typeof started.id !== "string" || typeof started.url !== "string") throw new Error("bad response");
+      } catch (e) { out(t("サーバーと通信できませんでした: {message}", { message: e instanceof Error ? e.message : String(e) })); return 1; }
+      out(t("ブラウザで次のページを開き、Google のアカウントで許可してください:"));
+      out(`  ${started.url}`);
+      o.onUrl?.({ url: started.url, expiresAt: started.expiresAt });
+      const deadline = Date.parse(started.expiresAt) || Date.now() + 600_000;
+      const cancel = async () => { try { await doFetch(`${server}/v1/auth/google/cancel`, { method: "POST", headers: headers(), redirect: "error", body: JSON.stringify({ id: started.id, claimSecret }) }); } catch { /* 期限切れで片付く */ } };
+      let issued: { token: string; account: string } | null = null;
+      while (issued === null) {
+        await sleep(3000);
+        if (o.cancelled?.()) { await cancel(); out(t("サインインを中止しました")); return 1; }
+        if (Date.now() > deadline) { out(t("サインインの期限が切れました。もう一度実行してください")); return 1; }
+        let res: Response;
+        try { res = await doFetch(`${server}/v1/auth/google/claim`, { method: "POST", headers: headers(), redirect: "error", body: JSON.stringify({ id: started.id, claimSecret }) }); } catch { continue; }
+        if (res.status === 429 || res.status === 502 || res.status === 503) continue;
+        const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+        if (res.status === 200 && body.status === "pending") continue;
+        if (res.status === 200 && body.status === "ok" && typeof body.token === "string" && typeof body.account === "string") {
+          if (o.cancelled?.()) { await revoke(server, body.token, doFetch); out(t("サインインを中止しました")); return 1; }
+          issued = { token: body.token, account: body.account };
+          break;
+        }
+        if (res.status === 403 && body.code === "not-invited") { out(t("この Google のアカウントは招待されていません (招待は Gmail か Google Workspace のメールアドレスに限ります)")); return 1; }
+        if (res.status === 410) { out(t("サインインの結果を受け取れませんでした。もう一度実行してください")); return 1; }
+        out(t("サインインできませんでした (サーバーの応答: {status} {code})", { status: res.status, code: String(body.code ?? "") }));
+        return 1;
+      }
+      if (previous && previous.account !== issued.account) {
+        await revoke(server, issued.token, doFetch);
+        out(t("このサーバーには、すでに {current} としてサインインしています。{next} に替えるには、先に boxglow logout を実行してください", { current: previous.login, next: issued.account }));
+        return 1;
+      }
+      try { saveCredentials({ server, account: issued.account, login: issued.account, token: issued.token, createdAt: new Date().toISOString() }); }
+      catch (e) { await revoke(server, issued.token, doFetch); out(t("資格情報を、安全に保存できませんでした: {reason}", { reason: e instanceof Error ? e.message : String(e) })); return 1; }
+      if (previous && previous.token !== issued.token) await revoke(server, previous.token, doFetch);
+      out(t("サインインしました: {login} ({account})", { login: issued.account, account: issued.account }));
+      return 0;
+    });
+  } catch (e) {
+    if (e instanceof CredentialsBusy) { out(t("ほかの boxglow login / logout が動いています。終わってから、もう一度実行してください")); return 1; }
+    if (e instanceof CredentialsUnsafe) { out(t("資格情報を、安全に保存できません: {reason}", { reason: e.reason })); return 1; }
+    throw e;
+  }
+}
+
 /** サーバーの場所が、トークンを送ってよい場所か (https、または手元の http) */
 export function serverProblem(server: string): string | null {
   let url: URL;

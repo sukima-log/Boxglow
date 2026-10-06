@@ -183,4 +183,9 @@ export const sync: Record<string, string> = {
   "サーバーが、この計画の同期を受け付けませんでした (待っても直りません)": "The server refused to sync this plan (waiting will not help)",
   "サーバーと通信できませんでした": "Could not reach the server",
   "同期の状態のファイルを読めません": "The sync state file cannot be read",
+  "このサーバーでは、Google でのサインインはまだ使えません": "Sign-in with Google is not available on this server yet",
+  "ブラウザで次のページを開き、Google のアカウントで許可してください:": "Open this page in your browser and allow with your Google account:",
+  "サインインの期限が切れました。もう一度実行してください": "The sign-in expired. Run it again",
+  "この Google のアカウントは招待されていません (招待は Gmail か Google Workspace のメールアドレスに限ります)": "This Google account is not invited (invitations are limited to Gmail and Google Workspace addresses)",
+  "サインインの結果を受け取れませんでした。もう一度実行してください": "The sign-in result could not be received. Run it again",
 };

@@ -42,6 +42,17 @@ export class TestSyncServer {
   dropNextSettleResponse = false;
   /** サインインの手順: device_code → 状態 ("pending" / "slow_down" / "denied" / "not-invited"、または許可された利用者) */
   deviceCodes = new Map<string, "pending" | "slow_down" | "denied" | "not-invited" | { account: string; login: string }>();
+  /** Google の取引: id → 状態。試験が approveGoogle(id, user) で「許可された」ことにする */
+  googleTx = new Map<string, { claimHash: string; status: "pending" | "ready" | "denied"; token?: string; account?: string }>();
+  /** Google のサインインを許可したことにする (トークンを発行して取引に置く) */
+  approveGoogle(id: string, user: { account: string; login: string } | "denied"): void {
+    const tx = this.googleTx.get(id);
+    if (!tx) return;
+    if (user === "denied") { tx.status = "denied"; return; }
+    const token = `tok-${user.account}-${this.issued.size + 1}`;
+    this.issued.set(token, user);
+    tx.status = "ready"; tx.token = token; tx.account = user.account;
+  }
   /** 発行したトークン → 利用者 (発行していないトークンは、文字列そのものを利用者の ID として扱う) */
   issued = new Map<string, { account: string; login: string }>();
   /** 取り消したトークン */
@@ -85,6 +96,29 @@ export class TestSyncServer {
       const code = "dc" + String(++this.codes).padStart(38, "0");
       this.deviceCodes.set(code, "pending");
       plain(200, { device_code: code, user_code: "TEST-" + this.codes, verification_uri: "https://github.com/login/device", interval: 1, expires_in: 900 });
+      return;
+    }
+    // ---- Google のサインイン (取引の仲立ち。本番と同じ約束。試験は googleTx の状態を直接変えて「許可された」ことにする) ----
+    if (req.method === "POST" && req.url === "/v1/auth/google/start") {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      const claimHash = String((JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { claimHash?: unknown }).claimHash ?? "");
+      const id = `tx-${++this.codes}`;
+      this.googleTx.set(id, { claimHash, status: "pending" });
+      plain(200, { id, url: `https://accounts.google.com/o/oauth2/v2/auth?state=${id}`, expiresAt: new Date(Date.now() + 600_000).toISOString() });
+      return;
+    }
+    if (req.method === "POST" && (req.url === "/v1/auth/google/claim" || req.url === "/v1/auth/google/cancel")) {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { id?: string; claimSecret?: string };
+      const tx = this.googleTx.get(String(body.id));
+      const hash = createHash("sha256").update(String(body.claimSecret ?? "")).digest("hex");
+      if (!tx || tx.claimHash !== hash) { plain(req.url.endsWith("cancel") ? 200 : 410, req.url.endsWith("cancel") ? { status: "gone" } : { code: "gone" }); return; }
+      if (req.url.endsWith("cancel")) { this.googleTx.delete(String(body.id)); if (tx.status === "ready") this.revoked.add(tx.token!); plain(200, { status: tx.status === "pending" ? "cancelled" : "aborting" }); return; }
+      if (tx.status === "pending") plain(200, { status: "pending" });
+      else if (tx.status === "denied") { this.googleTx.delete(String(body.id)); plain(403, { code: "not-invited" }); }
+      else { this.googleTx.delete(String(body.id)); plain(200, { status: "ok", token: tx.token, account: tx.account }); }
       return;
     }
     if (req.method === "POST" && req.url === "/v1/auth/device/token") {

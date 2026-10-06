@@ -264,3 +264,30 @@ describe("boxglow serve --sync (HTTP の口)", () => {
     } finally { plain.close(); }
   });
 });
+
+describe("Google でのサインイン (裏方)", () => {
+  it("認可の URL が状態に出る。許可されると資格情報が保存される。中止すると発行されたトークンは取り消される", async () => {
+    const { file } = planFile("p1");
+    const { host } = make();
+    host.openFile(file);
+    host.signIn("google");
+    await settle();
+    const during = host.status(file);
+    expect(during.signIn).toMatchObject({ provider: "google", url: expect.stringContaining("accounts.google.com") });
+    const id = [...server.googleTx.keys()].at(-1)!;
+    server.approveGoogle(id, { account: "acc-g", login: "g" });
+    await new Promise((r) => setTimeout(r, 50)); await host.tick(); await settle();
+    expect(readCredentials(server.url)).toMatchObject({ account: "acc-g" });
+    expect(host.status(file).signIn).toBeUndefined();
+    expect(JSON.stringify(host.status(file))).not.toContain("tok-");
+    // 中止
+    await host.act(file, { kind: "signOut" });
+    host.signIn("google");
+    await settle();
+    host.cancelSignIn();
+    await new Promise((r) => setTimeout(r, 80));
+    expect(readCredentials(server.url)).toBeNull();
+    expect(server.googleTx.size).toBe(0);
+    await host.stop();
+  });
+});

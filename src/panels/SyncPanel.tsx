@@ -75,7 +75,10 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
             <button className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "signOut" })}>{t("サインアウト")}</button>
           </>
         : status.credentials.source === "env" ? <span className="muted">{t("環境変数のトークンで同期しています")}</span>
-        : <button className="btn btn-sm" onClick={() => void act({ kind: "signIn", provider: "github" })}>{t("GitHub でサインイン")}</button>}
+        : <>
+            <button className="btn btn-sm" onClick={() => void act({ kind: "signIn", provider: "github" })}>{t("GitHub でサインイン")}</button>
+            <button className="btn btn-sm" onClick={() => void act({ kind: "signIn", provider: "google" })}>{t("Google でサインイン")}</button>
+          </>}
       </div>
       {/* この計画 */}
       {file && status.state !== "signed-out" && status.state !== "unsupported" && <div className="sync-panel__row">
@@ -142,6 +145,15 @@ function EditorBehind() {
 
 /** サインインの途中: コードと、開くページ */
 function SignInCode({ code, onCancel }: { code: NonNullable<SyncStatus["signIn"]>; onCancel: () => void }) {
+  if (code.provider === "google") {
+    return (
+      <div className="sync-panel__signin">
+        <div>{t("ブラウザで次のページを開き、Google のアカウントで許可してください")}</div>
+        <a href={code.url} target="_blank" rel="noreferrer">{t("Google のサインインのページを開く")}</a>
+        <button className="btn btn-ghost btn-sm" onClick={onCancel}>{t("中止")}</button>
+      </div>
+    );
+  }
   return (
     <div className="sync-panel__signin">
       <div>{t("ブラウザで次のページを開き、コードを入力してください")}</div>

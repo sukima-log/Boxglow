@@ -50,7 +50,8 @@ export interface SyncStatus {
   /** 選べる操作の無い問題と、直す場所 */
   problem?: { kind: "auth" | "network" | "rejected" | "state-unreadable" | "busy"; text: string; fix: "credentials" | "wait" | "local-file" | "sync-state" | "rerun" };
   /** サインインの途中 (コードを表示している間) */
-  signIn?: { provider: "github"; userCode: string; verificationUrl: string; expiresAt: string };
+  signIn?: { provider: "github"; userCode: string; verificationUrl: string; expiresAt: string }
+         | { provider: "google"; url: string; expiresAt: string };
   /** 1 行の補足 */
   message?: string;
 }
@@ -58,7 +59,7 @@ export interface SyncStatus {
 /** 画面からの操作 */
 export type HostAction =
   | { kind: "enable" } | { kind: "disable" }
-  | { kind: "signIn"; provider: "github" } | { kind: "cancelSignIn" } | { kind: "signOut" }
+  | { kind: "signIn"; provider: "github" | "google" } | { kind: "cancelSignIn" } | { kind: "signOut" }
   | { kind: "bind" } | { kind: "syncNow" }
   | { kind: "choose"; choiceId: string }
   | { kind: "pause" } | { kind: "resume" };

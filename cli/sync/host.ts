@@ -16,7 +16,7 @@ import { inspectLock } from "../file-store";
 import { syncOnce, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
 import { haltView, type SyncAction } from "./command";
 import { credentialsPath, resolveToken } from "./credentials";
-import { runLogin, runLogout, runWhoami } from "./login";
+import { runGoogleLogin, runLogin, runLogout, runWhoami } from "./login";
 import { bindingsOf, hashOf, normalizeServer, realFile, SyncStateUnreadable } from "./state-store";
 import { lockWatch, SyncWatcher, type WatchEvent } from "./watch";
 
@@ -43,7 +43,7 @@ export interface HostOptions {
 }
 
 /** 進行中のサインイン (中止の合図つき) */
-interface SignIn { provider: "github"; code?: SyncStatus["signIn"]; cancelled: boolean; done: Promise<number> }
+interface SignIn { provider: "github" | "google"; code?: SyncStatus["signIn"]; cancelled: boolean; done: Promise<number> }
 
 /** 人が選べる操作に付ける、選択 ID の中身 (対象・表示した操作・同期の状態の世代・資格情報の世代を結び付ける) */
 interface Choice { action: SyncAction; file: string; server: string; remoteId: string; generation: number | undefined; credentials: string }
@@ -192,16 +192,16 @@ export class SyncHost {
   // ---------------------------------------------------------------- サインイン / サインアウト
 
   /** サインインを始める (GitHub の端末向けの手順)。コードは状態の signIn に出る。終わると状態が変わる */
-  signIn(provider: "github"): void {
+  signIn(provider: "github" | "google"): void {
     if (this.signingIn || this.support !== "ok") { this.emit(); return; }
     const entry: SignIn = { provider, cancelled: false, done: Promise.resolve(1) };
     this.signingIn = entry;
     const lines: string[] = [];
-    entry.done = runLogin({
-      server: this.server, out: (line) => lines.push(line), fetch: this.doFetch, sleep: this.options.sleep, deviceName: this.options.deviceName
-    , onCode: (code) => { entry.code = { provider, ...code }; this.emit(); }
-    , cancelled: () => entry.cancelled
-    }).then((code) => {
+    const common = { server: this.server, out: (line: string) => lines.push(line), fetch: this.doFetch, sleep: this.options.sleep, deviceName: this.options.deviceName, cancelled: () => entry.cancelled };
+    entry.done = (provider === "google"
+      ? runGoogleLogin({ ...common, onUrl: (info) => { entry.code = { provider: "google", ...info }; this.emit(); } })
+      : runLogin({ ...common, onCode: (code) => { entry.code = { provider: "github", ...code }; this.emit(); } })
+    ).then((code) => {
       if (this.signingIn === entry) { this.signingIn = null; if (code !== 0 && !entry.cancelled) this.message = lines.filter((l) => !l.startsWith("  ")).at(-1); else this.message = undefined; }
       this.account = null;
       this.emit();
@@ -390,7 +390,7 @@ export function parseHostAction(text: string): HostAction | null {
   switch (o.kind) {
     case "enable": case "disable": case "cancelSignIn": case "signOut": case "bind": case "syncNow": case "pause": case "resume":
       return { kind: o.kind };
-    case "signIn": return o.provider === "github" ? { kind: "signIn", provider: "github" } : null;
+    case "signIn": return o.provider === "github" || o.provider === "google" ? { kind: "signIn", provider: o.provider } : null;
     case "choose": return typeof o.choiceId === "string" && o.choiceId.length <= 128 ? { kind: "choose", choiceId: o.choiceId } : null;
     default: return null;
   }
