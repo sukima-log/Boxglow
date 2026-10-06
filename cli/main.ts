@@ -335,7 +335,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   disconnect <題名.出力名> <題名.入力名>          線を外す
   tidy                                              ファイルを規則にそろえて保存し直す (つないだ入力の名前を供給元に合わせる、大項目を畳む、重なりを解く)
   remove <block> [--force]                          ボックスを消す (中にボックスがあるときは --force。線も外れる。元に戻せないので Git で管理していること)
-  serve [--port 4174] [--open]                      ローカルサーバ: 同梱の Web アプリを http://localhost:4174/?serve=1 で配信し、boxglow.json を読み書き (Firefox / Safari でも使える)
+  serve [--port 4174] [--open] [--sync]             ローカルサーバ: 同梱の Web アプリを http://localhost:4174/?serve=1 で配信し、boxglow.json を読み書き (Firefox / Safari でも使える)
+                                                 --sync = 画面からの同期 (実験的。サインイン・自動の送受信・確認の選択を画面で行う。--server で同期サーバーを指定)
   mcp [--file <path>]                               MCP サーバ (標準入出力)。Claude Code などから status / start / done / ask ... をツールとして使う (.mcp.json は setup-agent が書く)
   connect <題名.出力名> <題名[.入力名]>           結線 (受け側は題名だけでよい: 出力名と同じ名前の入力を作ってつなぐ。親子は自動で内側の面。最終成果物へは project)
   start <block> [--note <何をするか>] [--reason <理由>]  入力待ちは既定で警告。理由を記録すると警告なしで開始
@@ -421,7 +422,8 @@ Usage (npx boxglow <command> ...):
   disconnect <title.output> <title.input>          Remove a wire
   tidy                                              Normalize the file and save it again (match connected input names to their source, collapse top-level items, resolve overlaps)
   remove <block> [--force]                          Delete a box (--force if it contains boxes. Its wires are removed too. This cannot be undone, so keep the file in Git)
-  serve [--port 4174] [--open]                      Local server: serves the bundled web app at http://localhost:4174/?serve=1 and reads / writes boxglow.json (works in Firefox / Safari too)
+  serve [--port 4174] [--open] [--sync]             Local server: serves the bundled web app at http://localhost:4174/?serve=1 and reads / writes boxglow.json (works in Firefox / Safari too)
+                                                 --sync = sync from the UI (experimental: sign in, automatic push/pull and choices in the UI; --server picks the sync server)
   mcp [--file <path>]                               MCP server (stdio). Lets Claude Code and others use status / start / done / ask ... as tools (setup-agent writes .mcp.json)
   connect <title.output> <title[.input]>           Connect (the receiving side can be just a title: an input with the same name as the output is created and connected. Parent and child connect on the inner side automatically. Use project for the final deliverable)
   start <block> [--note <what you will do>] [--reason <reason>]  Missing inputs warn by default; a recorded reason allows starting without a warning
@@ -1253,7 +1255,12 @@ if (argv[0] === "mcp") {
     const file = locateFile(str(options.file));
     // 計画が読めなくてもサーバは今までどおり起動する (言語は上で決めたまま)
     try { setLang(explicitLang(options) ?? load(file).lang ?? "ja"); } catch { /* 読めないファイルは画面側で扱う */ }
-    startServe({ file, port: Number(str(options.port) ?? 4174), dist: fileURLToPath(new URL("../dist/", import.meta.url)), open: !!options.open, log: out });
+    // --sync: 画面からの同期 (実験的)。同期サーバーは --server > 環境変数 BOXGLOW_SERVER > このファイルの結び付け (1 つだけのとき)
+    let syncServer = options.sync ? (str(options.server) ?? process.env.BOXGLOW_SERVER) : undefined;
+    if (options.sync && !syncServer) { try { const bound = bindingsOf(file).bindings; if (bound.length === 1) syncServer = bound[0].server; } catch { /* 読めない状態は、裏方が知らせる */ } }
+    if (options.sync && !syncServer) throw new Error(t("同期サーバーが決まっていません。--server <URL> を指定してください"));
+    startServe({ file, port: Number(str(options.port) ?? 4174), dist: fileURLToPath(new URL("../dist/", import.meta.url)), open: !!options.open, log: out
+    , ...(syncServer ? { sync: { server: syncServer } } : {}) });
   } catch (e) {
     console.error(`[boxglow serve] ${e instanceof Error ? e.message : String(e)}`);
     process.exitCode = 1;

@@ -224,3 +224,43 @@ describe("確認が要る場面の選択", () => {
     await host.stop();
   });
 });
+
+describe("boxglow serve --sync (HTTP の口)", () => {
+  it("GET /api/sync は状態、POST は許可リストの操作だけ。SSE に sync の出来事が流れる。--sync 無しでは 404", async () => {
+    const { startServe } = await import("../serve");
+    const { once } = await import("node:events");
+    const { file } = planFile("p1");
+    signedIn();
+    const dist = join(root, "dist"); mkdirSync(dist); writeFileSync(join(dist, "index.html"), "test");
+    const serve = startServe({ file, dist, port: 0, open: false, log: () => {}, sync: { server: server.url } });
+    try {
+      await once(serve, "listening"); const port = (serve.address() as { port: number }).port;
+      const url = `http://127.0.0.1:${port}/api/sync`;
+      const first = await (await fetch(url)).json() as SyncStatus;
+      expect(first).toMatchObject({ state: "unbound", file: { enabled: true }, credentials: { source: "stored" } });
+      expect(JSON.stringify(first)).not.toContain("test-");
+      // SSE: つないだ画面に、今の状態がすぐ届く
+      const events = await fetch(`http://127.0.0.1:${port}/api/events`);
+      const reader = events.body!.getReader();
+      let received = "";
+      while (!received.includes("event: sync")) { const { value, done } = await reader.read(); if (done) break; received += Buffer.from(value).toString("utf8"); }
+      expect(received).toContain("event: sync");
+      void reader.cancel();
+      // 操作: 知らない種類・形の違う引数は 400。結び付けは synced になる
+      const post = (body: string) => fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body });
+      expect((await post(JSON.stringify({ kind: "delete-everything" }))).status).toBe(400);
+      expect((await post(JSON.stringify({ kind: "choose", choiceId: 42 }))).status).toBe(400);
+      expect((await post("not json")).status).toBe(400);
+      const bound = await (await post(JSON.stringify({ kind: "bind" }))).json() as SyncStatus;
+      expect(bound.state).toBe("synced");
+      // 別のサイトからは受け付けない
+      expect((await fetch(url, { method: "POST", headers: { "content-type": "application/json", origin: "https://untrusted.example" }, body: "{}" })).status).toBe(403);
+    } finally { serve.close(); }
+    // --sync 無し
+    const plain = startServe({ file, dist, port: 0, open: false, log: () => {} });
+    try {
+      await once(plain, "listening"); const port = (plain.address() as { port: number }).port;
+      expect((await fetch(`http://127.0.0.1:${port}/api/sync`)).status).toBe(404);
+    } finally { plain.close(); }
+  });
+});

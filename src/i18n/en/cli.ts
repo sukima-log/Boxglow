@@ -195,4 +195,8 @@ export const cli: Record<string, string> = {
 , "VS Code がファイルを保存できませんでした。再試行するか、変更を書き出してください": "VS Code could not save the file. Retry or export your changes."
 , "保存の処理中です。もう一度やり直してください": "A save is already in progress. Retry."
 , "確認トークン (guard) を有効にしました。AI は作業の前に boxglow context <ボックス> を読み、返ってきたトークンを --context-token で渡します。人の操作 (--actor human) には不要です。外すときは boxglow guard off --actor human": "Context guard enabled. Before working, an agent reads boxglow context <box> and passes the returned token with --context-token. People (--actor human) do not need one. To turn it off: boxglow guard off --actor human"
+, "同期サーバーが決まっていません。--server <URL> を指定してください": "No sync server is set. Pass --server <URL>"
+, "画面からの同期は、boxglow serve --sync で起動したときだけ使えます": "Sync from the UI is available only when started with boxglow serve --sync"
+, "要求が大きすぎます": "The request is too large"
+, "同期の操作として読めません": "Not a valid sync action"
 };

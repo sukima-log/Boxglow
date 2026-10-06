@@ -19,6 +19,7 @@ import { commitFile, FileBusy, FileConflict, revisionOf } from "./file-store";
 import { validateProjectText } from "../src/model/validate-file";
 // 文言を今の言語 (日本語 / 英語) で出す。言語は main.ts の serve の入口で決めてある
 import { t } from "../src/i18n/core";
+import { SyncHost, type HostAction, type SyncStatus } from "./sync/host";
 
 /** PUT で受け付ける本文の上限 (バイト)。これを超える計画は保存を断る */
 export const MAX_BODY = 5 * 1024 * 1024;
@@ -54,12 +55,43 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-export function startServe(opts: { file: string; port: number; dist: string; open: boolean; log: (text: string) => void }) {
+
+/**
+ * 画面からの同期の操作を、許可リストで読む (知らない種類・引数の形が違うものは受け付けない)
+ * Input : text = 要求の本文 (JSON)
+ * Output: HostAction。読めなければ null
+ */
+export function parseHostAction(text: string): HostAction | null {
+  let v: unknown;
+  try { v = JSON.parse(text); } catch { return null; }
+  if (typeof v !== "object" || v === null) return null;
+  const o = v as Record<string, unknown>;
+  switch (o.kind) {
+    case "enable": case "disable": case "cancelSignIn": case "signOut": case "bind": case "syncNow": case "pause": case "resume":
+      return { kind: o.kind };
+    case "signIn": return o.provider === "github" ? { kind: "signIn", provider: "github" } : null;
+    case "choose": return typeof o.choiceId === "string" && o.choiceId.length <= 128 ? { kind: "choose", choiceId: o.choiceId } : null;
+    default: return null;
+  }
+}
+
+export function startServe(opts: { file: string; port: number; dist: string; open: boolean; log: (text: string) => void
+  /** 画面からの同期 (--sync): 同期サーバーの場所を渡すと、裏方 (SyncHost) を動かして、このファイルを有効にする */
+; sync?: { server: string; host?: SyncHost } }) {
   const { file, dist, log } = opts;
   if (!existsSync(join(dist, "index.html"))) throw new Error(t("Web アプリが見つかりません: {dist} (npm run build で dist/ を作ってください)", { dist }));
   const clients = new Set<ServerResponse>();
   // 画面 (SSE でつながっている全員) に「ファイルが変わった」と知らせる
   const broadcast = () => { for (const res of clients) res.write("event: change\ndata: {}\n\n"); };
+  // ---- 画面からの同期の裏方 (--sync のときだけ)。状態が変わったら SSE の sync で知らせる ----
+  let syncHost: SyncHost | null = null;
+  let lastSync: SyncStatus | null = null;
+  const sendSync = (status: SyncStatus) => { lastSync = status; const data = JSON.stringify(status); for (const res of clients) res.write(`event: sync\ndata: ${data}\n\n`); };
+  if (opts.sync) {
+    syncHost = opts.sync.host ?? new SyncHost({ server: opts.sync.server, onStatus: sendSync });
+    syncHost.openFile(file);
+    syncHost.enable(file);
+  }
 
   // ファイルの監視 (ディレクトリを見て、同名のファイルの変化だけ拾う。連続する変化は 1 回にまとめる)
   // 一時ファイルやロックのディレクトリは名前が違うので拾わない。監視できない環境でもサーバは起動する
@@ -117,11 +149,24 @@ export function startServe(opts: { file: string; port: number; dist: string; ope
         broadcast();
         return;
       }
+      if (url.pathname === "/api/sync") {
+        // 画面からの同期: GET = 今の状態、POST = 操作 (本文は { kind, ... }。種類と引数は許可リストで検査する)
+        if (!syncHost) { send(404, JSON.stringify({ ok: false, error: t("画面からの同期は、boxglow serve --sync で起動したときだけ使えます") })); return; }
+        if (req.method === "GET") { send(200, JSON.stringify(syncHost.status(file))); return; }
+        if (req.method !== "POST") throw new HttpError(405, t("このメソッドは使えません"));
+        if (Number(req.headers["content-length"]) > 4096) throw new HttpError(413, t("要求が大きすぎます"));
+        const action = parseHostAction(await readBody(req));
+        if (!action) throw new HttpError(400, t("同期の操作として読めません"));
+        send(200, JSON.stringify(await syncHost.act(file, action)));
+        return;
+      }
       if (url.pathname === "/api/events") {
         if (req.method !== "GET") throw new HttpError(405, t("このメソッドは使えません"));
         res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" });
         res.write("event: hello\ndata: {}\n\n");
         clients.add(res);
+        // (つないだ画面に、同期の今の状態をすぐ知らせる)
+        if (syncHost) res.write(`event: sync\ndata: ${JSON.stringify(lastSync ?? syncHost.status(file))}\n\n`);
         // 接続が切られないよう、定期的に空のコメントを送る
         const ping = setInterval(() => res.write(": ping\n\n"), 25000);
         res.on("close", () => { clearInterval(ping); clients.delete(res); });
@@ -143,7 +188,7 @@ export function startServe(opts: { file: string; port: number; dist: string; ope
     }
   });
   // サーバを閉じるときは監視と SSE の接続も終える (テストで後始末できるように)
-  server.on("close", () => { watcher?.close(); clearTimeout(timer); for (const res of clients) res.end(); });
+  server.on("close", () => { watcher?.close(); clearTimeout(timer); for (const res of clients) res.end(); void syncHost?.stop(); });
   server.listen(opts.port, "127.0.0.1", () => {
     // port に 0 を渡したときは、実際に割り当てられたポートを使う
     const address = server.address();

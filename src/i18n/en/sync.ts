@@ -175,4 +175,12 @@ export const sync: Record<string, string> = {
   "--relink には、選べるものが 2 つあるときは --prefer local (手元を採る) か --prefer remote (サーバーを採る) を付けてください": "When there are two options, add --prefer local (keep the local plan) or --prefer remote (keep the server's plan) to --relink",
   "結び直しの途中の送信だった場合は、確定の後で、今の内容をもう一度選ぶことになります (同じ選択で、送り直しません)": "If this push was part of a relink, you will be asked to choose again with the current content after it is settled (the same choice is not sent again)",
   "サインインを中止しました": "Sign-in cancelled",
+  "その選択は、今の表示のものではありません。表示を確かめてから、選び直してください": "That choice does not belong to the current display. Check the display and choose again",
+  "表示したときから、状態が変わっています。選び直してください": "The state changed since it was shown. Choose again",
+  "別のプロセス (boxglow sync --watch など) が、このサーバーの同期を受け持っています。そちらを止めると、ここから同期できます": "Another process (such as boxglow sync --watch) owns syncing with this server. Stop it to sync from here",
+  "同期のロックの持ち主を判定できません。boxglow unlock で確かめてください": "The owner of the sync lock cannot be determined. Check with boxglow unlock",
+  "サーバーが利用者を確かめられませんでした": "The server could not verify the account",
+  "サーバーが、この計画の同期を受け付けませんでした (待っても直りません)": "The server refused to sync this plan (waiting will not help)",
+  "サーバーと通信できませんでした": "Could not reach the server",
+  "同期の状態のファイルを読めません": "The sync state file cannot be read",
 };
