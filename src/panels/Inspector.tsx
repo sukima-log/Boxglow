@@ -234,6 +234,16 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       <DebouncedText className="input font-head text-[16px]" value={b.title} disabled={readonly} placeholder={t("Title (何を作るか)")}
         onCommit={(v) => apply((p) => updateBlock(p, blockId, { title: v }))} />
 
+        {/* カテゴリは「状態」タブの中ではなく題名の直下に置く。どの詳細タブでも分類を確認・変更できるようにする。
+            候補が多いので選択欄にまとめる。空の値はモデルの null (カテゴリなし) に戻し、閲覧専用では変更させない。札の訳は common.ts。 */}
+        <label className="category-field"><span className="label">{t("カテゴリ")}</span>
+          <select className="input" aria-label={t("カテゴリ")} value={b.category ?? ""} disabled={readonly}
+            onChange={(e) => apply((p) => setCategory(p, blockId, (e.target.value || null) as Parameters<typeof setCategory>[2]))}>
+            <option value="">{t("カテゴリなし")}</option>
+            {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{t(c.label)}</option>)}
+          </select>
+        </label>
+
       <WorkScopePanel project={project} blockId={blockId} editing={scopeEditing} onClose={() => setScopeEditing(false)} />
       {descriptionReminder(b) && <p className="text-[12px] description-reminder" style={{ color: "var(--accent)" }}>{descriptionReminder(b)}</p>}
 
@@ -301,14 +311,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
             <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{t("複数のリポジトリをまたぐときは、boxglow.json を上のフォルダに 1 つ置き、各リポジトリの AI には環境変数 BOXGLOW_FILE でその場所を教えます")}</div>
           </>
         )}
-        {/* カテゴリ: 何の種類の仕事か (ボックスの札に出る)。候補が多いので一覧のボタンではなく選択欄にまとめる。空を選ぶと外す。札の訳は common.ts */}
-        <label className="category-field"><span className="label">Category</span>
-          <select className="input" aria-label="Category" value={b.category ?? ""} disabled={readonly}
-            onChange={(e) => apply((p) => setCategory(p, blockId, (e.target.value || null) as Parameters<typeof setCategory>[2]))}>
-            <option value="">{t("カテゴリなし")}</option>
-            {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{t(c.label)}</option>)}
-          </select>
-        </label>
+
         {b.status !== "white" && (
           <div className="flex items-center gap-2 text-[12px]" style={{ color: "var(--text-muted)" }}>
             <input type="range" min={0} max={100} step={5} value={percent} disabled={readonly} className="flex-1" title={t("進捗 (ドラッグで入力)")}
@@ -491,8 +494,8 @@ function WireTabs({ project, edgeId }: { project: Project; edgeId: string }) {
       <div className="flex flex-wrap gap-1">
         {/* ループ変数は翻訳関数 t と名前が衝突しないよう tabId にしている */}
         {tabs.map((tabId) => (
-          <button key={tabId ?? "all"} className="chip" data-on={viewScope === tabId} onClick={() => setViewScope(tabId)} title={tabId ? t("{title} のタブでこの線の続きを見る", { title: project.blocks[tabId]?.title ?? "" }) : t("All でこの線を見る")}>
-            {tabId ? project.blocks[tabId]?.title ?? "?" : "All"}
+          <button key={tabId ?? "all"} className="chip" data-on={viewScope === tabId} onClick={() => setViewScope(tabId)} title={tabId ? t("{title} のタブでこの線の続きを見る", { title: project.blocks[tabId]?.title ?? "" }) : t("Top でこの線を見る")}>
+            {tabId ? project.blocks[tabId]?.title ?? "?" : "Top"}
           </button>
         ))}
       </div>

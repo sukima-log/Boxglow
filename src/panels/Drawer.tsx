@@ -1,13 +1,14 @@
 /**
- * 引き出し (☰ で開く): 階層ツリー、絞り込み、メンバー
+ * 引き出し (☰ で開く): 絞り込み、メンバー、部品
+ * 階層の一覧と管理は TreePanel に分離する。フィルタ判定は図とツリーで共有し、結果が食い違わないようにする。
  * 既定は閉じていて、キャンバスの左に重ねて出す。
  */
 import { useEffect, useState } from "react";
-import { addMember, childrenOf, instantiateTemplate, kindOf, parseTemplate, removeMember } from "../model/graph";
+import { addMember, instantiateTemplate, kindOf, parseTemplate, removeMember } from "../model/graph";
 import type { BlockTemplate } from "../model/types";
 import { deleteTemplate, listTemplates, saveTemplate } from "../lib/templates";
 import { downloadText, pickTextFile, safeFilename } from "../lib/download";
-import { ROOT_ID, type BlockStatus, type Project } from "../model/types";
+import { type BlockStatus, type Project } from "../model/types";
 import { parentForNewBlock, useProjectStore } from "../store/useProjectStore";
 import { CATEGORIES } from "../model/categories";
 import { STATUS_LABEL } from "../model/status";
@@ -43,48 +44,8 @@ export function matchesFilter(p: Project, blockId: string, f: Filter): boolean {
   return true;
 }
 
-/** フィルタが何も絞っていない状態か */
+/** 入力: 状態・担当・カテゴリの Filter。出力: 条件が既定値で、何も絞っていなければ true。 */
 export const isFilterEmpty = (f: Filter): boolean => f.statuses.size === 3 && f.memberId === null && !f.unassigned && f.category === null;
-
-function TreeRows({ project, parentId, depth, selectedId, onSelect, closed, onToggle }: {
-  project: Project;
-  parentId: string;
-  depth: number;
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-  /** 引き出しの中で閉じたボックスの id (図の畳みとは別。既定は全部開く) */
-  closed: Set<string>;
-  onToggle: (id: string) => void;
-}) {
-  useLang(); // 言語が変わったら描き直す
-  const kids = childrenOf(project, parentId).sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
-  return (
-    <>
-      {kids.map((b) => {
-        const hasKids = childrenOf(project, b.id).length > 0;
-        const isClosed = closed.has(b.id);
-        return (
-          <div key={b.id}>
-            <div className="tree-row" data-selected={selectedId === b.id} style={{ paddingLeft: 8 + depth * 14 }} onClick={() => onSelect(b.id)} title={b.title}>
-              {hasKids ? (
-                <button className="btn btn-ghost btn-sm" style={{ padding: "0 4px" }} onClick={(e) => { e.stopPropagation(); onToggle(b.id); }} title={isClosed ? t("開く") : t("閉じる")}>
-                  {isClosed ? "▸" : "▾"}
-                </button>
-              ) : (
-                <span style={{ width: 20, display: "inline-block" }} />
-              )}
-              <span className={`tree-glyph ${b.status}`}>{GLYPH[b.status]}</span>
-              <span className="truncate">{b.title}</span>
-            </div>
-            {hasKids && !isClosed && (
-              <TreeRows project={project} parentId={b.id} depth={depth + 1} selectedId={selectedId} onSelect={onSelect} closed={closed} onToggle={onToggle} />
-            )}
-          </div>
-        );
-      })}
-    </>
-  );
-}
 
 export function Drawer({ project, filter, onFilter, onClose, width }: { project: Project; filter: Filter; onFilter: (f: Filter) => void; onClose: () => void; width: number }) {
   useLang(); // 言語が変わったら描き直す
@@ -92,9 +53,6 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
   const selection = useProjectStore((s) => s.selection);
   const select = useProjectStore((s) => s.select);
   const apply = useProjectStore((s) => s.apply);
-  // ツリーで閉じたボックス (引き出しの中だけの状態)
-  const [closed, setClosed] = useState<Set<string>>(() => new Set());
-  const toggleClosed = (id: string) => setClosed((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const [name, setName] = useState("");
   const [color, setColor] = useState(MEMBER_COLORS[0]);
   const focusBlock = useProjectStore((s) => s.focusBlock);
@@ -143,10 +101,10 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
     setColor(MEMBER_COLORS[(MEMBER_COLORS.indexOf(color) + 1) % MEMBER_COLORS.length]);
   };
 
-  const [tab, setTab] = useState<"tree" | "filter" | "members" | "parts">("tree");
+  // ツリーとは独立した入口なので、引き出しを開いたときは絞り込みから使えるようにする。
+  const [tab, setTab] = useState<"filter" | "members" | "parts">("filter");
   const tabs: { id: typeof tab; label: string; hint: string }[] = [
-    { id: "tree", label: "Tree", hint: t("ボックスの一覧 (押すと選ぶ)") }
-  , { id: "filter", label: "Filter", hint: t("状態や担当でボックスを絞る") }
+    { id: "filter", label: "Filter", hint: t("状態や担当でボックスを絞る") }
   , { id: "members", label: "Members", hint: t("担当にする人を登録。自分を決める") }
   , { id: "parts", label: "Parts", hint: t("他のプロジェクトでも使い回すボックス") }
   ];
@@ -154,7 +112,7 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
   return (
     <div className="drawer card" style={{ width }}>
       <div className="flex items-center gap-1 mb-2">
-        <div className="seg flex-1" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+        <div className="seg flex-1" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
           {tabs.map((x) => (
             <button key={x.id} className="seg__btn" data-on={tab === x.id} onClick={() => setTab(x.id)} title={x.hint} style={{ padding: "6px 2px", fontSize: 12 }}>{x.label}</button>
           ))}
@@ -162,20 +120,6 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
         <button className="btn btn-ghost btn-sm" onClick={onClose} title="Close">×</button>
       </div>
       <div className="text-[11px] mb-2" style={{ color: "var(--text-muted)" }}>{tabs.find((x) => x.id === tab)?.hint}</div>
-
-      {tab === "tree" && (childrenOf(project, ROOT_ID).length === 0 ? (
-        <div className="text-[12px] px-2" style={{ color: "var(--text-muted)" }}>No blocks yet</div>
-      ) : (
-        <TreeRows
-          project={project}
-          parentId={ROOT_ID}
-          depth={0}
-          selectedId={selection.blockId}
-          onSelect={(id) => { select({ blockId: id }); focusBlock(id); }}
-          closed={closed}
-          onToggle={toggleClosed}
-        />
-      ))}
 
       {tab === "filter" && (
       <div className="flex flex-wrap gap-1">

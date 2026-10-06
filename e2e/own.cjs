@@ -1,6 +1,6 @@
 /**
  * 自分の計画 (リポジトリ直下の boxglow.json) での、線の質と速さの検査
- * 何を: 全部のタブ (All と大項目) の線どうしの交差の合計が 220 以下、一番大きいタブへの切り替えが 1.2 秒以内。
+ * 何を: 全部のタブ (Top と大項目) の線どうしの交差の合計が 220 以下、一番大きいタブへの切り替えが 1.2 秒以内。
  * なぜ: 例の計画 (DAW / notes-app) は小さく、経路選びの罰を変えたときの後退 (交差 162 → 781、切り替え 0.57 秒 → 1.6 秒) を
  *       検出できなかった。ボックスと線が多い本物の計画で見張る。
  * boxglow.json が無い環境 (公開リポジトリを取ってきただけ、など) では何もせずに終わる。ファイルは読むだけで書き換えない
@@ -34,10 +34,10 @@ const MAX_SWITCH_MS = 1200;
     }, majors.map((m) => m.id));
     const big = majors[sizes.indexOf(Math.max(...sizes))];
 
-    // 交差: All と全部の大項目のタブを順に開いて数える
+    // 交差: Top と全部の大項目のタブを順に開いて数える
     let total = 0;
     const per = [];
-    for (const m of [{ id: null, title: "All" }, ...majors]) {
+    for (const m of [{ id: null, title: "Top" }, ...majors]) {
       await switchTab(page, m.id);
       const n = await crossings(page);
       total += n;
@@ -45,7 +45,7 @@ const MAX_SWITCH_MS = 1200;
     }
     check(`自分の計画: 線どうしの交差の合計が ${MAX_CROSSINGS} 以下`, total <= MAX_CROSSINGS, `合計 ${total} (${per.join(", ")})`);
 
-    // 速さ: All → 一番大きいタブ を 3 回測り、真ん中の値で判定する (1 回だけの引っかかりで落とさない)
+    // 速さ: Top → 一番大きいタブ を 3 回測り、真ん中の値で判定する (1 回だけの引っかかりで落とさない)
     const times = [];
     for (let i = 0; i < 3; i++) {
       await switchTab(page, null);

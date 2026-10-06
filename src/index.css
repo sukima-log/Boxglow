@@ -469,7 +469,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .dec-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 2px solid var(--line-soft); border-radius: 10px; background: var(--bg-paper); cursor: pointer; }
 .dec-head:hover { border-color: var(--primary); }
 .dec-key { flex: none; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; font-weight: 800; padding: 2px 6px; border-radius: 6px; background: var(--primary); color: var(--on-primary); }
-/* キャンバスのタブ (All = 大項目の一覧、以降は大項目ごと)。図の下の辺に、表計算のシートのように並べる */
+/* キャンバスのタブ (Top = 大項目の一覧、以降は大項目ごと)。図の下の辺に、表計算のシートのように並べる */
 .canvas-tabs { position: relative; display: flex; align-items: stretch; gap: 8px; padding: 0 12px 6px; border-top: 2px solid var(--line); background: var(--bg-card); flex: none; }
 .tab-nav { display: flex; align-items: center; gap: 2px; padding-top: 4px; flex: none; }
 .tab-nav-btn { width: 26px; height: 26px; border-radius: 8px; border: 2px solid transparent; background: transparent; color: var(--text); font-size: 11px; line-height: 1; cursor: pointer; }
@@ -1158,3 +1158,345 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .sync-panel__close { position: absolute; top: 6px; right: 6px; }
 .sync-panel .muted { color: var(--text-muted); }
 .restore-dialog { max-height: 70vh; overflow: auto; }
+
+/* 独立したツリー。通常は図と並べ、狭い幅では同じ操作を重ねて表示する。 */
+.canvas-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+/* 一行の階層一覧。題名を主役にし、詳しい状態はツールチップと詳細パネルへ。 */
+.tree-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  padding: 4px !important;
+}
+.tree-toggle[aria-pressed="true"] {
+  background: var(--primary-soft);
+  color: var(--primary-strong);
+}
+.tree-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+.tree-panel {
+  position: relative;
+  flex: 0 0 260px;
+  width: 260px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border-right: 1px solid var(--line-soft);
+  color: var(--text);
+}
+.tree-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px 5px 12px;
+  min-width: 0;
+  height: 36px;
+  flex: none;
+  font-size: 11px;
+}
+.tree-panel__head strong {
+  font-weight: 600;
+}
+.tree-panel__tools {
+  display: flex;
+  margin-left: auto;
+  gap: 2px;
+}
+.tree-tool {
+  width: 24px;
+  height: 24px;
+  padding: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.tree-tool:hover {
+  background: var(--primary-soft);
+  color: var(--text);
+}
+.tree-panel__list {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  padding: 0 0 8px;
+}
+.tree-panel .tree-row {
+  position: relative;
+  height: 28px;
+  min-height: 28px;
+  gap: 5px;
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-right: 4px;
+  border-radius: 0;
+  overflow: visible;
+}
+.tree-row[data-selected="true"] {
+  box-shadow: inset 2px 0 var(--primary-strong);
+}
+/* 16px の字下げと同じ周期で縦線を引く。操作対象ではないのでポインターを遮らない。 */
+.tree-guides {
+  position: absolute;
+  left: 14px;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(to right, var(--line-soft) 0 1px, transparent 1px 16px);
+}
+.tree-branch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 26px;
+  padding: 2px;
+  flex: none;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.tree-branch:hover:not(:disabled) {
+  background: var(--primary-soft);
+  color: var(--text);
+}
+.tree-branch svg {
+  width: 12px;
+  height: 12px;
+}
+.tree-branch[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+.tree-branch:disabled {
+  visibility: hidden;
+}
+.tree-kind {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  color: var(--cat);
+}
+:root[data-theme="dark"] .tree-kind {
+  color: color-mix(in srgb, var(--cat) 65%, white);
+}
+.tree-row__content {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+.tree-row__title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  line-height: 26px;
+  font-weight: 400;
+}
+.tree-alert {
+  flex: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--attention-text);
+  background: var(--attention-bg);
+  border-radius: 3px;
+  min-width: 14px;
+  text-align: center;
+}
+.tree-state {
+  display: inline-flex;
+  color: var(--text-muted);
+  flex: none;
+}
+.tree-state.gray {
+  color: var(--primary-strong);
+}
+/* 通常は題名を優先し、ホバー・フォーカス・選択時に管理入口を見せる。 */
+.tree-row__menu {
+  width: 18px;
+  opacity: 0;
+}
+.tree-row:hover .tree-row__menu,
+.tree-row:focus-within .tree-row__menu,
+.tree-row[data-selected="true"] .tree-row__menu,
+.tree-row__menu[aria-expanded="true"] {
+  opacity: 1;
+}
+.tree-title-input {
+  min-width: 0;
+  width: 100%;
+  height: 24px;
+  padding: 1px 4px;
+  font-size: 13px;
+}
+.tree-actions {
+  flex: none;
+  margin: 6px;
+  padding: 4px 6px 8px;
+  max-height: 65%;
+  overflow: auto;
+  font-size: 12px;
+}
+.tree-actions .tree-panel__head {
+  padding: 4px 0;
+  height: auto;
+}
+.tree-actions .tree-panel__head > button {
+  margin-left: auto;
+}
+.tree-actions__buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.tree-actions__move {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.tree-actions__move select {
+  min-width: 0;
+  flex: 1;
+}
+.tree-panel button:focus-visible,
+.tree-row:focus-visible {
+  outline: 1px solid var(--primary-strong);
+  outline-offset: -1px;
+}
+/* タッチ環境にはホバーがないので、管理入口を常に出し、行と矢印の押せる範囲も広げる。 */
+@media (pointer: coarse) {
+  .tree-panel .tree-row {
+    height: 34px;
+    min-height: 34px;
+  }
+  .tree-branch {
+    height: 32px;
+    width: 24px;
+  }
+  .tree-row__menu {
+    opacity: 1;
+    width: 24px;
+  }
+}
+/* 図の最小幅を確保できないときは重ねる。下のタブ帯は操作できるように空けておく。 */
+@media (max-width: 900px) {
+  .tree-panel {
+    position: absolute;
+    top: 0;
+    bottom: 38px;
+    left: 0;
+    z-index: 25;
+    width: min(280px, calc(100vw - 24px));
+    box-shadow: var(--shadow-card);
+  }
+}
+/* チップの位置に関係なく、同期の欄を画面内へ収める。復旧ダイアログには影響させない。 */
+.sync-popover {
+  position: fixed;
+  width: min(400px, calc(100vw - 16px));
+  z-index: 80;
+  overflow: auto;
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+}
+.sync-popover > .sync-panel {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  box-shadow: none;
+  padding: 18px 16px 14px;
+  gap: 12px;
+  overflow-wrap: anywhere;
+}
+.sync-panel__heading {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  padding-right: 28px;
+  font-size: 16px;
+}
+.sync-panel__heading > span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  background: var(--primary-soft);
+  border-radius: 7px;
+}
+.sync-panel__comparison {
+  border-left: 3px solid var(--line-soft);
+  padding-left: 10px;
+  display: grid;
+  gap: 6px;
+}
+.sync-popover .sync-panel__choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.sync-popover .btn {
+  white-space: normal;
+  height: auto;
+  overflow-wrap: anywhere;
+}
+.sync-popover details {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 10px;
+  white-space: normal;
+  word-break: normal;
+}
+.sync-popover summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+.sync-popover details[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.sync-popover details[open] > * {
+  margin-top: 8px;
+}
+.sync-popover details[open] > summary {
+  margin-top: 0;
+}
+
+/* カテゴリは選択前にも読める短い札。状態の行と分けて、判断待ちと競合させない。 */
+.bg-block__head > .bg-block__cat {
+  display: inline-flex;
+  flex: none;
+  font-size: 11px;
+  padding: 3px 6px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.bg-block.is-overview:not(.selected) .bg-block__head > .bg-block__cat {
+  display: inline-flex;
+}
+/* タイトル直下へ移したカテゴリ欄で、狭い画面の判断質問を押し出さないよう高さを抑える。 */
+.category-field {
+  margin-top: -6px;
+  gap: 10px;
+}
+.category-field > .input {
+  padding: 4px 8px;
+  font-size: 13px;
+  line-height: 1.4;
+}

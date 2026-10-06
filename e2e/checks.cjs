@@ -61,9 +61,9 @@ function squeezed(file) {
     await load(page, NOTES);
     await switchTab(page, null);
     const tabs = await page.locator(".canvas-tab").allInnerTexts();
-    check("タブ: All と大項目 4 つが並ぶ", tabs.length === 5 && tabs[0].trim() === "All", JSON.stringify(tabs.map((t) => t.trim())));
+    check("タブ: Top と大項目 4 つが並ぶ", tabs.length === 5 && tabs[0].trim() === "Top", JSON.stringify(tabs.map((t) => t.trim())));
 
-    // All の大項目をダブルクリックするとそのタブが開く (1 回のクリックでは開かない)
+    // Top の大項目をダブルクリックするとそのタブが開く (1 回のクリックでは開かない)
     const apiId = await idOf(page, "API");
     const pt = await page.evaluate((id) => { const rf = window.boxglow.rf; const n = rf.getInternalNode(id); return rf.flowToScreenPosition({ x: n.internals.positionAbsolute.x + 60, y: n.internals.positionAbsolute.y + 14 }); }, apiId);
     await page.mouse.click(pt.x, pt.y);
@@ -107,7 +107,7 @@ function squeezed(file) {
     await page.waitForTimeout(300);
     check("Activity: Log を開くと記録が出る", (await page.locator("aside.right .tl-row").count()) > 5);
 
-    // 線を選んだままタブを移る: All で大項目どうしの線を選び、行き先のボックスをダブルクリック
+    // 線を選んだままタブを移る: Top で大項目どうしの線を選び、行き先のボックスをダブルクリック
     await switchTab(page, null);
     const edge = await page.evaluate(() => {
       const s = window.boxglow.store.getState(); const p = s.project;
@@ -118,7 +118,7 @@ function squeezed(file) {
     });
     await page.waitForTimeout(400);
     const marked = (await page.locator('.canvas-tab[data-marked="true"]').allInnerTexts()).map((t) => t.trim());
-    check("選んだ線が通るタブに印が付く", marked.includes("All") && marked.includes("API") && marked.includes("Plan and design"), JSON.stringify(marked));
+    check("選んだ線が通るタブに印が付く", marked.includes("Top") && marked.includes("API") && marked.includes("Plan and design"), JSON.stringify(marked));
     check("線を 1 本選ぶと光 (halo) が付く", (await page.locator(".react-flow__edge-halo").count()) >= 1);
     const pt2 = await page.evaluate((id) => { const rf = window.boxglow.rf; const n = rf.getInternalNode(id); return rf.flowToScreenPosition({ x: n.internals.positionAbsolute.x + 60, y: n.internals.positionAbsolute.y + 14 }); }, apiId);
     await page.mouse.dblclick(pt2.x, pt2.y);

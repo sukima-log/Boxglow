@@ -72,10 +72,10 @@ const idOf = (page, title) => page.evaluate((t) => Object.values(window.boxglow.
 /**
  * タブを切り替えて、画面が落ち着くまでの時間を測る
  * 見張るもの: 図の位置と倍率 (viewport の transform)、描かれているボックスの数、線の数。
- * transform だけを見ると、大きいタブや All では transform が変わる前に「落ち着いた」と判定して 0 ms を返すことがある
+ * transform だけを見ると、大きいタブや Top では transform が変わる前に「落ち着いた」と判定して 0 ms を返すことがある
  * (重い描画の間は setInterval が回らず、描画の後に transform が元と同じ文字列のことがあるため)。
  * ボックスと線の数が入れ替わってから 350 ms 変化が無くなるまでを測れば、描画の重さがそのまま時間に出る。
- * Input : page, scope = 大項目の id (null = All)
+ * Input : page, scope = 大項目の id (null = Top)
  * Output: 所要時間 (ms。最後に画面が変わった時刻 - 切り替えを始めた時刻)
  */
 async function switchTab(page, scope) {

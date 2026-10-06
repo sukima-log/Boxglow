@@ -260,7 +260,7 @@ export function FlowCanvas({ project, matcher }: Props) {
               const me = rf.getInternalNode(n.id);
               const parent = rf.getInternalNode(container);
               if (me && parent) {
-                // 畳まれたボックス (All の大項目) に落としたときは中の空いた場所へ。展開中なら落とした位置 (新しい親の座標系) へ
+                // 畳まれたボックス (Top の大項目) に落としたときは中の空いた場所へ。展開中なら落とした位置 (新しい親の座標系) へ
                 const rel = isExpanded(project, container)
                   ? { x: me.internals.positionAbsolute.x - parent.internals.positionAbsolute.x, y: me.internals.positionAbsolute.y - parent.internals.positionAbsolute.y }
                   : nextFreePosition(q, container);

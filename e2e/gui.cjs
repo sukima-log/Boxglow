@@ -33,12 +33,12 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.setViewportSize({width:390,height:844});
     await search.fill('B5'); await search.press('Enter');
     await page.getByText('回答が必要です',{exact:true}).waitFor();
-    check('詳細パネル: 質問がカテゴリより上、画面の中に出る',await page.evaluate(()=>{
+    check('詳細パネル: カテゴリと質問が画面内で見つかる',await page.evaluate(()=>{
       const question=document.querySelector('.attention-section').getBoundingClientRect();
       const category=document.querySelector('.category-field').getBoundingClientRect();
       const top=document.querySelector('.app-top').getBoundingClientRect();
       const panel=document.querySelector('.panel.right').getBoundingClientRect();
-      return question.bottom<innerHeight-36 && question.bottom<category.top && panel.top>=top.bottom;
+      return question.bottom<innerHeight-36 && category.top<question.top && category.bottom<innerHeight-36 && panel.top>=top.bottom;
     }));
     check('詳細パネル: 答えていない質問は 1 回だけ出る',await page.getByText('公開先はどれにしますか?',{exact:true}).count()===1);
     await page.getByRole('button',{name:'静的ホスティング',exact:true}).click();

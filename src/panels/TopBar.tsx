@@ -3,6 +3,7 @@
  * 狭い幅 (760px 以下) では、追加・Auto Layout・Undo / Redo を ⋯ メニューの中へ移す
  */
 import { useEffect, useRef, useState } from "react";
+import { TreeIcon } from "./TreeIcon";
 import { RestoreDialog, SaveHeldChip, SyncChip } from "./SyncPanel";
 import { addBlock, addProjectBlock, normalizeCollapsed, searchBlocks, summarize, toJSON } from "../model/graph";
 import { layoutAll } from "../model/autolayout";
@@ -13,7 +14,11 @@ import { applyTheme, currentTheme, type Theme } from "../lib/theme";
 import { copyText, downloadText, pickTextFile, safeFilename } from "../lib/download";
 import { setLang, t, useLang } from "../i18n";
 
-export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; onToggleDrawer: () => void; onHelp: () => void }) {
+/**
+ * 入力: 表示中の Project、ツリーの開閉状態、各パネルの開閉コールバック。
+ * 出力: 上部の操作バー。ツリーとオプションは別の入口にし、開閉状態そのものは App が保持する。
+ */
+export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp }: { project: Project; onToggleTree: () => void; treeOpen: boolean; onToggleDrawer: () => void; onHelp: () => void }) {
   const lang = useLang(); // 言語が変わったら描き直す (メニューの切替項目の表示にも使う)
   const readonly = useProjectStore((s) => s.readonly);
   const ephemeral = useProjectStore((s) => s.ephemeral);
@@ -136,7 +141,9 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
   return (
     <header className="topbar" data-editing={editMode}>
       <div className="topbar-identity">
-      <button className="btn btn-ghost btn-sm" onClick={onToggleDrawer} title={t("階層 / 絞り込み / メンバー / 部品")}>☰</button>
+      {/* 文字を置かない入口にも名前と制御先を与え、読み上げ・ツールチップで用途と現在の開閉を伝える。 */}
+      <button className="tree-toggle btn btn-ghost btn-sm" onClick={onToggleTree} aria-pressed={treeOpen} aria-controls="project-tree" aria-label={treeOpen ? t("サイドバーを隠す") : t("サイドバーを表示")} title={treeOpen ? t("サイドバーを隠す") : t("サイドバーを表示")}><TreeIcon name="sidebar" /></button>
+      <button className="btn btn-ghost btn-sm" onClick={onToggleDrawer} title={t("絞り込み / メンバー / 部品")}>☰</button>
       {/* VS Code の中では、Home へ戻るボタンを出さない: 開いているのは 1 つのファイルで、戻る先の一覧 (ブラウザ内の計画) は、ファイルとは別のコピーのため */}
       {source !== "vscode" && <button className="btn btn-ghost btn-sm" onClick={closeProject} title={t("Home (プロジェクト一覧へ)")} aria-label="Home">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -148,7 +155,8 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
       <button className="project-name" onClick={() => select({ project: true })} title={project.name}>{project.name}</button>
       <span className={`save-chip ${saveState === "unsaved" ? "unsaved" : ""}`} title={saveTitle}>
         {!ephemeral && <span className="save-chip__file">{fileName ?? t("ブラウザ内")}</span>}
-        <span>{saveLabel}</span>
+        {/* 保存先のファイルと同期先のサーバーを区別する。ローカル保存済みでも送信前のことがある。 */}
+        <span>{(source === "serve" || source === "vscode") && <span>{t("ファイル")}: </span>}{saveLabel}</span>
       </span>
       {/* 手動の更新: 今すぐ読み直す (自動の更新を待たない)。どの計画でも、いつも同じ場所に出す (変更があるかどうかに関係なく)。
           ファイルにつながっている計画はファイルを、ブラウザ内の計画はこのブラウザの保存先を読み直す */}

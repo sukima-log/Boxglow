@@ -183,7 +183,7 @@ export function defaultTaskParent(p: Project): string {
 
 /**
  * 「大項目」のボックス (プロジェクトのボックスの直下。プロジェクトのボックスが無ければ最上位のボックス)。
- * All の画面にはこの階層までしか出さず (常に畳む)、中はそれぞれのタブで見る
+ * Top の画面にはこの階層までしか出さず (常に畳む)、中はそれぞれのタブで見る
  * Input : p
  * Output: 大項目のボックスの配列 (配置の上から、同じ高さなら左から)
  */
@@ -225,7 +225,7 @@ export function isInScope(p: Project, scope: string, blockId: string | null): bo
 }
 
 /**
- * 大項目のボックスは常に畳んだ状態にそろえる (All の図は大項目までしか出さず、中はタブで見る。大項目の中のボックスは入れ子のまま見せる)。
+ * 大項目のボックスは常に畳んだ状態にそろえる (Top の図は大項目までしか出さず、中はタブで見る。大項目の中のボックスは入れ子のまま見せる)。
  * 並べるときの大きさの計算もこの状態で行う
  * Input : p
  * Output: 大項目の collapsed を true にした複製 (変える物が無ければ p そのもの)
@@ -239,9 +239,9 @@ export function normalizeCollapsed(p: Project): Project {
 }
 
 /**
- * ボックスが見える画面 (開いておくべきタブ)。大項目の中のボックスならその大項目のタブ、大項目そのものや上の階層なら All (null)
+ * ボックスが見える画面 (開いておくべきタブ)。大項目の中のボックスならその大項目のタブ、大項目そのものや上の階層なら Top (null)
  * Input : p, blockId
- * Output: 大項目の id または null (= All)
+ * Output: 大項目の id または null (= Top)
  */
 export function scopeFor(p: Project, blockId: string): string | null {
   const major = majorOf(p, blockId);
@@ -2183,9 +2183,9 @@ export function issueKeyOf(url: string): string {
  */
 /**
  * 1 本の線 (と、境界を越えた先の続き) が見えるタブの一覧
- * 線は「両端のボックスが見える画面」に描かれる: 両端とも大項目の中なら、その大項目のタブ。大項目どうし・最上位の入出力との線は All (null)
+ * 線は「両端のボックスが見える画面」に描かれる: 両端とも大項目の中なら、その大項目のタブ。大項目どうし・最上位の入出力との線は Top (null)
  * Input : edgeId
- * Output: タブ (大項目の id、All は null) の配列。出す側のタブから受ける側のタブへの順。重複なし
+ * Output: タブ (大項目の id、Top は null) の配列。出す側のタブから受ける側のタブへの順。重複なし
  */
 export function wireNetTabs(p: Project, edgeId: string): (string | null)[] {
   const out: (string | null)[] = [];
@@ -2193,7 +2193,7 @@ export function wireNetTabs(p: Project, edgeId: string): (string | null)[] {
   const tabOf = (e: Edge): string | null => {
     const a = p.ports[e.from.portId]?.blockId;
     const b = p.ports[e.to.portId]?.blockId;
-    // 大項目の外側のポートどうし (兄弟の線) や最上位との線は All。片方が中のボックスなら、その大項目のタブ
+    // 大項目の外側のポートどうし (兄弟の線) や最上位との線は Top。片方が中のボックスなら、その大項目のタブ
     const ma = a && a !== ROOT_ID ? majorOf(p, a) : null;
     const mb = b && b !== ROOT_ID ? majorOf(p, b) : null;
     const inner = (id: string | undefined, side: "inner" | "outer") => !!id && id !== ROOT_ID && (majorOf(p, id) !== id || side === "inner");

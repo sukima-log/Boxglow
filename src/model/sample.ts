@@ -118,5 +118,5 @@ export function buildSampleProject(): Project {
   p = askDecision(p, release.blockId, "codex", "公開先はどれにしますか?", ["静的ホスティング", "自前のサーバー"], "最初に公開するのは静的な紹介ページです。フォーム送信などのサーバー処理は、別の API を使う想定です。\n静的ホスティング: 運用の手間を抑えやすく、今回の範囲に合います。\n自前のサーバー: 自由度は高い一方、更新・監視も自分たちで行います。\nこの判断を記録してから公開作業へ進みます。").project;
 
   // 依存関係で並べ直す (線が読みやすい配置にする)
-  return layoutAll(normalizeCollapsed(p)); // 大項目は畳んだ前提で並べる (All は大項目までしか出さない)
+  return layoutAll(normalizeCollapsed(p)); // 大項目は畳んだ前提で並べる (Top は大項目までしか出さない)
 }

@@ -71,7 +71,7 @@ export const inspector: Record<string, string> = {
 , "メモ (入力から出力をどう作るか)": "Notes (how to turn inputs into outputs)"
   // 線
 , "{title} のタブでこの線の続きを見る": "Follow this wire in the {title} tab"
-, "All でこの線を見る": "View this wire in All"
+, "Top でこの線を見る": "View this wire in Top"
 , "「{name}」": " \"{name}\""
 , "自動の線。手動でつなぐと置き換わります。": "Automatic wire. Connecting manually replaces it."
 };

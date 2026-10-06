@@ -147,9 +147,9 @@ export function buildNodes(
 ): AnyRFNode[] {
   const nodes: AnyRFNode[] = [];
   const scope = opts.scope && p.blocks[opts.scope] ? opts.scope : null;
-  // 開いているボックス (タブ / パンくず): そのボックスを All のプロジェクトのボックスと同じ「上の階層のボックス」として描き、中に直下のボックスを置く。
-  // ボックスの入力・出力は All のときの入力ノード / 出力ノードと同じ形でボックスの外 (左右) に置き、ボックスの外側の面のポートへ線でつなぐ。
-  // ボックスは絶対座標の位置に置く (線の経路計算は React Flow の絶対座標を使うので、All のときと同じ座標系に保つ)
+  // 開いているボックス (タブ / パンくず): そのボックスを Top のプロジェクトのボックスと同じ「上の階層のボックス」として描き、中に直下のボックスを置く。
+  // ボックスの入力・出力は Top のときの入力ノード / 出力ノードと同じ形でボックスの外 (左右) に置き、ボックスの外側の面のポートへ線でつなぐ。
+  // ボックスは絶対座標の位置に置く (線の経路計算は React Flow の絶対座標を使うので、Top のときと同じ座標系に保つ)
   if (scope) {
     const scopeSize = blockSize(p, scope);
     const scopeAbs = absolutePosition(p, scope);
@@ -253,7 +253,7 @@ export function buildNodes(
   });
   const blocks = Object.values(p.blocks).filter((b) => b.id !== ROOT_ID);
   blocks.sort((a, b) => depthOf(p, a.id) - depthOf(p, b.id));
-  const majors = new Set(majorBlocks(p).map((b) => b.id)); // All では大項目は畳んだまま (▸ はタブを開く)
+  const majors = new Set(majorBlocks(p).map((b) => b.id)); // Top では大項目は畳んだまま (▸ はタブを開く)
   for (const b of blocks) {
     const size = blockSize(p, b.id);
     const nested = b.parentId !== null && b.parentId !== ROOT_ID;

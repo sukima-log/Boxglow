@@ -51,7 +51,7 @@ const ROOT = path.resolve(__dirname, '..');
     await page.goto(base + '?serve=1&lang=ja');
     const chip = page.locator('.sync-chip');
     await chip.waitFor();
-    const chipText = async (text) => { try { await page.waitForFunction((t) => document.querySelector('.sync-chip')?.textContent?.includes(t), text, { timeout: 15000 }); return true; } catch { return false; } };
+    const chipText = async (text) => { try { await page.waitForFunction((t) => document.querySelector('.sync-chip')?.getAttribute('data-state') === t, ({ '未サインイン': 'signed-out', '未接続': 'unbound', '同期済み': 'synced', '確認': 'halted', '接続なし': 'disconnected' })[text], { timeout: 15000 }); return true; } catch { return false; } };
     check('同期: サインインしていない間は、印が「未サインイン」', await chipText('未サインイン'));
 
     // サインイン: 欄の GitHub のボタン → コードが出る → (サーバー側で許可) → 印が「未接続」
@@ -117,6 +117,7 @@ const ROOT = path.resolve(__dirname, '..');
     check('同期: serve を起動し直すと、印が「同期済み」に戻る', back);
 
     // サインアウト → 未サインイン、資格情報が消える
+    await page.locator('.sync-panel__details > summary').click();
     await page.getByRole('button', { name: 'サインアウト', exact: true }).click();
     check('同期: サインアウトで、印が「未サインイン」', await chipText('未サインイン'));
     check('同期: サインアウトで、トークンがサーバー側で取り消される', server.revoked.has(token));

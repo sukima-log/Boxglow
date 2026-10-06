@@ -1,8 +1,8 @@
 /**
  * キャンバスのタブ (図の下の辺)。表計算のシート選択と同じ操作感:
- *   [一覧] [◀] [▶]  All | 大項目1 | 大項目2 | ...   (帯はスクロールバーを出さず、◀ ▶ で左右に送る)
+ *   [一覧] [◀] [▶]  Top | 大項目1 | 大項目2 | ...   (帯はスクロールバーを出さず、◀ ▶ で左右に送る)
  * 「一覧」を押すと全部のタブが縦に並んだポップアップが出て、押せばそのタブへ飛ぶ
- * Input : project (表示用), majors = 大項目のボックス, scope = 開いているタブ (null = All), onSelect = タブを選んだときに呼ぶ
+ * Input : project (表示用), majors = 大項目のボックス, scope = 開いているタブ (null = Top), onSelect = タブを選んだときに呼ぶ
  * Output: タブの帯 (role=tablist)
  */
 import { useEffect, useRef, useState } from "react";
@@ -65,7 +65,7 @@ export function TabBar({ project, majors, scope, onSelect, marked }: { project: 
         <button className="tab-nav-btn" disabled={!canRight} onClick={() => scrollBy(STEP)} title={t("右へ")}>▶</button>
       </div>
       <div className="tab-strip" ref={strip} onScroll={updateArrows}>
-        <button className="canvas-tab" role="tab" data-on={scope === null} data-marked={marked?.has(null) || undefined} onClick={() => pick(null)} title={t("大項目の一覧を俯瞰する (中はそれぞれのタブで)")}>All</button>
+        <button className="canvas-tab" role="tab" data-on={scope === null} data-marked={marked?.has(null) || undefined} onClick={() => pick(null)} title={t("大項目の一覧を俯瞰する (中はそれぞれのタブで)")}>Top</button>
         {majors.map((b) => (
           <button key={b.id} className="canvas-tab" role="tab" data-on={scope === b.id} data-marked={marked?.has(b.id) || undefined} onClick={() => pick(b.id)} title={marked?.has(b.id) ? t("{title} (選んだ線の続きがある)", { title: b.title }) : t("{title} の中を見る", { title: b.title })}>
             <StatusIcon status={b.status} />
@@ -77,7 +77,7 @@ export function TabBar({ project, majors, scope, onSelect, marked }: { project: 
         <div className="tab-list card" role="menu">
           <button className="tab-list-row" data-on={scope === null} onClick={() => pick(null)}>
             <span className="tab-list-icon">⊞</span>
-            <span className="truncate">All</span>
+            <span className="truncate">Top</span>
           </button>
           {majors.map((b) => {
             const prog = computeProgress(project, b.id);

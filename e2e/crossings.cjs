@@ -16,7 +16,7 @@ const { chromium, ROOT, open, load, majorsOf, switchTab, crossings } = require("
     const majors = await majorsOf(page);
     let total = 0;
     const per = [];
-    for (const m of [{ id: null, title: "All" }, ...majors]) {
+    for (const m of [{ id: null, title: "Top" }, ...majors]) {
       await switchTab(page, m.id);
       const n = await crossings(page);
       total += n;

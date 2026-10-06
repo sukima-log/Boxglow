@@ -55,11 +55,11 @@ interface State {
   readonly: boolean;
   /** View モードで畳んだ / 展開したボックス (画面だけの状態。ファイルには書かない)。id -> collapsed */
   viewCollapsed: Record<string, boolean>;
-  /** ボックスを畳む / 展開する。All で大項目なら、そのタブを開く。Edit なら共有の配置として保存、View なら画面だけ */
+  /** ボックスを畳む / 展開する。Top で大項目なら、そのタブを開く。Edit なら共有の配置として保存、View なら画面だけ */
   toggleCollapsed: (blockId: string) => void;
-  /** 開いているタブ (大項目のボックスの id)。null なら All (大項目の一覧)。画面だけの状態で、プロジェクトごとにブラウザに記憶 */
+  /** 開いているタブ (大項目のボックスの id)。null なら Top (大項目の一覧)。画面だけの状態で、プロジェクトごとにブラウザに記憶 */
   viewScope: string | null;
-  /** 表示範囲を切り替える (null = All)。範囲の外にあるボックスの選択は解除する */
+  /** 表示範囲を切り替える (null = Top)。範囲の外にあるボックスの選択は解除する */
   setViewScope: (blockId: string | null) => void;
   /** 今すぐ保存する (Save ボタン。自動保存を待たずに書く) */
   saveNow: () => void;
@@ -211,7 +211,7 @@ function loadMe(p: Project): string | null {
 /**
  * ブラウザに記憶した表示範囲 (タブ) を読む
  * Input : p = 開いたプロジェクト
- * Output: 大項目のボックスの id (無い・消えていれば null = All)
+ * Output: 大項目のボックスの id (無い・消えていれば null = Top)
  */
 function loadScope(p: Project): string | null {
   try {
@@ -622,7 +622,7 @@ export const useProjectStore = create<State>((set, get) => {
   , toggleCollapsed: (blockId) => {
       const { project, editMode, readonly, viewCollapsed, viewScope } = get();
       if (!project || !project.blocks[blockId]) return;
-      // All の図では大項目は展開しない (中はタブで見る)。畳む / 展開の操作はその大項目のタブを開く操作にする
+      // Top の図では大項目は展開しない (中はタブで見る)。畳む / 展開の操作はその大項目のタブを開く操作にする
       if (viewScope === null && majorOf(project, blockId) === blockId) {
         // ダブルクリックの 1 回目でボックスが選ばれ、直前まで選んでいた線の選択が外れている。
         // その線がこのタブへ続いているなら、線を選んだままタブを開く (線を選んで接続先のボックスをダブルクリックする流れ)
@@ -674,7 +674,7 @@ export const useProjectStore = create<State>((set, get) => {
     }
   , focus: null
   , focusBlock: (blockId, opts) => {
-      // ボックスが見える画面に切り替えてから寄せる: 親のボックスを開く (親がプロジェクトのボックスや最上位なら All)。
+      // ボックスが見える画面に切り替えてから寄せる: 親のボックスを開く (親がプロジェクトのボックスや最上位なら Top)。
       // scope: false なら画面は変えない (キャンバスでクリックして選んだときは、クリック側がボックスを開くのでここでは切り替えない)
       const { project, viewScope } = get();
       if (opts?.scope !== false && project && project.blocks[blockId]) {
@@ -690,7 +690,7 @@ export const useProjectStore = create<State>((set, get) => {
       if (!project || readonly) return;
       let next = fn(project);
       if (next === project) return;
-      // 大項目は畳んだ状態でそろえる (All は大項目までしか出さない)。ボックスは重ねない: 変更のたびに同じ階層の重なりを押し出す (ドラッグ中は呼び出し側が history=false で呼ぶので除く)
+      // 大項目は畳んだ状態でそろえる (Top は大項目までしか出さない)。ボックスは重ねない: 変更のたびに同じ階層の重なりを押し出す (ドラッグ中は呼び出し側が history=false で呼ぶので除く)
       next = normalizeCollapsed(normalizeInputNames(next).project);
       if (opts?.history !== false) next = resolveAllOverlaps(next, blockSize);
       const history = opts?.history ?? true;
@@ -1043,7 +1043,7 @@ export function withViewCollapsed(project: Project, viewCollapsed: Record<string
   return { ...project, blocks };
 }
 
-/** 描画用のプロジェクト (All では大項目を畳み、開いているタブの大項目だけ展開。View の畳みも重ねる。画面だけで、ファイルは変えない) を返すフック */
+/** 描画用のプロジェクト (Top では大項目を畳み、開いているタブの大項目だけ展開。View の畳みも重ねる。画面だけで、ファイルは変えない) を返すフック */
 export function useShownProject(): Project | null {
   const project = useProjectStore((s) => s.project);
   const viewCollapsed = useProjectStore((s) => s.viewCollapsed);

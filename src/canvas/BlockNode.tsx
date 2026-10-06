@@ -109,7 +109,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     ev.stopPropagation();
     toggleCollapsed(blockId);
   };
-  // ダブルクリック: 大項目なら All からそのタブを開く、中のボックスなら畳む / 展開。1 回のクリックは選ぶだけ。
+  // ダブルクリック: 大項目なら Top からそのタブを開く、中のボックスなら畳む / 展開。1 回のクリックは選ぶだけ。
   // ボックスの側で受ける (React Flow のノードのダブルクリックは View のとき届かない)
   const onDoubleClick = (ev: React.MouseEvent) => {
     ev.stopPropagation();
@@ -137,8 +137,10 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   // 丸を押すだけで詳細パネルが開くと図の幅が変わり、クリックでの結線 (出力の丸 → 入力の丸) の途中で接続先がずれるため
   return (
     <div className={cls} style={{ width, height, ...(view.category ? ({ "--cat": view.category.color } as React.CSSProperties) : {}) }} onDoubleClick={onDoubleClick} onClick={(ev) => { if ((ev.target as HTMLElement).closest(".react-flow__handle")) ev.stopPropagation(); }}>
-      {/* 題名の行: 題名、プロジェクトの札、畳むボタン */}
+      {/* 題名の行: カテゴリ、題名、プロジェクトの札、畳むボタン。
+          カテゴリを選択時だけの補助行から外し、未選択・俯瞰でも仕事の種類を読める位置に固定する。 */}
       <div className="bg-block__head" style={{ height: headerH - 24 }}>
+        {view.category && <span className={`bg-block__cat${view.category.neutral ? " neutral" : ""}`} title={t("カテゴリ: {label}", { label: t(view.category.label) })}>{t(view.category.label)}</span>}
         {view.isProject && <span className="bg-block__tag">Project</span>}
         <span className="bg-block__title" title={view.fromTemplate ? t("{title} (部品: {name})", { title: view.title, name: view.fromTemplate }) : view.title}>{view.title}</span>
         {(view.kids > 0 || data.major) && (
@@ -171,7 +173,6 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         {view.startable && <span className="meta-chip ready" title={t("必須の入力がそろっています (着手できます)")}>Ready</span>}
         {view.issue && <a className="meta-chip issue nodrag" href={view.issue.url} target="_blank" rel="noreferrer" title={t("外部の課題: {url}", { url: view.issue.url })} onClick={(e) => e.stopPropagation()}>{view.issue.key}</a>}
         {view.fromTemplate && <span className="meta-chip muted" title={t("部品: {name}", { name: view.fromTemplate })}>{t("部品")}</span>}
-        {view.category && <span className={`bg-block__cat bg-block__secondary${view.category.neutral ? " neutral" : ""}`} title={t("カテゴリ: {label}", { label: t(view.category.label) })}>{t(view.category.label)}</span>}
         <span className="bg-block__key bg-block__secondary" title={t("ID (検索や CLI で使えます)")}>{view.key}</span>
       </div>
 

@@ -103,6 +103,9 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     for (let i = 0; i < 30 && (await onboarding()); i++) await win.waitForTimeout(500);
     watching = false; await dismiss;
     check('VS Code: サインインしていない間は「未サインイン」', await chipText('未サインイン'));
+    await frame.locator('.tree-toggle').click();
+    check('VS Code: 独立ツリーを開ける', await frame.locator('.tree-panel').isVisible());
+    await frame.locator('.tree-toggle').click();
     await frame.locator('.sync-chip').click();
     await button('GitHub でサインイン').click();
     await frame.locator('.sync-panel__code').waitFor({ timeout: 15000 });
@@ -111,7 +114,7 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     check('VS Code: 許可されると「オフ」(この計画はまだ同期していない)', await chipText('オフ'));
     // この計画を同期する (有効化) → サーバーに置く
     // (チェックの表示は、裏方からの状態で変わる。押した後は、印の状態で確かめる)
-    await frame.getByLabel(/^(この計画を同期する|Sync this plan)$/).click();
+    await frame.getByRole('button', { name: /^(この計画を同期する|Sync this plan)$/ }).click();
     check('VS Code: 有効にすると「未接続」', await chipText('未接続'));
     await button('サーバーに置く').click();
     check('VS Code: サーバーに置くと「同期済み」', await chipText('同期済み'));
@@ -238,6 +241,7 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     check('VS Code: Save と同期で、サーバーに両方の変更が届く', pushed);
     // サインアウト (開き直した画面から)
     if (!(await frame3.locator('.sync-panel').isVisible().catch(() => false))) await frame3.locator('.sync-chip').click();
+    await frame3.locator('.sync-panel__details > summary').click();
     await frame3.getByRole('button', { name: /^(サインアウト|Sign out)$/ }).click();
     let signedOut = false;
     try { await frame3.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'signed-out', null, { timeout: 20000 }); signedOut = true; } catch { signedOut = false; }

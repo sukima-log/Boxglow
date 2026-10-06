@@ -70,7 +70,7 @@ describe("表示範囲 (大項目のタブ)", () => {
     expect(synthOut.length).toBe(portsOf(p, scope.id, "out").length);
     for (const e of synthIn) { expect(e.target).toBe(scope.id); expect(e.targetHandle?.endsWith(":outer")).toBe(true); }
     for (const e of synthOut) { expect(e.source).toBe(scope.id); expect(e.sourceHandle?.endsWith(":outer")).toBe(true); }
-    // All (scope 無し) では入力・出力ノードが出る
+    // Top (scope 無し) では入力・出力ノードが出る
     const all = buildNodes(p, { selectedBlockId: null, readonly: false, scope: null });
     expect(all.some((n) => n.type === "terminal")).toBe(true);
   });

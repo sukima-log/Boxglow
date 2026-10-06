@@ -47,6 +47,7 @@ import { Drawer, isFilterEmpty, matchesFilter, type Filter, EMPTY_FILTER } from 
 import { RestoreNotice, SaveNotice } from "./panels/SaveNotice";
 import { VersionInfo } from "./panels/VersionInfo";
 import { TopBar } from "./panels/TopBar";
+import { TreePanel } from "./panels/TreePanel";
 import { TabBar } from "./panels/TabBar";
 
 export function App() {
@@ -73,6 +74,24 @@ export function App() {
   const viewScope = useProjectStore((s) => s.viewScope);
   const setViewScope = useProjectStore((s) => s.setViewScope);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // ツリーの開閉は閲覧上の好みなので、共有する計画ファイルではなくブラウザに記憶する。
+  // localStorage が禁止された環境でも画面は開けるよう、読み取り失敗は閉じた初期状態にする。
+  const [treeOpen, setTreeOpen] = useState(() => {
+    try {
+      return localStorage.getItem("boxglow:treeOpen") === "true";
+    } catch {
+      return false;
+    }
+  });
+  /** 入力: なし (現在値は更新関数で受け取る)。出力: void。開閉とその記憶だけを更新する。 */
+  const toggleTree = () => setTreeOpen((prev) => {
+    try {
+      localStorage.setItem("boxglow:treeOpen", String(!prev));
+    } catch {
+      // 記憶できなくても、この画面での開閉は止めない。
+    }
+    return !prev;
+  });
   // パネルの幅 (境界のつまみで変えられる。ブラウザに記憶)
   const [rightW, setRightW] = useState(() => loadWidth("boxglow:rightW", RIGHT_W.def, RIGHT_W.min, RIGHT_W.max));
   const [drawerW, setDrawerW] = useState(() => loadWidth("boxglow:drawerW", DRAWER_W.def, DRAWER_W.min, DRAWER_W.max));
@@ -117,7 +136,7 @@ export function App() {
     } else if (article || params.get("demo") === "1") {
       openSample();
       if (article) {
-        // 記事ではボックスと分岐が読める範囲から始める。All へはいつでも戻れる。
+        // 記事ではボックスと分岐が読める範囲から始める。Top へはいつでも戻れる。
         const state = useProjectStore.getState();
         const blocks = Object.values(state.project?.blocks ?? {});
         const scope = blocks.find((b) => b.kind === "task" && blocks.some((child) => child.parentId === b.id));
@@ -219,11 +238,11 @@ export function App() {
   // 詳細パネルは何かを選んでいるときだけ出す
   const hasSelection = !!project && !embed && (selection.blockId !== null || selection.edgeId !== null || selection.terminal !== null || selection.project || selection.timeline);
   const gridClass = ["app-grid", embed ? "embed" : "", hasSelection ? "" : "no-right"].filter(Boolean).join(" ");
-  // キャンバスのタブ: All (全体) + 大項目ごと (埋め込みでは出さない)
+  // キャンバスのタブ: Top (全体) + 大項目ごと (埋め込みでは出さない)
   const majors = useMemo(() => (project ? majorBlocks(project) : []), [project]);
   // 選んだ線 (と境界を越えた先の続き) が通るタブ。タブの帯に印を付け、線を選んだまま行き来できるようにする
   const wireTabs = useMemo(() => (project && selection.edgeId && project.edges[selection.edgeId] ? new Set(wireNetTabs(project, selection.edgeId)) : undefined), [project, selection.edgeId]);
-  const showTabs = !!project && majors.length > 0; // 埋め込みでも出す (All は大項目までしか見せないので、中を見る手段が要る)
+  const showTabs = !!project && majors.length > 0; // 埋め込みでも出す (Top は大項目までしか見せないので、中を見る手段が要る)
   const scopeOk = viewScope && project?.blocks[viewScope] ? viewScope : null;
   // パンくず: 開いているボックスから大項目までの道 (タブは大項目で選ぶ)
   const path = useMemo(() => (project && scopeOk ? scopePath(project, scopeOk) : []), [project, scopeOk]);
@@ -232,13 +251,16 @@ export function App() {
   return (
     <div className={gridClass} style={{ ["--right-w" as string]: `${rightW}px` }}>
       <div className="app-top">
-        {project && !embed && <TopBar project={project} onToggleDrawer={toggleDrawer} onHelp={() => setHelpOpen(true)} />}
+        {project && !embed && <TopBar project={project} treeOpen={treeOpen} onToggleTree={toggleTree} onToggleDrawer={toggleDrawer} onHelp={() => setHelpOpen(true)} />}
         {project && !embed && <SaveNotice />}
         {/* 退避した編集の取り込みの結果 (編集画面に出す。R44-01) */}
         {project && !embed && <RestoreNotice />}
       </div>
 
       <main className="app-main relative min-w-0 min-h-0">
+        {/* 通常幅ではツリーと図を並べる。狭い幅の重ね表示は CSS に任せ、図の座標や表示範囲は変更しない。 */}
+        <div className="canvas-layout">
+        {project && treeOpen && !embed && <TreePanel project={project} filter={filter} onClose={toggleTree} />}
         <div className="canvas-wrap">
           {project && (
             <ReactFlowProvider>
@@ -252,7 +274,7 @@ export function App() {
             <div className="scope-path" style={{ left: drawerOpen && !embed ? 8 + drawerW + 8 : 8 }}>
               {path.length > 0 && (
                 <>
-                  <button className="scope-crumb" onClick={() => setViewScope(null)} title={t("大項目の一覧へ")}>All</button>
+                  <button className="scope-crumb" onClick={() => setViewScope(null)} title={t("大項目の一覧へ")}>Top</button>
                   {path.map((b, i) => (
                     <span key={b.id} className="contents">
                       <span className="scope-sep">›</span>
@@ -274,6 +296,7 @@ export function App() {
           {embed && path.length === 0 && (
             <span className="absolute top-2 left-2 z-10 font-head text-[14px] px-2 py-1 rounded-lg" style={{ background: "var(--bg-card)", border: "2px solid var(--line)" }}>Boxglow</span>
           )}
+        </div>
         </div>
         {showTabs && <TabBar project={project!} majors={majors} scope={activeTab} onSelect={setViewScope} marked={wireTabs} />}
         {!project && !embed && <HomeDialog />}
