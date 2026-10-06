@@ -64,7 +64,8 @@ export function attachSync(context: vscode.ExtensionContext, document: vscode.Te
       void panel.webview.postMessage({ type: "sync-status", status });
       return;
     }
-    if (msg?.type === "sync-status-request") { void panel.webview.postMessage({ type: "sync-status", status: host.status(path) }); return; }
+    // 画面が読み込みを終えた (ready) / 状態を求めた: 今の状態を送る。最初の状態は、画面が受け取れる前に送ってしまうことがあるため (実機の VS Code で見つけた)
+    if (msg?.type === "ready" || msg?.type === "sync-status-request") { void panel.webview.postMessage({ type: "sync-status", status: host.status(path) }); return; }
     // 退避: 画面にだけある未保存の中身を、別のファイルへ書く。書けたことを確かめてから、その中身のハッシュと場所を返す
     if (msg?.type === "evacuate" && typeof msg.text === "string" && typeof msg.requestId === "string") {
       const suggested = vscode.Uri.file(`${dirname(document.uri.fsPath)}/${basename(document.uri.fsPath, ".json")}.unsaved-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);

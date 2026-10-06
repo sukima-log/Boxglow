@@ -44,3 +44,6 @@ node e2e/design.cjs
 
 # 画面からの同期 (serve --sync + 試験用の同期サーバー: サインイン・サーバーに置く・受け取り・競合の選択・サインアウト)
 node e2e/sync.cjs
+
+# 実際の VS Code (Linux 版。~/.cache/boxglow-e2e/vscode-linux に無ければ飛ばす) の中で、画面からの同期を通しで
+npm run build:vscode >/dev/null 2>&1 && node e2e/vscode-sync.cjs

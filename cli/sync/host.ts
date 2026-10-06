@@ -193,6 +193,8 @@ export class SyncHost {
   /** 1 秒ごと: 一時停止中は見張りだけ (同期しない)。実行中の同期の間は「同期中」と見せる */
   async tick(): Promise<void> {
     if (!this.watcher || this.paused) return;
+    // (資格情報が無い間は、見張りも同期しない。サインインすれば、次の tick から)
+    if (!resolveToken(this.server)) return;
     if (this.running) return this.running;
     const w = this.watcher;
     // 資格情報が変わった (別の CLI の login / logout): 止まっていた計画も含めて、確かめ直す (R39-03)
@@ -333,6 +335,8 @@ export class SyncHost {
   }
   /** 1 回の同期をこの場で行う (結び付け・今すぐ同期・人の選択)。常駐の同期と同じロックで排他される */
   private syncFile(file: string, extra: Partial<Parameters<typeof syncOnce>[0]>): Promise<void> {
+    // 資格情報が無ければ同期しない (トークン無しの要求を送らない)
+    if (!resolveToken(this.server)) { this.message = t("先にサインインしてください"); this.emit(); return Promise.resolve(); }
     // 停止の途中・停止の後は、新しい操作を始めない (R40-02)
     if (this.stopping || this.stopped) { this.message = t("同期を止めています。終わってから、もう一度操作してください"); this.emit(); return Promise.resolve(); }
     const op = this.syncFileNow(file, extra);
@@ -399,7 +403,8 @@ export class SyncHost {
     };
     if (this.support !== "ok") { status.state = "unsupported"; return status; }
     if (!real) { status.state = credentialsSource === "none" ? "signed-out" : "off"; return status; }
-    if (credentialsSource === "none" && !this.signingIn) { status.state = "signed-out"; return status; }
+    // 資格情報が無い間は、サインインの途中でも「未サインイン」(途中で「オフ」に見せない。サインインの欄は signIn で出る。実機の VS Code で見つけた)
+    if (credentialsSource === "none") { status.state = "signed-out"; return status; }
     if (!enabled) { status.state = "off"; return status; }
     if (this.owner === "external" || this.owner === "unknown") { status.state = "external"; status.message = this.owner === "external" ? t("別のプロセス (boxglow sync --watch など) が、このサーバーの同期を受け持っています。そちらを止めると、ここから同期できます") : t("同期のロックの持ち主を判定できません。boxglow unlock で確かめてください"); return status; }
     if (!binding) { status.state = "unbound"; return status; }

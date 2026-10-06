@@ -547,3 +547,22 @@ describe("レビュー 42 の回帰 (裏方)", () => {
     lock.unlock!();
   });
 });
+
+describe("実機の VS Code で見つけた不具合の回帰 (裏方)", () => {
+  it("サインインの途中は「未サインイン」のまま (「オフ」に見せない)。資格情報が無い間は、有効にしても結び付けても、要求を送らない", async () => {
+    const { file } = planFile("p1");
+    const { host } = make();
+    host.openFile(file);
+    host.signIn("github");
+    await settle();
+    expect(host.status(file)).toMatchObject({ state: "signed-out", signIn: { provider: "github" } });
+    const puts = server.puts;
+    host.enable(file);
+    await host.act(file, { kind: "bind" });
+    await advance(host, 3000);
+    expect(server.puts).toBe(puts);
+    expect(host.status(file).state).toBe("signed-out");
+    host.cancelSignIn();
+    await host.stop();
+  });
+});
