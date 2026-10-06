@@ -104,6 +104,18 @@ const ROOT = path.resolve(__dirname, '..');
     const head = JSON.parse(server.project(remoteId, 'acc-e2e').head.text);
     check('同期: サーバーの題名は、選んだ手元の値', head.blocks[block.blockId].title === '1 台目の案');
 
+    // serve との接続が切れたら、印は古い「同期済み」ではなく「接続なし」。同じポートで起動し直すと戻る (作者の手動確認で見つけた)
+    child.kill();
+    await new Promise((r) => child.once('exit', r));
+    let lost = false;
+    try { await page.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'disconnected', null, { timeout: 15000 }); lost = true; } catch { lost = false; }
+    check('同期: serve が止まると、印が「接続なし」になる (古い「同期済み」を出さない)', lost && await chipText('接続なし'));
+    child = spawn(process.execPath, [path.join(tmp, 'serve.mjs'), fileA, dist, String(port), server.url], { env: { ...process.env, BOXGLOW_CONFIG_DIR: configA, BOXGLOW_TOKEN: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    child.stdout.on('data', (d) => { serveLog += d; }); child.stderr.on('data', (d) => { serveLog += d; });
+    let back = false;
+    try { await page.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'synced', null, { timeout: 30000 }); back = true; } catch { back = false; }
+    check('同期: serve を起動し直すと、印が「同期済み」に戻る', back);
+
     // サインアウト → 未サインイン、資格情報が消える
     await page.getByRole('button', { name: 'サインアウト', exact: true }).click();
     check('同期: サインアウトで、印が「未サインイン」', await chipText('未サインイン'));

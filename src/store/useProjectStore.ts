@@ -76,6 +76,11 @@ interface State {
    * 画面は表示と操作の送信だけを行う (判断・通信・資格情報は裏方)
    */
   syncStatus: SyncStatus | null;
+  /**
+   * serve との接続が切れている (通知の接続が切れた・保存が通信で失敗した)。この間の syncStatus は、最後に受け取った古い状態なので、
+   * 同期の印は「接続なし」にする (古い「同期済み」を出し続けない)。つながり直すと false に戻り、状態を取り直す
+   */
+  syncLost: boolean;
   /** 同期の操作を裏方へ送る (serve は POST /api/sync、VS Code は postMessage)。応答の状態で syncStatus を更新する */
   syncAct: (action: HostAction) => Promise<void>;
   /** 裏方から届いた状態を受ける (古いセッションや古い通し番号の状態で、新しい状態を上書きしない) */
@@ -342,6 +347,8 @@ export const useProjectStore = create<State>((set, get) => {
       } while (generation === epoch && get().project);
     } catch (error) {
       if (generation === epoch) set({ saveState: "unsaved", saveError: error instanceof TypeError ? t("接続できません。編集は保持しています。サーバーを確認して保存を再試行してください。") : error instanceof Error ? error.message : String(error) });
+      // (serve に届かなかった: 同期の印も「接続なし」にする)
+      if (generation === epoch && error instanceof TypeError && get().source === "serve") set({ syncLost: true });
     } finally {
       if (generation === epoch) { inFlight = false; inFlightText = ""; if (get().saveState === "saved") void refreshExternal?.(); }
     }
@@ -419,7 +426,7 @@ export const useProjectStore = create<State>((set, get) => {
   };
   const canLeave = () => !["unsaved", "saving"].includes(get().saveState) || confirm(t("未保存の編集があります。必要なら先に JSON を書き出してください。編集を破棄して移動しますか？"));
   const stopWatching = () => {
-    epoch++; holdSave = false; set({ saveHeld: false }); inFlight = false; inFlightText = ""; refreshExternal = null; reloadNow = null; vscodeReloadWaiter = null; vscodeEmpty = null;
+    epoch++; holdSave = false; set({ saveHeld: false, syncLost: false }); inFlight = false; inFlightText = ""; refreshExternal = null; reloadNow = null; vscodeReloadWaiter = null; vscodeEmpty = null;
     if (saveTimer) clearTimeout(saveTimer); saveTimer = null;
     if (watchTimer) clearInterval(watchTimer); watchTimer = null; fileHandle = null;
     serveEvents?.close(); serveEvents = null;
@@ -461,6 +468,7 @@ export const useProjectStore = create<State>((set, get) => {
   , saveNow: () => { if (saveTimer) clearTimeout(saveTimer); saveTimer = null; holdSave = false; set({ saveHeld: false, restoreNotice: null }); void persist(true); }
   , reloading: false
   , syncStatus: null
+  , syncLost: false
   , editorBehind: null
   , evacuated: null
   , contentHash: async () => { const p = get().project; return p ? await sha256(toJSON(p)) : ""; }
@@ -539,6 +547,8 @@ export const useProjectStore = create<State>((set, get) => {
       if (pending?.step === "editor") set({ restoreNotice: { kind: "info", text: t("エディタ側の編集は取り込みませんでした。画面側の取り込みは残っています (取り消しで戻せます)。確かめてから Save で保存してください") } });
     }
   , acceptSyncStatus: (status) => {
+      // (状態が届いた = つながっている)
+      if (get().syncLost) set({ syncLost: false });
       const current = get().syncStatus;
       // セッションが変わった (裏方が起動し直した) ら、通し番号は初期化して受け入れる
       if (current && current.session === status.session && status.seq < current.seq) return;
@@ -852,7 +862,21 @@ export const useProjectStore = create<State>((set, get) => {
       };
       serveEvents = new EventSource(serveApi("api/events"));
       serveEvents.addEventListener("change", () => { void reload(); });
-      serveEvents.addEventListener("hello", () => { void reload(); });
+      serveEvents.addEventListener("hello", () => {
+        // つながり直した: 接続なしの印を外し、同期の状態を取り直す (serve が --sync なしで起動し直されていたら、同期の印を消す)。
+        // (--sync ありなら、serve は接続のたびに sync の通知も送る。取り直しは、その通知が無い場合に備える)
+        if (get().syncLost) {
+          set({ syncLost: false });
+          void fetch(serveApi("api/sync"), { cache: "no-store" }).then(async (response) => {
+            if (generation !== epoch) return;
+            if (response.ok) get().acceptSyncStatus(await response.json() as SyncStatus);
+            else if (response.status === 404) set({ syncStatus: null });
+          }).catch(() => { if (generation === epoch) set({ syncLost: true }); });
+        }
+        void reload();
+      });
+      // 通知の接続が切れた (serve が止まった・通信が切れた): ブラウザが自動でつなぎ直す。それまで同期の印は「接続なし」
+      serveEvents.addEventListener("error", () => { if (generation === epoch && get().syncStatus) set({ syncLost: true }); });
       // 画面からの同期の状態 (--sync で起動したときだけ流れる)
       serveEvents.addEventListener("sync", (e) => { try { get().acceptSyncStatus(JSON.parse((e as MessageEvent).data) as SyncStatus); } catch { /* 読めない通知は無視 */ } });
       return true;

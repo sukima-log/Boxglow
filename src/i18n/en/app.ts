@@ -152,6 +152,8 @@ export const app: Record<string, string> = {
 , "未保存の編集はありません。ファイルを閉じて開き直すと、最新の中身になります": "No unsaved edits. Close and reopen the file to get the latest content"
 , "編集を退避する": "Save a copy of the edits"
 , "退避した編集を読み込む": "Load saved edits"
+, "接続なし": "Disconnected"
+, "boxglow serve と接続できません。同期の状態は分かりません (最後の表示は古い可能性があります)。serve が動いているか確かめてください。つながり直すと、表示は戻ります": "Cannot reach boxglow serve, so the sync state is unknown (the last state shown may be out of date). Check that serve is running. The state comes back when it reconnects"
 , "同期で新しい中身を受け取りましたが、エディタに未保存の編集があるため、ここでは統合できません。手元の編集を退避してから、このファイルのタブを全部閉じて (保存しない) 開き直し、⋯ メニューの「退避した編集を読み込む」で取り込んでください。": "Sync received new content, but the editor has unsaved edits, so they cannot be merged here. Save a copy of your edits, close every tab of this file (Don't Save) and reopen it, then use \"Load saved edits\" in the ⋯ menu."
 , "退避済み: {path}。このファイルのタブを全部閉じて (保存しない) 開き直してください": "Saved a copy to {path}. Close every tab of this file (Don't Save) and reopen it"
 , "もう一度退避する": "Save another copy"

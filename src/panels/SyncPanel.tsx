@@ -31,6 +31,8 @@ function chip(status: SyncStatus): { label: string; tone: "quiet" | "ok" | "busy
 /** 上のバーの印 + 欄 */
 export function SyncChip() {
   const status = useProjectStore((s) => s.syncStatus);
+  // serve との接続が切れている: 手元の状態は古いので、「接続なし」だけを出す (操作も出さない)
+  const lost = useProjectStore((s) => s.syncLost);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   // 欄の外を押したら閉じる
@@ -41,14 +43,19 @@ export function SyncChip() {
     return () => document.removeEventListener("mousedown", close);
   }, [open]);
   if (!status) return null;
-  const c = chip(status);
+  const c = lost ? { label: t("接続なし"), tone: "problem" as const } : chip(status);
   return (
     <div className="sync-chip-wrap" ref={ref}>
-      <button className={`sync-chip tone-${c.tone}`} data-state={status.state} onClick={() => setOpen((v) => !v)} title={t("同期")} aria-expanded={open}>
+      <button className={`sync-chip tone-${c.tone}`} data-state={lost ? "disconnected" : status.state} onClick={() => setOpen((v) => !v)} title={t("同期")} aria-expanded={open}>
         <span className="sync-chip__dot" aria-hidden="true" />
         <span>{c.label}</span>
       </button>
-      {open && <SyncPanel status={status} onClose={() => setOpen(false)} />}
+      {open && (lost
+        ? <div className="sync-panel" role="dialog" aria-label={t("同期")}>
+            <div className="sync-panel__line">{t("boxglow serve と接続できません。同期の状態は分かりません (最後の表示は古い可能性があります)。serve が動いているか確かめてください。つながり直すと、表示は戻ります")}</div>
+            <button className="sync-panel__close btn btn-ghost btn-sm" onClick={() => setOpen(false)} aria-label={t("閉じる")}>×</button>
+          </div>
+        : <SyncPanel status={status} onClose={() => setOpen(false)} />)}
     </div>
   );
 }
