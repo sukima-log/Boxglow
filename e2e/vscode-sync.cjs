@@ -14,7 +14,11 @@ const ROOT = path.resolve(__dirname, '..');
 const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache', 'boxglow-e2e', 'vscode-linux', 'VSCode-linux-x64', 'code');
 
 (async () => {
-  if (!fs.existsSync(CODE)) { console.log('SKIP VS Code の Linux 版がありません: ' + CODE); process.exit(0); }
+  // (段階の完了の判定などで、実機の検査を必須にするときは BOXGLOW_E2E_REQUIRE_VSCODE=1。無ければ失敗にする。SKIP を成功と数えない)
+  if (!fs.existsSync(CODE)) {
+    if (process.env.BOXGLOW_E2E_REQUIRE_VSCODE === '1') { console.log('NG  VS Code の Linux 版がありません (必須): ' + CODE); process.exit(1); }
+    console.log('SKIP VS Code の Linux 版がありません: ' + CODE); process.exit(0);
+  }
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'boxglow-e2e-vscode-'));
   let app = null, server = null;
   try {
@@ -44,6 +48,8 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     , env: (() => { const env = { ...process.env, BOXGLOW_CONFIG_DIR: configA, BOXGLOW_TOKEN: '' }; delete env.ELECTRON_RUN_AS_NODE; delete env.VSCODE_IPC_HOOK_CLI; return env; })()
     });
     const win = await app.firstWindow();
+    // (検査した環境を記録する)
+    console.log(`環境: VS Code ${await app.evaluate(({ app: a }) => a.getVersion()).catch(() => '?')} (Linux の拡張ホスト), Playwright ${require(path.join(path.dirname(require.resolve(process.env.PLAYWRIGHT || 'playwright')), 'package.json')).version}, ${os.release()}`);
     // (VS Code の最初の案内のダイアログが出たら閉じる。図の操作を覆うため)
     // (出るまでに時間がかかることがあるので、図を探す間も見張って閉じる)
     const skip = win.getByText('Continue without Signing In', { exact: true });
@@ -114,7 +120,8 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     for (let i = 0; i < 60 && !received; i++) { received = (await titleOf()) === '2 台目の題名'; if (!received) await win.waitForTimeout(250); }
     check('VS Code: 2 台目の変更が図に届く (エディタが読み直し、画面に update が来る)', received);
     check('VS Code: ディスクのファイルも 2 台目の題名', JSON.parse(fs.readFileSync(fileA, 'utf8')).blocks[block.blockId].title === '2 台目の題名');
-    // 競合 → 欄で解決
+    // 競合 → 欄で解決 (準備の間は常駐の同期を止める。途中で自動の受け取りが入ると、競合にならないことがある)
+    await frame.evaluate(() => window.boxglow.store.getState().syncAct({ kind: 'pause' }));
     fs.writeFileSync(fileB, tools.toJSON(tools.updateBlock(tools.fromJSON(fs.readFileSync(fileB, 'utf8')), block.blockId, { title: '2 台目の案' })) + '\n');
     await tools.syncOnce({ file: fileB, server: server.url, token });
     await frame.evaluate((id) => { const s = window.boxglow.store.getState(); s.apply((p) => ({ ...p, blocks: { ...p.blocks, [id]: { ...p.blocks[id], title: 'VS Code の案' } } })); s.saveNow(); }, block.blockId);
@@ -122,6 +129,7 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     await button('今すぐ同期').click();
     check('VS Code: 競合で「確認」', await chipText('確認'));
     await button('手元の値に決める').click();
+    await frame.evaluate(() => window.boxglow.store.getState().syncAct({ kind: 'resume' }));
     check('VS Code: 選ぶと「同期済み」', await chipText('同期済み'));
     check('VS Code: サーバーは選んだ手元の値', JSON.parse(server.project(remoteId, 'acc-vscode').head.text).blocks[block.blockId].title === 'VS Code の案');
     // サインアウト

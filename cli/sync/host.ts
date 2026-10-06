@@ -17,7 +17,7 @@ import { inspectLock } from "../file-store";
 import { syncOnce, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
 import { haltView, type SyncAction } from "./command";
 import { credentialsPath, resolveToken } from "./credentials";
-import { runGoogleLogin, runLogin, runLogout } from "./login";
+import { runGoogleLogin, runLogin, runLogout, serverProblem } from "./login";
 import { bindingsOf, hashOf, normalizeServer, realFile, SyncStateUnreadable } from "./state-store";
 import { lockWatch, SyncWatcher, type WatchEvent } from "./watch";
 
@@ -151,6 +151,8 @@ export class SyncHost {
     }
     this.unlockWatch = lock.unlock;
     this.owner = "self";
+    // (見張りを始めた時点の資格情報の世代。ここから変わったら、tick が画面に知らせる)
+    this.lastCredentials = this.credentialsGeneration();
     this.watcher = new SyncWatcher({
       server: this.server
       // トークンと資格情報の世代を、1 回の同期の始めに一緒に解決する (出来事に世代が付く。R39-03)
@@ -193,14 +195,15 @@ export class SyncHost {
   /** 1 秒ごと: 一時停止中は見張りだけ (同期しない)。実行中の同期の間は「同期中」と見せる */
   async tick(): Promise<void> {
     if (!this.watcher || this.paused) return;
-    // (資格情報が無い間は、見張りも同期しない。サインインすれば、次の tick から)
-    if (!resolveToken(this.server)) return;
     if (this.running) return this.running;
     const w = this.watcher;
-    // 資格情報が変わった (別の CLI の login / logout): 止まっていた計画も含めて、確かめ直す (R39-03)
+    // 資格情報が変わった (別の CLI の login / logout): 止まっていた計画も含めて確かめ直し、画面に知らせる (R39-03)。
+    // 変化の検知と画面への知らせは、送ってよいかの判定より先に行う (別の CLI で消されたときも、画面を「未サインイン」にする。R46-02)
     const credentials = this.credentialsGeneration();
-    if (this.lastCredentials !== null && this.lastCredentials !== credentials) w.recheck();
+    if (this.lastCredentials !== null && this.lastCredentials !== credentials) { w.recheck(); this.account = null; this.emit(); }
     this.lastCredentials = credentials;
+    // (資格情報が無い間は、見張りも同期しない。サインインすれば、次の tick から)
+    if (!resolveToken(this.server)) return;
     this.busy++; this.emit();
     this.running = w.tick().finally(() => { this.running = null; this.busy--; this.emit(); });
     return this.running;
@@ -298,6 +301,9 @@ export class SyncHost {
     const credentials = this.credentialsGeneration();
     if (this.account?.credentials === credentials) return;
     if (!resolveToken(this.server)) { this.account = { credentials }; return; }
+    // 資格情報を送ってよい場所か (https、または手元の http)。サインイン・同期と同じ制約を、利用者の確認にもかける (R46-01)
+    const unsafe = serverProblem(this.server);
+    if (unsafe) { this.account = { credentials, problem: unsafe }; return; }
     // (/v1/me を JSON で読む。whoami の表示の文を読み取ると、言語や ID の形で読めなくなる)
     type Me = { account?: unknown; login?: unknown; signedInWith?: unknown };
     const read = async (): Promise<{ me: Me | null; problem?: string }> => {
@@ -408,7 +414,6 @@ export class SyncHost {
     if (!enabled) { status.state = "off"; return status; }
     if (this.owner === "external" || this.owner === "unknown") { status.state = "external"; status.message = this.owner === "external" ? t("別のプロセス (boxglow sync --watch など) が、このサーバーの同期を受け持っています。そちらを止めると、ここから同期できます") : t("同期のロックの持ち主を判定できません。boxglow unlock で確かめてください"); return status; }
     if (!binding) { status.state = "unbound"; return status; }
-    if (this.paused) { status.state = "paused"; return status; }
     // 今の資格情報で、サーバーが利用者を確かめられなかった: 前の成功より優先する (R39-10)
     if (this.authProblem !== null && this.authProblem === this.credentialsGeneration()) {
       status.state = "problem";
@@ -430,6 +435,8 @@ export class SyncHost {
       if (status.problem.kind === "network") status.state = "offline";
       return status;
     }
+    // (一時停止中でも、手動の同期で止まった・問題が起きたことは見せる。「一時停止」は、それ以外のときだけ)
+    if (this.paused && r.status !== "halted") { status.state = "paused"; return status; }
     if (r.status === "busy") { status.state = "syncing"; return status; }
     if (r.status === "halted") {
       status.state = "halted";

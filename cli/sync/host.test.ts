@@ -566,3 +566,69 @@ describe("実機の VS Code で見つけた不具合の回帰 (裏方)", () => {
     await host.stop();
   });
 });
+
+describe("レビュー 46 の回帰 (裏方)", () => {
+  it("R46-01: 利用者の確認も、https か手元の http にだけトークンを送る (環境変数のトークンでも)", async () => {
+    const { file } = planFile("p1");
+    let calls = 0;
+    const stub = (async () => { calls++; return new Response("{}", { status: 200 }); }) as typeof fetch;
+    process.env.BOXGLOW_TOKEN = "env-secret-token";
+    const statuses: SyncStatus[] = [];
+    const host = new SyncHost({ server: "http://sync.example.com", fetch: stub, onStatus: (s) => statuses.push(s) });
+    host.openFile(file);
+    await settle();
+    expect(calls).toBe(0);
+    expect(JSON.stringify(host.status(file))).not.toContain("env-secret-token");
+    // 手元の http (試験用サーバー) には送る
+    const local = make({ fetch: ((...args: Parameters<typeof fetch>) => { calls++; return fetch(...args); }) as typeof fetch });
+    local.host.openFile(file);
+    await settle();
+    expect(calls).toBeGreaterThan(0);
+    await host.stop(); await local.host.stop();
+  });
+
+  it("R46-02: 別の CLI がサインアウトしたら (資格情報のファイルが消えた)、操作しなくても画面に「未サインイン」が届く。同期の要求は送らない。再びサインインすると戻る", async () => {
+    const { file } = planFile("p1");
+    signedIn();
+    const { host, statuses } = make();
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    await settle();
+    expect(statuses.at(-1)?.state).toBe("synced");
+    const { credentialsPath } = await import("./credentials");
+    rmSync(credentialsPath(server.url));
+    const puts = server.puts;
+    await advance(host, 1000); await settle();
+    expect(statuses.at(-1)?.state).toBe("signed-out");
+    await advance(host, 40_000);
+    expect(server.puts).toBe(puts);
+    signedIn();
+    await advance(host, 1000); await advance(host, 40_000); await settle();
+    expect(statuses.at(-1)?.state).toBe("synced");
+    await host.stop();
+  });
+});
+
+describe("一時停止中の表示", () => {
+  it("一時停止中でも、手動の同期で止まったこと (競合) は見せる。それ以外は「一時停止」", async () => {
+    const { file, a } = planFile("p1");
+    signedIn();
+    const { host } = make();
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    await host.act(file, { kind: "pause" });
+    expect(host.status(file).state).toBe("paused");
+    // 別の端末が同じ題名を変え、手元も変えて、手動で同期する
+    const remoteId = host.status(file).file!.binding!.remoteId;
+    const other = join(root, "other", "boxglow.json"); mkdirSync(join(root, "other"));
+    const saved = process.env.BOXGLOW_CONFIG_DIR; process.env.BOXGLOW_CONFIG_DIR = join(root, "other-config");
+    await syncOnce({ file: other, server: server.url, remoteId });
+    edit(other, (p) => updateBlock(p, a, { title: "別の端末" }));
+    await syncOnce({ file: other, server: server.url });
+    process.env.BOXGLOW_CONFIG_DIR = saved;
+    edit(file, (p) => updateBlock(p, a, { title: "手元" }));
+    await host.act(file, { kind: "syncNow" });
+    expect(host.status(file).state).toBe("halted");
+    await host.stop();
+  });
+});

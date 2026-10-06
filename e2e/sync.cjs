@@ -87,16 +87,19 @@ const ROOT = path.resolve(__dirname, '..');
     check('同期: 1 台目の画面に、2 台目の変更が届く', received);
     check('同期: 受け取った後も「同期済み」', await chipText('同期済み'));
 
-    // 競合: 2 台目と 1 台目が同じ題名を別の値に → 1 台目が止まり、欄で選んで進む
+    // 競合: 2 台目と 1 台目が同じ題名を別の値に → 1 台目が止まり、欄で選んで進む (準備の間は常駐の同期を止める。途中で自動の受け取りが入ると、競合にならないことがある)
+    await fetch(base + 'api/sync', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'pause' }) });
     fs.writeFileSync(fileB, tools.toJSON(tools.updateBlock(tools.fromJSON(fs.readFileSync(fileB, 'utf8')), block.blockId, { title: '2 台目の案' })) + '\n');
     await tools.syncOnce({ file: fileB, server: server.url, token });
     await page.evaluate((id) => { const s = window.boxglow.store.getState(); s.apply((p) => ({ ...p, blocks: { ...p.blocks, [id]: { ...p.blocks[id], title: '1 台目の案' } } })); s.saveNow(); }, block.blockId);
-    await page.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved', null, { timeout: 10000 });
+    try { await page.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved', null, { timeout: 10000 }); }
+    catch (e) { throw new Error('保存が終わらない: ' + JSON.stringify(await page.evaluate(() => { const s = window.boxglow.store.getState(); return { saveState: s.saveState, saveError: s.saveError, conflict: !!s.conflict }; }))); }
     await page.getByRole('button', { name: '今すぐ同期', exact: true }).click();
     check('同期: 同じ項目を両方で変えると、印が「確認」', await chipText('確認'));
     const choose = page.getByRole('button', { name: '手元の値に決める', exact: true });
     check('同期: 欄に、手元 / サーバーの値に決めるボタンが出る', await choose.isVisible({ timeout: 5000 }).catch(() => false) && await page.getByRole('button', { name: 'サーバーの値に決める', exact: true }).isVisible());
     await choose.click();
+    await fetch(base + 'api/sync', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'resume' }) });
     check('同期: 選ぶと「同期済み」に戻る', await chipText('同期済み'));
     const head = JSON.parse(server.project(remoteId, 'acc-e2e').head.text);
     check('同期: サーバーの題名は、選んだ手元の値', head.blocks[block.blockId].title === '1 台目の案');
