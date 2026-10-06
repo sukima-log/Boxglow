@@ -18,6 +18,7 @@ import { rewriteIndexHtml } from "./html";
 import { APP_VERSION, SAVE_PROTOCOL } from "../../src/model/version";
 // 保存の失敗の文言を計画の言語 (日本語 / 英語) で出す
 import { setLang, t } from "../../src/i18n/core";
+import { attachSync } from "./sync";
 
 /**
  * 計画の言語を調べる (保存の失敗の文言を、CLI と同じく計画の言語で出すため)
@@ -122,6 +123,13 @@ class BoxglowEditorProvider implements vscode.CustomTextEditorProvider {
         if (conflict) diskBase = disk;
       } finally { saving = false; }
     });
-    panel.onDidDispose(() => { sub.dispose(); messages.dispose(); });
+    // 画面からの同期 (設定 boxglow.sync.server があるときだけ)
+    const detachSync = attachSync(this.context, document, panel, {
+      // 受け取った中身を衝突として画面へ (画面の未保存の編集と、受け取った中身の両方を保持する)
+      postConflict: (text) => { void panel.webview.postMessage({ type: "save-error", requestId: "", error: t("同期で受け取った中身があります。手元の編集と見比べてください"), conflict: true, text, version: document.version }); }
+      // VS Code が追い付いていない間の、確認用の中身 (編集用の基準は進めない)
+    , postFromDisk: (text) => { void panel.webview.postMessage({ type: "update", fromDisk: true, text, version: document.version, name: basename(document.uri.fsPath), appVersion: APP_VERSION, protocol: SAVE_PROTOCOL, extensionVersion: this.context.extension.packageJSON.version, readonlyReason: diskAccess(document.uri.fsPath) }); }
+    });
+    panel.onDidDispose(() => { sub.dispose(); messages.dispose(); detachSync(); });
   }
 }

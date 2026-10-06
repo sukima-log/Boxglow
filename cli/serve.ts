@@ -19,7 +19,7 @@ import { commitFile, FileBusy, FileConflict, revisionOf } from "./file-store";
 import { validateProjectText } from "../src/model/validate-file";
 // 文言を今の言語 (日本語 / 英語) で出す。言語は main.ts の serve の入口で決めてある
 import { t } from "../src/i18n/core";
-import { SyncHost, type HostAction, type SyncStatus } from "./sync/host";
+import { parseHostAction, SyncHost, type SyncStatus } from "./sync/host";
 
 /** PUT で受け付ける本文の上限 (バイト)。これを超える計画は保存を断る */
 export const MAX_BODY = 5 * 1024 * 1024;
@@ -55,25 +55,6 @@ function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-
-/**
- * 画面からの同期の操作を、許可リストで読む (知らない種類・引数の形が違うものは受け付けない)
- * Input : text = 要求の本文 (JSON)
- * Output: HostAction。読めなければ null
- */
-export function parseHostAction(text: string): HostAction | null {
-  let v: unknown;
-  try { v = JSON.parse(text); } catch { return null; }
-  if (typeof v !== "object" || v === null) return null;
-  const o = v as Record<string, unknown>;
-  switch (o.kind) {
-    case "enable": case "disable": case "cancelSignIn": case "signOut": case "bind": case "syncNow": case "pause": case "resume":
-      return { kind: o.kind };
-    case "signIn": return o.provider === "github" ? { kind: "signIn", provider: "github" } : null;
-    case "choose": return typeof o.choiceId === "string" && o.choiceId.length <= 128 ? { kind: "choose", choiceId: o.choiceId } : null;
-    default: return null;
-  }
-}
 
 export function startServe(opts: { file: string; port: number; dist: string; open: boolean; log: (text: string) => void
   /** 画面からの同期 (--sync): 同期サーバーの場所を渡すと、裏方 (SyncHost) を動かして、このファイルを有効にする */

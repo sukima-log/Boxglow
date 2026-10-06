@@ -79,6 +79,19 @@ interface State {
   syncAct: (action: HostAction) => Promise<void>;
   /** 裏方から届いた状態を受ける (古いセッションや古い通し番号の状態で、新しい状態を上書きしない) */
   acceptSyncStatus: (status: SyncStatus) => void;
+  /**
+   * VS Code のエディタが、ディスクの最新 (同期の受け取り) に追い付いていない (設計書 4 章 / R36-05)。
+   * この間は、受け取った中身は確認用にだけ持ち、保存は通らない。画面にだけある編集は、退避してから開き直す (R37-02)
+   */
+  editorBehind: { text: string } | null;
+  /** 退避済み: 退避した中身のハッシュと場所 (今の中身がこのハッシュと違えば、まだ退避していない編集がある) */
+  evacuated: { hash: string; path: string } | null;
+  /** 画面の今の中身を、拡張の保存ダイアログで別のファイルに退避する。書けたことを確かめてから「退避済み」にする */
+  evacuate: () => Promise<boolean>;
+  /** 退避した編集を読み込んで、衝突として見比べる (拡張のファイル選択) */
+  loadEvacuated: () => void;
+  /** 今の中身のハッシュ (退避済みかの判定に使う) */
+  contentHash: () => Promise<string>;
   peerVersion: PeerVersion | null;
   saveError: string | null;
   /** VS Code の中で、保存できない理由 (拡張がファイルを直接読み書きできない窓など)。あれば閲覧専用にして、この文を帯に出す */
@@ -181,6 +194,13 @@ let fileLastModified = 0;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 /** ローカルサーバ連携の状態: 自分が最後に書いた中身 (サーバからの変更通知と区別する) と、通知の接続 */
 let serveEvents: EventSource | null = null;
+/** 退避の応答を待つ (requestId → 受け取る関数) */
+const evacuateWaiters = new Map<string, (result: { hash: string; path: string } | null, detail: string) => void>();
+/** 文字列の SHA-256 (16 進) */
+async function sha256(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 /** VS Code の webview の API (拡張の中だけで定義される)。postMessage で拡張とやり取りする */
 type VsCodeApi = { postMessage: (msg: unknown) => void };
 declare global { interface Window { acquireVsCodeApi?: () => VsCodeApi } }
@@ -262,6 +282,8 @@ export const useProjectStore = create<State>((set, get) => {
           if (!response.ok && response.status !== 412) throw new Error(t("サーバに書けません ({status})", { status: response.status }));
           if (response.ok) serveRevision = response.headers.get("etag") ?? "";
         } else if (source === "vscode") {
+          // エディタがディスクの最新に追い付いていない間は保存しない (古い中身の上に書かない。退避して開き直す)
+          if (get().editorBehind) throw new Error(t("VS Code のエディタが、同期で受け取った最新の中身をまだ読み込んでいません。編集を退避してから、ファイルを閉じて開き直してください"));
           vscodeVersion = await saveToVsCode(text);
         } else if (source === "file") {
           throw new Error(t("共同編集は npx boxglow serve --open または VS Code 拡張で開いてください。"));
@@ -329,6 +351,24 @@ export const useProjectStore = create<State>((set, get) => {
   , saveNow: () => { if (saveTimer) clearTimeout(saveTimer); saveTimer = null; void persist(); }
   , reloading: false
   , syncStatus: null
+  , editorBehind: null
+  , evacuated: null
+  , contentHash: async () => { const p = get().project; return p ? await sha256(toJSON(p)) : ""; }
+  , evacuate: async () => {
+      const p = get().project;
+      if (!p || get().source !== "vscode") return false;
+      const text = toJSON(p);
+      const requestId = `evac-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const result = await new Promise<{ hash: string; path: string } | null>((resolve) => {
+        evacuateWaiters.set(requestId, (r) => resolve(r));
+        vscodeApi?.postMessage({ type: "evacuate", requestId, text });
+        setTimeout(() => { if (evacuateWaiters.delete(requestId)) resolve(null); }, 120_000);
+      });
+      // (退避の成功は、退避したときの中身に対してだけ。その後の編集は、ハッシュの違いで分かる)
+      if (result) set({ evacuated: result });
+      return result !== null;
+    }
+  , loadEvacuated: () => { vscodeApi?.postMessage({ type: "load-evacuated" }); }
   , acceptSyncStatus: (status) => {
       const current = get().syncStatus;
       // セッションが変わった (裏方が起動し直した) ら、通し番号は初期化して受け入れる
@@ -658,9 +698,16 @@ export const useProjectStore = create<State>((set, get) => {
         // 拡張から届く中身の改行を LF にそろえる (CRLF のファイルでも、画面が保存した LF の中身と同じものとして比べられるようにする。
         // そろえないと、自分の保存の反映を「外からの変更」とみなして、読み直しや競合が起きる)
         const msg = typeof ev.data.text === "string" ? { ...ev.data, text: ev.data.text.replace(/\r\n/g, "\n") } : ev.data;
+        // 退避の応答 (拡張が別のファイルに書けたか)。書けたときだけ「退避済み」にする (中身のハッシュで、その後の編集と区別する)
+        if (msg.type === "evacuated") {
+          const waiter = evacuateWaiters.get(msg.requestId); evacuateWaiters.delete(msg.requestId);
+          waiter?.(msg.ok === true && typeof msg.hash === "string" && typeof msg.path === "string" ? { hash: msg.hash, path: msg.path } : null, typeof msg.detail === "string" ? msg.detail : "");
+          return;
+        }
         if (msg.type === "saved" || msg.type === "save-error") {
           const pending = pendingSaves.get(msg.requestId);
-          if (!pending) return;
+          // 保存の要求に対する応答ではない衝突 (同期の受け取りで、ディスクが変わった): 画面の編集は捨てず、受け取った中身を衝突として持つ
+          if (!pending) { if (msg.type === "save-error" && msg.conflict && typeof msg.text === "string") markConflict(msg.text, String(msg.version)); return; }
           clearTimeout(pending.timer); pendingSaves.delete(msg.requestId);
           if (msg.type === "saved") pending.resolve(msg.version);
           else {
@@ -672,6 +719,9 @@ export const useProjectStore = create<State>((set, get) => {
         // 画面からの同期の状態 (拡張の裏方から)
         if (msg.type === "sync-status" && msg.status && typeof msg.status === "object") { get().acceptSyncStatus(msg.status as SyncStatus); return; }
         if ((msg.type !== "load" && msg.type !== "update") || typeof msg.text !== "string") return;
+        // 確認用の中身 (VS Code のエディタが、ディスクの最新に追い付いていない間)。編集用の基準は進めず、「エディタ待ち」として持つ
+        if (msg.type === "update" && msg.fromDisk === true) { set({ editorBehind: { text: msg.text }, evacuated: null }); return; }
+        if (msg.type === "update" && get().editorBehind) set({ editorBehind: null });
         // 手動の更新で頼んだ読み直しの応答が届いた (この後の処理で、中身が画面に反映される)
         const waiter = vscodeReloadWaiter; vscodeReloadWaiter = null;
         queueMicrotask(() => waiter?.());

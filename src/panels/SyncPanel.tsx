@@ -90,6 +90,8 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
       {status.message && <div className="sync-panel__line">{status.message}</div>}
       {status.problem && <div className="sync-panel__line sync-panel__problem">{status.problem.text}{" "}<span className="muted">{fixHint(status.problem.fix)}</span></div>}
       {unsaved && file?.enabled && <div className="sync-panel__line muted">{t("未保存の編集があります。保存すると送られます")}</div>}
+      {/* VS Code のエディタが追い付いていない (受け取った中身は確認用。保存は通らない): 退避してから開き直す */}
+      <EditorBehind />
       {/* 確認が要る場面 */}
       {status.halt && <div className="sync-panel__halt">
         {texts.slice(0, 3).map((i, n) => <div key={n} className="sync-panel__line">{i.text}</div>)}
@@ -103,6 +105,37 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
       {/* 詳細 (版・ID) */}
       {!status.halt && file?.binding && <div className="sync-panel__line muted">{status.revision ? t("サーバーの版: {revision}", { revision: status.revision }) : ""}{" "}<span className="sync-panel__id">{file.binding.remoteId}</span></div>}
       <button className="sync-panel__close btn btn-ghost btn-sm" onClick={onClose} aria-label={t("閉じる")}>×</button>
+    </div>
+  );
+}
+
+/** エディタ待ち: 画面にだけある編集を退避してから、ファイルを閉じて開き直す (退避の成功は、その中身に対してだけ) */
+function EditorBehind() {
+  const behind = useProjectStore((s) => s.editorBehind);
+  const evacuated = useProjectStore((s) => s.evacuated);
+  const evacuate = useProjectStore((s) => s.evacuate);
+  const loadEvacuated = useProjectStore((s) => s.loadEvacuated);
+  const contentHash = useProjectStore((s) => s.contentHash);
+  const saveState = useProjectStore((s) => s.saveState);
+  const project = useProjectStore((s) => s.project);
+  const [current, setCurrent] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (behind) void contentHash().then(setCurrent); }, [behind, project, contentHash]);
+  if (!behind) return null;
+  const upToDate = evacuated !== null && evacuated.hash === current;
+  const dirty = saveState !== "saved";
+  return (
+    <div className="sync-panel__halt">
+      <div className="sync-panel__line">{t("同期で受け取った最新の中身を、VS Code のエディタがまだ読み込んでいません。")}</div>
+      {dirty
+        ? <div className="sync-panel__line">{upToDate
+            ? t("退避済み: {path}。ファイルを閉じて開き直し、「退避した編集を読み込む」で見比べてください", { path: evacuated!.path })
+            : t("画面に未保存の編集があります。先に別のファイルへ退避してから、ファイルを閉じて開き直してください (退避せずに閉じると、この編集は失われます)")}</div>
+        : <div className="sync-panel__line">{t("未保存の編集はありません。ファイルを閉じて開き直すと、最新の中身になります")}</div>}
+      <div className="sync-panel__choices">
+        {dirty && !upToDate && <button className="btn btn-sm" disabled={busy} onClick={() => { setBusy(true); void evacuate().finally(() => setBusy(false)); }}>{t("編集を退避する")}</button>}
+        <button className="btn btn-ghost btn-sm" onClick={loadEvacuated}>{t("退避した編集を読み込む")}</button>
+      </div>
     </div>
   );
 }

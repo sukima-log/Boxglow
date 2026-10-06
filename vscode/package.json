@@ -94,6 +94,16 @@
           "group": "navigation@1"
         }
       ]
+    },
+    "configuration": {
+      "title": "Boxglow",
+      "properties": {
+        "boxglow.sync.server": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Sync server URL for sync from the UI (experimental). Empty = sync from the UI is off. / 画面からの同期 (実験的) に使う同期サーバーの URL。空なら、画面からの同期は使わない。"
+        }
+      }
     }
   },
   "scripts": {

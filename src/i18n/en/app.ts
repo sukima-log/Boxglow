@@ -146,4 +146,12 @@ export const app: Record<string, string> = {
 , "サインインを確かめてください": "Check your sign-in"
 , "もう一度同期してください": "Sync again"
 , "しばらく待ちます": "Waiting a while"
+, "同期で受け取った最新の中身を、VS Code のエディタがまだ読み込んでいません。": "The VS Code editor has not loaded the latest content received by sync yet."
+, "退避済み: {path}。ファイルを閉じて開き直し、「退避した編集を読み込む」で見比べてください": "Saved a copy to {path}. Close and reopen the file, then use \"Load saved edits\" to compare"
+, "画面に未保存の編集があります。先に別のファイルへ退避してから、ファイルを閉じて開き直してください (退避せずに閉じると、この編集は失われます)": "There are unsaved edits in this view. Save a copy to another file first, then close and reopen the file (closing without a copy loses these edits)"
+, "未保存の編集はありません。ファイルを閉じて開き直すと、最新の中身になります": "No unsaved edits. Close and reopen the file to get the latest content"
+, "編集を退避する": "Save a copy of the edits"
+, "退避した編集を読み込む": "Load saved edits"
+, "VS Code のエディタが、同期で受け取った最新の中身をまだ読み込んでいません。編集を退避してから、ファイルを閉じて開き直してください": "The VS Code editor has not loaded the latest content received by sync. Save a copy of your edits, then close and reopen the file"
+, "同期で受け取った中身があります。手元の編集と見比べてください": "Sync received new content. Compare it with your edits"
 };

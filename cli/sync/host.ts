@@ -376,3 +376,22 @@ export class SyncHost {
     void this.refreshAccount().then(() => { for (const file of this.open.size ? this.open.keys() : [null]) this.options.onStatus?.(this.status(file)); });
   }
 }
+
+/**
+ * 画面からの同期の操作を、許可リストで読む (知らない種類・引数の形が違うものは受け付けない)
+ * Input : text = 要求の本文 (JSON)
+ * Output: HostAction。読めなければ null
+ */
+export function parseHostAction(text: string): HostAction | null {
+  let v: unknown;
+  try { v = JSON.parse(text); } catch { return null; }
+  if (typeof v !== "object" || v === null) return null;
+  const o = v as Record<string, unknown>;
+  switch (o.kind) {
+    case "enable": case "disable": case "cancelSignIn": case "signOut": case "bind": case "syncNow": case "pause": case "resume":
+      return { kind: o.kind };
+    case "signIn": return o.provider === "github" ? { kind: "signIn", provider: "github" } : null;
+    case "choose": return typeof o.choiceId === "string" && o.choiceId.length <= 128 ? { kind: "choose", choiceId: o.choiceId } : null;
+    default: return null;
+  }
+}
