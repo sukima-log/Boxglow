@@ -174,4 +174,5 @@ export const sync: Record<string, string> = {
   "--relink の選択は、今の状態には当てはまりません (表示のあとで、手元かサーバーが変わった・選べる内容が違う)。何もしていません。boxglow sync でもう一度確かめてください": "The --relink choice does not apply to the current state (the local file or the server changed after it was shown, or the options differ). Nothing was done. Run boxglow sync to check again",
   "--relink には、選べるものが 2 つあるときは --prefer local (手元を採る) か --prefer remote (サーバーを採る) を付けてください": "When there are two options, add --prefer local (keep the local plan) or --prefer remote (keep the server's plan) to --relink",
   "結び直しの途中の送信だった場合は、確定の後で、今の内容をもう一度選ぶことになります (同じ選択で、送り直しません)": "If this push was part of a relink, you will be asked to choose again with the current content after it is settled (the same choice is not sent again)",
+  "サインインを中止しました": "Sign-in cancelled",
 };

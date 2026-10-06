@@ -21,6 +21,10 @@ export interface LoginOptions {
   sleep?: (ms: number) => Promise<void>;
   /** 端末の名前 (省略時は、マシンの名前) */
   deviceName?: string;
+  /** コードが発行されたときに呼ぶ (画面の裏方が、コードと URL を画面に出すために使う。表示は out にも出る) */
+  onCode?: (code: { userCode: string; verificationUrl: string; expiresAt: string }) => void;
+  /** 中止の合図 (true を返したら、待つのをやめて失敗として終える。発行済みのトークンは無い) */
+  cancelled?: () => boolean;
 }
 
 /** サーバーの場所が、トークンを送ってよい場所か (https、または手元の http) */
@@ -77,9 +81,12 @@ export async function runLogin(o: LoginOptions): Promise<number> {
       // ---- 許可されるまで、決められた間隔で確かめる ----
       let interval = Math.max(1, Number(started.interval) || 5);
       const deadline = Date.now() + Math.max(1, Number(started.expires_in) || 900) * 1000;
+      o.onCode?.({ userCode: started.user_code, verificationUrl: started.verification_uri, expiresAt: new Date(deadline).toISOString() });
       let issued: { token: string; account: string; login: string } | null = null;
       while (issued === null) {
         await sleep(interval * 1000);
+        // 中止された (画面のキャンセル・サインアウト): 待つのをやめる。遅れて許可されても、この手順ではトークンを受け取らない
+        if (o.cancelled?.()) { out(t("サインインを中止しました")); return 1; }
         if (Date.now() > deadline) { out(t("コードの期限が切れました。もう一度 boxglow login を実行してください")); return 1; }
         let res: Response;
         try {
@@ -92,6 +99,8 @@ export async function runLogin(o: LoginOptions): Promise<number> {
         if (res.status === 200 && body.status === "pending") continue;
         if (res.status === 200 && body.status === "slow_down") { interval = Math.max(interval + 5, Number(body.interval) || 0); continue; }
         if (res.status === 200 && body.status === "ok" && typeof body.token === "string" && typeof body.account === "string") {
+          // (待っている間に中止されていたら、受け取ったトークンは保存せずに取り消す)
+          if (o.cancelled?.()) { await revoke(server, body.token, doFetch); out(t("サインインを中止しました")); return 1; }
           issued = { token: body.token, account: body.account, login: String(body.login ?? "") };
           break;
         }
