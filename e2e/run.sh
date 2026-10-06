@@ -41,3 +41,6 @@ node e2e/workflow.cjs
 
 # 状態と選択の分離・俯瞰表示
 node e2e/design.cjs
+
+# 画面からの同期 (serve --sync + 試験用の同期サーバー: サインイン・サーバーに置く・受け取り・競合の選択・サインアウト)
+node e2e/sync.cjs

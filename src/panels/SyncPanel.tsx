@@ -108,7 +108,7 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
         {details && <div className="sync-panel__details">{texts.slice(3).map((i, n) => <div key={n}>{i.text}</div>)}{status.halt.done.backup && <div className="muted">{t("控え")}: {status.halt.done.backup}</div>}</div>}
       </div>}
       {/* 詳細 (版・ID) */}
-      {!status.halt && file?.binding && <div className="sync-panel__line muted">{status.revision ? t("サーバーの版: {revision}", { revision: status.revision }) : ""}{" "}<span className="sync-panel__id">{file.binding.remoteId}</span></div>}
+      {!status.halt && file?.binding && status.state !== "signed-out" && <div className="sync-panel__line muted">{status.revision ? t("サーバーの版: {revision}", { revision: status.revision }) : ""}{" "}<span className="sync-panel__id">{file.binding.remoteId}</span></div>}
       <button className="sync-panel__close btn btn-ghost btn-sm" onClick={onClose} aria-label={t("閉じる")}>×</button>
     </div>
   );

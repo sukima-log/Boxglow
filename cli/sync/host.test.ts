@@ -53,13 +53,16 @@ describe("状態の判定", () => {
     expect(make({ platform: "win32" }).host.status(file).state).toBe("unsupported");
     const { host } = make({ platform: "linux" });
     expect(host.status(file)).toMatchObject({ state: "signed-out", credentials: { source: "none" }, file: { enabled: false, binding: null } });
-    signedIn();
+    // (トークンと利用者の ID を別の値にする: 試験用サーバーは、発行したトークンなら、その利用者として扱う)
+    server.issued.set("tok-secret-value", { account: "test", login: "tester" });
+    saveCredentials({ server: server.url, account: "test", login: "tester", token: "tok-secret-value", createdAt: new Date().toISOString() });
     expect(host.status(file)).toMatchObject({ state: "off", credentials: { source: "stored" } });
     host.openFile(file); host.enable(file);
     await settle();
     expect(host.status(file)).toMatchObject({ state: "unbound", owner: "self", file: { enabled: true } });
-    // トークンの値は、状態のどこにも出ない
-    expect(JSON.stringify(host.status(file))).not.toContain("test");
+    // トークンの値は、状態のどこにも出ない (利用者は出る)
+    expect(JSON.stringify(host.status(file))).not.toContain("tok-secret-value");
+    expect(host.status(file).credentials.account).toMatchObject({ accountId: "test", display: "tester" });
     await host.stop();
   });
 

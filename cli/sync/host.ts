@@ -11,12 +11,13 @@
  */
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
+import { APP_VERSION } from "../../src/model/version";
 import { t } from "../../src/i18n/core";
 import { inspectLock } from "../file-store";
 import { syncOnce, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
 import { haltView, type SyncAction } from "./command";
 import { credentialsPath, resolveToken } from "./credentials";
-import { runGoogleLogin, runLogin, runLogout, runWhoami } from "./login";
+import { runGoogleLogin, runLogin, runLogout } from "./login";
 import { bindingsOf, hashOf, normalizeServer, realFile, SyncStateUnreadable } from "./state-store";
 import { lockWatch, SyncWatcher, type WatchEvent } from "./watch";
 
@@ -295,13 +296,20 @@ export class SyncHost {
     const credentials = this.credentialsGeneration();
     if (this.account?.credentials === credentials) return;
     if (!resolveToken(this.server)) { this.account = { credentials }; return; }
-    const lines: string[] = [];
-    const code = await runWhoami({ server: this.server, out: (line) => lines.push(line), fetch: this.doFetch });
+    // (/v1/me を JSON で読む。whoami の表示の文を読み取ると、言語や ID の形で読めなくなる)
+    type Me = { account?: unknown; login?: unknown; signedInWith?: unknown };
+    const read = async (): Promise<{ me: Me | null; problem?: string }> => {
+      try {
+        const res = await this.doFetch(`${this.server}/v1/me`, { headers: { authorization: `Bearer ${resolveToken(this.server)!.token}`, "x-boxglow-version": APP_VERSION }, redirect: "error" });
+        return res.ok ? { me: await res.json() as Me } : { me: null, problem: `HTTP ${res.status}` };
+      } catch (e) { return { me: null, problem: e instanceof Error ? e.message : String(e) }; }
+    };
+    const { me, problem } = await read();
     // (遅い応答: その間に資格情報が変わっていたら、採用しない)
     if (this.credentialsGeneration() !== credentials) return;
-    if (code !== 0) { this.account = { credentials, problem: lines.at(-1) }; return; }
-    const m = /^.*?: (.+?) \((acc[0-9a-f]+)\)/.exec(lines[0] ?? "");
-    this.account = { credentials, account: { accountId: m?.[2] ?? "", display: m?.[1] ?? "", signedInWith: "github" } };
+    if (!me || typeof me.account !== "string") { this.account = { credentials, problem: problem ?? "me" }; return; }
+    const signedInWith = me.signedInWith === "google" || me.signedInWith === "github" ? me.signedInWith : "github";
+    this.account = { credentials, account: { accountId: me.account, display: typeof me.login === "string" && me.login ? me.login : me.account, signedInWith } };
   }
 
   // ---------------------------------------------------------------- 画面からの操作
