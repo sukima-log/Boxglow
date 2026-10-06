@@ -68,6 +68,93 @@ async function remoteEdit(remoteId: string, change: (p: Project) => Project): Pr
   } finally { process.env.BOXGLOW_CONFIG_DIR = saved; }
 }
 
+describe("見張る対象の指定 (画面の裏方が使う selected)", () => {
+  /** 計画 p1 と p2 を結び付け、それぞれのサーバーへの要求の数を数える道具 */
+  const twoPlans = async () => {
+    const p1 = planFile("p1"), p2 = planFile("p2");
+    await syncOnce({ file: p1.file, server: server.url, remoteId: "p1" });
+    await syncOnce({ file: p2.file, server: server.url, remoteId: "p2" });
+    const requests = { p1: 0, p2: 0 };
+    const counting = ((...args: Parameters<typeof fetch>) => {
+      const url = String(args[0]);
+      if (url.includes("/v1/projects/p1")) requests.p1++;
+      if (url.includes("/v1/projects/p2")) requests.p2++;
+      return fetch(...args);
+    }) as typeof fetch;
+    return { p1, p2, requests, counting };
+  };
+
+  it("selected: 指定した計画だけを見張る。空の集合は 0 件 (全部にはならない)。外した計画は次から触らない", async () => {
+    const { p1, p2, requests, counting } = await twoPlans();
+    // 最初から 0 件
+    const none = watcher({ fetch: counting, targets: { mode: "selected", files: new Set() } });
+    await none.tick(); await advance(none, POLL_MS * 1.2);
+    expect(none.files()).toEqual([]);
+    expect(requests).toEqual({ p1: 0, p2: 0 });
+    // p1 だけ
+    const w = watcher({ fetch: counting, targets: { mode: "selected", files: new Set([p1.file]) } });
+    await w.tick();
+    expect(w.files()).toEqual([p1.file]);
+    edit(p1.file, (p) => updateBlock(p, p1.a, { title: "p1 の編集" }));
+    edit(p2.file, (p) => updateBlock(p, p2.a, { title: "p2 の編集" }));
+    await advance(w, 100); await advance(w, DEBOUNCE_MS + 100);
+    expect(JSON.parse(server.project("p1")!.head!.text).blocks[p1.a].title).toBe("p1 の編集");
+    expect(JSON.parse(server.project("p2")!.head!.text).blocks[p2.a].title).toBe("A");
+    expect(requests.p2).toBe(0);
+    // サーバー側で p2 が進んでも、受け取らない
+    await remoteEdit("p2", (p) => updateBlock(p, p2.b, { title: "別の端末の p2" }));
+    await advance(w, POLL_MS * 1.2);
+    expect(read(p2.file).blocks[p2.b].title).toBe("B");
+    expect(requests.p2).toBe(0);
+    // p1 を外す (0 件になる): その後の p1 の編集も送らない。全部にはならない
+    w.setTargets({ mode: "selected", files: new Set() });
+    const before = { ...requests };
+    edit(p1.file, (p) => updateBlock(p, p1.a, { title: "外した後の編集" }));
+    await advance(w, 100); await advance(w, DEBOUNCE_MS + 100); await advance(w, POLL_MS * 1.2);
+    expect(w.files()).toEqual([]);
+    expect(requests).toEqual(before);
+    expect(JSON.parse(server.project("p1")!.head!.text).blocks[p1.a].title).toBe("p1 の編集");
+    // 戻すと、止まっている間の変更を取り込む
+    w.setTargets({ mode: "selected", files: new Set([p1.file]) });
+    await advance(w, 100); await advance(w, DEBOUNCE_MS + 100);
+    expect(JSON.parse(server.project("p1")!.head!.text).blocks[p1.a].title).toBe("外した後の編集");
+    expect(requests.p2).toBe(0);
+  });
+
+  it("all (CLI の --watch) は今までどおり全部を見張る。selected で、同期の待ちの間に外した計画は、次の 1 回を始めない", async () => {
+    const { p1, p2, requests, counting } = await twoPlans();
+    const all = watcher({ fetch: counting });
+    await all.tick();
+    expect(all.files().sort()).toEqual([p1.file, p2.file].sort());
+    // selected で、p1 の同期の途中 (サーバーへの要求の中) で p2 を外す → p2 の同期は始まらない
+    const w = watcher({ fetch: (async (...args: Parameters<typeof fetch>) => {
+      if (String(args[0]).includes("/v1/projects/p1") && w.files().includes(p2.file)) w.setTargets({ mode: "selected", files: new Set([p1.file]) });
+      return counting(...args);
+    }) as typeof fetch, targets: { mode: "selected", files: new Set([p1.file, p2.file]) } });
+    await w.tick();
+    edit(p1.file, (p) => updateBlock(p, p1.a, { title: "p1" }));
+    edit(p2.file, (p) => updateBlock(p, p2.a, { title: "p2" }));
+    const before = requests.p2;
+    await advance(w, 100); await advance(w, DEBOUNCE_MS + 100);
+    expect(JSON.parse(server.project("p1")!.head!.text).blocks[p1.a].title).toBe("p1");
+    expect(requests.p2).toBe(before);
+    expect(JSON.parse(server.project("p2")!.head!.text).blocks[p2.a].title).toBe("A");
+  });
+
+  it("トークンを関数で渡すと、同期のたびに解決し直す (別の CLI のサインアウト・再サインインを、次の同期から使う)", async () => {
+    const { p1, counting } = await twoPlans();
+    let token: string | undefined = "test";
+    const w = watcher({ fetch: counting, token: () => token, targets: { mode: "selected", files: new Set([p1.file]) } });
+    await w.tick();
+    token = "other";                                              // (別の利用者のトークンに替わった)
+    edit(p1.file, (p) => updateBlock(p, p1.a, { title: "別の利用者で" }));
+    await advance(w, 100); await advance(w, DEBOUNCE_MS + 100);
+    // 別の利用者の計画を置き換えない (利用者の違いで止まる)
+    expect(events.at(-1)).toMatchObject({ kind: "halted", file: p1.file });
+    expect(JSON.parse(server.project("p1")!.head!.text).blocks[p1.a].title).toBe("A");
+  });
+});
+
 describe("手元の変更をまとめて送る", () => {
   it("変更から 2 秒静かなら送る。それまでは送らない", async () => {
     const { file, a } = planFile("p1");

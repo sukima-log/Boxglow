@@ -33,12 +33,16 @@ const RETRY_MAX_MS = 60_000;
 
 /** 常時の同期が知らせる出来事 */
 export type WatchEvent =
-  | { kind: "synced"; file: string; pulled: number; pushed: number; revision: string | null }
+  | { kind: "synced"; file: string; pulled: number; pushed: number; revision: string | null
+      /** 「そろった」と確かめたときの手元の中身のハッシュ (画面の裏方が、今のディスクと比べて「同期済み」かを決めるのに使う) */
+    ; localHash: string | null }
   | { kind: "halted"; file: string; result: Extract<SyncResult, { status: "halted" }> }
   | { kind: "network"; message: string; retryInMs: number }
   /** サーバーが利用者を確かめられない (トークンが無い・無効)。全部の計画に効くので、直るまで待つ (1 回だけ知らせる) */
   | { kind: "auth" }
-  | { kind: "error"; file: string; message: string };
+  | { kind: "error"; file: string; message: string }
+  /** 変更なしで「そろっている」と確かめた (表示には出さない。画面の裏方の状態の更新用) */
+  | { kind: "checked"; file: string; revision: string | null; localHash: string | null };
 
 /** 計画 1 つ分の見張りの状態 */
 interface Watched {
@@ -67,10 +71,20 @@ interface Watched {
   generation: number | undefined;
 }
 
+/**
+ * 見張る対象の指定
+ *   all      = 設定フォルダの、このサーバーに結び付いた計画すべて (CLI の boxglow sync --watch だけが使う)
+ *   selected = 指定したファイル (実体のパス) だけ。空なら 0 件 (全部にはならない)。画面の裏方が使う (開いていて有効にした計画だけ)
+ */
+export type WatchTargets = { mode: "all" } | { mode: "selected"; files: ReadonlySet<string> };
+
 /** 常時の同期の指定 */
 export interface WatchOptions {
   server: string;
-  token?: string;
+  /** トークン。関数なら、同期のたびに解決し直す (画面の裏方: サインイン / サインアウトの変化を次の同期から使う) */
+  token?: string | (() => string | undefined);
+  /** 見張る対象 (省略時は all) */
+  targets?: WatchTargets;
   /** 今の日時 (ms)。操作の記録に残す日時に使う。試験で差し替える */
   now?: () => number;
   /** 巻き戻らない時計 (ms)。待ち時間を測るのに使う。試験で差し替える (省略時は performance.now) */
@@ -156,12 +170,25 @@ export class SyncWatcher {
     this.wall = options.now ?? (() => Date.now());
     this.elapsed = options.elapsed ?? (() => performance.now());
     this.random = options.random ?? Math.random;
+    this.targets = options.targets ?? { mode: "all" };
     // 最初の tick で、すぐにサーバーを確かめる
     this.nextPollAt = this.elapsed();
   }
 
   /** 見張っている計画のファイルの一覧 (試験の確認用) */
   files(): string[] { return [...this.watched.keys()]; }
+
+  /** 見張る対象 (省略時は all) */
+  private targets: WatchTargets = { mode: "all" };
+  /**
+   * 見張る対象を替える (画面の裏方が、計画を開いた・閉じた・有効 / 無効にしたときに呼ぶ)
+   * 外した計画は、次の tick から見張らない。実行中の 1 回の同期は、終わるまで待つ (途中で切らない)
+   */
+  setTargets(targets: WatchTargets): void { this.targets = targets; }
+  /** ファイルが、今の対象に入っているか (実体のパスで比べる) */
+  private targeted(file: string): boolean { return this.targets.mode === "all" || this.targets.files.has(file); }
+  /** 同期のたびに解決し直すトークン */
+  private token(): string | undefined { const t = this.options.token; return typeof t === "function" ? t() : t; }
 
   /**
    * その時点で行うべきことを 1 回分行う: 結び付けの一覧を取り直す → 手元の変更を調べる → (時点が来ていれば) サーバーを確かめる → 送る・受け取る
@@ -192,7 +219,7 @@ export class SyncWatcher {
     // ---- サーバーを確かめる (全部の計画を 1 回の要求で) ----
     if (at >= this.nextPollAt && this.watched.size > 0) {
       try {
-        const { epoch, heads } = await fetchHeads({ server: this.options.server, token: this.options.token, fetch: this.options.fetch });
+        const { epoch, heads } = await fetchHeads({ server: this.options.server, token: this.token(), fetch: this.options.fetch });
         let changed = false;
         // 履歴の世代が変わったら、全部の計画を確かめ直す (版の文字列が同じでも、同じ履歴とはみなさない)
         const epochChanged = this.epoch !== null && this.epoch !== epoch;
@@ -224,6 +251,8 @@ export class SyncWatcher {
     // ---- 同期が要る計画を、1 つずつ同期する ----
     for (const w of this.watched.values()) {
       if (w.broken) continue;
+      // (非同期の待ちの間に対象から外れた計画は、次の 1 回を始めない)
+      if (!this.targeted(w.binding.file)) continue;
       const localDue = w.firstChangeAt !== null && w.lastChangeAt !== null
         && (at - w.lastChangeAt >= DEBOUNCE_MS || at - w.firstChangeAt >= MAX_WAIT_MS);
       if (!localDue && !w.remoteAhead) continue;
@@ -243,7 +272,9 @@ export class SyncWatcher {
   /** 結び付けの一覧を取り直す (常時の同期を始めた後で結び付けた計画も、次の tick から受け持つ) */
   private refreshBindings(): void {
     const { states, unreadable } = bindingsFor(this.options.server);
-    this.states = new Map(states.map((s) => [s.state.binding.file, s.state] as const));
+    // (対象に入っていない計画は、結び付いていても見張らない。対象から外れた計画は、ここで見張りから外す)
+    this.states = new Map(states.filter((s) => this.targeted(s.state.binding.file)).map((s) => [s.state.binding.file, s.state] as const));
+    for (const file of [...this.watched.keys()]) if (!this.targeted(file)) this.watched.delete(file);
     const broken = new Set(unreadable);
     for (const [file, w] of [...this.watched]) {
       const dir = bindingDir(file, this.options.server);
@@ -302,7 +333,7 @@ export class SyncWatcher {
     const file = w.binding.file;
     let result: SyncResult;
     try {
-      result = await syncOnce({ file, server: this.options.server, token: this.options.token, fetch: this.options.fetch, now: () => new Date(this.wall()) });
+      result = await syncOnce({ file, server: this.options.server, token: this.token(), fetch: this.options.fetch, now: () => new Date(this.wall()) });
       // 自分の同期が処理した状態の世代番号を覚え直す (自分で進めた分を「別の実行が進めた」と数えて、同期を繰り返さないように)。
       // 値は、同期がロックの中で確かめたもの (結果に入っている)。ロックを外した後に読み直すと、その隙に別の実行が進めた分を「自分が処理した」と
       // 取り違えて、その実行の続き (結び直しなど) を見落とす (R33-01)
@@ -333,7 +364,9 @@ export class SyncWatcher {
       // 止まっていた計画がそろったときは、送受信が無くても知らせる (止まったままではないことが分かるように)
       const resumed = w.halted !== null;
       w.halted = null; w.notified = null;
-      if (result.pulled || result.pushed || resumed) this.options.onEvent?.({ kind: "synced", file, pulled: result.pulled, pushed: result.pushed, revision: result.revision });
+      if (result.pulled || result.pushed || resumed) this.options.onEvent?.({ kind: "synced", file, pulled: result.pulled, pushed: result.pushed, revision: result.revision, localHash: result.localHash });
+      // (変更なしの成功は知らせないが、状態の確認には使えるように、別の出来事で伝える)
+      else this.options.onEvent?.({ kind: "checked", file, revision: result.revision, localHash: result.localHash });
       return true;
     }
     // 止まった: 同じ内容 (理由と、選ぶための印が同じ) は繰り返し知らせない。サーバーが進んで選択肢が変わったら、もう一度知らせる
