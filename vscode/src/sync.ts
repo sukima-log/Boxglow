@@ -53,6 +53,24 @@ export function attachSync(context: vscode.ExtensionContext, document: vscode.Te
   panels.get(path)!.add(panel);
   if (context.globalState.get<boolean>(enabledKey(document.uri, server))) host.enable(path);
 
+  // ---- エディタの保存済みの中身 (退避の基準に使う) ----
+  // エディタに未保存の編集があると、画面はその中身を受け取り、画面の基準もそこへ進む。退避の基準がそれだと、
+  // エディタの未保存の編集が「基準からの変更」に見えず、取り込みで失われる (実機の検査で見つけた)。
+  // そこで、エディタが clean だった最後の中身 (= 保存済みのディスクの中身) を覚えておき、dirty のときの退避の基準にする
+  let savedText: string | null = null;
+  if (!document.isDirty) savedText = document.getText();
+  else { try { savedText = readFileSync(document.uri.fsPath, "utf8"); } catch { savedText = null; } }
+  // (エディタの中身が変わり、clean に見えるとき (ディスクからの読み直し・元に戻す): ディスクと同じと確かめてから覚える。
+  //  変更の通知の時点では、最初の 1 文字の編集でも isDirty がまだ false のことがある。実機の検査で見つけた)
+  const savedWatch = vscode.workspace.onDidChangeTextDocument((e) => {
+    if (e.document !== document || document.isDirty) return;
+    try {
+      const disk = readFileSync(document.uri.fsPath, "utf8");
+      if (disk.replace(/\r\n/g, "\n") === document.getText().replace(/\r\n/g, "\n")) savedText = disk;
+    } catch { /* 読めなければ、前の保存済みの中身のまま */ }
+  });
+  const savedOnSave = vscode.workspace.onDidSaveTextDocument((d) => { if (d === document) savedText = document.getText(); });
+
   // ---- 画面からの操作 ----
   const messages = panel.webview.onDidReceiveMessage(async (msg) => {
     if (msg?.type === "sync-action") {
@@ -77,7 +95,8 @@ export function attachSync(context: vscode.ExtensionContext, document: vscode.Te
       const lf = (v: string) => v.replace(/\r\n/g, "\n");
       const recovery = {
         boxglowRecovery: 1, savedAt: new Date().toISOString(), file: document.uri.fsPath
-      , base: typeof msg.base === "string" ? msg.base : null
+      // (基準: エディタに未保存の編集があれば、保存済みの中身。無ければ、画面が元にした中身)
+      , base: document.isDirty && savedText !== null ? savedText : typeof msg.base === "string" ? msg.base : null
       , received: typeof msg.received === "string" ? msg.received : null
       , gui: { text: msg.text, hash: sha(msg.text) }
       , editor: document.isDirty && lf(editorText) !== lf(msg.text) ? { text: editorText, version: editorVersion, hash: sha(editorText) } : null
@@ -92,6 +111,25 @@ export function attachSync(context: vscode.ExtensionContext, document: vscode.Te
         if (readFileSync(target.fsPath, "utf8") !== body) { void reply(false, "verify-failed"); return; }
         void reply(true, "", target.fsPath);
       } catch (e) { void reply(false, e instanceof Error ? e.message : String(e)); }
+      return;
+    }
+    // 最新のファイルを開く (保存の衝突で、画面が退避を済ませた後に頼む): エディタの未保存の編集を捨てて、ディスクの中身を読み直す。
+    //   Input : { requestId, editorVersion = 退避したときのエディタの版 }
+    //   Output: opened-latest { ok, text (読み直したエディタの中身), version, detail (断った理由) }
+    //   退避した後にエディタが編集されていたら (版が違う)、その編集は退避に入っていないので、読み直さない。
+    //   保存ではなく読み直し (revert) にする: 保存すると、VS Code が「ディスクの方が新しい」と断る。待つ間に受け取った新しい中身を古い中身で上書きするおそれもある
+    if (msg?.type === "open-latest" && typeof msg.requestId === "string") {
+      const reply = (ok: boolean, detail: string) => panel.webview.postMessage({ type: "opened-latest", requestId: msg.requestId, ok, detail, ...(ok ? { text: document.getText(), version: document.version } : {}) });
+      if (typeof msg.editorVersion !== "number" || document.version !== msg.editorVersion) { void reply(false, "editor-changed"); return; }
+      try {
+        await vscode.commands.executeCommand("workbench.action.files.revert", document.uri);
+      } catch (e) { void reply(false, e instanceof Error ? e.message : String(e)); return; }
+      // 読み直せたことを確かめる (未保存の印が消え、エディタの中身がディスクと同じ)
+      let disk = "";
+      try { disk = readFileSync(document.uri.fsPath, "utf8"); } catch { /* 読めなければ、下で失敗として返す */ }
+      const lf = (v: string) => v.replace(/\r\n/g, "\n");
+      if (document.isDirty || lf(document.getText()) !== lf(disk)) { void reply(false, "revert-failed"); return; }
+      void reply(true, "");
       return;
     }
     // 退避した編集を読み込む (画面が衝突として見比べる)
@@ -142,7 +180,7 @@ export function attachSync(context: vscode.ExtensionContext, document: vscode.Te
   void panel.webview.postMessage({ type: "sync-status", status: host.status(path) });
 
   return () => {
-    messages.dispose();
+    messages.dispose(); savedWatch.dispose(); savedOnSave.dispose();
     watcher?.close(); clearTimeout(timer);
     panels.get(path)?.delete(panel);
     if ((panels.get(path)?.size ?? 0) === 0) { panels.delete(path); host.closeFile(path); }

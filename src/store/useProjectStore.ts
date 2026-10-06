@@ -112,6 +112,13 @@ interface State {
   cancelRestore: () => void;
   /** 画面の今の中身を、拡張の保存ダイアログで別のファイルに退避する。書けたことを確かめてから「退避済み」にする */
   evacuate: () => Promise<boolean>;
+  /**
+   * 保存の衝突 (同期で受け取った中身と、手元の未保存の編集) のとき、VS Code で使う:
+   * 画面とエディタの未保存の編集を退避し、退避できたときだけ、エディタと画面を最新のファイルにする。
+   * Input : なし (今の衝突と画面の中身を使う)
+   * Output: なし。結果は restoreNotice の案内に出す (退避しなかった・最新にできなかったときは、画面もエディタも変えない)
+   */
+  evacuateAndOpenLatest: () => Promise<void>;
   /** 退避した編集を読み込んで、衝突として見比べる (拡張のファイル選択) */
   loadEvacuated: () => void;
   /** 今の中身のハッシュ (退避済みかの判定に使う) */
@@ -219,6 +226,8 @@ let watchTimer: ReturnType<typeof setInterval> | null = null;
 /** ローカルサーバ連携の状態: 自分が最後に書いた中身 (サーバからの変更通知と区別する) と、通知の接続 */
 let serveEvents: EventSource | null = null;
 /** 退避の応答を待つ (requestId → 受け取る関数) */
+/** 最新のファイルを開く (エディタの読み直し) の応答を待つ (requestId → 受け取る関数) */
+const openLatestWaiters = new Map<string, (reply: { ok: boolean; text?: string; version?: number; detail: string }) => void>();
 const evacuateWaiters = new Map<string, (result: { hash: string; path: string; editorVersion: number | null } | null, detail: string) => void>();
 /** 文字列の SHA-256 (16 進) */
 async function sha256(text: string): Promise<string> {
@@ -459,12 +468,45 @@ export const useProjectStore = create<State>((set, get) => {
       const result = await new Promise<{ hash: string; path: string; editorVersion: number | null } | null>((resolve) => {
         evacuateWaiters.set(requestId, (r) => resolve(r));
         // 復旧に要るものを全部渡す: 画面の中身 (G)・統合の基準 (画面が元にした中身)・受け取った最新の中身 (R)。エディタ側の未保存の中身は、拡張が足す (R39-05)
-        vscodeApi?.postMessage({ type: "evacuate", requestId, text, base: baseText, received: get().editorBehind?.text ?? null });
+        // (受け取った最新の中身: エディタ待ちのときはその中身、保存の衝突のときは衝突の相手の中身)
+        vscodeApi?.postMessage({ type: "evacuate", requestId, text, base: baseText, received: get().editorBehind?.text ?? get().conflict?.text ?? null });
         setTimeout(() => { if (evacuateWaiters.delete(requestId)) resolve(null); }, 120_000);
       });
       // (退避の成功は、退避したときの中身に対してだけ。その後の編集は、ハッシュの違いで分かる)
       if (result) set({ evacuated: result });
       return result !== null;
+    }
+  , evacuateAndOpenLatest: async () => {
+      // VS Code の中で、保存の衝突があるときだけ (保存の途中は、応答と取り違えないよう何もしない)
+      if (get().source !== "vscode" || !get().conflict || inFlight) return;
+      // 1. 退避する (保存先を選ばない・書けなかった: 何も変えない)
+      const ok = await get().evacuate();
+      const evacuated = get().evacuated;
+      if (!ok || !evacuated) { set({ restoreNotice: { kind: "info", text: t("退避しなかったので、画面とエディタの編集はそのままです") } }); return; }
+      // 2. 拡張に、エディタを最新のファイルに読み直してもらう (退避した後にエディタが編集されていたら、拡張が断る)
+      const requestId = `latest-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const reply = await new Promise<{ ok: boolean; text?: string; version?: number; detail: string }>((resolve) => {
+        openLatestWaiters.set(requestId, resolve);
+        vscodeApi?.postMessage({ type: "open-latest", requestId, editorVersion: evacuated.editorVersion });
+        setTimeout(() => { if (openLatestWaiters.delete(requestId)) resolve({ ok: false, detail: "timeout" }); }, 30_000);
+      });
+      if (!reply.ok || typeof reply.text !== "string" || typeof reply.version !== "number") {
+        set({ restoreNotice: { kind: "info", text: t("退避しました ({path})。最新のファイルは開けませんでした ({detail})。画面とエディタの編集はそのままです", { path: evacuated.path, detail: reply.detail }) } });
+        return;
+      }
+      let latest: Project;
+      try { latest = fromJSON(reply.text); }
+      catch (e) { set({ restoreNotice: { kind: "info", text: t("退避しました ({path})。最新のファイルを計画として読めません ({detail})", { path: evacuated.path, detail: e instanceof Error ? e.message : String(e) }) } }); return; }
+      // 3. 画面も最新にする (基準と版も、読み直したエディタに合わせる。取り消しで、衝突の前の画面に戻れる)。
+      //    衝突の前の編集で予約した保存は取り消す (最新を開いた直後に、何かを送らない)
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+      const current = get().project;
+      baseText = reply.text; vscodeVersion = reply.version;
+      set({
+        project: latest, conflict: null, saveError: null, saveState: "saved", editorBehind: null
+      , past: current ? [...get().past.slice(-HISTORY_LIMIT + 1), current] : get().past, future: []
+      , restoreNotice: { kind: "info", text: t("退避しました ({path})。最新のファイルを開きました。退避した編集は、同期の欄の「退避した編集を読み込む」で取り込めます", { path: evacuated.path }) }
+      });
     }
   , loadEvacuated: () => { vscodeApi?.postMessage({ type: "load-evacuated" }); }
   , restorePending: null
@@ -840,6 +882,12 @@ export const useProjectStore = create<State>((set, get) => {
         if (msg.type === "evacuated") {
           const waiter = evacuateWaiters.get(msg.requestId); evacuateWaiters.delete(msg.requestId);
           waiter?.(msg.ok === true && typeof msg.hash === "string" && typeof msg.path === "string" ? { hash: msg.hash, path: msg.path, editorVersion: typeof msg.editorVersion === "number" ? msg.editorVersion : null } : null, typeof msg.detail === "string" ? msg.detail : "");
+          return;
+        }
+        // 最新のファイルを開いた (エディタを読み直した) 応答
+        if (msg.type === "opened-latest") {
+          const waiter = openLatestWaiters.get(msg.requestId); openLatestWaiters.delete(msg.requestId);
+          waiter?.({ ok: msg.ok === true, text: typeof msg.text === "string" ? msg.text : undefined, version: typeof msg.version === "number" ? msg.version : undefined, detail: typeof msg.detail === "string" ? msg.detail : "" });
           return;
         }
         // 退避したファイルの中身 (拡張のファイル選択で選ばれた): 今の中身に取り込む

@@ -117,7 +117,22 @@ export function RestoreNoticeView({ notice, onSave, onDismiss }: { notice: { kin
 }
 
 export function SaveNotice() {
-  const { project, source, saveError, conflict, resolveConflict, previewConflict, saveNow, readonlyReason } = useProjectStore();
+  const { project, source, saveError, conflict, resolveConflict, previewConflict, saveNow, readonlyReason, evacuate, evacuateAndOpenLatest } = useProjectStore();
+  // 退避の操作の途中 (VS Code の保存先の選択を待つ間、ボタンを押せなくする)
+  const [busy, setBusy] = useState(false);
+  // VS Code の中: 退避は拡張の保存先の選択で書く (画面とエディタの両方の未保存の編集を、取り込める形で書く。書けたかどうかも分かる)。
+  // 「最新を開く」は、退避できたときだけ行う (保存先の選択をやめた・書けなかったら、何も変えない)
+  const inVsCode = source === "vscode";
+  const run = (job: () => Promise<unknown>) => { setBusy(true); void job().finally(() => setBusy(false)); };
+  const saveCopy = () => inVsCode
+    ? run(async () => {
+        // (結果を、帯の下の案内に出す。書けた場所を見せ、取り込み方を案内する)
+        const ok = await evacuate();
+        const at = useProjectStore.getState().evacuated?.path;
+        useProjectStore.setState({ restoreNotice: { kind: "info", text: ok && at ? t("退避しました ({path})。同期の欄の「退避した編集を読み込む」で取り込めます", { path: at }) : t("退避しませんでした (保存先を選ばなかった・書けなかった)") } });
+      })
+    : downloadText("boxglow-unsaved.json", toJSON(project!), "application/json");
+  const openLatest = () => { if (inVsCode) { run(evacuateAndOpenLatest); return; } downloadText("boxglow-unsaved.json", toJSON(project!), "application/json"); resolveConflict("remote"); };
   // 比較ダイアログを開いているか
   const [compare, setCompare] = useState(false);
   // 出すのは 2 つの場合だけ: 保存に失敗している (saveError)、または直接開いたファイル (source = "file"。閲覧専用) を見ている
@@ -128,12 +143,12 @@ export function SaveNotice() {
   return <div className="save-notice" role={saveError ? "alert" : "status"}>
     <span>{saveError ?? readonlyReason ?? t("このファイルは閲覧専用です。共同編集は npx boxglow serve --open または VS Code 拡張で開いてください。")}</span>
     {saveError && <div className="flex flex-wrap gap-2 mt-2">
-      <button className="btn btn-sm" onClick={() => downloadText("boxglow-unsaved.json", toJSON(project), "application/json")}>{t("手元の編集を JSON で退避")}</button>
+      <button className="btn btn-sm" disabled={busy} onClick={saveCopy}>{t("手元の編集を JSON で退避")}</button>
       {conflict ? <>
         {conflicts > 0
           ? <button className="btn btn-primary btn-sm" onClick={() => setCompare(true)}>{t("変更を比較して選ぶ")} ({conflicts})</button>
           : <button className="btn btn-primary btn-sm" onClick={() => resolveConflict("merge")}>{t("両方の変更を統合")}</button>}
-        <button className="btn btn-sm" onClick={() => { downloadText("boxglow-unsaved.json", toJSON(project), "application/json"); resolveConflict("remote"); }}>{t("手元を退避して最新のファイルを開く")}</button>
+        <button className="btn btn-sm" disabled={busy} onClick={openLatest}>{t("手元を退避して最新のファイルを開く")}</button>
       </> : <button className="btn btn-sm" onClick={saveNow}>{t("保存を再試行")}</button>}
     </div>}
     {compare && conflict && <ConflictDialog onClose={() => setCompare(false)} />}

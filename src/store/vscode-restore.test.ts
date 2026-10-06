@@ -185,4 +185,69 @@ describe("退避した編集の取り込み (VS Code の store)", () => {
     store.getState().saveNow();
     expect(store.getState().restoreNotice).toBeNull();
   });
+
+});
+
+describe("保存の衝突から、退避して最新のファイルを開く (VS Code の store)", () => {
+  /** 衝突を作る: 画面は G (未保存)、同期で受け取ったディスクの中身は R */
+  async function conflicted() {
+    const { L, a, b } = plans();
+    const store = await openStore(L);
+    store.getState().apply((p) => updateBlock(p, b, { title: "画面だけ" }));
+    const R = toJSON(updateBlock(fromJSON(L), a, { title: "受け取った" }));
+    deliver({ type: "save-error", requestId: "", error: "x", conflict: true, text: R, version: ++version });
+    await wait(10);
+    expect(store.getState().conflict).not.toBeNull();
+    sent.length = 0;
+    return { store, L, R, a, b };
+  }
+  /** 拡張に送られた、最後の指定の種類のメッセージ */
+  const last = (type: string) => [...sent].reverse().find((m) => m.type === type) as (Record<string, unknown> & { requestId: string }) | undefined;
+
+  it("退避の保存先を選ばなかったら、最新を開かず、画面も衝突もそのまま", async () => {
+    const { store, b } = await conflicted();
+    const job = store.getState().evacuateAndOpenLatest();
+    await wait(5);
+    deliver({ type: "evacuated", requestId: last("evacuate")!.requestId, ok: false, detail: "cancelled" });
+    await job;
+    expect(last("open-latest")).toBeUndefined();
+    expect(store.getState().conflict).not.toBeNull();
+    expect(store.getState().project!.blocks[b].title).toBe("画面だけ");
+    expect(store.getState().restoreNotice?.text).toContain("退避しなかった");
+  });
+
+  it("退避の後、拡張が最新にできなかったら (エディタが編集された など)、画面も衝突もそのまま", async () => {
+    const { store, b, R } = await conflicted();
+    const job = store.getState().evacuateAndOpenLatest();
+    await wait(5);
+    // (退避には、受け取った最新の中身 = 衝突の相手が入る)
+    expect(last("evacuate")!.received).toBe(R);
+    deliver({ type: "evacuated", requestId: last("evacuate")!.requestId, ok: true, hash: "h", path: "/tmp/copy.json", editorVersion: 7 });
+    await wait(5);
+    expect(last("open-latest")!.editorVersion).toBe(7);
+    deliver({ type: "opened-latest", requestId: last("open-latest")!.requestId, ok: false, detail: "editor-changed" });
+    await job;
+    expect(store.getState().conflict).not.toBeNull();
+    expect(store.getState().project!.blocks[b].title).toBe("画面だけ");
+    expect(store.getState().restoreNotice?.text).toContain("editor-changed");
+  });
+
+  it("退避でき、拡張がエディタを読み直したら、画面も最新になり、衝突は解ける。保存の要求は送らない", async () => {
+    const { store, a, b, R } = await conflicted();
+    const job = store.getState().evacuateAndOpenLatest();
+    await wait(5);
+    deliver({ type: "evacuated", requestId: last("evacuate")!.requestId, ok: true, hash: "h", path: "/tmp/copy.json", editorVersion: 7 });
+    await wait(5);
+    deliver({ type: "opened-latest", requestId: last("open-latest")!.requestId, ok: true, detail: "", text: R, version: ++version });
+    await job;
+    const state = store.getState();
+    expect(state.conflict).toBeNull();
+    expect(state.saveError).toBeNull();
+    expect(state.saveState).toBe("saved");
+    expect(state.project!.blocks[a].title).toBe("受け取った");
+    expect(state.project!.blocks[b].title).toBe("B");
+    expect(state.restoreNotice?.text).toContain("/tmp/copy.json");
+    await wait(1200);
+    expect(sent.filter((m) => m.type === "save")).toHaveLength(0);
+  });
 });

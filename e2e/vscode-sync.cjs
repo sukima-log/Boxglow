@@ -38,8 +38,15 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     const ud = path.join(tmp, 'ud'); fs.mkdirSync(path.join(ud, 'User'), { recursive: true });
     fs.writeFileSync(path.join(ud, 'User', 'settings.json'), JSON.stringify({
       'boxglow.sync.server': server.url, 'workbench.editorAssociations': { '**/boxglow.json': 'boxglow.editor' }
+    // (保存先・読み込む先の選択を、VS Code の簡易ダイアログにする。OS のダイアログは検査から操作できないため)
+    , 'files.simpleDialog.enable': true
     , 'security.workspace.trust.enabled': false, 'update.mode': 'none', 'telemetry.telemetryLevel': 'off', 'workbench.startupEditor': 'none', 'window.restoreWindows': 'none'
     }));
+    // (検査で使うコマンドのキー: エディタの分割・テキストエディターで開き直す。コマンドパレットに打つより確か)
+    fs.writeFileSync(path.join(ud, 'User', 'keybindings.json'), JSON.stringify([
+      { key: 'ctrl+alt+shift+1', command: 'workbench.action.splitEditorRight' }
+    , { key: 'ctrl+alt+shift+2', command: 'workbench.action.reopenTextEditor' }
+    ]));
     const configA = path.join(tmp, 'config-a'), configB = path.join(tmp, 'config-b');
     app = await _electron.launch({
       executablePath: CODE
@@ -86,7 +93,7 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     // (画面の言語は VS Code の表示言語に従うので、印は data-state で、ボタンは日本語・英語のどちらの名前でも探す)
     const STATE = { '未サインイン': 'signed-out', 'オフ': 'off', '未接続': 'unbound', '同期済み': 'synced', '確認': 'halted' };
     const chipText = async (text) => { try { await frame.waitForFunction((s) => document.querySelector('.sync-chip')?.getAttribute('data-state') === s, STATE[text], { timeout: 20000 }); return true; } catch { return false; } };
-    const NAMES = { 'GitHub でサインイン': 'Sign in with GitHub', 'サーバーに置く': 'Put on the server', '今すぐ同期': 'Sync now', '手元の値に決める': 'Use the local value', 'サインアウト': 'Sign out' };
+    const NAMES = { '手元を退避して最新のファイルを開く': 'Export mine and open the latest file', '退避した編集を読み込む': 'Load saved edits', 'GitHub でサインイン': 'Sign in with GitHub', 'サーバーに置く': 'Put on the server', '今すぐ同期': 'Sync now', '手元の値に決める': 'Use the local value', 'サインアウト': 'Sign out' };
     const button = (ja) => frame.getByRole('button', { name: new RegExp(`^(${ja}|${NAMES[ja]})$`) });
     // 案内のダイアログが出て閉じるまで待つ (出なければ 20 秒で先へ)
     for (let i = 0; i < 40 && !(await onboarding()); i++) await win.waitForTimeout(500);
@@ -132,6 +139,84 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     await frame.evaluate(() => window.boxglow.store.getState().syncAct({ kind: 'resume' }));
     check('VS Code: 選ぶと「同期済み」', await chipText('同期済み'));
     check('VS Code: サーバーは選んだ手元の値', JSON.parse(server.project(remoteId, 'acc-vscode').head.text).blocks[block.blockId].title === 'VS Code の案');
+    // ---- 保存の衝突: エディタ (TextDocument) に未保存の編集があるときに受け取る → 退避 → 最新を開く → 取り込む → Save → 同期 ----
+    // (エディタを分割し、片方をテキストエディターにして、計画の名前の末尾に文字を足す。保存はしない)
+    // (キーが webview の中に吸われないよう、先に作業中のタブを押して VS Code 本体にフォーカスを移してから、コマンドのキーを押す)
+    const command = async (key) => {
+      await win.locator('.editor-group-container.active .tab.active').first().click();
+      await win.keyboard.press(key);
+      await win.waitForTimeout(1500);
+    };
+    await command('Control+Alt+Shift+1');
+    await command('Control+Alt+Shift+2');
+    // (テキストエディターの 4 行目 = 計画の名前。行末の「",」の前に文字を足す)
+    const textEditor = win.locator('.editor-group-container.active .monaco-editor .view-lines').first();
+    await textEditor.waitFor({ timeout: 10000 });
+    await textEditor.click();
+    await win.keyboard.press('Control+Home');
+    for (let i = 0; i < 3; i++) await win.keyboard.press('ArrowDown');
+    await win.keyboard.press('End'); await win.keyboard.press('ArrowLeft'); await win.keyboard.press('ArrowLeft');
+    await win.keyboard.type('_EDITOR', { delay: 20 });
+    // (図を探し直す: 分割で webview が作り直されることがある)
+    const frame2 = (await findFrame()) ?? frame;
+    const nameOf = () => frame2.evaluate(() => window.boxglow.store.getState().project.name);
+    let editorSeen = false;
+    for (let i = 0; i < 40 && !editorSeen; i++) { editorSeen = (await nameOf()).endsWith('_EDITOR'); if (!editorSeen) await win.waitForTimeout(250); }
+    check('VS Code: エディタの未保存の編集が図に届く', editorSeen);
+    check('VS Code: エディタの編集はディスクに書かれていない', !JSON.parse(fs.readFileSync(fileA, 'utf8')).name.endsWith('_EDITOR'));
+    // 2 台目が送り、今すぐ同期 → ディスクが変わる → エディタは dirty なので衝突
+    // (2 台目は、先に競合の解決の結果を受け取ってから変える。受け取らずに変えると、2 台目のほうが競合で止まる)
+    await tools.syncOnce({ file: fileB, server: server.url, token });
+    fs.writeFileSync(fileB, tools.toJSON(tools.updateBlock(tools.fromJSON(fs.readFileSync(fileB, 'utf8')), block.blockId, { title: '衝突中に届いた題名' })) + '\n');
+    await tools.syncOnce({ file: fileB, server: server.url, token });
+    await frame2.evaluate(() => window.boxglow.store.getState().syncAct({ kind: 'syncNow' }));
+    let conflicted = false;
+    for (let i = 0; i < 60 && !conflicted; i++) { conflicted = await frame2.evaluate(() => window.boxglow.store.getState().conflict !== null); if (!conflicted) await win.waitForTimeout(250); }
+    if (!conflicted) console.log('debug:', JSON.stringify({ disk: JSON.parse(fs.readFileSync(fileA, 'utf8')).blocks[block.blockId].title, sync: await frame2.evaluate(() => { const s = window.boxglow.store.getState(); return { state: s.syncStatus?.state, msg: s.syncStatus?.message, saveError: s.saveError, behind: !!s.editorBehind, title: s.project.blocks[Object.keys(s.project.blocks).at(-1)].title }; }), frames: win.frames().length }));
+    check('VS Code: エディタが dirty のまま受け取ると、保存の衝突の帯が出る', conflicted);
+    const button2 = (ja) => frame2.getByRole('button', { name: new RegExp(`^(${ja}|${NAMES[ja]})$`) });
+    // (同期の欄が開いていると帯に重なるので、閉じておく)
+    if (await frame2.locator('.sync-panel').isVisible().catch(() => false)) await frame2.locator('.sync-chip').click();
+    // 退避の保存先の選択をやめる → 何も変わらない
+    await button2('手元を退避して最新のファイルを開く').click();
+    await win.locator('.quick-input-widget input').waitFor({ timeout: 10000 });
+    await win.waitForTimeout(500);
+    await win.keyboard.press('Escape');
+    await win.waitForTimeout(1500);
+    const afterCancel = await frame2.evaluate(() => { const s = window.boxglow.store.getState(); return { conflict: s.conflict !== null, name: s.project.name, notice: s.restoreNotice?.text ?? '' }; });
+    check('VS Code: 退避をやめると、衝突も図の編集もそのまま', afterCancel.conflict && afterCancel.name.endsWith('_EDITOR'), JSON.stringify(afterCancel));
+    // 退避する (示された場所のまま保存) → エディタが読み直され、図も最新になる
+    const copiesBefore = fs.readdirSync(work).filter((f) => f.includes('.unsaved-'));
+    await button2('手元を退避して最新のファイルを開く').click();
+    await win.locator('.quick-input-widget input').waitFor({ timeout: 10000 });
+    await win.waitForTimeout(500);
+    await win.keyboard.press('Enter');
+    let opened = false;
+    for (let i = 0; i < 60 && !opened; i++) { opened = await frame2.evaluate(() => window.boxglow.store.getState().conflict === null); if (!opened) await win.waitForTimeout(250); }
+    const latest = await frame2.evaluate((id) => { const s = window.boxglow.store.getState(); return { name: s.project.name, title: s.project.blocks[id].title, saveState: s.saveState, notice: s.restoreNotice?.text ?? '' }; }, block.blockId);
+    check('VS Code: 退避すると、最新のファイルが開く (エディタの編集は外れ、届いた題名になる)', opened && !latest.name.endsWith('_EDITOR') && latest.title === '衝突中に届いた題名' && latest.saveState === 'saved', JSON.stringify(latest));
+    const copies = fs.readdirSync(work).filter((f) => f.includes('.unsaved-') && !copiesBefore.includes(f));
+    const copy = copies.length === 1 ? JSON.parse(fs.readFileSync(path.join(work, copies[0]), 'utf8')) : null;
+    check('VS Code: 退避のファイルに、図の編集と受け取った中身が入る', !!copy && copy.boxglowRecovery === 1 && JSON.parse(copy.gui.text).name.endsWith('_EDITOR') && JSON.parse(copy.received).blocks[block.blockId].title === '衝突中に届いた題名', copies.join(','));
+    check('VS Code: ディスクは受け取った中身のまま (退避で上書きしない)', JSON.parse(fs.readFileSync(fileA, 'utf8')).blocks[block.blockId].title === '衝突中に届いた題名');
+    // 退避した編集を読み込む (同期の欄から) → 取り込み → Save → 同期
+    if (!(await button2('退避した編集を読み込む').isVisible().catch(() => false))) await frame2.locator('.sync-chip').click();
+    await button2('退避した編集を読み込む').click();
+    const input = win.locator('.quick-input-widget input');
+    await input.waitFor({ timeout: 10000 });
+    await input.fill(path.join(work, copies[0] ?? 'missing.json'));
+    await win.waitForTimeout(500);
+    await win.keyboard.press('Enter');
+    let restored = false;
+    for (let i = 0; i < 40 && !restored; i++) { restored = (await nameOf()).endsWith('_EDITOR'); if (!restored) await win.waitForTimeout(250); }
+    const merged = await frame2.evaluate((id) => { const s = window.boxglow.store.getState(); return { name: s.project.name, title: s.project.blocks[id].title, held: s.saveHeld, pending: s.restorePending !== null, step: s.restorePending?.step, conflicts: s.restorePending?.conflicts.map((c) => ({ path: c.path, current: c.current, saved: c.saved })) }; }, block.blockId);
+    check('VS Code: 取り込むと、退避した編集と届いた題名の両方が入り、自動保存は止まる', restored && merged.title === '衝突中に届いた題名' && merged.held && !merged.pending, JSON.stringify(merged));
+    await frame2.evaluate(() => window.boxglow.store.getState().saveNow());
+    await frame2.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved', null, { timeout: 15000 });
+    await frame2.evaluate(() => window.boxglow.store.getState().syncAct({ kind: 'syncNow' }));
+    let pushed = false;
+    for (let i = 0; i < 60 && !pushed; i++) { const head = JSON.parse(server.project(remoteId, 'acc-vscode').head.text); pushed = head.name.endsWith('_EDITOR') && head.blocks[block.blockId].title === '衝突中に届いた題名'; if (!pushed) await win.waitForTimeout(250); }
+    check('VS Code: Save と同期で、サーバーに両方の変更が届く', pushed);
     // サインアウト
     await button('サインアウト').click();
     check('VS Code: サインアウトで「未サインイン」', await chipText('未サインイン'));
