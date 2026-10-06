@@ -157,4 +157,8 @@ export const app: Record<string, string> = {
 , "Google でサインイン": "Sign in with Google"
 , "ブラウザで次のページを開き、Google のアカウントで許可してください": "Open this page in your browser and allow with your Google account"
 , "Google のサインインのページを開く": "Open the Google sign-in page"
+, "退避したファイルとして読めません": "Not a saved copy of edits"
+, "先にファイルを閉じて開き直し、最新の中身にしてから読み込んでください": "Close and reopen the file to get the latest content first, then load the saved edits"
+, "退避した編集を取り込みました (両側で違っていた項目は、退避した編集の値にしました: {paths})。保存すると送られます": "Restored the saved edits (items changed on both sides take the saved value: {paths}). They are sent after you save"
+, "退避した編集を取り込みました。保存すると送られます": "Restored the saved edits. They are sent after you save"
 };

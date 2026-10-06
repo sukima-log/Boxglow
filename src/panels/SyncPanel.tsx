@@ -95,6 +95,8 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
       {unsaved && file?.enabled && <div className="sync-panel__line muted">{t("未保存の編集があります。保存すると送られます")}</div>}
       {/* VS Code のエディタが追い付いていない (受け取った中身は確認用。保存は通らない): 退避してから開き直す */}
       <EditorBehind />
+      {/* 退避した編集の取り込み (開き直した後の画面から使う。VS Code の中だけ。R39-06) */}
+      <RestoreEntry />
       {/* 確認が要る場面 */}
       {status.halt && <div className="sync-panel__halt">
         {texts.slice(0, 3).map((i, n) => <div key={n} className="sync-panel__line">{i.text}</div>)}
@@ -117,7 +119,6 @@ function EditorBehind() {
   const behind = useProjectStore((s) => s.editorBehind);
   const evacuated = useProjectStore((s) => s.evacuated);
   const evacuate = useProjectStore((s) => s.evacuate);
-  const loadEvacuated = useProjectStore((s) => s.loadEvacuated);
   const contentHash = useProjectStore((s) => s.contentHash);
   const saveState = useProjectStore((s) => s.saveState);
   const project = useProjectStore((s) => s.project);
@@ -137,10 +138,18 @@ function EditorBehind() {
         : <div className="sync-panel__line">{t("未保存の編集はありません。ファイルを閉じて開き直すと、最新の中身になります")}</div>}
       <div className="sync-panel__choices">
         {dirty && !upToDate && <button className="btn btn-sm" disabled={busy} onClick={() => { setBusy(true); void evacuate().finally(() => setBusy(false)); }}>{t("編集を退避する")}</button>}
-        <button className="btn btn-ghost btn-sm" onClick={loadEvacuated}>{t("退避した編集を読み込む")}</button>
       </div>
     </div>
   );
+}
+
+/** 退避した編集を、今開いている最新の中身に取り込む入口 (エディタ待ちの間は出さない: 先に開き直す) */
+function RestoreEntry() {
+  const source = useProjectStore((s) => s.source);
+  const behind = useProjectStore((s) => s.editorBehind);
+  const loadEvacuated = useProjectStore((s) => s.loadEvacuated);
+  if (source !== "vscode" || behind) return null;
+  return <div className="sync-panel__row"><button className="btn btn-ghost btn-sm" onClick={loadEvacuated}>{t("退避した編集を読み込む")}</button></div>;
 }
 
 /** サインインの途中: コードと、開くページ */

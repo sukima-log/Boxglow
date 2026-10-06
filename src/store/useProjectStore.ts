@@ -14,6 +14,7 @@ export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile } from "../lib/localfile";
 import { mergeProjects } from "../model/merge";
+import { editorCaughtUp, mergeRecovery, readRecovery } from "../sync/recovery";
 import { buildSampleProject } from "../model/sample";
 import exampleText from "../../examples/logic-daw/boxglow.json?raw";
 import type { Project } from "../model/types";
@@ -84,8 +85,16 @@ interface State {
    * この間は、受け取った中身は確認用にだけ持ち、保存は通らない。画面にだけある編集は、退避してから開き直す (R37-02)
    */
   editorBehind: { text: string } | null;
-  /** 退避済み: 退避した中身のハッシュと場所 (今の中身がこのハッシュと違えば、まだ退避していない編集がある) */
-  evacuated: { hash: string; path: string } | null;
+  /**
+   * 退避済み: 退避した画面の中身のハッシュ・エディタの版・場所。今の画面の中身がこのハッシュと違う、またはエディタの版が進んだら、まだ退避していない編集がある
+   */
+  evacuated: { hash: string; path: string; editorVersion: number | null } | null;
+  /**
+   * 退避した編集を、今開いている最新の中身に取り込む (R39-06)。退避したときの基準を共通の元にして、退避した画面の編集とエディタ側の編集を、
+   * 今の中身 (保存の基準) に統合する。結果は未保存の編集として持ち、保存の完了の通知が来るまで「保存済み」にしない
+   * Output: 取り込みの結果 (統合した数と、両側で違う値になっていた項目)
+   */
+  restoreEvacuated: (recovery: unknown) => { merged: number; conflicts: string[] } | { error: string };
   /** 画面の今の中身を、拡張の保存ダイアログで別のファイルに退避する。書けたことを確かめてから「退避済み」にする */
   evacuate: () => Promise<boolean>;
   /** 退避した編集を読み込んで、衝突として見比べる (拡張のファイル選択) */
@@ -195,7 +204,7 @@ let watchTimer: ReturnType<typeof setInterval> | null = null;
 /** ローカルサーバ連携の状態: 自分が最後に書いた中身 (サーバからの変更通知と区別する) と、通知の接続 */
 let serveEvents: EventSource | null = null;
 /** 退避の応答を待つ (requestId → 受け取る関数) */
-const evacuateWaiters = new Map<string, (result: { hash: string; path: string } | null, detail: string) => void>();
+const evacuateWaiters = new Map<string, (result: { hash: string; path: string; editorVersion: number | null } | null, detail: string) => void>();
 /** 文字列の SHA-256 (16 進) */
 async function sha256(text: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -359,9 +368,10 @@ export const useProjectStore = create<State>((set, get) => {
       if (!p || get().source !== "vscode") return false;
       const text = toJSON(p);
       const requestId = `evac-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const result = await new Promise<{ hash: string; path: string } | null>((resolve) => {
+      const result = await new Promise<{ hash: string; path: string; editorVersion: number | null } | null>((resolve) => {
         evacuateWaiters.set(requestId, (r) => resolve(r));
-        vscodeApi?.postMessage({ type: "evacuate", requestId, text });
+        // 復旧に要るものを全部渡す: 画面の中身 (G)・統合の基準 (画面が元にした中身)・受け取った最新の中身 (R)。エディタ側の未保存の中身は、拡張が足す (R39-05)
+        vscodeApi?.postMessage({ type: "evacuate", requestId, text, base: baseText, received: get().editorBehind?.text ?? null });
         setTimeout(() => { if (evacuateWaiters.delete(requestId)) resolve(null); }, 120_000);
       });
       // (退避の成功は、退避したときの中身に対してだけ。その後の編集は、ハッシュの違いで分かる)
@@ -369,6 +379,18 @@ export const useProjectStore = create<State>((set, get) => {
       return result !== null;
     }
   , loadEvacuated: () => { vscodeApi?.postMessage({ type: "load-evacuated" }); }
+  , restoreEvacuated: (value) => {
+      const current = get().project;
+      const recovery = readRecovery(value);
+      if (!current || !recovery) return { error: t("退避したファイルとして読めません") };
+      if (get().editorBehind) return { error: t("先にファイルを閉じて開き直し、最新の中身にしてから読み込んでください") };
+      // 今の中身 (= 開き直した最新、保存の基準) に、退避した編集を取り込む。結果は未保存として持ち、今の基準 baseText のまま保存する
+      const result = mergeRecovery(recovery, current);
+      if ("error" in result) return result;
+      set({ project: result.project, saveState: "unsaved", evacuated: null, saveError: null });
+      scheduleSave();
+      return { merged: result.merged, conflicts: result.conflicts };
+    }
   , acceptSyncStatus: (status) => {
       const current = get().syncStatus;
       // セッションが変わった (裏方が起動し直した) ら、通し番号は初期化して受け入れる
@@ -701,7 +723,14 @@ export const useProjectStore = create<State>((set, get) => {
         // 退避の応答 (拡張が別のファイルに書けたか)。書けたときだけ「退避済み」にする (中身のハッシュで、その後の編集と区別する)
         if (msg.type === "evacuated") {
           const waiter = evacuateWaiters.get(msg.requestId); evacuateWaiters.delete(msg.requestId);
-          waiter?.(msg.ok === true && typeof msg.hash === "string" && typeof msg.path === "string" ? { hash: msg.hash, path: msg.path } : null, typeof msg.detail === "string" ? msg.detail : "");
+          waiter?.(msg.ok === true && typeof msg.hash === "string" && typeof msg.path === "string" ? { hash: msg.hash, path: msg.path, editorVersion: typeof msg.editorVersion === "number" ? msg.editorVersion : null } : null, typeof msg.detail === "string" ? msg.detail : "");
+          return;
+        }
+        // 退避したファイルの中身 (拡張のファイル選択で選ばれた): 今の中身に取り込む
+        if (msg.type === "restore-evacuated") {
+          const result = get().restoreEvacuated(msg.recovery);
+          if ("error" in result) set({ saveError: result.error });
+          else set({ hostNotice: result.conflicts.length ? t("退避した編集を取り込みました (両側で違っていた項目は、退避した編集の値にしました: {paths})。保存すると送られます", { paths: result.conflicts.slice(0, 5).join(", ") }) : t("退避した編集を取り込みました。保存すると送られます") });
           return;
         }
         if (msg.type === "saved" || msg.type === "save-error") {
@@ -721,7 +750,12 @@ export const useProjectStore = create<State>((set, get) => {
         if ((msg.type !== "load" && msg.type !== "update") || typeof msg.text !== "string") return;
         // 確認用の中身 (VS Code のエディタが、ディスクの最新に追い付いていない間)。編集用の基準は進めず、「エディタ待ち」として持つ
         if (msg.type === "update" && msg.fromDisk === true) { set({ editorBehind: { text: msg.text }, evacuated: null }); return; }
-        if (msg.type === "update" && get().editorBehind) set({ editorBehind: null });
+        // エディタ待ちは、エディタの中身が受け取った最新 (R) と同じになったと確かめたときだけ解く (load / update 共通。古い版の update では解かない。R39-07)
+        if (get().editorBehind) {
+          if (editorCaughtUp(get().editorBehind!.text, msg.text)) set({ editorBehind: null });
+          // (エディタ側が編集された: 退避した後の変更なら、退避済みではなくなる)
+          else if (get().evacuated && typeof msg.version === "number" && msg.version !== get().evacuated!.editorVersion) set({ evacuated: null });
+        }
         // 手動の更新で頼んだ読み直しの応答が届いた (この後の処理で、中身が画面に反映される)
         const waiter = vscodeReloadWaiter; vscodeReloadWaiter = null;
         queueMicrotask(() => waiter?.());

@@ -69,13 +69,26 @@ export function attachSync(context: vscode.ExtensionContext, document: vscode.Te
     if (msg?.type === "evacuate" && typeof msg.text === "string" && typeof msg.requestId === "string") {
       const suggested = vscode.Uri.file(`${dirname(document.uri.fsPath)}/${basename(document.uri.fsPath, ".json")}.unsaved-${new Date().toISOString().replace(/[:.]/g, "-")}.json`);
       const target = await vscode.window.showSaveDialog({ defaultUri: suggested, filters: { JSON: ["json"] }, saveLabel: "退避 / Save a copy" });
-      const reply = (ok: boolean, detail: string, at?: string) => panel.webview.postMessage({ type: "evacuated", requestId: msg.requestId, ok, hash: sha(msg.text), path: at, detail });
+      // 復旧用の形式で書く (R39-05): 画面の中身 (G)・統合の基準・受け取った最新の中身 (R)・エディタ側の未保存の中身 (画面と違うときだけ) と、その版
+      // エディタの版は、書き出す時点のもの (この後にエディタが編集されたら、画面は「退避済み」ではなくなる)
+      const editorVersion = document.version;
+      const editorText = document.getText();
+      const lf = (v: string) => v.replace(/\r\n/g, "\n");
+      const recovery = {
+        boxglowRecovery: 1, savedAt: new Date().toISOString(), file: document.uri.fsPath
+      , base: typeof msg.base === "string" ? msg.base : null
+      , received: typeof msg.received === "string" ? msg.received : null
+      , gui: { text: msg.text, hash: sha(msg.text) }
+      , editor: document.isDirty && lf(editorText) !== lf(msg.text) ? { text: editorText, version: editorVersion, hash: sha(editorText) } : null
+      };
+      const body = JSON.stringify(recovery, null, 2) + "\n";
+      const reply = (ok: boolean, detail: string, at?: string) => panel.webview.postMessage({ type: "evacuated", requestId: msg.requestId, ok, hash: sha(msg.text), editorVersion, path: at, detail });
       if (!target) { void reply(false, "cancelled"); return; }
       // 元のファイル (とその実体) には書かない
       if (real(target.fsPath) === path) { void reply(false, "same-file"); return; }
       try {
-        writeFileSync(target.fsPath, msg.text, "utf8");
-        if (readFileSync(target.fsPath, "utf8") !== msg.text) { void reply(false, "verify-failed"); return; }
+        writeFileSync(target.fsPath, body, "utf8");
+        if (readFileSync(target.fsPath, "utf8") !== body) { void reply(false, "verify-failed"); return; }
         void reply(true, "", target.fsPath);
       } catch (e) { void reply(false, e instanceof Error ? e.message : String(e)); }
       return;
@@ -84,7 +97,15 @@ export function attachSync(context: vscode.ExtensionContext, document: vscode.Te
     if (msg?.type === "load-evacuated") {
       const picked = await vscode.window.showOpenDialog({ canSelectMany: false, filters: { JSON: ["json"] } });
       if (!picked?.[0]) return;
-      try { hooks.postConflict(readFileSync(picked[0].fsPath, "utf8")); } catch (e) { void vscode.window.showErrorMessage(String(e)); }
+      // 画面が、退避したときの基準を共通の元にして、今の中身に取り込む (外部のファイル変更の衝突としては扱わない。R39-06)
+      try {
+        const text = readFileSync(picked[0].fsPath, "utf8");
+        let recovery: unknown;
+        try { recovery = JSON.parse(text); } catch { recovery = null; }
+        // (前の版で退避した、計画そのもののファイル: 基準なしの退避として扱う)
+        if (!recovery || typeof recovery !== "object" || (recovery as { boxglowRecovery?: unknown }).boxglowRecovery !== 1) recovery = { boxglowRecovery: 1, base: null, received: null, gui: { text }, editor: null };
+        void panel.webview.postMessage({ type: "restore-evacuated", recovery });
+      } catch (e) { void vscode.window.showErrorMessage(String(e)); }
       return;
     }
   });
@@ -99,8 +120,14 @@ export function attachSync(context: vscode.ExtensionContext, document: vscode.Te
     const lf = (v: string) => v.replace(/\r\n/g, "\n");
     if (lf(disk) === lf(document.getText())) return;            // VS Code が追い付いた (ふつうの update の経路で届く)
     if (document.isDirty) { hooks.postConflict(disk); return; } // 未保存の編集は捨てず、受け取った中身を衝突として見せる
-    // clean なのに追い付いていない: 少し待ってから、まだなら確認用として送る (編集用の基準は進めない)
-    setTimeout(() => { try { if (!document.isDirty && lf(readFileSync(document.uri.fsPath, "utf8")) !== lf(document.getText())) hooks.postFromDisk(readFileSync(document.uri.fsPath, "utf8")); } catch { /* 消えたファイルは扱わない */ } }, 1500);
+    // clean なのに追い付いていない: 少し待ってから、ディスク・エディタ・dirty を見直して決める (待ち時間は表示の時機だけ。正しさは見直しで決める。R39-07)
+    setTimeout(() => {
+      let now: string;
+      try { now = readFileSync(document.uri.fsPath, "utf8"); } catch { return; }
+      if (lf(now) === lf(document.getText())) return;                // 追い付いた (ふつうの update で届く)
+      if (document.isDirty) { hooks.postConflict(now); return; }      // 待つ間にエディタが編集された: 衝突として両方を保持する
+      hooks.postFromDisk(now);
+    }, 1500);
   };
   try {
     watcher = watch(dirname(document.uri.fsPath), (_ev, name) => {
