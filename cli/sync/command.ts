@@ -21,7 +21,8 @@ import { bindingsOf, hashOf, SyncStateUnreadable } from "./state-store";
 import { resolveToken } from "./credentials";
 import { authHint } from "./login";
 import { bindingsFor, lockWatch, SyncWatcher, type WatchEvent } from "./watch";
-import type { RecoveryOutcome } from "../../src/sync/engine";
+import type { Halt, RecoveryOutcome } from "../../src/sync/engine";
+import type { ClientHalt } from "./client";
 
 /** sync コマンドの引数 (main.ts が解釈したオプションから作る) */
 export interface SyncCommandOptions {
@@ -110,14 +111,60 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
   return 2;
 }
 
+/** 止まったときの表示の 1 項目: 文章か、人が選べる操作 (CLI のコマンド / 画面のボタン) */
+export type HaltItem =
+  | { kind: "text"; text: string }
+  | { kind: "choice"; id: string; label: string; command: string; action: SyncAction };
+
+/** 人が選べる操作 (CLI の引数と 1 対 1。印は CLI と同じ値なので、画面で選んでも CLI で打っても同じ経路) */
+export type SyncAction =
+  | { kind: "resolve"; token: string; prefer: "local" | "remote" }
+  | { kind: "link"; token: string; prefer: "local" | "remote" }
+  | { kind: "relink"; token: string; prefer?: "local" | "remote" }
+  | { kind: "recover"; token: string; applied: boolean }
+  | { kind: "adopt"; approval: string }
+  | { kind: "restore"; approval: string }
+  | { kind: "account"; account: string };
+
+/**
+ * 止まったときの表示の構造 (CLI の文字列と、画面の表示の両方を、ここから作る)
+ *   target = 表示したときの対象 (初回の選択では同期の状態が無いので、ここに持つ)
+ *   fix    = 選べる操作が無いときに、直す場所: local-file (手元のファイル) / sync-state (同期の状態のフォルダ) / server-content (サーバーの中身) /
+ *            credentials (資格情報) / rerun (もう一度実行する) / none (何もできない。待つ)
+ */
+export interface HaltView {
+  target: { file: string; server: string; remoteId: string };
+  reason: Halt["reason"] | ClientHalt["reason"];
+  done: { pulled: number; pushed: number; edited: number; backup?: string };
+  items: HaltItem[];
+  fix: "local-file" | "sync-state" | "server-content" | "credentials" | "rerun" | "none";
+}
+
 /**
  * 止まったときの表示: 理由と、次にできること (1 回の同期と、常時の同期の両方から使う)
  * Input : result = 止まった結果, file = 計画のファイル, out = 出力の関数
- * Output: なし (out に書く)
+ * Output: なし (out に書く)。中身は haltView() の構造から作る
  */
 export function describeHalt(result: Extract<SyncResult, { status: "halted" }>, file: string, out: (text: string) => void): void {
+  for (const item of haltView(result, file).items) {
+    if (item.kind === "text") out(item.text);
+    else out(`  ${item.command}`);
+  }
+}
+
+/**
+ * 止まった結果を、表示の構造にする
+ * Input : result = 止まった結果, file = 計画のファイル
+ * Output: HaltView (文章の順番は、CLI の表示の順番)
+ */
+export function haltView(result: Extract<SyncResult, { status: "halted" }>, file: string): HaltView {
   const o = { file };
   const halt = result.halt;
+  const items: HaltItem[] = [];
+  let fix: HaltView["fix"] = "none";
+  const out = (text: string) => { items.push({ kind: "text", text }); };
+  // 選べる操作: 表示するコマンド (対象つき) と、画面で使う操作の内容
+  const choice = (label: string, command: string, action: SyncAction) => { items.push({ kind: "choice", id: `${action.kind}:${items.length}`, label, command: command.trim(), action }); };
   // 表示するコマンドには、対象 (ファイル・サーバー・サーバー側の計画) をそのまま付ける。
   // 省くと、実行する場所や環境によって、別の対象に対する操作になってしまう (特に、まだ結び付けが無い初回の選択)
   const target = ` --file ${quote(result.target.file)}`;
@@ -134,27 +181,30 @@ export function describeHalt(result: Extract<SyncResult, { status: "halted" }>, 
       out(t("手元とサーバーで、同じ項目が別の値に変わっています ({count} 件):", { count: halt.conflicts.length }));
       for (const c of halt.conflicts) out(`  - ${c.path}: ${t("手元")} ${JSON.stringify(c.ours)} / ${t("サーバー")} ${JSON.stringify(c.theirs)}`);
       out(t("表示した項目を、手元の値に決めるなら (表示していない項目は、今までどおり自動で合わせます):"));
-      out(`  boxglow sync --resolve ${halt.token} --prefer local${target}`);
+      choice(t("手元の値に決める"), `boxglow sync --resolve ${halt.token} --prefer local${target}`, { kind: "resolve", token: halt.token, prefer: "local" });
       out(t("サーバーの値に決めるなら:"));
-      out(`  boxglow sync --resolve ${halt.token} --prefer remote${target}`);
+      choice(t("サーバーの値に決める"), `boxglow sync --resolve ${halt.token} --prefer remote${target}`, { kind: "resolve", token: halt.token, prefer: "remote" });
       out(t("項目ごとに選び分けたいときは、手元のファイルで採りたい値に直してから、もう一度 boxglow sync を実行してください (サーバーと同じ値にした項目は、競合になりません)"));
       break;
     case "invalid-merge":
+      fix = "local-file";
       out(t("手元とサーバーの変更を合わせると、計画として正しくない形になります: {problem}", { problem: halt.problem }));
       out(t("手元のファイルで、どちらかの変更を取り消してからもう一度実行してください"));
       break;
     case "invalid-local":
+      fix = "local-file";
       out(t("手元のファイルが、計画として読めません: {problem}", { problem: halt.problem }));
       break;
     case "invalid-remote":
+      fix = "server-content";
       out(t("サーバーの中身が、計画として読めません: {problem}", { problem: halt.problem }));
       break;
     case "protected-deletion":
       out(t("前回そろえたときに在った設定が、手元のファイルから消えています: {keys}", { keys: halt.keys.join(", ") }));
       out(t("古い版の Boxglow が保存のときに落としたのかもしれません (書き手は確認できません)。意図した削除なら、次を実行すると、その削除を送ります:"));
-      out(`  boxglow sync --adopt ${halt.approval}${target}`);
+      choice(t("削除を送る"), `boxglow sync --adopt ${halt.approval}${target}`, { kind: "adopt", approval: halt.approval });
       out(t("意図していないなら、次を実行すると、消えた設定だけを手元のファイルに戻して、同期を続けます (ほかの編集はそのままです):"));
-      out(`  boxglow sync --restore ${halt.approval}${target}`);
+      choice(t("消えた設定を手元に戻す"), `boxglow sync --restore ${halt.approval}${target}`, { kind: "restore", approval: halt.approval });
       break;
     case "recover-pull": {
       out(t("前回の同期が、サーバーの変更 (版 {revision}) を手元に書く途中で終わっていました。書き込めたかどうかを、今のファイルからは確かめられません。", { revision: halt.pending.remote.revision }));
@@ -163,7 +213,7 @@ export function describeHalt(result: Extract<SyncResult, { status: "halted" }>, 
       if (recovery) {
         const show = (label: string, flag: string, outcome: RecoveryOutcome) => {
           out("");
-          out(`${label}: boxglow sync --recover ${recovery.token} ${flag}${target}`);
+          choice(label, `boxglow sync --recover ${recovery.token} ${flag}${target}`, { kind: "recover", token: recovery.token, applied: flag === "--applied" });
           out("  " + t("手元のファイルに入る変更:") + (outcome.localChanges.length ? "" : " " + t("なし")));
           for (const line of outcome.localChanges) out("    - " + line);
           if (outcome.next === "push") {
@@ -184,8 +234,11 @@ export function describeHalt(result: Extract<SyncResult, { status: "halted" }>, 
       out(halt.reason === "history-changed" ? t("サーバーの履歴が、前回そろえたときから変わっています (バックアップからの復旧など)。前回の続きとしては同期できません。") : t("結び直しの途中で、選んだときから手元かサーバーの中身が変わりました (または、選んだ送信が断られました)。選んだ内容は使っていません。今の内容で、選び直してください。"));
       const preview = result.relink;
       // 見比べが無い = 今の内容をまだ読めていない (消されている計画は、別の理由 remote-deleted で止まる)。もう一度の実行を案内する (R32-04)
-      if (!preview) { out(t("サーバーの履歴が、同期の途中で変わりました。何も送っていません・書いていません。もう一度 boxglow sync を実行すると、今の内容との見比べを表示します")); break; }
-      const command = (prefer?: "local" | "remote") => `  boxglow sync --relink ${preview.token}${prefer ? ` --prefer ${prefer}` : ""}${target}`;
+      if (!preview) { fix = "rerun"; out(t("サーバーの履歴が、同期の途中で変わりました。何も送っていません・書いていません。もう一度 boxglow sync を実行すると、今の内容との見比べを表示します")); break; }
+      const command = (prefer?: "local" | "remote") => {
+        const label = prefer === "remote" ? t("サーバーの計画を採る") : prefer === "local" ? t("手元の計画を採る") : t("結び直す");
+        choice(label, `boxglow sync --relink ${preview.token}${prefer ? ` --prefer ${prefer}` : ""}${target}`, { kind: "relink", token: preview.token, ...(prefer ? { prefer } : {}) });
+      };
       out("  " + t("サーバーの今の版: {remote} (前回そろえた版: {base})", { remote: preview.remoteRevision ?? t("なし"), base: preview.baseRevision ?? t("なし") }));
       if (halt.reason === "history-changed") out("  " + (preview.localChanged === null ? t("手元: 前回そろえた後に変えたかどうかは、確かめられません (前回の中身の写しがありません)") : preview.localChanged ? t("手元: 前回そろえた後の変更があります") : t("手元: 前回そろえた後の変更はありません")));
       if (preview.pending === "push") out("  " + t("前回の送信が、途中のまま残っています (届いたかどうかは分かりません)。送り直しません。中身の写しが残っていれば、控えに入れます"));
@@ -195,62 +248,78 @@ export function describeHalt(result: Extract<SyncResult, { status: "halted" }>, 
         for (const line of preview.differences) out("  - " + line);
         out(t("どちらを採るかを選んでください。古い中身を元にした自動の統合はしません (復旧の後は、手元の作業を消す方向に働くことがあるため)。"));
         out(t("A. サーバーの計画を採る (手元のファイルを置き換える。前の中身は <ファイル名>.before-sync-....json と、控えのフォルダに残します):"));
-        out(command("remote"));
+        command("remote");
         out(t("B. 手元の計画を採る (サーバーの計画を置き換える。サーバーの前の中身は、サーバーの履歴に残ります):"));
-        out(command("local"));
+        command("local");
         out(t("項目ごとに選び分けたいときは、手元のファイルを採りたい内容に直してから、もう一度 boxglow sync を実行して B を選んでください"));
       } else {
         out(preview.relation === "same" ? t("サーバーの計画と、手元の計画は、同じ中身です。次を実行すると、今の中身を新しい出発点として、同期を続けます:") : preview.relation === "none" ? t("サーバーにも手元にも、この計画はありません。次を実行すると、結び付けだけを残して、止まった状態を解きます:") : preview.relation === "remote-only" ? t("手元の計画のファイルがありません。次を実行すると、サーバーの計画を手元に書いて、同期を続けます:") : t("復旧先の時点では、この計画はサーバーにありません。次を実行すると、手元の計画を、サーバーに新しく送ります:"));
-        out(command());
+        command();
       }
       out(t("この選択は、この端末の中身についてのものです。ほかの端末でも同じ確認が出ます (先に、どの端末の中身を正とするか決めてください)。手元の計画を別の計画として残したいときは、ファイルを別のフォルダへ写して、そこで結び付けてください"));
       break;
     }
     case "stale-operation":
+      fix = "sync-state";
       out(t("前回の送信の記録が古すぎる、または日時が読めないため、自動では続けられません"));
       break;
     case "first-link":
       out(t("手元とサーバーの両方に、違う中身の計画があります。共通の元が分からないので、自動では合わせません。どちらを採るかを選んでください。"));
       out(t("手元の計画を採る (サーバーの計画を置き換える。前の中身はサーバーの履歴に残ります):"));
-      out(`  boxglow sync --link ${halt.token} --prefer local${fullTarget}`);
+      choice(t("手元の計画を採る"), `boxglow sync --link ${halt.token} --prefer local${fullTarget}`, { kind: "link", token: halt.token, prefer: "local" });
       out(t("サーバーの計画を採る (手元のファイルを置き換える。前の中身は、同じフォルダに <ファイル名>.before-sync-....json として残します):"));
-      out(`  boxglow sync --link ${halt.token} --prefer remote${fullTarget}`);
+      choice(t("サーバーの計画を採る"), `boxglow sync --link ${halt.token} --prefer remote${fullTarget}`, { kind: "link", token: halt.token, prefer: "remote" });
       break;
     case "remote-deleted":
+      fix = "none";
       out(t("サーバー側で、この計画は消されています (自動では作り直しません)"));
       break;
     case "local-missing":
+      fix = "local-file";
       out(t("手元の計画のファイルがありません: {file}", { file: o.file }));
       break;
     case "base-missing":
+      fix = "sync-state";
       out(t("同期の状態のフォルダから、前回そろえた中身の写しが見つかりません (または壊れています)。自動では続けられません。状態の記録はそのまま残して止まっています (消さないでください)"));
       break;
     case "binding-target":
+      fix = "rerun";
       out(t("この計画は、サーバー側の計画 {bound} に結び付いています。指定された {requested} とは違うので、何もしていません。結び付け済みの計画と同期するなら、--project を付けずに実行してください", { bound: halt.bound, requested: halt.requested }));
       break;
     case "bound-elsewhere":
+      fix = "none";
       out(t("この計画のファイルは、すでに別のサーバーに結び付いています: {server} (1 つのファイルを、2 つのサーバーへは結び付けません)", { server: halt.server }));
       break;
     case "unreadable-bindings":
+      fix = "sync-state";
       out(t("同期の状態を読めないフォルダがあるため、この計画がすでに結び付いているかを確かめられません。新しい結び付けは作りません (フォルダは消さずに、中身を確かめてください): {list}", { list: halt.dirs.join(", ") }));
       break;
     case "choice-not-applied":
+      fix = "rerun";
       out(halt.choice === "relink" ? t("--relink の選択は、今の状態には当てはまりません (表示のあとで、手元かサーバーが変わった・選べる内容が違う)。何もしていません。boxglow sync でもう一度確かめてください") : halt.choice === "firstLink"
         ? t("--link の選択は、今の状態には当てはまりません (同期の対象が、選択を表示したときと違う可能性があります)。何もしていません。表示されたコマンドを、--server・--project・--file を付けたまま実行してください")
         : t("--resolve の選択は、今の状態には当てはまりません (競合がもう無い、または対象が違います)。何もしていません。boxglow sync でもう一度確かめてください"));
       break;
     case "account-mismatch":
+      fix = "credentials";
       out(t("この計画の結び付けは、別の利用者 ({bound}) のものです。今のトークンの利用者は {actual} です。別の利用者の計画を置き換えないよう、何も送らず、何も書いていません。結び付けたときの利用者のトークンで実行してください", { bound: halt.bound, actual: halt.actual }));
       break;
     case "account-unconfirmed":
       out(t("この計画の結び付けには、利用者の記録がありません (記録するようになる前に結び付けたものです)。今のトークンの利用者は {account} です。この利用者で結び付けたものなら、次を実行すると、利用者を記録して同期を続けます:", { account: halt.account }));
-      out(`  boxglow sync --account ${quote(halt.account)}${target}`);
+      choice(t("この利用者のものとして続ける"), `boxglow sync --account ${quote(halt.account)}${target}`, { kind: "account", account: halt.account });
       out(t("別の利用者で結び付けたものなら、実行しないでください (そのときのトークンに直してから、もう一度確かめてください)"));
       break;
     case "binding-mismatch":
+      fix = "local-file";
       out(t("このパスには、結び付けたときとは別の計画が置かれています (結び付けた計画の ID: {expected}、今の計画の ID: {actual})。同期しません", { expected: halt.expected, actual: halt.actual }));
       break;
   }
+  return {
+    target: { ...result.target }
+  , reason: halt.reason
+  , done: { pulled: result.pulled, pushed: result.pushed, edited: result.edited, ...(result.relinkBackup ? { backup: result.relinkBackup } : {}) }
+  , items, fix
+  };
 }
 
 /**
