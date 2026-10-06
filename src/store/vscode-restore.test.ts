@@ -17,6 +17,19 @@ beforeAll(() => {
   (globalThis as unknown as { confirm: unknown }).confirm = () => true;
 });
 afterEach(() => { sent.length = 0; });
+/** 編集画面の帯 (保存の帯と、取り込みの帯) を、文字列として描画する (画面に文字が現れることを確かめる) */
+async function render(): Promise<string> {
+  const { renderToStaticMarkup } = await import("react-dom/server");
+  const { createElement } = await import("react");
+  const { RestoreNoticeView } = await import("../panels/SaveNotice");
+  const { useProjectStore } = await import("./useProjectStore");
+  // (サーバーの描画は store の初めの状態を読むので、今の状態を見た目の部品に渡して描画する)
+  const state = useProjectStore.getState();
+  const restore = state.restoreNotice ? renderToStaticMarkup(createElement(RestoreNoticeView, { notice: state.restoreNotice, onSave: () => {}, onDismiss: () => {} })) : "";
+  // (保存の帯は、保存の失敗のときだけ「保存を再試行」を出す。取り込みの案内は保存の失敗にしないので、ここに再試行は出ない)
+  const save = state.saveError ? `<span>${state.saveError}</span><button>保存を再試行</button>` : "";
+  return save + restore;
+}
 /** 拡張からのメッセージを届ける */
 const deliver = (data: unknown) => { target.dispatchEvent(new MessageEvent("message", { data })); };
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -120,9 +133,16 @@ describe("退避した編集の取り込み (VS Code の store)", () => {
     expect(store.getState().applyRestorePicks({ [pending.conflicts[0].id]: "saved" })).toBeNull();
     expect(store.getState().restorePending).toBeNull();
     expect(store.getState().project!.blocks[a].title).toBe("GUI");
-    expect(store.getState().saveError).toContain("取り込めませんでした");
-    expect(store.getState().saveError).toContain("画面側");
-    expect(store.getState().hostNotice).toBeNull();
+    // 取り込みの案内 (保存の失敗ではない) に、どこまで取り込めたかが出る
+    expect(store.getState().restoreNotice).toMatchObject({ kind: "partial" });
+    expect(store.getState().restoreNotice!.text).toContain("取り込めませんでした");
+    expect(store.getState().restoreNotice!.text).toContain("画面側");
+    expect(store.getState().saveError).toBeNull();
+    // R44-01 / R44-02: 編集画面の帯に出る。操作は「確かめた今の中身を保存」で、保存の再試行は出ない
+    const html = await render();
+    expect(html).toContain("取り込めませんでした");
+    expect(html).toContain("確かめた今の中身を保存");
+    expect(html).not.toContain("保存を再試行");
   });
 
   it("R43-02: 取り込みの確認の途中は、別の退避ファイルを読まない (欄と取り込む対象を取り違えない)", async () => {
@@ -140,5 +160,29 @@ describe("退避した編集の取り込み (VS Code の store)", () => {
     // やめた後は読める
     expect(store.getState().restoreEvacuated(recovery(L, Y))).toEqual({ applied: true, conflicts: 0 });
     expect(store.getState().project!.blocks[b].title).toBe("NEW FILE B");
+  });
+
+  it("R44-01: 全部取り込めた・次の段へ・段をやめた、の案内が、編集画面の帯に出る", async () => {
+    const { L, a, b } = plans();
+    const store = await openStore(L);
+    const G = toJSON(updateBlock(fromJSON(L), a, { title: "GUI" }));
+    const E = toJSON(updateBlock(updateBlock(fromJSON(L), a, { title: "EDITOR" }), b, { title: "E-B" }));
+    const rec = { boxglowRecovery: 1, base: L, received: null, gui: { text: G }, editor: { text: E, version: 3 } };
+    // 画面の段は競合なしで取り込み、エディタの段で確認へ
+    expect(store.getState().restoreEvacuated(rec)).toEqual({ applied: false, conflicts: 1 });
+    expect(store.getState().restorePending!.step).toBe("editor");
+    expect(await render()).toContain("次に、エディタ側の編集を確かめてください");
+    // この段をやめる
+    store.getState().cancelRestore();
+    const html = await render();
+    expect(html).toContain("エディタ側の編集は取り込みませんでした");
+    expect(html).not.toContain("保存を再試行");
+    expect(store.getState().project!.blocks[a].title).toBe("GUI");
+    // 閉じると消える。Save でも消える
+    store.getState().dismissRestoreNotice();
+    expect(await render()).not.toContain("取り込み");
+    store.getState().undo();
+    store.getState().saveNow();
+    expect(store.getState().restoreNotice).toBeNull();
   });
 });

@@ -186,9 +186,11 @@ export const app: Record<string, string> = {
 , "画面側": "view"
 , "エディタ側": "editor"
 , "と": " and "
-, "{done}の編集は取り込みました。{failed}の編集は取り込めませんでした: {reason}。Save の前に中身を確かめてください (取り消しで戻せます)": "Restored the {done} edits. The {failed} edits could not be restored: {reason}. Check the content before saving (you can undo)"
 , "{done}の編集を取り込みました。自動保存を止めています。確かめてから Save で保存してください (取り消すこともできます)": "Restored the {done} edits. Auto-save is paused; check, then press Save (you can undo)"
 , "{done}の編集は取り込みました。次に、エディタ側の編集を確かめてください": "Restored the {done} edits. Next, check the editor edits"
 , "画面側の編集は取り込み済みです。「今の値」は、その結果です。": "The view edits are already restored. \"Current value\" is that result."
 , "この段をやめる": "Skip this step"
+, "確かめた今の中身を保存": "Save the checked content"
+, "{done}の編集は取り込みました。{failed}の編集は取り込めませんでした (反映していません): {reason}。Save の前に中身を確かめてください (取り消しで戻せます)": "Restored the {done} edits. The {failed} edits could not be restored (not applied): {reason}. Check the content before saving (you can undo)"
+, "取り込んだ結果が、計画として正しくなりません (親子の関係などが矛盾します)": "The result would not be a valid plan (for example, conflicting parent relations)"
 };

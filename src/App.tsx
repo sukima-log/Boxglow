@@ -44,7 +44,7 @@ import { applyTheme } from "./lib/theme";
 import { HomeDialog } from "./panels/HomeDialog";
 import { Inspector } from "./panels/Inspector";
 import { Drawer, isFilterEmpty, matchesFilter, type Filter, EMPTY_FILTER } from "./panels/Drawer";
-import { SaveNotice } from "./panels/SaveNotice";
+import { RestoreNotice, SaveNotice } from "./panels/SaveNotice";
 import { VersionInfo } from "./panels/VersionInfo";
 import { TopBar } from "./panels/TopBar";
 import { TabBar } from "./panels/TabBar";
@@ -234,6 +234,8 @@ export function App() {
       <div className="app-top">
         {project && !embed && <TopBar project={project} onToggleDrawer={toggleDrawer} onHelp={() => setHelpOpen(true)} />}
         {project && !embed && <SaveNotice />}
+        {/* 退避した編集の取り込みの結果 (編集画面に出す。R44-01) */}
+        {project && !embed && <RestoreNotice />}
       </div>
 
       <main className="app-main relative min-w-0 min-h-0">

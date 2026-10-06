@@ -92,6 +92,30 @@ function ConflictDialog({ onClose }: { onClose: () => void }) {
  * Input : なし (保存の状態は store から取る)
  * Output: 帯の JSX。保存の失敗も無く、閲覧専用のファイルでもなければ何も出さない (null)
  */
+/**
+ * 退避した編集の取り込みの結果の帯 (保存の失敗の帯と同じ場所・見た目。操作は取り込み用: 保存の再試行は出さない。R44-01 / R44-02)
+ *   partial = 一部の段だけ取り込めた → 「確かめた今の中身を保存」(通常の Save と同じ処理だと分かる名前) と閉じる
+ *   info    = 取り込めた・段をやめた → 閉じる (Save は上のバーから)
+ */
+export function RestoreNotice() {
+  const { project, restoreNotice, dismissRestoreNotice, saveNow } = useProjectStore();
+  if (!project || !restoreNotice) return null;
+  return <RestoreNoticeView notice={restoreNotice} onSave={saveNow} onDismiss={dismissRestoreNotice} />;
+}
+/**
+ * 取り込みの帯の見た目 (状態は呼び出し側が渡す。試験からも、状態を渡して描画できる)
+ * Input : notice = 案内の種類と文, onSave = 確かめた今の中身を保存, onDismiss = 閉じる
+ */
+export function RestoreNoticeView({ notice, onSave, onDismiss }: { notice: { kind: "info" | "partial"; text: string }; onSave: () => void; onDismiss: () => void }) {
+  return <div className="save-notice" role={notice.kind === "partial" ? "alert" : "status"}>
+    <span>{notice.text}</span>
+    <div className="flex flex-wrap gap-2 mt-2">
+      {notice.kind === "partial" && <button className="btn btn-sm" onClick={onSave}>{t("確かめた今の中身を保存")}</button>}
+      <button className="btn btn-ghost btn-sm" onClick={onDismiss}>{t("閉じる")}</button>
+    </div>
+  </div>;
+}
+
 export function SaveNotice() {
   const { project, source, saveError, conflict, resolveConflict, previewConflict, saveNow, readonlyReason } = useProjectStore();
   // 比較ダイアログを開いているか

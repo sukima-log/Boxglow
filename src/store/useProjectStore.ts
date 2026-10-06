@@ -99,6 +99,13 @@ interface State {
   restorePending: { recovery: Recovery; step: RestoreStep; conflicts: RestoreConflict[]; basis: string } | null;
   /** 自動保存を一時停止している (退避した編集を取り込んだ後。Save を押すか、開き直すまで。R41-03 / レビュー 42 の回答 1) */
   saveHeld: boolean;
+  /**
+   * 退避した編集の取り込みの結果の案内 (編集画面の帯に出す。保存の失敗とは別の種類。R44-01 / R44-02)
+   *   info = 取り込めた・次の段の確認へ・段をやめた / partial = 一部の段だけ取り込めた
+   */
+  restoreNotice: { kind: "info" | "partial"; text: string } | null;
+  /** 取り込みの案内を閉じる */
+  dismissRestoreNotice: () => void;
   /** 競合ごとの選択で取り込む (取り消しの履歴に、取り込む前の画面を積む)。Output: エラーの文 (成功なら null) */
   applyRestorePicks: (picks: RestorePicks) => string | null;
   /** 取り込みをやめる (画面は元のまま) */
@@ -361,13 +368,13 @@ export const useProjectStore = create<State>((set, get) => {
     if ("error" in result) {
       // 一部の段は取り込めた: 成功の案内だけを残さず、どこまで取り込めたかを、続けて見える帯に出す
       if (done.length > 0) {
-        set({ hostNotice: null, saveError: t("{done}の編集は取り込みました。{failed}の編集は取り込めませんでした: {reason}。Save の前に中身を確かめてください (取り消しで戻せます)", { done: names(done), failed: names([result.step ?? "editor"]), reason: result.error }) });
+        set({ restoreNotice: { kind: "partial", text: t("{done}の編集は取り込みました。{failed}の編集は取り込めませんでした (反映していません): {reason}。Save の前に中身を確かめてください (取り消しで戻せます)", { done: names(done), failed: names([result.step ?? "editor"]), reason: result.error }) } });
         return { applied: false, conflicts: 0 };
       }
       return { error: result.error };
     }
-    if (result.applied) set({ hostNotice: t("{done}の編集を取り込みました。自動保存を止めています。確かめてから Save で保存してください (取り消すこともできます)", { done: names(done) }) });
-    else if (done.length > 0) set({ hostNotice: t("{done}の編集は取り込みました。次に、エディタ側の編集を確かめてください", { done: names(done) }) });
+    if (result.applied) set({ restoreNotice: { kind: "info", text: t("{done}の編集を取り込みました。自動保存を止めています。確かめてから Save で保存してください (取り消すこともできます)", { done: names(done) }) } });
+    else if (done.length > 0) set({ restoreNotice: { kind: "info", text: t("{done}の編集は取り込みました。次に、エディタ側の編集を確かめてください", { done: names(done) }) } });
     return { applied: result.applied, conflicts: result.conflicts };
   };
   /**
@@ -380,7 +387,7 @@ export const useProjectStore = create<State>((set, get) => {
     const result = applyRestore(recovery, current, step, picks);
     if ("error" in result) {
       return result.error === "unresolved" ? t("全部の項目について、どの値を採るかを選んでください")
-        : result.error.startsWith("invalid:") ? t("取り込んだ結果が、計画として正しくなりません (親子の関係などが矛盾します)。画面は元のままです")
+        : result.error.startsWith("invalid:") ? t("取り込んだ結果が、計画として正しくなりません (親子の関係などが矛盾します)")
         : result.error;
     }
     // 結果は未保存 (保存の基準は今の中身のまま)。自動では保存しない: 予約した保存を取り消し、進行中の保存の続きも止める。Save で送る (R40-03 / R41-03)
@@ -438,7 +445,7 @@ export const useProjectStore = create<State>((set, get) => {
       const keepSel = scope && selection.blockId && !isInScope(project, scope, selection.blockId) ? { ...selection, blockId: null } : selection;
       set({ viewScope: scope, selection: keepSel });
     }
-  , saveNow: () => { if (saveTimer) clearTimeout(saveTimer); saveTimer = null; holdSave = false; set({ saveHeld: false }); void persist(true); }
+  , saveNow: () => { if (saveTimer) clearTimeout(saveTimer); saveTimer = null; holdSave = false; set({ saveHeld: false, restoreNotice: null }); void persist(true); }
   , reloading: false
   , syncStatus: null
   , editorBehind: null
@@ -462,6 +469,8 @@ export const useProjectStore = create<State>((set, get) => {
   , loadEvacuated: () => { vscodeApi?.postMessage({ type: "load-evacuated" }); }
   , restorePending: null
   , saveHeld: false
+  , restoreNotice: null
+  , dismissRestoreNotice: () => set({ restoreNotice: null })
   , restoreEvacuated: (value) => {
       const current = get().project;
       const recovery = readRecovery(value);
@@ -496,7 +505,7 @@ export const useProjectStore = create<State>((set, get) => {
       const pending = get().restorePending;
       set({ restorePending: null });
       // エディタの段をやめた: 画面の段の取り込みは残っている (取り消しで戻せる) ことを伝える
-      if (pending?.step === "editor") set({ hostNotice: t("エディタ側の編集は取り込みませんでした。画面側の取り込みは残っています (取り消しで戻せます)。確かめてから Save で保存してください") });
+      if (pending?.step === "editor") set({ restoreNotice: { kind: "info", text: t("エディタ側の編集は取り込みませんでした。画面側の取り込みは残っています (取り消しで戻せます)。確かめてから Save で保存してください") } });
     }
   , acceptSyncStatus: (status) => {
       const current = get().syncStatus;
