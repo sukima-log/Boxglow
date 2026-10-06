@@ -30,6 +30,9 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
   const importJSON = useProjectStore((s) => s.importJSON);
   const copyToMine = useProjectStore((s) => s.copyToMine);
   const setToast = useProjectStore((s) => s.setToast);
+  // VS Code の中: 退避した編集の読み込み (同期の設定が無くても使う。保存の衝突の帯から退避した編集を、開き直した後に取り込む。R49-03)
+  const loadEvacuated = useProjectStore((s) => s.loadEvacuated);
+  const restoring = useProjectStore((s) => s.restorePending !== null || s.editorBehind !== null);
   // テーマ切り替えボタンの向き: 実際に画面に当たっているテーマ (html の data-theme) に合わせる。
   // URL の ?theme= や VS Code の配色でボタン以外からテーマが変わることがあるので、属性の変化を見張って追従する
   const [theme, setTheme] = useState<Theme>(() => document.documentElement.dataset.theme as Theme || currentTheme());
@@ -229,6 +232,7 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
               <button className="btn btn-ghost btn-sm justify-start" onClick={exportMd}>Export Markdown</button>
               <button className="btn btn-ghost btn-sm justify-start" onClick={copyMermaid}>Copy Mermaid</button>
               <button className="btn btn-ghost btn-sm justify-start" onClick={doImport}>Import JSON</button>
+              {source === "vscode" && !readonly && <button className="btn btn-ghost btn-sm justify-start" disabled={restoring} onClick={loadEvacuated}>{t("退避した編集を読み込む")}</button>}
               <div style={{ borderTop: "1px solid var(--line-soft)", margin: "4px 0" }} />
               <button className="btn btn-ghost btn-sm justify-start" onClick={onHelp}>Help</button>
               <button className="btn btn-ghost btn-sm justify-start" onClick={closeProject}>Home</button>

@@ -113,12 +113,13 @@ interface State {
   /** 画面の今の中身を、拡張の保存ダイアログで別のファイルに退避する。書けたことを確かめてから「退避済み」にする */
   evacuate: () => Promise<boolean>;
   /**
-   * 保存の衝突 (同期で受け取った中身と、手元の未保存の編集) のとき、VS Code で使う:
-   * 画面とエディタの未保存の編集を退避し、退避できたときだけ、エディタと画面を最新のファイルにする。
+   * 保存の衝突のとき、VS Code で使う「手元を退避して最新のファイルを開く」:
+   * 画面とエディタの未保存の編集を退避し、退避できて、その後に画面も衝突も変わっていないときだけ、画面を最新の中身にする。
    * Input : なし (今の衝突と画面の中身を使う)
-   * Output: なし。結果は restoreNotice の案内に出す (退避しなかった・最新にできなかったときは、画面もエディタも変えない)
+   * Output: なし。結果は restoreNotice の案内に出す (退避しなかった・退避の後に変わったときは、画面を変えない。R49-04)。
+   *         エディタに未保存の編集があるときの衝突 (editorDirty) では何もしない (退避と開き直しへ案内する。R49-01 / R49-02)
    */
-  evacuateAndOpenLatest: () => Promise<void>;
+  evacuateAndTakeLatest: () => Promise<void>;
   /** 退避した編集を読み込んで、衝突として見比べる (拡張のファイル選択) */
   loadEvacuated: () => void;
   /** 今の中身のハッシュ (退避済みかの判定に使う) */
@@ -137,7 +138,8 @@ interface State {
   vscodeFile: { state: "waiting" | "empty" | "invalid" | "timeout"; name: string; error?: string } | null;
   /** VS Code の中: 空のファイルに、名前を付けて計画を作る (作った計画は、そのファイルに保存される) */
   createInVsCode: (name: string) => void;
-  conflict: { text: string; revision: string; paths: string[] } | null;
+  /** 保存の衝突 (editorDirty = VS Code のエディタに未保存の編集があるときに受け取った。画面の基準がエディタの中身まで進んでいるので、画面では統合しない。R49-02) */
+  conflict: { text: string; revision: string; paths: string[]; editorDirty?: boolean } | null;
   previewConflict: () => MergeResult | null;
   resolveConflict: (choice: "merge" | "remote", choices?: ConflictChoices, revision?: string) => boolean;
 
@@ -226,8 +228,6 @@ let watchTimer: ReturnType<typeof setInterval> | null = null;
 /** ローカルサーバ連携の状態: 自分が最後に書いた中身 (サーバからの変更通知と区別する) と、通知の接続 */
 let serveEvents: EventSource | null = null;
 /** 退避の応答を待つ (requestId → 受け取る関数) */
-/** 最新のファイルを開く (エディタの読み直し) の応答を待つ (requestId → 受け取る関数) */
-const openLatestWaiters = new Map<string, (reply: { ok: boolean; text?: string; version?: number; detail: string }) => void>();
 const evacuateWaiters = new Map<string, (result: { hash: string; path: string; editorVersion: number | null } | null, detail: string) => void>();
 /** 文字列の SHA-256 (16 進) */
 async function sha256(text: string): Promise<string> {
@@ -276,12 +276,16 @@ function saveToVsCode(text: string): Promise<number> {
 const WATCH_INTERVAL = 1500;
 
 export const useProjectStore = create<State>((set, get) => {
-  const markConflict = (text: string, revision: string) => {
+  const markConflict = (text: string, revision: string, editorDirty = false) => {
     const current = get().project;
     if (!current || text === baseText) return;
     const remote = fromJSON(text);
     const result = mergeProjects(baseText ? fromJSON(baseText) : null, current, remote);
-    set({ conflict: { text, revision, paths: result.conflicts.map((c) => c.path) }, saveState: "unsaved", saveError: t("他の編集と競合しました。両方の変更を保持しているので、統合方法を選んでください。") });
+    // (エディタに未保存の編集があるときは、統合ではなく退避と開き直しを案内する。R49-02)
+    set({ conflict: { text, revision, paths: result.conflicts.map((c) => c.path), ...(editorDirty ? { editorDirty: true } : {}) }, saveState: "unsaved"
+    , saveError: editorDirty
+        ? t("同期で新しい中身を受け取りましたが、エディタに未保存の編集があるため、ここでは統合できません。手元の編集を退避してから、このファイルのタブを全部閉じて (保存しない) 開き直し、⋯ メニューの「退避した編集を読み込む」で取り込んでください。")
+        : t("他の編集と競合しました。両方の変更を保持しているので、統合方法を選んでください。") });
   };
   const acceptRemote = (text: string, revision = "") => {
     const current = get().project;
@@ -476,37 +480,22 @@ export const useProjectStore = create<State>((set, get) => {
       if (result) set({ evacuated: result });
       return result !== null;
     }
-  , evacuateAndOpenLatest: async () => {
-      // VS Code の中で、保存の衝突があるときだけ (保存の途中は、応答と取り違えないよう何もしない)
-      if (get().source !== "vscode" || !get().conflict || inFlight) return;
+  , evacuateAndTakeLatest: async () => {
+      const conflict = get().conflict;
+      // VS Code の中で、エディタに未保存の編集が無い衝突のときだけ (保存の途中は、応答と取り違えないよう何もしない)
+      if (get().source !== "vscode" || !conflict || conflict.editorDirty || inFlight) return;
       // 1. 退避する (保存先を選ばない・書けなかった: 何も変えない)
       const ok = await get().evacuate();
       const evacuated = get().evacuated;
-      if (!ok || !evacuated) { set({ restoreNotice: { kind: "info", text: t("退避しなかったので、画面とエディタの編集はそのままです") } }); return; }
-      // 2. 拡張に、エディタを最新のファイルに読み直してもらう (退避した後にエディタが編集されていたら、拡張が断る)
-      const requestId = `latest-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const reply = await new Promise<{ ok: boolean; text?: string; version?: number; detail: string }>((resolve) => {
-        openLatestWaiters.set(requestId, resolve);
-        vscodeApi?.postMessage({ type: "open-latest", requestId, editorVersion: evacuated.editorVersion });
-        setTimeout(() => { if (openLatestWaiters.delete(requestId)) resolve({ ok: false, detail: "timeout" }); }, 30_000);
-      });
-      if (!reply.ok || typeof reply.text !== "string" || typeof reply.version !== "number") {
-        set({ restoreNotice: { kind: "info", text: t("退避しました ({path})。最新のファイルは開けませんでした ({detail})。画面とエディタの編集はそのままです", { path: evacuated.path, detail: reply.detail }) } });
+      if (!ok || !evacuated) { set({ restoreNotice: { kind: "info", text: t("退避しなかったので、画面の編集はそのままです") } }); return; }
+      // 2. 退避を待つ間に、画面や衝突が変わっていたら置き換えない (退避に入っていない編集を外さない。R49-04)
+      if (get().conflict !== conflict || (await get().contentHash()) !== evacuated.hash) {
+        set({ restoreNotice: { kind: "info", text: t("退避しました ({path})。ただ、退避の後に画面か受け取った中身が変わったので、最新には切り替えていません。もう一度退避してください", { path: evacuated.path }) } });
         return;
       }
-      let latest: Project;
-      try { latest = fromJSON(reply.text); }
-      catch (e) { set({ restoreNotice: { kind: "info", text: t("退避しました ({path})。最新のファイルを計画として読めません ({detail})", { path: evacuated.path, detail: e instanceof Error ? e.message : String(e) }) } }); return; }
-      // 3. 画面も最新にする (基準と版も、読み直したエディタに合わせる。取り消しで、衝突の前の画面に戻れる)。
-      //    衝突の前の編集で予約した保存は取り消す (最新を開いた直後に、何かを送らない)
-      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-      const current = get().project;
-      baseText = reply.text; vscodeVersion = reply.version;
-      set({
-        project: latest, conflict: null, saveError: null, saveState: "saved", editorBehind: null
-      , past: current ? [...get().past.slice(-HISTORY_LIMIT + 1), current] : get().past, future: []
-      , restoreNotice: { kind: "info", text: t("退避しました ({path})。最新のファイルを開きました。退避した編集は、同期の欄の「退避した編集を読み込む」で取り込めます", { path: evacuated.path }) }
-      });
+      // 3. 最新の中身にする (取り消しで、衝突の前の画面に戻れる)
+      if (!get().resolveConflict("remote")) { set({ restoreNotice: { kind: "info", text: t("退避しました ({path})。最新には切り替えられませんでした", { path: evacuated.path }) } }); return; }
+      set({ restoreNotice: { kind: "info", text: t("退避しました ({path})。最新のファイルを開きました。退避した編集は、⋯ メニューの「退避した編集を読み込む」で取り込めます", { path: evacuated.path }) } });
     }
   , loadEvacuated: () => { vscodeApi?.postMessage({ type: "load-evacuated" }); }
   , restorePending: null
@@ -604,6 +593,8 @@ export const useProjectStore = create<State>((set, get) => {
   , resolveConflict: (choice, choices = {}, revision) => {
       const conflict = get().conflict, current = get().project;
       if (!conflict || !current || inFlight || (revision !== undefined && revision !== conflict.revision)) return false;
+      // (エディタに未保存の編集があるときの衝突は、画面では統合も置き換えもしない: 基準がエディタの中身まで進んでいて、その編集が落ちる。退避へ案内する。R49-02)
+      if (conflict.editorDirty) return false;
       const remote = fromJSON(conflict.text);
       const result = mergeProjects(baseText ? fromJSON(baseText) : null, current, remote, choices);
       if (choice === "merge" && result.conflicts.some((item) => !item.automatic && !choices[item.id])) return false;
@@ -884,12 +875,6 @@ export const useProjectStore = create<State>((set, get) => {
           waiter?.(msg.ok === true && typeof msg.hash === "string" && typeof msg.path === "string" ? { hash: msg.hash, path: msg.path, editorVersion: typeof msg.editorVersion === "number" ? msg.editorVersion : null } : null, typeof msg.detail === "string" ? msg.detail : "");
           return;
         }
-        // 最新のファイルを開いた (エディタを読み直した) 応答
-        if (msg.type === "opened-latest") {
-          const waiter = openLatestWaiters.get(msg.requestId); openLatestWaiters.delete(msg.requestId);
-          waiter?.({ ok: msg.ok === true, text: typeof msg.text === "string" ? msg.text : undefined, version: typeof msg.version === "number" ? msg.version : undefined, detail: typeof msg.detail === "string" ? msg.detail : "" });
-          return;
-        }
         // 退避したファイルの中身 (拡張のファイル選択で選ばれた): 今の中身に取り込む
         if (msg.type === "restore-evacuated") {
           const result = get().restoreEvacuated(msg.recovery);
@@ -899,7 +884,7 @@ export const useProjectStore = create<State>((set, get) => {
         if (msg.type === "saved" || msg.type === "save-error") {
           const pending = pendingSaves.get(msg.requestId);
           // 保存の要求に対する応答ではない衝突 (同期の受け取りで、ディスクが変わった): 画面の編集は捨てず、受け取った中身を衝突として持つ
-          if (!pending) { if (msg.type === "save-error" && msg.conflict && typeof msg.text === "string") markConflict(msg.text, String(msg.version)); return; }
+          if (!pending) { if (msg.type === "save-error" && msg.conflict && typeof msg.text === "string") markConflict(msg.text, String(msg.version), msg.editorDirty === true); return; }
           clearTimeout(pending.timer); pendingSaves.delete(msg.requestId);
           if (msg.type === "saved") pending.resolve(msg.version);
           else {

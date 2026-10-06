@@ -117,11 +117,14 @@ export function RestoreNoticeView({ notice, onSave, onDismiss }: { notice: { kin
 }
 
 export function SaveNotice() {
-  const { project, source, saveError, conflict, resolveConflict, previewConflict, saveNow, readonlyReason, evacuate, evacuateAndOpenLatest } = useProjectStore();
+  const { project, source, saveError, conflict, resolveConflict, previewConflict, saveNow, readonlyReason, evacuate, evacuateAndTakeLatest, evacuated, contentHash } = useProjectStore();
   // 退避の操作の途中 (VS Code の保存先の選択を待つ間、ボタンを押せなくする)
   const [busy, setBusy] = useState(false);
+  // 今の画面の中身のハッシュ (退避した中身と同じか = 退避の後に編集していないか、を見る。R49-04)
+  const [current, setCurrent] = useState("");
+  useEffect(() => { if (conflict?.editorDirty) void contentHash().then(setCurrent); }, [conflict, project, contentHash]);
   // VS Code の中: 退避は拡張の保存先の選択で書く (画面とエディタの両方の未保存の編集を、取り込める形で書く。書けたかどうかも分かる)。
-  // 「最新を開く」は、退避できたときだけ行う (保存先の選択をやめた・書けなかったら、何も変えない)
+  // 「最新を開く」は、退避できて、その後に画面が変わっていないときだけ行う (保存先の選択をやめた・書けなかったら、何も変えない)
   const inVsCode = source === "vscode";
   const run = (job: () => Promise<unknown>) => { setBusy(true); void job().finally(() => setBusy(false)); };
   const saveCopy = () => inVsCode
@@ -129,15 +132,26 @@ export function SaveNotice() {
         // (結果を、帯の下の案内に出す。書けた場所を見せ、取り込み方を案内する)
         const ok = await evacuate();
         const at = useProjectStore.getState().evacuated?.path;
-        useProjectStore.setState({ restoreNotice: { kind: "info", text: ok && at ? t("退避しました ({path})。同期の欄の「退避した編集を読み込む」で取り込めます", { path: at }) : t("退避しませんでした (保存先を選ばなかった・書けなかった)") } });
+        useProjectStore.setState({ restoreNotice: { kind: "info", text: ok && at ? t("退避しました ({path})。⋯ メニューの「退避した編集を読み込む」で取り込めます", { path: at }) : t("退避しませんでした (保存先を選ばなかった・書けなかった)") } });
       })
     : downloadText("boxglow-unsaved.json", toJSON(project!), "application/json");
-  const openLatest = () => { if (inVsCode) { run(evacuateAndOpenLatest); return; } downloadText("boxglow-unsaved.json", toJSON(project!), "application/json"); resolveConflict("remote"); };
+  const openLatest = () => { if (inVsCode) { run(evacuateAndTakeLatest); return; } downloadText("boxglow-unsaved.json", toJSON(project!), "application/json"); resolveConflict("remote"); };
   // 比較ダイアログを開いているか
   const [compare, setCompare] = useState(false);
   // 出すのは 2 つの場合だけ: 保存に失敗している (saveError)、または直接開いたファイル (source = "file"。閲覧専用) を見ている
   // (VS Code の中で、拡張がファイルを読み書きできない窓も閲覧専用。理由と対処を出す)
   if (!project || (!saveError && source !== "file" && !readonlyReason)) return null;
+  // VS Code のエディタに未保存の編集があるときの衝突: 統合・置き換えはさせず、退避と開き直しだけを案内する (R49-01 / R49-02)
+  if (conflict?.editorDirty) {
+    const upToDate = evacuated !== null && evacuated.hash === current;
+    return <div className="save-notice" role="alert">
+      <span>{saveError}</span>
+      {upToDate && <div className="mt-2">{t("退避済み: {path}。このファイルのタブを全部閉じて (保存しない) 開き直してください", { path: evacuated!.path })}</div>}
+      <div className="flex flex-wrap gap-2 mt-2">
+        <button className="btn btn-primary btn-sm" disabled={busy} onClick={saveCopy}>{upToDate ? t("もう一度退避する") : t("手元の編集を退避")}</button>
+      </div>
+    </div>;
+  }
   // 人が選ぶ必要のある競合の数 (0 なら選ばずにそのまま統合できる)
   const conflicts = previewConflict()?.conflicts.filter((item) => !item.automatic).length ?? 0;
   return <div className="save-notice" role={saveError ? "alert" : "status"}>

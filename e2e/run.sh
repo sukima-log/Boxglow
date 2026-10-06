@@ -47,3 +47,6 @@ node e2e/sync.cjs
 
 # 実際の VS Code (Linux 版。~/.cache/boxglow-e2e/vscode-linux に無ければ飛ばす) の中で、画面からの同期を通しで
 npm run build:vscode >/dev/null 2>&1 && node e2e/vscode-sync.cjs
+
+# 実際の VS Code で、同期サーバーを設定していないときの退避と、退避したファイルの取り込み (⋯ メニュー)
+node e2e/vscode-recovery.cjs

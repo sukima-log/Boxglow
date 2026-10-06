@@ -188,14 +188,14 @@ describe("退避した編集の取り込み (VS Code の store)", () => {
 
 });
 
-describe("保存の衝突から、退避して最新のファイルを開く (VS Code の store)", () => {
-  /** 衝突を作る: 画面は G (未保存)、同期で受け取ったディスクの中身は R */
-  async function conflicted() {
+describe("保存の衝突からの退避 (VS Code の store)", () => {
+  /** 衝突を作る: 画面は「画面だけ」の編集 (未保存)、受け取った中身は R。editorDirty = エディタに未保存の編集があるときの衝突 */
+  async function conflicted(editorDirty: boolean) {
     const { L, a, b } = plans();
     const store = await openStore(L);
     store.getState().apply((p) => updateBlock(p, b, { title: "画面だけ" }));
     const R = toJSON(updateBlock(fromJSON(L), a, { title: "受け取った" }));
-    deliver({ type: "save-error", requestId: "", error: "x", conflict: true, text: R, version: ++version });
+    deliver({ type: "save-error", requestId: "", error: "x", conflict: true, ...(editorDirty ? { editorDirty: true } : {}), text: R, version: ++version });
     await wait(10);
     expect(store.getState().conflict).not.toBeNull();
     sent.length = 0;
@@ -203,51 +203,65 @@ describe("保存の衝突から、退避して最新のファイルを開く (VS
   }
   /** 拡張に送られた、最後の指定の種類のメッセージ */
   const last = (type: string) => [...sent].reverse().find((m) => m.type === type) as (Record<string, unknown> & { requestId: string }) | undefined;
-
-  it("退避の保存先を選ばなかったら、最新を開かず、画面も衝突もそのまま", async () => {
-    const { store, b } = await conflicted();
-    const job = store.getState().evacuateAndOpenLatest();
+  /** 退避の要求に、拡張の代わりに応答する (ok = 書けた。hash = 書いた画面の中身のハッシュ) */
+  async function answerEvacuate(ok: boolean) {
+    const { useProjectStore } = await import("./useProjectStore");
+    const req = last("evacuate")!;
+    const { createHash } = await import("node:crypto");
+    deliver(ok
+      ? { type: "evacuated", requestId: req.requestId, ok: true, hash: createHash("sha256").update(String(req.text)).digest("hex"), path: "/tmp/copy.json", editorVersion: 7 }
+      : { type: "evacuated", requestId: req.requestId, ok: false, detail: "cancelled" });
     await wait(5);
-    deliver({ type: "evacuated", requestId: last("evacuate")!.requestId, ok: false, detail: "cancelled" });
+    return useProjectStore;
+  }
+
+  it("R49-02: エディタに未保存の編集があるときの衝突は、画面で統合も置き換えもしない (退避を案内する)", async () => {
+    const { store, b } = await conflicted(true);
+    expect(store.getState().conflict!.editorDirty).toBe(true);
+    expect(store.getState().saveError).toContain("ここでは統合できません");
+    expect(store.getState().resolveConflict("merge")).toBe(false);
+    expect(store.getState().resolveConflict("remote")).toBe(false);
+    await store.getState().evacuateAndTakeLatest();
+    expect(last("evacuate")).toBeUndefined();
+    expect(store.getState().conflict).not.toBeNull();
+    expect(store.getState().project!.blocks[b].title).toBe("画面だけ");
+  });
+
+  it("退避の保存先を選ばなかったら、最新にせず、画面も衝突もそのまま", async () => {
+    const { store, b } = await conflicted(false);
+    const job = store.getState().evacuateAndTakeLatest();
+    await wait(5);
+    await answerEvacuate(false);
     await job;
-    expect(last("open-latest")).toBeUndefined();
     expect(store.getState().conflict).not.toBeNull();
     expect(store.getState().project!.blocks[b].title).toBe("画面だけ");
     expect(store.getState().restoreNotice?.text).toContain("退避しなかった");
   });
 
-  it("退避の後、拡張が最新にできなかったら (エディタが編集された など)、画面も衝突もそのまま", async () => {
-    const { store, b, R } = await conflicted();
-    const job = store.getState().evacuateAndOpenLatest();
+  it("R49-04: 退避を待つ間に画面を変えたら、古い退避の成功で置き換えない", async () => {
+    const { store, b, R } = await conflicted(false);
+    const job = store.getState().evacuateAndTakeLatest();
     await wait(5);
     // (退避には、受け取った最新の中身 = 衝突の相手が入る)
     expect(last("evacuate")!.received).toBe(R);
-    deliver({ type: "evacuated", requestId: last("evacuate")!.requestId, ok: true, hash: "h", path: "/tmp/copy.json", editorVersion: 7 });
-    await wait(5);
-    expect(last("open-latest")!.editorVersion).toBe(7);
-    deliver({ type: "opened-latest", requestId: last("open-latest")!.requestId, ok: false, detail: "editor-changed" });
+    store.getState().apply((p) => updateBlock(p, b, { title: "退避の後の編集" }));
+    await answerEvacuate(true);
     await job;
     expect(store.getState().conflict).not.toBeNull();
-    expect(store.getState().project!.blocks[b].title).toBe("画面だけ");
-    expect(store.getState().restoreNotice?.text).toContain("editor-changed");
+    expect(store.getState().project!.blocks[b].title).toBe("退避の後の編集");
+    expect(store.getState().restoreNotice?.text).toContain("切り替えていません");
   });
 
-  it("退避でき、拡張がエディタを読み直したら、画面も最新になり、衝突は解ける。保存の要求は送らない", async () => {
-    const { store, a, b, R } = await conflicted();
-    const job = store.getState().evacuateAndOpenLatest();
+  it("退避でき、その後に画面が変わっていなければ、最新の中身になり、衝突は解ける", async () => {
+    const { store, a, b } = await conflicted(false);
+    const job = store.getState().evacuateAndTakeLatest();
     await wait(5);
-    deliver({ type: "evacuated", requestId: last("evacuate")!.requestId, ok: true, hash: "h", path: "/tmp/copy.json", editorVersion: 7 });
-    await wait(5);
-    deliver({ type: "opened-latest", requestId: last("open-latest")!.requestId, ok: true, detail: "", text: R, version: ++version });
+    await answerEvacuate(true);
     await job;
     const state = store.getState();
     expect(state.conflict).toBeNull();
-    expect(state.saveError).toBeNull();
-    expect(state.saveState).toBe("saved");
     expect(state.project!.blocks[a].title).toBe("受け取った");
     expect(state.project!.blocks[b].title).toBe("B");
     expect(state.restoreNotice?.text).toContain("/tmp/copy.json");
-    await wait(1200);
-    expect(sent.filter((m) => m.type === "save")).toHaveLength(0);
   });
 });
