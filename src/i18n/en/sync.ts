@@ -189,4 +189,5 @@ export const sync: Record<string, string> = {
   "この Google のアカウントは招待されていません (招待は Gmail か Google Workspace のメールアドレスに限ります)": "This Google account is not invited (invitations are limited to Gmail and Google Workspace addresses)",
   "サインインの結果を受け取れませんでした。もう一度実行してください": "The sign-in result could not be received. Run it again",
   "同期の状態が、選んだときから変わっています。何もしていません。もう一度確かめてから選んでください": "The sync state changed since you chose. Nothing was done. Check again, then choose",
+  "同期を止めています。終わってから、もう一度操作してください": "Sync is stopping. Try again after it has stopped",
 };

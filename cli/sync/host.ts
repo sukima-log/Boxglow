@@ -170,8 +170,10 @@ export class SyncHost {
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
     w.setTargets({ mode: "selected", files: new Set() });
     const running = this.running;
+    const manual = [...this.manual];
     const release = (async () => {
-      try { await running; } catch { /* 実行中の失敗は、状態に出ている */ }
+      // 常駐の 1 回と、始めた手動の操作の全部が終わるのを待つ (R40-02)
+      await Promise.allSettled([running, ...manual]);
       unlock?.();
       if (this.owner === "self" && !this.watcher) this.owner = "none";
     })();
@@ -201,7 +203,10 @@ export class SyncHost {
   /** 裏方を止める (プロセスの終了・最後の画面が閉じた後)。停止が終わってから解決する */
   async stop(): Promise<void> {
     if (this.signingIn) this.signingIn.cancelled = true;
+    this.stopping = true;
     await this.releaseWatcher();
+    // (見張りが無かった場合も、始めた手動の操作の終わりを待つ)
+    await Promise.allSettled([...this.manual]);
   }
 
   private onEvent(e: WatchEvent): void {
@@ -210,7 +215,8 @@ export class SyncHost {
     const credentials = "tag" in e && e.tag !== undefined ? e.tag : current;
     if (credentials !== current) { this.watcher?.recheck(); this.emit(); return; }
     // 成功したら、この世代の認証の失敗は解ける
-    if (e.kind === "synced" || e.kind === "checked" || e.kind === "halted") { if (this.authProblem === credentials) this.authProblem = null; }
+    if (e.kind === "synced" || e.kind === "checked" || e.kind === "halted" || e.kind === "authOk") { if (this.authProblem === credentials) this.authProblem = null; }
+    if (e.kind === "authOk") { this.emit(); return; }
     if (e.kind === "synced" || e.kind === "checked") this.results.set(e.file, { result: { status: "synced", pulled: e.kind === "synced" ? e.pulled : 0, pushed: e.kind === "synced" ? e.pushed : 0, edited: 0, revision: e.revision, localHash: e.localHash }, at: this.wall(), credentials });
     else if (e.kind === "halted") this.results.set(e.file, { result: e.result, at: this.wall(), credentials });
     else if (e.kind === "error") this.results.set(e.file, { result: { status: "error", error: new Error(e.message) }, at: this.wall(), credentials });
@@ -256,8 +262,12 @@ export class SyncHost {
     this.cancelSignIn();
     const targets = [...this.enabled];
     this.enabled.clear();
-    // 常駐の同期の停止が終わってから、資格情報を失効させる (R39-01)
-    await this.releaseWatcher();
+    // 常駐の同期と、始めた手動の操作が終わってから、資格情報を失効させる (R39-01 / R40-02)
+    this.stopping = true;
+    try {
+      await this.releaseWatcher();
+      await Promise.allSettled([...this.manual]);
+    } finally { this.stopping = false; }
     const lines: string[] = [];
     await runLogout({ server: this.server, out: (line) => lines.push(line), fetch: this.doFetch });
     this.account = null;
@@ -303,16 +313,32 @@ export class SyncHost {
     return this.status(file);
   }
   /** 1 回の同期をこの場で行う (結び付け・今すぐ同期・人の選択)。常駐の同期と同じロックで排他される */
-  private async syncFile(file: string, extra: Partial<Parameters<typeof syncOnce>[0]>): Promise<void> {
+  private syncFile(file: string, extra: Partial<Parameters<typeof syncOnce>[0]>): Promise<void> {
+    // 停止の途中・停止の後は、新しい操作を始めない (R40-02)
+    if (this.stopping) { this.message = t("同期を止めています。終わってから、もう一度操作してください"); this.emit(); return Promise.resolve(); }
+    const op = this.syncFileNow(file, extra);
+    // 手動の操作も、停止が待つ対象に入れる (停止の完了は、始めた操作が全部終わった後)
+    this.manual.add(op);
+    void op.finally(() => this.manual.delete(op));
+    return op;
+  }
+  private async syncFileNow(file: string, extra: Partial<Parameters<typeof syncOnce>[0]>): Promise<void> {
     const credentials = this.credentialsGeneration();
     this.busy++; this.emit();
     try {
-      const result = await syncOnce({ file, server: this.server, token: resolveToken(this.server)?.token, fetch: this.doFetch, now: () => new Date(this.wall()), ...extra });
+      const token = resolveToken(this.server)?.token;
+      const result = await syncOnce({ file, server: this.server, token, fetch: this.doFetch, now: () => new Date(this.wall()), ...extra });
       this.results.set(file, { result, at: this.wall(), credentials });
+      // (この資格情報で同期できた: 同じ世代の認証の失敗は解ける。R40-05)
+      if (this.authProblem === credentials) this.authProblem = null;
     } catch (e) {
       this.results.set(file, { result: { status: "error", error: e }, at: this.wall(), credentials });
     } finally { this.busy--; this.emit(); }
   }
+  /** 始めた手動の操作 (結び付け・今すぐ同期・選択) */
+  private readonly manual = new Set<Promise<void>>();
+  /** 停止の途中 (stop / signOut)。この間は新しい手動の操作を始めない */
+  private stopping = false;
   /** 選択 ID で、人の選択を実行する。対象・状態の世代・資格情報の世代が、表示したときと違えば、何もしない */
   private async choose(choiceId: string, file: string | null): Promise<void> {
     const c = this.choices.get(choiceId);

@@ -52,7 +52,8 @@ const edit = (file: string, change: (p: Project) => Project) => {
 };
 /** 試験では、ふつうの時計 (now) と、待ち時間を測る時計 (elapsed) を、同じ値で進める (別々に動かす試験は、個別に作る) */
 const watcher = (extra: Partial<ConstructorParameters<typeof SyncWatcher>[0]> = {}) =>
-  new SyncWatcher({ server: server.url, now: () => clock, elapsed: () => clock, random: () => 0.5, onEvent: (e) => events.push(e), ...extra });
+  // (利用者の確認 authOk は、一覧の確認のたびに出る。表示の出来事の並びを見る試験では数えない)
+  new SyncWatcher({ server: server.url, now: () => clock, elapsed: () => clock, random: () => 0.5, onEvent: (e) => { if (e.kind !== "authOk") events.push(e); }, ...extra });
 /** 時刻を進めてから tick を 1 回行う */
 const advance = async (w: SyncWatcher, ms: number) => { clock += ms; await w.tick(); };
 /** 別の端末として、サーバー側の計画を書き換える (この端末の状態の置き場は使わない) */

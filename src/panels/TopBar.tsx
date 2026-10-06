@@ -3,7 +3,7 @@
  * 狭い幅 (760px 以下) では、追加・Auto Layout・Undo / Redo を ⋯ メニューの中へ移す
  */
 import { useEffect, useRef, useState } from "react";
-import { SyncChip } from "./SyncPanel";
+import { RestoreDialog, SyncChip } from "./SyncPanel";
 import { addBlock, addProjectBlock, normalizeCollapsed, searchBlocks, summarize, toJSON } from "../model/graph";
 import { layoutAll } from "../model/autolayout";
 import { projectToMarkdown, scopeToMermaid } from "../model/export";
@@ -161,6 +161,8 @@ export function TopBar({ project, onToggleDrawer, onHelp }: { project: Project; 
       {!ephemeral && !readonly && <button className="btn btn-sm" onClick={saveNow} disabled={saveState === "saved" || saveState === "saving"} title={saveTitle}>Save</button>}
       {/* 画面からの同期の印 (裏方が状態を流しているときだけ出る) */}
       <SyncChip />
+      {/* 退避した編集の取り込みで、競合を選ぶ欄 (選ぶまで反映しない) */}
+      <div className="sync-chip-wrap"><RestoreDialog /></div>
       </div>
       <div className="topbar-tools">
       <button className="summary-chip" data-on={selection.timeline} onClick={() => select({ timeline: !selection.timeline })} title={t("今の状況 (作業中・判断待ち・ログ)")}>

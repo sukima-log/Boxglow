@@ -40,6 +40,8 @@ export type WatchEvent =
   | { kind: "network"; message: string; retryInMs: number }
   /** サーバーが利用者を確かめられない (トークンが無い・無効)。全部の計画に効くので、直るまで待つ (1 回だけ知らせる) */
   | { kind: "auth"; tag?: string }
+  /** 一覧の確認で、サーバーが利用者を確かめられた (認証の失敗が直ったことを、変更が無いときも伝える。R40-05) */
+  | { kind: "authOk"; tag?: string }
   | { kind: "error"; file: string; message: string; tag?: string }
   /** 変更なしで「そろっている」と確かめた (表示には出さない。画面の裏方の状態の更新用) */
   | { kind: "checked"; file: string; revision: string | null; localHash: string | null; tag?: string };
@@ -238,6 +240,9 @@ export class SyncWatcher {
         const cred = this.creds();
         this.pollTag = cred.tag;
         const { epoch, heads } = await fetchHeads({ server: this.options.server, token: cred.token, fetch: this.options.fetch });
+        // (利用者を確かめられた。前に認証の失敗を知らせていたら、次に失敗したときにも、もう一度知らせられるようにする)
+        this.authNotified = false;
+        this.options.onEvent?.({ kind: "authOk", tag: cred.tag });
         let changed = false;
         // 履歴の世代が変わったら、全部の計画を確かめ直す (版の文字列が同じでも、同じ履歴とはみなさない)
         const epochChanged = this.epoch !== null && this.epoch !== epoch;

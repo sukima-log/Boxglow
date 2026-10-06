@@ -14,7 +14,7 @@ export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile } from "../lib/localfile";
 import { mergeProjects } from "../model/merge";
-import { editorCaughtUp, mergeRecovery, readRecovery } from "../sync/recovery";
+import { applyRestore, editorCaughtUp, prepareRestore, readRecovery, type Recovery, type RestoreConflict, type RestorePicks } from "../sync/recovery";
 import { buildSampleProject } from "../model/sample";
 import exampleText from "../../examples/logic-daw/boxglow.json?raw";
 import type { Project } from "../model/types";
@@ -94,7 +94,13 @@ interface State {
    * 今の中身 (保存の基準) に統合する。結果は未保存の編集として持ち、保存の完了の通知が来るまで「保存済み」にしない
    * Output: 取り込みの結果 (統合した数と、両側で違う値になっていた項目)
    */
-  restoreEvacuated: (recovery: unknown) => { merged: number; conflicts: string[] } | { error: string };
+  restoreEvacuated: (recovery: unknown) => { applied: boolean; conflicts: number } | { error: string };
+  /** 取り込みの途中 (競合があり、利用者の選択を待っている)。選ぶまで画面にも保存にも反映しない */
+  restorePending: { recovery: Recovery; conflicts: RestoreConflict[] } | null;
+  /** 競合ごとの選択で取り込む (取り消しの履歴に、取り込む前の画面を積む)。Output: エラーの文 (成功なら null) */
+  applyRestorePicks: (picks: RestorePicks) => string | null;
+  /** 取り込みをやめる (画面は元のまま) */
+  cancelRestore: () => void;
   /** 画面の今の中身を、拡張の保存ダイアログで別のファイルに退避する。書けたことを確かめてから「退避済み」にする */
   evacuate: () => Promise<boolean>;
   /** 退避した編集を読み込んで、衝突として見比べる (拡張のファイル選択) */
@@ -203,6 +209,8 @@ let fileLastModified = 0;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 /** ローカルサーバ連携の状態: 自分が最後に書いた中身 (サーバからの変更通知と区別する) と、通知の接続 */
 let serveEvents: EventSource | null = null;
+/** 競合の無い取り込みで、applyRestorePicks に渡す退避の中身 (restoreEvacuated が直前に置く) */
+let lastRecovery: Recovery | null = null;
 /** 退避の応答を待つ (requestId → 受け取る関数) */
 const evacuateWaiters = new Map<string, (result: { hash: string; path: string; editorVersion: number | null } | null, detail: string) => void>();
 /** 文字列の SHA-256 (16 進) */
@@ -379,18 +387,42 @@ export const useProjectStore = create<State>((set, get) => {
       return result !== null;
     }
   , loadEvacuated: () => { vscodeApi?.postMessage({ type: "load-evacuated" }); }
+  , restorePending: null
   , restoreEvacuated: (value) => {
       const current = get().project;
       const recovery = readRecovery(value);
       if (!current || !recovery) return { error: t("退避したファイルとして読めません") };
       if (get().editorBehind) return { error: t("先にファイルを閉じて開き直し、最新の中身にしてから読み込んでください") };
-      // 今の中身 (= 開き直した最新、保存の基準) に、退避した編集を取り込む。結果は未保存として持ち、今の基準 baseText のまま保存する
-      const result = mergeRecovery(recovery, current);
-      if ("error" in result) return result;
-      set({ project: result.project, saveState: "unsaved", evacuated: null, saveError: null });
-      scheduleSave();
-      return { merged: result.merged, conflicts: result.conflicts };
+      const prepared = prepareRestore(recovery, current);
+      if ("error" in prepared) return { error: prepared.error === "different-plan" ? t("別の計画の退避ファイルです。取り込めません") : prepared.error };
+      lastRecovery = recovery;
+      // 競合が無ければ、そのまま取り込む。あれば、利用者が選ぶまで何も変えない (R40-03)
+      if (prepared.conflicts.length === 0) {
+        const message = get().applyRestorePicks({});
+        if (message) { set({ restorePending: null }); return { error: message }; }
+        return { applied: true, conflicts: 0 };
+      }
+      set({ restorePending: { recovery, conflicts: prepared.conflicts } });
+      return { applied: false, conflicts: prepared.conflicts.length };
     }
+  , applyRestorePicks: (picks) => {
+      const current = get().project;
+      const pending = get().restorePending;
+      const recovery = pending?.recovery ?? null;
+      // (競合が無い取り込みは、restoreEvacuated から直接呼ばれる。そのときの退避の中身は、呼ぶ直前に置く)
+      const source = recovery ?? lastRecovery;
+      if (!current || !source) return t("取り込むものがありません");
+      const result = applyRestore(source, current, picks);
+      if ("error" in result) {
+        return result.error === "unresolved" ? t("全部の項目について、どの値を採るかを選んでください")
+          : result.error.startsWith("invalid:") ? t("取り込んだ結果が、計画として正しくなりません (親子の関係などが矛盾します)。画面は元のままです")
+          : result.error;
+      }
+      // 取り込む前の画面を、取り消しの履歴に積む。結果は未保存 (保存の基準は今の中身のまま)。自動では保存しない (R40-03)
+      set({ project: result.project, past: [...get().past.slice(-HISTORY_LIMIT + 1), current], future: [], saveState: "unsaved", evacuated: null, saveError: null, restorePending: null });
+      return null;
+    }
+  , cancelRestore: () => set({ restorePending: null })
   , acceptSyncStatus: (status) => {
       const current = get().syncStatus;
       // セッションが変わった (裏方が起動し直した) ら、通し番号は初期化して受け入れる
@@ -730,7 +762,7 @@ export const useProjectStore = create<State>((set, get) => {
         if (msg.type === "restore-evacuated") {
           const result = get().restoreEvacuated(msg.recovery);
           if ("error" in result) set({ saveError: result.error });
-          else set({ hostNotice: result.conflicts.length ? t("退避した編集を取り込みました (両側で違っていた項目は、退避した編集の値にしました: {paths})。保存すると送られます", { paths: result.conflicts.slice(0, 5).join(", ") }) : t("退避した編集を取り込みました。保存すると送られます") });
+          else if (result.applied) set({ hostNotice: t("退避した編集を取り込みました。保存すると送られます (取り消すこともできます)") });
           return;
         }
         if (msg.type === "saved" || msg.type === "save-error") {

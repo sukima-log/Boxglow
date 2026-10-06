@@ -143,6 +143,42 @@ function EditorBehind() {
   );
 }
 
+/**
+ * 退避した編集の取り込みで、両側が違う値にしていた項目を選ぶ欄 (R40-03)。選ぶまで画面にも保存にも反映しない。やめれば、画面は元のまま
+ */
+export function RestoreDialog() {
+  const pending = useProjectStore((s) => s.restorePending);
+  const apply = useProjectStore((s) => s.applyRestorePicks);
+  const cancel = useProjectStore((s) => s.cancelRestore);
+  const [picks, setPicks] = useState<Record<string, "current" | "gui" | "editor">>({});
+  const [error, setError] = useState<string | null>(null);
+  if (!pending) return null;
+  const show = (v: unknown) => { const text = v === undefined ? t("(無し)") : typeof v === "string" ? v : JSON.stringify(v); return text.length > 80 ? text.slice(0, 80) + "…" : text; };
+  const labels: Record<"current" | "gui" | "editor", string> = { current: t("今の値"), gui: t("退避した画面の値"), editor: t("退避したエディタの値") };
+  const done = pending.conflicts.every((c) => picks[c.id]);
+  return (
+    <div className="sync-panel restore-dialog" role="dialog" aria-label={t("退避した編集の取り込み")}>
+      <div className="sync-panel__line">{t("退避した編集と、今の中身で、同じ項目が違う値になっています。項目ごとに、どの値を採るかを選んでください。")}</div>
+      {pending.conflicts.map((c) => (
+        <div key={c.id} className="sync-panel__halt">
+          <div className="sync-panel__id">{c.path}</div>
+          {(["current", "gui", "editor"] as const).filter((k) => k in c).map((k) => (
+            <label key={k} className="sync-panel__toggle">
+              <input type="radio" name={c.id} checked={picks[c.id] === k} onChange={() => setPicks({ ...picks, [c.id]: k })} />
+              <span>{labels[k]}: {show(c[k])}</span>
+            </label>
+          ))}
+        </div>
+      ))}
+      {error && <div className="sync-panel__line sync-panel__problem">{error}</div>}
+      <div className="sync-panel__choices">
+        <button className="btn btn-sm" disabled={!done} onClick={() => { const message = apply(picks); setError(message); if (!message) setPicks({}); }}>{t("取り込む")}</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => { cancel(); setPicks({}); setError(null); }}>{t("やめる")}</button>
+      </div>
+    </div>
+  );
+}
+
 /** 退避した編集を、今開いている最新の中身に取り込む入口 (エディタ待ちの間は出さない: 先に開き直す) */
 function RestoreEntry() {
   const source = useProjectStore((s) => s.source);

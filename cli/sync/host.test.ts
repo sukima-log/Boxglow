@@ -411,3 +411,65 @@ describe("レビュー 39 の回帰 (裏方)", () => {
     await host.stop();
   });
 });
+
+describe("レビュー 40 の回帰 (裏方)", () => {
+  const until = async (cond: () => boolean) => { for (let i = 0; i < 200 && !cond(); i++) await new Promise((r) => setTimeout(r, 5)); };
+
+  it("R40-02: 手動の操作 (結び付け) の通信を待っている間に止めても、その操作が終わるまで停止は終わらず、所有権も手放さない", async () => {
+    const { file } = planFile("p1");
+    signedIn();
+    let held: (() => void) | null = null;
+    let hold = false;
+    const fetchFn = (async (...args: Parameters<typeof fetch>) => {
+      if (hold && (args[1] as RequestInit | undefined)?.method === "PUT") { hold = false; await new Promise<void>((r) => { held = r; }); }
+      return fetch(...args);
+    }) as typeof fetch;
+    const { host } = make({ fetch: fetchFn });
+    host.openFile(file); host.enable(file);
+    await settle();
+    hold = true;
+    const binding = host.act(file, { kind: "bind" });
+    await until(() => held !== null);
+    let stopped = false;
+    const stopping = host.stop().then(() => { stopped = true; });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(stopped).toBe(false);
+    expect(lockWatch(server.url).unlock).toBeNull();
+    const puts = server.puts;
+    (held as unknown as () => void)();
+    await binding; await stopping;
+    expect(server.puts).toBe(puts + 1);                 // (始めた送信は、停止の前に終わっている)
+    const later = lockWatch(server.url);
+    expect(later.unlock).not.toBeNull();
+    later.unlock!();
+    // 停止の後は、新しい手動の操作を始めない
+    const after = server.puts;
+    await host.act(file, { kind: "syncNow" });
+    expect(server.puts).toBe(after);
+  });
+
+  it("R40-05: 資格情報を変えずに認証が直ったら (サーバー側の停止の解除など)、変更が無くても、手動の同期でも、表示が戻る", async () => {
+    const { file } = planFile("p1");
+    signedIn();
+    let deny = false;
+    const fetchFn = (async (...args: Parameters<typeof fetch>) => deny && String(args[0]).includes("/v1/projects")
+      ? new Response("{}", { status: 401, headers: { "x-boxglow-epoch": "e1" } }) : fetch(...args)) as typeof fetch;
+    const { host } = make({ fetch: fetchFn });
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    deny = true;
+    await advance(host, 40_000);
+    expect(host.status(file).problem?.kind).toBe("auth");
+    deny = false;
+    // 変更なしの自動の確認で戻る (認証の失敗の後は、間隔を延ばして待つので、十分に進める)
+    await advance(host, 120_000);
+    expect(host.status(file).state).toBe("synced");
+    // 手動の同期でも戻る
+    deny = true; await advance(host, 120_000);
+    expect(host.status(file).problem?.kind).toBe("auth");
+    deny = false;
+    await host.act(file, { kind: "syncNow" });
+    expect(host.status(file).state).toBe("synced");
+    await host.stop();
+  });
+});
