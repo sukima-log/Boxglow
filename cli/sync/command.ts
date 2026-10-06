@@ -282,6 +282,10 @@ export function haltView(result: Extract<SyncResult, { status: "halted" }>, file
       choice(t("この利用者のものとして続ける"), `boxglow sync --account ${quote(halt.account)}${target}`, { kind: "account", account: halt.account });
       out(t("別の利用者で結び付けたものなら、実行しないでください (そのときのトークンに直してから、もう一度確かめてください)"));
       break;
+    case "state-changed":
+      fix = "rerun";
+      out(t("同期の状態が、選んだときから変わっています。何もしていません。もう一度確かめてから選んでください"));
+      break;
     case "binding-mismatch":
       fix = "local-file";
       out(t("このパスには、結び付けたときとは別の計画が置かれています (結び付けた計画の ID: {expected}、今の計画の ID: {actual})。同期しません", { expected: halt.expected, actual: halt.actual }));

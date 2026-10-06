@@ -70,7 +70,9 @@ export type ClientHalt =
   /** この結び付けは、別の利用者のもの (サーバーが答えた利用者が、結び付けたときと違う)。基準もやりかけの操作も使わず、何も送らない・書かない */
   | { reason: "account-mismatch"; bound: string; actual: string }
   /** この結び付けには、利用者の記録がまだ無い (記録するようになる前に作った状態)。今の利用者のものだと、人が確かめるまで同期しない */
-  | { reason: "account-unconfirmed"; account: string };
+  | { reason: "account-unconfirmed"; account: string }
+  /** 人の選択を表示したときから、同期の状態が (別の実行で) 進んでいた。選択は使わない */
+  | { reason: "state-changed" };
 
 /** サーバーとの通信の失敗 (やりかけの操作は残したまま。後でやり直せる) */
 export class SyncNetworkError extends Error {}
@@ -112,6 +114,11 @@ export interface SyncOptions {
   firstLink?: { token: string; prefer: "local" | "remote" };
   /** 止まっている「受け取りの再開」への人の選択: 印 (recoveryToken の値) と、反映済みとして続けるか */
   recover?: { token: string; applied: boolean };
+  /**
+   * 人の選択を表示したときの、同期の状態の世代番号 (状態が無かったなら null)。指定すると、ロックの中で今の世代と照合し、
+   * 違えば何もせずに止まる (別の実行が状態を進めた後に、古い選択を使わない。画面の裏方が使う。R39-02)
+   */
+  expectGeneration?: number | null;
   /** サーバーの履歴が変わって止まった後の「結び直し」への人の選択: 印と、どちらを採るか (選べるものが 1 つなら省く) */
   relink?: { token: string; prefer?: "local" | "remote" };
   /** 利用者の記録が無い結び付けを「この利用者のもの」と人が確かめた、その利用者の ID (account-unconfirmed で表示した値) */
@@ -307,6 +314,8 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
     unlock = store.lock();
     if (!unlock) return { status: "busy", what: "sync" };
     stored = store.read();
+    // 画面で選んだ選択は、表示したときの状態の世代と、ロックの中で照合する (違えば、送りも書き込みもしない)
+    if (options.expectGeneration !== undefined && (stored?.generation ?? null) !== options.expectGeneration) return halted({ reason: "state-changed" });
     // 新しい結び付けを作ることになる場合: 状態を読めないフォルダがあると、このファイルがすでに結び付いているかを確かめられない。
     // 確かめられないまま、別の結び付けを作らない (読めるものだけを見て「未接続」とみなさない)
     if (!stored && known.unreadable.length > 0) return halted({ reason: "unreadable-bindings", dirs: known.unreadable });

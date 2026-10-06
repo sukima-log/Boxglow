@@ -291,3 +291,123 @@ describe("Google でのサインイン (裏方)", () => {
     await host.stop();
   });
 });
+
+describe("レビュー 39 の回帰 (裏方)", () => {
+  /** 指定の要求を止めておける通信 (hold() で止め、release() で通す) */
+  const gate = () => {
+    let held: (() => void) | null = null;
+    let armed = false;
+    const fetchFn = (async (...args: Parameters<typeof fetch>) => {
+      if (armed && String(args[0]).includes("/v1/projects/")) { armed = false; await new Promise<void>((r) => { held = r; }); }
+      return fetch(...args);
+    }) as typeof fetch;
+    return { fetchFn, hold: () => { armed = true; }, release: () => { held?.(); held = null; }, isHeld: () => held !== null };
+  };
+  const until = async (cond: () => boolean) => { for (let i = 0; i < 200 && !cond(); i++) await new Promise((r) => setTimeout(r, 5)); };
+
+  it("R39-01: 通信を待っている間に止めても、実行中の 1 回が終わるまで所有権を手放さない。終われば別の所有者が取れる", async () => {
+    const { file, a } = planFile("p1");
+    signedIn();
+    const g = gate();
+    const { host } = make({ fetch: g.fetchFn });
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    edit(file, (p) => updateBlock(p, a, { title: "編集" }));
+    g.hold();
+    clock += 100; void host.tick(); clock += 2500;
+    const running = host.tick();
+    await until(g.isHeld);
+    expect(g.isHeld()).toBe(true);
+    host.disable(file);
+    const stopped = host.stop();
+    await new Promise((r) => setTimeout(r, 30));
+    // 実行中の間は、別の所有者はロックを取れない
+    const early = lockWatch(server.url);
+    expect(early.unlock).toBeNull();
+    g.release();
+    await running; await stopped;
+    const later = lockWatch(server.url);
+    expect(later.unlock).not.toBeNull();
+    later.unlock!();
+  });
+
+  it("R39-02: 内容が同じでも、別の実行が状態の世代だけを進めた後は、古い選択で送らない。別のファイルの選択も通さない", async () => {
+    const { file, a } = planFile("p1");
+    signedIn();
+    const { host } = make();
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    const remoteId = host.status(file).file!.binding!.remoteId;
+    const other = join(root, "other", "boxglow.json"); mkdirSync(join(root, "other"));
+    const saved = process.env.BOXGLOW_CONFIG_DIR; process.env.BOXGLOW_CONFIG_DIR = join(root, "other-config");
+    await syncOnce({ file: other, server: server.url, remoteId });
+    edit(other, (p) => updateBlock(p, a, { title: "別の端末" }));
+    await syncOnce({ file: other, server: server.url });
+    process.env.BOXGLOW_CONFIG_DIR = saved;
+    edit(file, (p) => updateBlock(p, a, { title: "手元" }));
+    await host.act(file, { kind: "syncNow" });
+    const halted = host.status(file);
+    const item = halted.halt!.items.find((i) => i.kind === "choice") as { id: string };
+    const choiceId = halted.halt!.choiceIds[item.id];
+    // 別の実行が、状態の世代だけを進める (中身は同じ)
+    const { StateStore, bindingDir } = await import("./state-store");
+    const store = new StateStore(bindingDir(file, server.url));
+    const unlock = store.lock()!;
+    const current = store.read()!;
+    store.write({ ...current, generation: current.generation + 1 }, current.generation);
+    unlock();
+    const puts = server.puts;
+    // 別のファイルを名乗った選択は通らない
+    const wrongFile = await host.act(planFile("p9").file, { kind: "choose", choiceId });
+    expect(wrongFile.message).toContain("選び直して");
+    const r = await host.act(file, { kind: "choose", choiceId });
+    expect(server.puts).toBe(puts);
+    expect(r.state).toBe("halted");
+    expect(r.halt!.reason).toBe("state-changed");
+    await host.stop();
+  });
+
+  it("R39-03: 同期の応答を待っている間に資格情報が替わったら、その結果を今の成功として表示しない", async () => {
+    const { file, a } = planFile("p1");
+    signedIn("test");
+    const g = gate();
+    let synced = false;
+    const seenSync = () => synced;
+    const { host } = make({ fetch: g.fetchFn });
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    edit(file, (p) => updateBlock(p, a, { title: "編集" }));
+    g.hold();
+    clock += 100; void host.tick(); clock += 2500;
+    const running = host.tick();
+    await until(g.isHeld);
+    signedIn("other");                          // (別の CLI が、別の利用者でサインインし直した)
+    g.release();
+    await running;
+    const after = host.status(file);
+    synced = JSON.parse(server.project(host.status(file).file!.binding!.remoteId)!.head!.text).blocks[a].title === "編集";
+    expect(seenSync()).toBe(true);
+    expect(after.state).not.toBe("synced");
+    await host.stop();
+  });
+
+  it("R39-10: 同期できた後で、サーバーがトークンを断るようになったら、同期済みのままにせず、認証の問題として表示する", async () => {
+    const { file } = planFile("p1");
+    signedIn();
+    let deny = false;
+    const fetchFn = (async (...args: Parameters<typeof fetch>) => deny && String(args[0]).includes("/v1/projects")
+      ? new Response("{}", { status: 401, headers: { "x-boxglow-epoch": "e1" } }) : fetch(...args)) as typeof fetch;
+    const { host } = make({ fetch: fetchFn });
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    expect(host.status(file).state).toBe("synced");
+    deny = true;
+    await advance(host, 40_000);
+    expect(host.status(file)).toMatchObject({ state: "problem", problem: { kind: "auth", fix: "credentials" } });
+    // 資格情報を直す (別の利用者のものに替える) と、認証の問題は今の世代のものではなくなる
+    deny = false;
+    signedIn("test2");
+    expect(host.status(file).problem?.kind).not.toBe("auth");
+    await host.stop();
+  });
+});

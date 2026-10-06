@@ -48,9 +48,9 @@ export function attachSync(context: vscode.ExtensionContext, document: vscode.Te
     hosts.set(server, entry);
   }
   const { host, panels } = entry;
-  if (!panels.has(path)) panels.set(path, new Set());
+  // (裏方の開く・閉じるは、そのファイルの最初の画面と最後の画面でだけ呼ぶ。画面ごとに呼ぶと、閉じた後も参照数が残る。R39-04)
+  if (!panels.has(path)) { panels.set(path, new Set()); host.openFile(path); }
   panels.get(path)!.add(panel);
-  host.openFile(path);
   if (context.globalState.get<boolean>(enabledKey(document.uri, server))) host.enable(path);
 
   // ---- 画面からの操作 ----

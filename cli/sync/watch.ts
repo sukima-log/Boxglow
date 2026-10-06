@@ -35,14 +35,14 @@ const RETRY_MAX_MS = 60_000;
 export type WatchEvent =
   | { kind: "synced"; file: string; pulled: number; pushed: number; revision: string | null
       /** 「そろった」と確かめたときの手元の中身のハッシュ (画面の裏方が、今のディスクと比べて「同期済み」かを決めるのに使う) */
-    ; localHash: string | null }
-  | { kind: "halted"; file: string; result: Extract<SyncResult, { status: "halted" }> }
+    ; localHash: string | null; tag?: string }
+  | { kind: "halted"; file: string; result: Extract<SyncResult, { status: "halted" }>; tag?: string }
   | { kind: "network"; message: string; retryInMs: number }
   /** サーバーが利用者を確かめられない (トークンが無い・無効)。全部の計画に効くので、直るまで待つ (1 回だけ知らせる) */
-  | { kind: "auth" }
-  | { kind: "error"; file: string; message: string }
+  | { kind: "auth"; tag?: string }
+  | { kind: "error"; file: string; message: string; tag?: string }
   /** 変更なしで「そろっている」と確かめた (表示には出さない。画面の裏方の状態の更新用) */
-  | { kind: "checked"; file: string; revision: string | null; localHash: string | null };
+  | { kind: "checked"; file: string; revision: string | null; localHash: string | null; tag?: string };
 
 /** 計画 1 つ分の見張りの状態 */
 interface Watched {
@@ -83,6 +83,11 @@ export interface WatchOptions {
   server: string;
   /** トークン。関数なら、同期のたびに解決し直す (画面の裏方: サインイン / サインアウトの変化を次の同期から使う) */
   token?: string | (() => string | undefined);
+  /**
+   * トークンと、その資格情報の世代 (tag) を 1 度に解決する (画面の裏方が使う。token より優先)。
+   * 1 回の同期の始めに解決し、その同期の出来事に tag を付ける (遅れて終わった同期の結果を、新しい資格情報のものと取り違えないように。R39-03)
+   */
+  credentials?: () => { token?: string; tag: string };
   /** 見張る対象 (省略時は all) */
   targets?: WatchTargets;
   /** 今の日時 (ms)。操作の記録に残す日時に使う。試験で差し替える */
@@ -188,7 +193,18 @@ export class SyncWatcher {
   /** ファイルが、今の対象に入っているか (実体のパスで比べる) */
   private targeted(file: string): boolean { return this.targets.mode === "all" || this.targets.files.has(file); }
   /** 同期のたびに解決し直すトークン */
-  private token(): string | undefined { const t = this.options.token; return typeof t === "function" ? t() : t; }
+  private creds(): { token?: string; tag?: string } {
+    if (this.options.credentials) return this.options.credentials();
+    const t = this.options.token;
+    return { token: typeof t === "function" ? t() : t };
+  }
+  /** 資格情報が変わった (画面の裏方が呼ぶ): 止まっていた計画も含めて、全部を次の機会に確かめ直す。認証の失敗の知らせも、もう一度出せるようにする */
+  recheck(): void {
+    this.authNotified = false;
+    this.blockedUntil = 0;
+    this.nextPollAt = this.elapsed();
+    for (const w of this.watched.values()) { w.remoteAhead = true; w.halted = null; w.notified = null; }
+  }
 
   /**
    * その時点で行うべきことを 1 回分行う: 結び付けの一覧を取り直す → 手元の変更を調べる → (時点が来ていれば) サーバーを確かめる → 送る・受け取る
@@ -219,7 +235,9 @@ export class SyncWatcher {
     // ---- サーバーを確かめる (全部の計画を 1 回の要求で) ----
     if (at >= this.nextPollAt && this.watched.size > 0) {
       try {
-        const { epoch, heads } = await fetchHeads({ server: this.options.server, token: this.token(), fetch: this.options.fetch });
+        const cred = this.creds();
+        this.pollTag = cred.tag;
+        const { epoch, heads } = await fetchHeads({ server: this.options.server, token: cred.token, fetch: this.options.fetch });
         let changed = false;
         // 履歴の世代が変わったら、全部の計画を確かめ直す (版の文字列が同じでも、同じ履歴とはみなさない)
         const epochChanged = this.epoch !== null && this.epoch !== epoch;
@@ -306,13 +324,15 @@ export class SyncWatcher {
 
   /** 「利用者を確かめられない」を知らせ済みか (同じことを繰り返し知らせない) */
   private authNotified = false;
+  /** 一覧の確認に使った資格情報の世代 */
+  private pollTag: string | undefined;
 
   /** 通信の失敗: やり直しの間隔を延ばす (最初 5 秒、倍々で 60 秒まで)。利用者を確かめられない場合は、1 回だけ知らせて、長い間隔で待つ */
-  private fail(at: number, e: SyncNetworkError): void {
+  private fail(at: number, e: SyncNetworkError, tag?: string): void {
     if (e instanceof SyncAuthError) {
       this.retryMs = RETRY_MAX_MS;
       this.blockedUntil = at + this.retryMs;
-      if (!this.authNotified) { this.authNotified = true; this.options.onEvent?.({ kind: "auth" }); }
+      if (!this.authNotified) { this.authNotified = true; this.options.onEvent?.({ kind: "auth", tag: tag ?? this.pollTag }); }
       return;
     }
     this.backOff(at, e.message);
@@ -332,8 +352,11 @@ export class SyncWatcher {
   private async syncOne(w: Watched, at: number): Promise<boolean> {
     const file = w.binding.file;
     let result: SyncResult;
+    // (この 1 回の同期の資格情報。結果の出来事には、この世代を付ける)
+    const cred = this.creds();
+    const tag = cred.tag;
     try {
-      result = await syncOnce({ file, server: this.options.server, token: this.token(), fetch: this.options.fetch, now: () => new Date(this.wall()) });
+      result = await syncOnce({ file, server: this.options.server, token: cred.token, fetch: this.options.fetch, now: () => new Date(this.wall()) });
       // 自分の同期が処理した状態の世代番号を覚え直す (自分で進めた分を「別の実行が進めた」と数えて、同期を繰り返さないように)。
       // 値は、同期がロックの中で確かめたもの (結果に入っている)。ロックを外した後に読み直すと、その隙に別の実行が進めた分を「自分が処理した」と
       // 取り違えて、その実行の続き (結び直しなど) を見落とす (R33-01)
@@ -342,11 +365,11 @@ export class SyncWatcher {
       // (例外で終わった同期も、ロックの中で最後に確かめた世代番号を例外に添えてくる。無ければ変えず、次の一覧の取り直しに任せる)
       const generation = (e as { stateGeneration?: number }).stateGeneration;
       if (generation !== undefined) w.generation = generation;
-      if (e instanceof SyncNetworkError) { this.fail(at, e); return false; }
+      if (e instanceof SyncNetworkError) { this.fail(at, e, tag); return false; }
       // 状態が読めないなど: この計画は止めておき、ほかの計画は続ける
       w.halted = { hash: contentHash(file), head: w.head }; w.remoteAhead = false; w.firstChangeAt = w.lastChangeAt = null;
       const message = e instanceof Error ? e.message : String(e);
-      if (w.notified !== message) { w.notified = message; this.options.onEvent?.({ kind: "error", file, message }); }
+      if (w.notified !== message) { w.notified = message; this.options.onEvent?.({ kind: "error", file, message, tag }); }
       return true;
     }
     // ほかの同期・書き込みが動いている: 何も確かめられていないので、変更の記録は残したまま、次の tick でやり直す
@@ -364,15 +387,15 @@ export class SyncWatcher {
       // 止まっていた計画がそろったときは、送受信が無くても知らせる (止まったままではないことが分かるように)
       const resumed = w.halted !== null;
       w.halted = null; w.notified = null;
-      if (result.pulled || result.pushed || resumed) this.options.onEvent?.({ kind: "synced", file, pulled: result.pulled, pushed: result.pushed, revision: result.revision, localHash: result.localHash });
+      if (result.pulled || result.pushed || resumed) this.options.onEvent?.({ kind: "synced", file, pulled: result.pulled, pushed: result.pushed, revision: result.revision, localHash: result.localHash, tag });
       // (変更なしの成功は知らせないが、状態の確認には使えるように、別の出来事で伝える)
-      else this.options.onEvent?.({ kind: "checked", file, revision: result.revision, localHash: result.localHash });
+      else this.options.onEvent?.({ kind: "checked", file, revision: result.revision, localHash: result.localHash, tag });
       return true;
     }
     // 止まった: 同じ内容 (理由と、選ぶための印が同じ) は繰り返し知らせない。サーバーが進んで選択肢が変わったら、もう一度知らせる
     w.halted = { hash: result.localHash, head: w.head };
     const key = haltKey(result);
-    if (w.notified !== key) { w.notified = key; this.options.onEvent?.({ kind: "halted", file, result }); }
+    if (w.notified !== key) { w.notified = key; this.options.onEvent?.({ kind: "halted", file, result, tag }); }
     return true;
   }
 }
