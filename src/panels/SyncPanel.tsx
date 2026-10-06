@@ -161,6 +161,8 @@ export function RestoreDialog() {
   const done = pending.conflicts.every((c) => picks[c.id]);
   return (
     <div className="sync-panel restore-dialog" role="dialog" aria-label={t("退避した編集の取り込み")}>
+      {/* (エディタの段: 画面側は取り込み済みで、今の値はその結果。この段をやめても、画面側の取り込みは残る) */}
+      {pending.step === "editor" && <div className="sync-panel__line muted">{t("画面側の編集は取り込み済みです。「今の値」は、その結果です。")}</div>}
       <div className="sync-panel__line">{pending.step === "gui"
         ? t("退避した画面の編集と、今の中身で、同じ項目が違う値になっています。項目ごとに、どちらを採るかを選んでください。")
         : t("退避したエディタ側の編集と、今の中身で、同じ項目が違う値になっています。項目ごとに、どちらを採るかを選んでください。")}</div>
@@ -178,7 +180,7 @@ export function RestoreDialog() {
       {error && <div className="sync-panel__line sync-panel__problem">{error}</div>}
       <div className="sync-panel__choices">
         <button className="btn btn-sm" disabled={!done} onClick={() => { const message = apply(picks); setError(message); }}>{t("取り込む")}</button>
-        <button className="btn btn-ghost btn-sm" onClick={() => { cancel(); setPicks({}); setError(null); }}>{t("やめる")}</button>
+        <button className="btn btn-ghost btn-sm" onClick={() => { cancel(); setPicks({}); setError(null); }}>{pending.step === "editor" ? t("この段をやめる") : t("やめる")}</button>
       </div>
     </div>
   );
@@ -196,7 +198,9 @@ function RestoreEntry() {
   const source = useProjectStore((s) => s.source);
   const behind = useProjectStore((s) => s.editorBehind);
   const loadEvacuated = useProjectStore((s) => s.loadEvacuated);
-  if (source !== "vscode" || behind) return null;
+  const pending = useProjectStore((s) => s.restorePending);
+  // (取り込みの確認の途中は、新しい退避ファイルを読ませない。R43-02)
+  if (source !== "vscode" || behind || pending) return null;
   return <div className="sync-panel__row"><button className="btn btn-ghost btn-sm" onClick={loadEvacuated}>{t("退避した編集を読み込む")}</button></div>;
 }
 

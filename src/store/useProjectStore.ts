@@ -330,23 +330,45 @@ export const useProjectStore = create<State>((set, get) => {
    * 取り込みの 1 段を進める: 競合が無ければそのまま取り込み (次の段があれば続ける)、あれば欄を出して選択を待つ
    * Output: { applied = この呼び出しで取り込みが終わったか, conflicts = 欄に出した競合の数 } / { error }
    */
-  const restoreStep = (recovery: Recovery, step: RestoreStep): { applied: boolean; conflicts: number } | { error: string } => {
+  /** 段の進み具合: applied = 全部の段が終わった / conflicts = 欄に出した競合の数 / done = この呼び出しで取り込めた段 / error (と、その段) */
+  type StepResult = { applied: boolean; conflicts: number; done: RestoreStep[] } | { error: string; step?: RestoreStep; done: RestoreStep[] };
+  const restoreStep = (recovery: Recovery, step: RestoreStep): StepResult => {
     const current = get().project;
-    if (!current) return { error: t("取り込むものがありません") };
+    if (!current) return { error: t("取り込むものがありません"), done: [] };
     const prepared = prepareRestore(recovery, current, step);
     if ("error" in prepared) {
-      if (prepared.error === "no-step") return { applied: true, conflicts: 0 };
-      return { error: prepared.error === "different-plan" ? t("別の計画の退避ファイルです。取り込めません") : prepared.error };
+      if (prepared.error === "no-step") return { applied: true, conflicts: 0, done: [] };
+      return { error: prepared.error === "different-plan" ? t("別の計画の退避ファイルです。取り込めません") : prepared.error, step, done: [] };
     }
     if (prepared.conflicts.length > 0) {
       // (欄を作ったときの今の中身。選ぶ間に変わったら、古い表示の選択は使わない。R41-01)
       set({ restorePending: { recovery, step, conflicts: prepared.conflicts, basis: toJSON(current) } });
-      return { applied: false, conflicts: prepared.conflicts.length };
+      return { applied: false, conflicts: prepared.conflicts.length, done: [] };
     }
     const message = commitRestore(recovery, step, {});
-    if (message) return { error: message };
-    if (step === "gui" && recovery.editor) return restoreStep(recovery, "editor");
-    return { applied: true, conflicts: 0 };
+    if (message) return { error: message, step, done: [] };
+    if (step === "gui" && recovery.editor) { const next = restoreStep(recovery, "editor"); return { ...next, done: [step, ...next.done] }; }
+    return { applied: true, conflicts: 0, done: [step] };
+  };
+  /**
+   * 取り込みの結果を、欄を閉じても見える案内にまとめる (R43-01): 全部終わった / 次の段の確認へ / 一部だけ取り込めた / 取り込めなかった
+   * Input : result = 段を進めた結果, before = この前までに取り込んだ段
+   * Output: restoreEvacuated の戻り値の形
+   */
+  const finishRestore = (result: StepResult, before: RestoreStep[]): { applied: boolean; conflicts: number } | { error: string } => {
+    const done = [...before, ...result.done];
+    const names = (steps: RestoreStep[]) => steps.map((x) => x === "gui" ? t("画面側") : t("エディタ側")).join(t("と"));
+    if ("error" in result) {
+      // 一部の段は取り込めた: 成功の案内だけを残さず、どこまで取り込めたかを、続けて見える帯に出す
+      if (done.length > 0) {
+        set({ hostNotice: null, saveError: t("{done}の編集は取り込みました。{failed}の編集は取り込めませんでした: {reason}。Save の前に中身を確かめてください (取り消しで戻せます)", { done: names(done), failed: names([result.step ?? "editor"]), reason: result.error }) });
+        return { applied: false, conflicts: 0 };
+      }
+      return { error: result.error };
+    }
+    if (result.applied) set({ hostNotice: t("{done}の編集を取り込みました。自動保存を止めています。確かめてから Save で保存してください (取り消すこともできます)", { done: names(done) }) });
+    else if (done.length > 0) set({ hostNotice: t("{done}の編集は取り込みました。次に、エディタ側の編集を確かめてください", { done: names(done) }) });
+    return { applied: result.applied, conflicts: result.conflicts };
   };
   /**
    * 取り込みの 1 段を反映する (取り込む前の画面を取り消しの履歴に積む。自動保存を一時停止する)
@@ -364,8 +386,7 @@ export const useProjectStore = create<State>((set, get) => {
     // 結果は未保存 (保存の基準は今の中身のまま)。自動では保存しない: 予約した保存を取り消し、進行中の保存の続きも止める。Save で送る (R40-03 / R41-03)
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
     holdSave = true;
-    set({ project: result.project, past: [...get().past.slice(-HISTORY_LIMIT + 1), current], future: [], saveState: "unsaved", saveHeld: true, evacuated: null, saveError: null
-    , hostNotice: t("退避した編集を取り込みました。自動保存を止めています。確かめてから Save で保存してください (取り消すこともできます)") });
+    set({ project: result.project, past: [...get().past.slice(-HISTORY_LIMIT + 1), current], future: [], saveState: "unsaved", saveHeld: true, evacuated: null, saveError: null });
     return null;
   };
   const scheduleSave = () => {
@@ -446,8 +467,10 @@ export const useProjectStore = create<State>((set, get) => {
       const recovery = readRecovery(value);
       if (!current || !recovery) return { error: t("退避したファイルとして読めません") };
       if (get().editorBehind) return { error: t("先にファイルを閉じて開き直し、最新の中身にしてから読み込んでください") };
+      // 別の取り込みを確認している間は、新しい退避ファイルを読まない (欄と取り込む対象を取り違えない。R43-02)
+      if (get().restorePending) return { error: t("取り込みの確認の途中です。先に、表示中の欄で選ぶか、やめてください") };
       // 画面の退避から始める (エディタの退避があれば、その後で)
-      return restoreStep(recovery, "gui");
+      return finishRestore(restoreStep(recovery, "gui"), []);
     }
   , applyRestorePicks: (picks) => {
       const current = get().project;
@@ -461,13 +484,20 @@ export const useProjectStore = create<State>((set, get) => {
         return t("表示した後で、今の中身が変わりました。今の値で選び直してください");
       }
       const message = commitRestore(pending.recovery, pending.step, picks);
+      // (この段の反映に失敗: 欄は残し、何も変えていない。欄の中にエラーを出す)
       if (message) return message;
       set({ restorePending: null });
-      // 画面の退避を取り込んだら、エディタの退避の段へ (競合があれば、また欄が出る)
-      if (pending.step === "gui" && pending.recovery.editor) { const next = restoreStep(pending.recovery, "editor"); if ("error" in next) return next.error; }
+      // 画面の退避を取り込んだら、エディタの退避の段へ (競合があれば、また欄が出る)。結果は、欄を閉じても見える案内に出す (R43-01)
+      const next = pending.step === "gui" && pending.recovery.editor ? restoreStep(pending.recovery, "editor") : { applied: true, conflicts: 0, done: [] as RestoreStep[] };
+      finishRestore(next, [pending.step]);
       return null;
     }
-  , cancelRestore: () => set({ restorePending: null })
+  , cancelRestore: () => {
+      const pending = get().restorePending;
+      set({ restorePending: null });
+      // エディタの段をやめた: 画面の段の取り込みは残っている (取り消しで戻せる) ことを伝える
+      if (pending?.step === "editor") set({ hostNotice: t("エディタ側の編集は取り込みませんでした。画面側の取り込みは残っています (取り消しで戻せます)。確かめてから Save で保存してください") });
+    }
   , acceptSyncStatus: (status) => {
       const current = get().syncStatus;
       // セッションが変わった (裏方が起動し直した) ら、通し番号は初期化して受け入れる

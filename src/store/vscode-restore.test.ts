@@ -106,4 +106,39 @@ describe("退避した編集の取り込み (VS Code の store)", () => {
     expect(store.getState().saveState).toBe("unsaved");
     expect(store.getState().project!.blocks[a].title).toBe("GUI");
   });
+
+  it("R43-01: 画面の段を選んで取り込んだ後、エディタの段が検査で失敗したら、どこまで取り込めたかを、欄を閉じても見える帯に出す", async () => {
+    const { L, a, b } = plans();
+    const now = updateBlock(fromJSON(L), a, { title: "CURRENT" }); now.blocks[b].parentId = a;   // 今: A の題名、B を A の子に
+    const G = toJSON(updateBlock(fromJSON(L), a, { title: "GUI" }));                            // 画面: A の題名
+    const e = fromJSON(L); e.blocks[a].parentId = b;                                            // エディタ: A を B の子に (今と合わせると循環)
+    const store = await openStore(toJSON(now));
+    const rec = { boxglowRecovery: 1, base: L, received: null, gui: { text: G }, editor: { text: toJSON(e), version: 3 } };
+    expect(store.getState().restoreEvacuated(rec)).toEqual({ applied: false, conflicts: 1 });
+    const pending = store.getState().restorePending!;
+    expect(pending.step).toBe("gui");
+    expect(store.getState().applyRestorePicks({ [pending.conflicts[0].id]: "saved" })).toBeNull();
+    expect(store.getState().restorePending).toBeNull();
+    expect(store.getState().project!.blocks[a].title).toBe("GUI");
+    expect(store.getState().saveError).toContain("取り込めませんでした");
+    expect(store.getState().saveError).toContain("画面側");
+    expect(store.getState().hostNotice).toBeNull();
+  });
+
+  it("R43-02: 取り込みの確認の途中は、別の退避ファイルを読まない (欄と取り込む対象を取り違えない)", async () => {
+    const { L, a, b } = plans();
+    const now = updateBlock(fromJSON(L), a, { title: "CURRENT" });
+    const store = await openStore(toJSON(now));
+    const X = toJSON(updateBlock(fromJSON(L), a, { title: "GUI" }));
+    expect(store.getState().restoreEvacuated(recovery(L, X))).toEqual({ applied: false, conflicts: 1 });
+    const Y = toJSON(updateBlock(fromJSON(L), b, { title: "NEW FILE B" }));
+    const second = store.getState().restoreEvacuated(recovery(L, Y));
+    expect("error" in second && second.error).toContain("確認の途中");
+    expect(store.getState().project!.blocks[b].title).toBe("B");
+    expect(store.getState().restorePending!.recovery.gui).toBe(X);
+    store.getState().cancelRestore();
+    // やめた後は読める
+    expect(store.getState().restoreEvacuated(recovery(L, Y))).toEqual({ applied: true, conflicts: 0 });
+    expect(store.getState().project!.blocks[b].title).toBe("NEW FILE B");
+  });
 });
