@@ -175,4 +175,10 @@ export const app: Record<string, string> = {
 , "取り込んだ結果が、計画として正しくなりません (親子の関係などが矛盾します)。画面は元のままです": "The result would not be a valid plan (for example, conflicting parent relations). The view is unchanged"
 , "退避した編集を取り込みました。保存すると送られます (取り消すこともできます)": "Restored the saved edits. They are sent after you save (you can undo)"
 , "表示した後で、今の中身が変わりました。今の値で選び直してください": "The current content changed after this was shown. Choose again with the current values"
+, "(消されている)": "(deleted)"
+, "退避した画面の編集と、今の中身で、同じ項目が違う値になっています。項目ごとに、どちらを採るかを選んでください。": "The saved view edits and the current content changed the same items differently. Choose which one to keep for each item."
+, "退避したエディタ側の編集と、今の中身で、同じ項目が違う値になっています。項目ごとに、どちらを採るかを選んでください。": "The saved editor edits and the current content changed the same items differently. Choose which one to keep for each item."
+, "退避した編集を取り込んだので、自動保存を止めています。確かめてから Save で保存してください": "Auto-save is paused because saved edits were restored. Check, then press Save"
+, "自動保存を一時停止中": "Auto-save paused"
+, "退避した編集を取り込みました。自動保存を止めています。確かめてから Save で保存してください (取り消すこともできます)": "Restored the saved edits. Auto-save is paused; check, then press Save (you can undo)"
 };

@@ -150,24 +150,27 @@ export function RestoreDialog() {
   const pending = useProjectStore((s) => s.restorePending);
   const apply = useProjectStore((s) => s.applyRestorePicks);
   const cancel = useProjectStore((s) => s.cancelRestore);
-  const [picks, setPicks] = useState<Record<string, "current" | "gui" | "editor">>({});
+  const [picks, setPicks] = useState<Record<string, "current" | "saved">>({});
   const [error, setError] = useState<string | null>(null);
   // (欄の中身が作り直されたら、前の選択は捨てる。表示していない値を、古い選択で採らない)
-  useEffect(() => { setPicks({}); }, [pending?.basis, pending?.conflicts]);
+  useEffect(() => { setPicks({}); }, [pending?.basis, pending?.conflicts, pending?.step]);
   if (!pending) return null;
-  const show = (v: unknown) => { const text = v === undefined ? t("(無し)") : typeof v === "string" ? v : JSON.stringify(v); return text.length > 80 ? text.slice(0, 80) + "…" : text; };
-  const labels: Record<"current" | "gui" | "editor", string> = { current: t("今の値"), gui: t("退避した画面の値"), editor: t("退避したエディタの値") };
+  const show = (v: unknown) => { const text = v === undefined ? t("(消されている)") : typeof v === "string" ? v : JSON.stringify(v); return text.length > 80 ? text.slice(0, 80) + "…" : text; };
+  // (段ごとに、どの退避の版と比べているかを示す。今の値 = この段の前までを取り込んだ、今の画面の値)
+  const savedLabel = pending.step === "gui" ? t("退避した画面の値") : t("退避したエディタの値");
   const done = pending.conflicts.every((c) => picks[c.id]);
   return (
     <div className="sync-panel restore-dialog" role="dialog" aria-label={t("退避した編集の取り込み")}>
-      <div className="sync-panel__line">{t("退避した編集と、今の中身で、同じ項目が違う値になっています。項目ごとに、どの値を採るかを選んでください。")}</div>
+      <div className="sync-panel__line">{pending.step === "gui"
+        ? t("退避した画面の編集と、今の中身で、同じ項目が違う値になっています。項目ごとに、どちらを採るかを選んでください。")
+        : t("退避したエディタ側の編集と、今の中身で、同じ項目が違う値になっています。項目ごとに、どちらを採るかを選んでください。")}</div>
       {pending.conflicts.map((c) => (
         <div key={c.id} className="sync-panel__halt">
           <div className="sync-panel__id">{c.path}</div>
-          {(["current", "gui", "editor"] as const).filter((k) => k in c).map((k) => (
+          {(["current", "saved"] as const).map((k) => (
             <label key={k} className="sync-panel__toggle">
               <input type="radio" name={c.id} checked={picks[c.id] === k} onChange={() => setPicks({ ...picks, [c.id]: k })} />
-              <span>{labels[k]}: {show(c[k])}</span>
+              <span>{k === "current" ? t("今の値") : savedLabel}: {show(k === "current" ? c.current : c.saved)}</span>
             </label>
           ))}
         </div>
@@ -179,6 +182,13 @@ export function RestoreDialog() {
       </div>
     </div>
   );
+}
+
+/** 自動保存を止めているときの短い印 (退避した編集を取り込んだ後。Save で外れる) */
+export function SaveHeldChip() {
+  const held = useProjectStore((s) => s.saveHeld);
+  if (!held) return null;
+  return <span className="save-chip unsaved" title={t("退避した編集を取り込んだので、自動保存を止めています。確かめてから Save で保存してください")}>{t("自動保存を一時停止中")}</span>;
 }
 
 /** 退避した編集を、今開いている最新の中身に取り込む入口 (エディタ待ちの間は出さない: 先に開き直す) */

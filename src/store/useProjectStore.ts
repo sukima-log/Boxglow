@@ -14,7 +14,7 @@ export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile } from "../lib/localfile";
 import { mergeProjects } from "../model/merge";
-import { applyRestore, editorCaughtUp, prepareRestore, readRecovery, type Recovery, type RestoreConflict, type RestorePicks } from "../sync/recovery";
+import { applyRestore, editorCaughtUp, prepareRestore, readRecovery, type Recovery, type RestoreConflict, type RestorePicks, type RestoreStep } from "../sync/recovery";
 import { buildSampleProject } from "../model/sample";
 import exampleText from "../../examples/logic-daw/boxglow.json?raw";
 import type { Project } from "../model/types";
@@ -96,7 +96,9 @@ interface State {
    */
   restoreEvacuated: (recovery: unknown) => { applied: boolean; conflicts: number } | { error: string };
   /** 取り込みの途中 (競合があり、利用者の選択を待っている)。選ぶまで画面にも保存にも反映しない */
-  restorePending: { recovery: Recovery; conflicts: RestoreConflict[]; basis: string } | null;
+  restorePending: { recovery: Recovery; step: RestoreStep; conflicts: RestoreConflict[]; basis: string } | null;
+  /** 自動保存を一時停止している (退避した編集を取り込んだ後。Save を押すか、開き直すまで。R41-03 / レビュー 42 の回答 1) */
+  saveHeld: boolean;
   /** 競合ごとの選択で取り込む (取り消しの履歴に、取り込む前の画面を積む)。Output: エラーの文 (成功なら null) */
   applyRestorePicks: (picks: RestorePicks) => string | null;
   /** 取り込みをやめる (画面は元のまま) */
@@ -209,8 +211,6 @@ let fileLastModified = 0;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 /** ローカルサーバ連携の状態: 自分が最後に書いた中身 (サーバからの変更通知と区別する) と、通知の接続 */
 let serveEvents: EventSource | null = null;
-/** 競合の無い取り込みで、applyRestorePicks に渡す退避の中身 (restoreEvacuated が直前に置く) */
-let lastRecovery: Recovery | null = null;
 /** 退避の応答を待つ (requestId → 受け取る関数) */
 const evacuateWaiters = new Map<string, (result: { hash: string; path: string; editorVersion: number | null } | null, detail: string) => void>();
 /** 文字列の SHA-256 (16 進) */
@@ -326,6 +326,48 @@ export const useProjectStore = create<State>((set, get) => {
       if (generation === epoch) { inFlight = false; inFlightText = ""; if (get().saveState === "saved") void refreshExternal?.(); }
     }
   };
+  /**
+   * 取り込みの 1 段を進める: 競合が無ければそのまま取り込み (次の段があれば続ける)、あれば欄を出して選択を待つ
+   * Output: { applied = この呼び出しで取り込みが終わったか, conflicts = 欄に出した競合の数 } / { error }
+   */
+  const restoreStep = (recovery: Recovery, step: RestoreStep): { applied: boolean; conflicts: number } | { error: string } => {
+    const current = get().project;
+    if (!current) return { error: t("取り込むものがありません") };
+    const prepared = prepareRestore(recovery, current, step);
+    if ("error" in prepared) {
+      if (prepared.error === "no-step") return { applied: true, conflicts: 0 };
+      return { error: prepared.error === "different-plan" ? t("別の計画の退避ファイルです。取り込めません") : prepared.error };
+    }
+    if (prepared.conflicts.length > 0) {
+      // (欄を作ったときの今の中身。選ぶ間に変わったら、古い表示の選択は使わない。R41-01)
+      set({ restorePending: { recovery, step, conflicts: prepared.conflicts, basis: toJSON(current) } });
+      return { applied: false, conflicts: prepared.conflicts.length };
+    }
+    const message = commitRestore(recovery, step, {});
+    if (message) return { error: message };
+    if (step === "gui" && recovery.editor) return restoreStep(recovery, "editor");
+    return { applied: true, conflicts: 0 };
+  };
+  /**
+   * 取り込みの 1 段を反映する (取り込む前の画面を取り消しの履歴に積む。自動保存を一時停止する)
+   * Output: エラーの文 (成功なら null。失敗のときは何も変えない)
+   */
+  const commitRestore = (recovery: Recovery, step: RestoreStep, picks: RestorePicks): string | null => {
+    const current = get().project;
+    if (!current) return t("取り込むものがありません");
+    const result = applyRestore(recovery, current, step, picks);
+    if ("error" in result) {
+      return result.error === "unresolved" ? t("全部の項目について、どの値を採るかを選んでください")
+        : result.error.startsWith("invalid:") ? t("取り込んだ結果が、計画として正しくなりません (親子の関係などが矛盾します)。画面は元のままです")
+        : result.error;
+    }
+    // 結果は未保存 (保存の基準は今の中身のまま)。自動では保存しない: 予約した保存を取り消し、進行中の保存の続きも止める。Save で送る (R40-03 / R41-03)
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    holdSave = true;
+    set({ project: result.project, past: [...get().past.slice(-HISTORY_LIMIT + 1), current], future: [], saveState: "unsaved", saveHeld: true, evacuated: null, saveError: null
+    , hostNotice: t("退避した編集を取り込みました。自動保存を止めています。確かめてから Save で保存してください (取り消すこともできます)") });
+    return null;
+  };
   const scheduleSave = () => {
     const { project, ephemeral, readonly } = get();
     if (!project || ephemeral || readonly) return;
@@ -336,7 +378,7 @@ export const useProjectStore = create<State>((set, get) => {
   };
   const canLeave = () => !["unsaved", "saving"].includes(get().saveState) || confirm(t("未保存の編集があります。必要なら先に JSON を書き出してください。編集を破棄して移動しますか？"));
   const stopWatching = () => {
-    epoch++; holdSave = false; inFlight = false; inFlightText = ""; refreshExternal = null; reloadNow = null; vscodeReloadWaiter = null; vscodeEmpty = null;
+    epoch++; holdSave = false; set({ saveHeld: false }); inFlight = false; inFlightText = ""; refreshExternal = null; reloadNow = null; vscodeReloadWaiter = null; vscodeEmpty = null;
     if (saveTimer) clearTimeout(saveTimer); saveTimer = null;
     if (watchTimer) clearInterval(watchTimer); watchTimer = null; fileHandle = null;
     serveEvents?.close(); serveEvents = null;
@@ -375,7 +417,7 @@ export const useProjectStore = create<State>((set, get) => {
       const keepSel = scope && selection.blockId && !isInScope(project, scope, selection.blockId) ? { ...selection, blockId: null } : selection;
       set({ viewScope: scope, selection: keepSel });
     }
-  , saveNow: () => { if (saveTimer) clearTimeout(saveTimer); saveTimer = null; holdSave = false; void persist(true); }
+  , saveNow: () => { if (saveTimer) clearTimeout(saveTimer); saveTimer = null; holdSave = false; set({ saveHeld: false }); void persist(true); }
   , reloading: false
   , syncStatus: null
   , editorBehind: null
@@ -398,49 +440,31 @@ export const useProjectStore = create<State>((set, get) => {
     }
   , loadEvacuated: () => { vscodeApi?.postMessage({ type: "load-evacuated" }); }
   , restorePending: null
+  , saveHeld: false
   , restoreEvacuated: (value) => {
       const current = get().project;
       const recovery = readRecovery(value);
       if (!current || !recovery) return { error: t("退避したファイルとして読めません") };
       if (get().editorBehind) return { error: t("先にファイルを閉じて開き直し、最新の中身にしてから読み込んでください") };
-      const prepared = prepareRestore(recovery, current);
-      if ("error" in prepared) return { error: prepared.error === "different-plan" ? t("別の計画の退避ファイルです。取り込めません") : prepared.error };
-      lastRecovery = recovery;
-      // 競合が無ければ、そのまま取り込む。あれば、利用者が選ぶまで何も変えない (R40-03)
-      if (prepared.conflicts.length === 0) {
-        const message = get().applyRestorePicks({});
-        if (message) { set({ restorePending: null }); return { error: message }; }
-        return { applied: true, conflicts: 0 };
-      }
-      // (欄を作ったときの今の中身。選ぶ間に変わったら、古い表示の選択は使わない。R41-01)
-      set({ restorePending: { recovery, conflicts: prepared.conflicts, basis: toJSON(current) } });
-      return { applied: false, conflicts: prepared.conflicts.length };
+      // 画面の退避から始める (エディタの退避があれば、その後で)
+      return restoreStep(recovery, "gui");
     }
   , applyRestorePicks: (picks) => {
       const current = get().project;
       const pending = get().restorePending;
-      const recovery = pending?.recovery ?? null;
-      // (競合が無い取り込みは、restoreEvacuated から直接呼ばれる。そのときの退避の中身は、呼ぶ直前に置く)
-      const source = recovery ?? lastRecovery;
-      if (!current || !source) return t("取り込むものがありません");
+      if (!current || !pending) return t("取り込むものがありません");
       // 欄を作った後で、今の中身が変わっていた (外からの更新・画面の編集): 今の中身から競合を作り直し、選び直してもらう (R41-01)
-      if (pending && toJSON(current) !== pending.basis) {
-        const again = prepareRestore(source, current);
+      if (toJSON(current) !== pending.basis) {
+        const again = prepareRestore(pending.recovery, current, pending.step);
         if ("error" in again) { set({ restorePending: null }); return again.error; }
-        set({ restorePending: { recovery: source, conflicts: again.conflicts, basis: toJSON(current) } });
+        set({ restorePending: { ...pending, conflicts: again.conflicts, basis: toJSON(current) } });
         return t("表示した後で、今の中身が変わりました。今の値で選び直してください");
       }
-      const result = applyRestore(source, current, picks);
-      if ("error" in result) {
-        return result.error === "unresolved" ? t("全部の項目について、どの値を採るかを選んでください")
-          : result.error.startsWith("invalid:") ? t("取り込んだ結果が、計画として正しくなりません (親子の関係などが矛盾します)。画面は元のままです")
-          : result.error;
-      }
-      // 取り込む前の画面を、取り消しの履歴に積む。結果は未保存 (保存の基準は今の中身のまま)。
-      // 自動では保存しない: 予約した保存を取り消し、進行中の保存の続きも止める。Save で送る (R40-03 / R41-03)
-      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-      holdSave = true;
-      set({ project: result.project, past: [...get().past.slice(-HISTORY_LIMIT + 1), current], future: [], saveState: "unsaved", evacuated: null, saveError: null, restorePending: null });
+      const message = commitRestore(pending.recovery, pending.step, picks);
+      if (message) return message;
+      set({ restorePending: null });
+      // 画面の退避を取り込んだら、エディタの退避の段へ (競合があれば、また欄が出る)
+      if (pending.step === "gui" && pending.recovery.editor) { const next = restoreStep(pending.recovery, "editor"); if ("error" in next) return next.error; }
       return null;
     }
   , cancelRestore: () => set({ restorePending: null })
@@ -783,7 +807,6 @@ export const useProjectStore = create<State>((set, get) => {
         if (msg.type === "restore-evacuated") {
           const result = get().restoreEvacuated(msg.recovery);
           if ("error" in result) set({ saveError: result.error });
-          else if (result.applied) set({ hostNotice: t("退避した編集を取り込みました。保存すると送られます (取り消すこともできます)") });
           return;
         }
         if (msg.type === "saved" || msg.type === "save-error") {

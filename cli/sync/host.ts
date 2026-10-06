@@ -260,7 +260,16 @@ export class SyncHost {
    * サインアウト: 進行中のサインインを無効にし、所有している常駐の同期を止めてから、保存済みの資格情報を失効・削除する。
    * 環境変数のトークンは対象にしない (残っていれば、状態にそう出る)
    */
-  async signOut(): Promise<void> {
+  signOut(): Promise<void> {
+    // 重ねて呼ばれたら、進行中のサインアウトの完了を待つだけ (停止の印は、そのサインアウトだけが外す。R42-01)
+    if (this.signingOut) return this.signingOut;
+    const run = this.signOutOnce().finally(() => { if (this.signingOut === run) this.signingOut = null; });
+    this.signingOut = run;
+    return run;
+  }
+  /** 進行中のサインアウト */
+  private signingOut: Promise<void> | null = null;
+  private async signOutOnce(): Promise<void> {
     // 停止・失効・資格情報の削除・結果の片付けまでを、1 つの排他的な期間にする (この間は、有効化・手動の操作・見張りの取り直しをしない。R41-04)
     this.stopping = true;
     try {

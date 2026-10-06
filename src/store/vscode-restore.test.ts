@@ -53,17 +53,17 @@ describe("退避した編集の取り込み (VS Code の store)", () => {
     const result = store.getState().restoreEvacuated(recovery(L, G));
     expect(result).toEqual({ applied: false, conflicts: 1 });
     const shown = store.getState().restorePending!;
-    expect(shown.conflicts[0]).toMatchObject({ current: "R1", gui: "GUI" });
+    expect(shown.conflicts[0]).toMatchObject({ current: "R1", saved: "GUI" });
     // 選ぶ間に、外からの更新で R2 になる
     const R2 = toJSON(updateBlock(fromJSON(L), a, { title: "R2" }));
     deliver({ type: "update", text: R2, version: ++version, name: "boxglow.json" });
     await wait(10);
     expect(store.getState().project!.blocks[a].title).toBe("R2");
-    const message = store.getState().applyRestorePicks({ [shown.conflicts[0].id]: "gui" });
+    const message = store.getState().applyRestorePicks({ [shown.conflicts[0].id]: "saved" });
     expect(message).toContain("選び直して");
     expect(store.getState().project!.blocks[a].title).toBe("R2");
     // 欄は今の値で作り直されている
-    expect(store.getState().restorePending!.conflicts[0]).toMatchObject({ current: "R2", gui: "GUI" });
+    expect(store.getState().restorePending!.conflicts[0]).toMatchObject({ current: "R2", saved: "GUI" });
     store.getState().cancelRestore();
   });
 

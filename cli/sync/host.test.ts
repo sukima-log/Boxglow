@@ -506,3 +506,41 @@ describe("レビュー 41 の回帰 (裏方)", () => {
     lock.unlock!();
   });
 });
+
+describe("レビュー 42 の回帰 (裏方)", () => {
+  it("R42-01: サインアウトを 2 回重ねても、先の失効が終わるまで同期は再開しない。2 回目は同じ完了を待つ", async () => {
+    const { file, a } = planFile("p1");
+    signedIn();
+    let held: (() => void) | null = null;
+    let hold = false;
+    const fetchFn = (async (...args: Parameters<typeof fetch>) => {
+      if (hold && (args[1] as RequestInit | undefined)?.method === "DELETE") { hold = false; await new Promise<void>((r) => { held = r; }); }
+      return fetch(...args);
+    }) as typeof fetch;
+    const { host } = make({ fetch: fetchFn });
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    hold = true;
+    let firstDone = false;
+    const first = host.act(file, { kind: "signOut" }).then(() => { firstDone = true; });
+    for (let i = 0; i < 200 && held === null; i++) await new Promise((r) => setTimeout(r, 5));
+    let secondDone = false;
+    const second = host.act(file, { kind: "signOut" }).then(() => { secondDone = true; });
+    await new Promise((r) => setTimeout(r, 30));
+    expect([firstDone, secondDone]).toEqual([false, false]);
+    edit(file, (p) => updateBlock(p, a, { title: "サインアウト中の編集" }));
+    const puts = server.puts;
+    await host.act(file, { kind: "enable" });
+    void host.act(file, { kind: "syncNow" });
+    await advance(host, 3000);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(server.puts).toBe(puts);
+    expect(host.status(file).owner).not.toBe("self");
+    (held as unknown as () => void)();
+    await first; await second;
+    expect(host.status(file)).toMatchObject({ state: "signed-out", owner: "none", file: { enabled: false } });
+    const lock = lockWatch(server.url);
+    expect(lock.unlock).not.toBeNull();
+    lock.unlock!();
+  });
+});
