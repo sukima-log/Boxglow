@@ -174,4 +174,5 @@ export const app: Record<string, string> = {
 , "全部の項目について、どの値を採るかを選んでください": "Choose a value for every item"
 , "取り込んだ結果が、計画として正しくなりません (親子の関係などが矛盾します)。画面は元のままです": "The result would not be a valid plan (for example, conflicting parent relations). The view is unchanged"
 , "退避した編集を取り込みました。保存すると送られます (取り消すこともできます)": "Restored the saved edits. They are sent after you save (you can undo)"
+, "表示した後で、今の中身が変わりました。今の値で選び直してください": "The current content changed after this was shown. Choose again with the current values"
 };

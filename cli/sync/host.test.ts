@@ -473,3 +473,36 @@ describe("レビュー 40 の回帰 (裏方)", () => {
     await host.stop();
   });
 });
+
+describe("レビュー 41 の回帰 (裏方)", () => {
+  it("R41-04: サインアウトの失効の要求を待つ間に、有効化・今すぐ同期を送っても、新しい同期は始まらない。終わった後に見張りは残らない", async () => {
+    const { file, a } = planFile("p1");
+    signedIn();
+    let held: (() => void) | null = null;
+    let hold = false;
+    const fetchFn = (async (...args: Parameters<typeof fetch>) => {
+      if (hold && (args[1] as RequestInit | undefined)?.method === "DELETE") { hold = false; await new Promise<void>((r) => { held = r; }); }
+      return fetch(...args);
+    }) as typeof fetch;
+    const { host } = make({ fetch: fetchFn });
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    hold = true;
+    const signingOut = host.act(file, { kind: "signOut" });
+    for (let i = 0; i < 200 && held === null; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(held).not.toBeNull();
+    edit(file, (p) => updateBlock(p, a, { title: "サインアウト中の編集" }));
+    const puts = server.puts;
+    await host.act(file, { kind: "enable" });
+    await host.act(file, { kind: "syncNow" });
+    await advance(host, 3000);
+    expect(server.puts).toBe(puts);
+    expect(host.status(file).owner).not.toBe("self");
+    (held as unknown as () => void)();
+    await signingOut;
+    expect(host.status(file)).toMatchObject({ state: "signed-out", owner: "none", file: { enabled: false } });
+    const lock = lockWatch(server.url);
+    expect(lock.unlock).not.toBeNull();
+    lock.unlock!();
+  });
+});

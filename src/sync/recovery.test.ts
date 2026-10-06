@@ -54,6 +54,38 @@ describe("退避した編集の取り込み", () => {
     }
   });
 
+  it("R41-02: 今が基準のまま、画面とエディタだけが違う値にしたときも、今・画面・エディタの元の値を選び分けられる", () => {
+    const { L, a } = fixture();
+    const G = toJSON(updateBlock(fromJSON(L), a, { title: "GUI" }));
+    const E = toJSON(updateBlock(fromJSON(L), a, { title: "EDITOR" }));
+    const prepared = prepareRestore(rec(L, G, E), fromJSON(L));
+    if ("error" in prepared) throw new Error(prepared.error);
+    expect(prepared.conflicts).toEqual([expect.objectContaining({ current: "A", gui: "GUI", editor: "EDITOR" })]);
+    const id = prepared.conflicts[0].id;
+    for (const [pick, title] of [["current", "A"], ["gui", "GUI"], ["editor", "EDITOR"]] as const) {
+      const result = applyRestore(rec(L, G, E), fromJSON(L), { [id]: pick });
+      if ("error" in result) throw new Error(result.error);
+      expect(result.project.blocks[a].title).toBe(title);
+    }
+  });
+
+  it("R41-02: 削除と変更の競合も、選んだ版の通りになる (今は残し、画面で消し、エディタで変えた)", () => {
+    const { L, a } = fixture();
+    const G = toJSON(updateBlock(fromJSON(L), a, { description: "画面の説明" }));
+    const g = fromJSON(G); delete (g.blocks[a] as unknown as Record<string, unknown>).description;
+    const E = toJSON(updateBlock(fromJSON(L), a, { description: "エディタの説明" }));
+    const now = updateBlock(fromJSON(L), a, { description: "今の説明" });
+    const prepared = prepareRestore(rec(L, toJSON(g), E), now);
+    if ("error" in prepared) throw new Error(prepared.error);
+    const c = prepared.conflicts.find((x) => x.path.endsWith("description"))!;
+    expect(c).toMatchObject({ current: "今の説明", editor: "エディタの説明" });
+    for (const [pick, value] of [["current", "今の説明"], ["editor", "エディタの説明"]] as const) {
+      const result = applyRestore(rec(L, toJSON(g), E), now, Object.fromEntries(prepared.conflicts.map((x) => [x.id, x.id === c.id ? pick : "current"])));
+      if ("error" in result) throw new Error(result.error);
+      expect(result.project.blocks[a].description).toBe(value);
+    }
+  });
+
   it("R40-04: 個別には正しい親の変更どうしで循環ができる組み合わせは、取り込まない", () => {
     const { L, a, b } = fixture();
     const G = toJSON(updateBlock(fromJSON(L), a, {}));

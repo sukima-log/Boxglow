@@ -111,6 +111,8 @@ export class SyncHost {
   }
   /** この計画の同期を有効にする (所有権を取り、見張りを始める) */
   enable(file: string): void {
+    // 停止・サインアウトの途中と、停止の後は、新しい同期を始めない (R41-04)
+    if (this.stopping || this.stopped) { this.message = t("同期を止めています。終わってから、もう一度操作してください"); this.emit(); return; }
     const real = realFile(file);
     this.enabled.add(real);
     this.ensureWatcher();
@@ -127,7 +129,7 @@ export class SyncHost {
   private targets(): Set<string> { return new Set([...this.enabled].filter((f) => this.open.has(f))); }
   private applyTargets(): void {
     const files = this.targets();
-    if (files.size === 0) { void this.releaseWatcher(); return; }
+    if (files.size === 0 || this.stopping || this.stopped) { void this.releaseWatcher(); return; }
     // 停止の途中なら、停止が終わって所有権を手放してから、改めて取り直す (停止と再開を直列にする)
     if (this.releasing) { void this.releasing.then(() => this.applyTargets()); return; }
     this.ensureWatcher();
@@ -137,7 +139,7 @@ export class SyncHost {
   // ---------------------------------------------------------------- 常駐の同期の所有権
 
   private ensureWatcher(): void {
-    if (this.watcher || this.targets().size === 0) return;
+    if (this.watcher || this.targets().size === 0 || this.stopping || this.stopped) return;
     const lock = lockWatch(this.server);
     if (!lock.unlock) {
       // 別のプロセスが所有している (CLI の --watch か、別の裏方)。持ち主を判定できなければ、断定しない
@@ -203,7 +205,7 @@ export class SyncHost {
   /** 裏方を止める (プロセスの終了・最後の画面が閉じた後)。停止が終わってから解決する */
   async stop(): Promise<void> {
     if (this.signingIn) this.signingIn.cancelled = true;
-    this.stopping = true;
+    this.stopped = true;
     await this.releaseWatcher();
     // (見張りが無かった場合も、始めた手動の操作の終わりを待つ)
     await Promise.allSettled([...this.manual]);
@@ -259,23 +261,23 @@ export class SyncHost {
    * 環境変数のトークンは対象にしない (残っていれば、状態にそう出る)
    */
   async signOut(): Promise<void> {
-    this.cancelSignIn();
-    const targets = [...this.enabled];
-    this.enabled.clear();
-    // 常駐の同期と、始めた手動の操作が終わってから、資格情報を失効させる (R39-01 / R40-02)
+    // 停止・失効・資格情報の削除・結果の片付けまでを、1 つの排他的な期間にする (この間は、有効化・手動の操作・見張りの取り直しをしない。R41-04)
     this.stopping = true;
     try {
+      this.cancelSignIn();
+      this.enabled.clear();
+      // 常駐の同期と、始めた手動の操作が終わってから、資格情報を失効させる (R39-01 / R40-02)
       await this.releaseWatcher();
       await Promise.allSettled([...this.manual]);
-    } finally { this.stopping = false; }
-    const lines: string[] = [];
-    await runLogout({ server: this.server, out: (line) => lines.push(line), fetch: this.doFetch });
-    this.account = null;
-    this.results.clear();
-    this.message = lines.at(-1);
-    // (サインアウトの後も、有効にしていた計画の記憶は画面側 (拡張の設定) が持つ。ここでは、見張りを止めるだけ)
-    void targets;
-    this.emit();
+      const lines: string[] = [];
+      await runLogout({ server: this.server, out: (line) => lines.push(line), fetch: this.doFetch });
+      this.account = null;
+      this.results.clear();
+      this.message = lines.at(-1);
+    } finally {
+      this.stopping = false;
+      this.emit();
+    }
   }
   private message: string | undefined;
 
@@ -315,7 +317,7 @@ export class SyncHost {
   /** 1 回の同期をこの場で行う (結び付け・今すぐ同期・人の選択)。常駐の同期と同じロックで排他される */
   private syncFile(file: string, extra: Partial<Parameters<typeof syncOnce>[0]>): Promise<void> {
     // 停止の途中・停止の後は、新しい操作を始めない (R40-02)
-    if (this.stopping) { this.message = t("同期を止めています。終わってから、もう一度操作してください"); this.emit(); return Promise.resolve(); }
+    if (this.stopping || this.stopped) { this.message = t("同期を止めています。終わってから、もう一度操作してください"); this.emit(); return Promise.resolve(); }
     const op = this.syncFileNow(file, extra);
     // 手動の操作も、停止が待つ対象に入れる (停止の完了は、始めた操作が全部終わった後)
     this.manual.add(op);
@@ -337,8 +339,10 @@ export class SyncHost {
   }
   /** 始めた手動の操作 (結び付け・今すぐ同期・選択) */
   private readonly manual = new Set<Promise<void>>();
-  /** 停止の途中 (stop / signOut)。この間は新しい手動の操作を始めない */
+  /** 停止の途中 (signOut の全体)。この間は、新しい手動の操作も、見張りの取り直しもしない */
   private stopping = false;
+  /** 停止した (stop の後。この裏方では、もう同期を始めない) */
+  private stopped = false;
   /** 選択 ID で、人の選択を実行する。対象・状態の世代・資格情報の世代が、表示したときと違えば、何もしない */
   private async choose(choiceId: string, file: string | null): Promise<void> {
     const c = this.choices.get(choiceId);

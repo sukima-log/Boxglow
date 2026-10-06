@@ -8,7 +8,7 @@
  * 競合しない編集は自動で取り込む。競合する項目は、利用者が選ぶまで反映しない (R40-03)
  */
 import { fromJSON, toJSON } from "../model/graph";
-import { mergeProjects, type ConflictChoices } from "../model/merge";
+import { mergeProjects } from "../model/merge";
 import { validateProjectText } from "../model/validate-file";
 import type { Project } from "../model/types";
 
@@ -41,8 +41,28 @@ function parse(recovery: Recovery): { base: Project | null; gui: Project; editor
   return { base: recovery.base ? fromJSON(recovery.base) : null, gui: fromJSON(recovery.gui), editor: recovery.editor ? fromJSON(recovery.editor) : null };
 }
 
+/** 項目の場所 (segments) の値を読む (無ければ undefined) */
+function valueAt(project: Project, segments: string[]): unknown {
+  let v: unknown = project;
+  for (const k of segments) { if (v === null || typeof v !== "object") return undefined; v = (v as Record<string, unknown>)[k]; }
+  return v;
+}
+/** 項目の場所 (segments) に値を書く (undefined なら消す)。途中の入れ物が無ければ作る */
+function setAt(project: Project, segments: string[], value: unknown): void {
+  let o = project as unknown as Record<string, unknown>;
+  for (const k of segments.slice(0, -1)) {
+    if (o[k] === null || typeof o[k] !== "object") o[k] = {};
+    o = o[k] as Record<string, unknown>;
+  }
+  const last = segments[segments.length - 1];
+  if (value === undefined) delete o[last]; else o[last] = structuredClone(value);
+}
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
 /**
  * 取り込みの準備: 同じ計画か確かめ、競合を集める (何も変えない)
+ * 競合 = 今・退避した画面・退避したエディタのうち 2 つ以上が、基準から変えていて、値が食い違う項目。
+ * 候補の値は、それぞれの元の版から取る (2 段の統合の途中の結果を「今の値」として見せない。R41-02)
  * Input : recovery = 退避ファイルの中身, current = 今開いている最新の中身
  * Output: { conflicts } (空なら、そのまま取り込める) / { error } (読めない・別の計画の退避)
  */
@@ -51,23 +71,22 @@ export function prepareRestore(recovery: Recovery, current: Project): { conflict
   try { p = parse(recovery); } catch (e) { return { error: e instanceof Error ? e.message : String(e) }; }
   // 同じ計画の退避だけを取り込む (別の場所へ移した同じ計画は通る。パスでは比べない。R40-06)
   for (const other of [p.base, p.gui, p.editor]) if (other && other.id !== current.id) return { error: "different-plan" };
-  const first = mergeProjects(p.base, p.gui, current);
-  const conflicts = new Map<string, RestoreConflict>();
-  for (const c of first.conflicts) if (!c.automatic) conflicts.set(c.id, { id: c.id, path: c.path, gui: c.ours, current: c.theirs });
-  if (p.editor) {
-    const second = mergeProjects(p.base, p.editor, first.project);
-    for (const c of second.conflicts) {
-      if (c.automatic) continue;
-      const known = conflicts.get(c.id);
-      // (画面の退避と今の最新で競合していない項目は、統合した値 = 今の値として出す)
-      conflicts.set(c.id, known ? { ...known, editor: c.ours } : { id: c.id, path: c.path, current: c.theirs, editor: c.ours });
-    }
+  // 2 つずつ統合して、食い違う項目の場所を全部集める (今と画面・今とエディタ・画面とエディタ)
+  const places = new Map<string, { path: string; segments: string[] }>();
+  const collect = (ours: Project, theirs: Project) => { for (const c of mergeProjects(p.base, ours, theirs).conflicts) if (!c.automatic) places.set(c.id, { path: c.path, segments: c.segments }); };
+  collect(p.gui, current);
+  if (p.editor) { collect(p.editor, current); collect(p.editor, p.gui); }
+  const conflicts: RestoreConflict[] = [];
+  for (const [id, place] of places) {
+    const c: RestoreConflict = { id, path: place.path, current: valueAt(current, place.segments), gui: valueAt(p.gui, place.segments) };
+    if (p.editor) c.editor = valueAt(p.editor, place.segments);
+    conflicts.push(c);
   }
-  return { conflicts: [...conflicts.values()] };
+  return { conflicts };
 }
 
 /**
- * 取り込む: 競合ごとの選択で統合し、統合の結果が計画として正しいかを確かめる
+ * 取り込む: 競合しない編集は統合し、競合した項目は、選んだ版の元の値をその場所に書く (自動の採用に負けない)。結果が計画として正しいかを確かめる
  * Input : recovery, current, picks = 競合ごとの選択 (prepareRestore の全部の競合について必要)
  * Output: { project, merged } / { error } (選んでいない競合がある・統合の結果が正しくない。何も変えない)
  */
@@ -76,21 +95,27 @@ export function applyRestore(recovery: Recovery, current: Project, picks: Restor
   if ("error" in prepared) return prepared;
   if (prepared.conflicts.some((c) => !picks[c.id])) return { error: "unresolved" };
   const p = parse(recovery);
-  // 1 段目: 画面の退避 (ours) と今の最新 (theirs)。「今の値」を選んだ項目だけ theirs
-  const choices1: ConflictChoices = {};
-  for (const c of prepared.conflicts) choices1[c.id] = picks[c.id] === "current" ? "theirs" : "ours";
-  const first = mergeProjects(p.base, p.gui, current, choices1);
-  // 2 段目: エディタ側の退避 (ours) と 1 段目の結果 (theirs)。「エディタ側の値」を選んだ項目だけ ours
+  // 競合しない編集を統合する (画面の退避 → 今、エディタの退避 → その結果)
+  const first = mergeProjects(p.base, p.gui, current);
   let project = first.project, merged = first.merged;
-  if (p.editor) {
-    const choices2: ConflictChoices = {};
-    for (const c of prepared.conflicts) choices2[c.id] = picks[c.id] === "editor" ? "ours" : "theirs";
-    const second = mergeProjects(p.base, p.editor, first.project, choices2);
-    project = second.project; merged += second.merged;
+  if (p.editor) { const second = mergeProjects(p.base, p.editor, first.project); project = second.project; merged += second.merged; }
+  project = structuredClone(project);
+  // 競合した項目は、選んだ版の値を書く
+  const sources = { current, gui: p.gui, editor: p.editor ?? p.gui };
+  const places = new Map<string, string[]>();
+  const collect = (ours: Project, theirs: Project) => { for (const c of mergeProjects(p.base, ours, theirs).conflicts) if (!c.automatic) places.set(c.id, c.segments); };
+  collect(p.gui, current);
+  if (p.editor) { collect(p.editor, current); collect(p.editor, p.gui); }
+  for (const c of prepared.conflicts) {
+    const segments = places.get(c.id);
+    if (!segments) continue;
+    const chosen = valueAt(sources[picks[c.id]], segments);
+    if (!same(valueAt(project, segments), chosen)) setAt(project, segments, chosen);
   }
   // 統合の結果が計画として正しいか (個別には正しい編集どうしでも、親子の循環などができることがある。R40-04)
-  try { validateProjectText(toJSON(project)); } catch (e) { return { error: "invalid:" + (e instanceof Error ? e.message : String(e)) }; }
-  return { project, merged };
+  let text: string;
+  try { text = toJSON(project); validateProjectText(text); } catch (e) { return { error: "invalid:" + (e instanceof Error ? e.message : String(e)) }; }
+  return { project: fromJSON(text), merged };
 }
 
 /**

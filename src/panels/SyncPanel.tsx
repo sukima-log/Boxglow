@@ -152,6 +152,8 @@ export function RestoreDialog() {
   const cancel = useProjectStore((s) => s.cancelRestore);
   const [picks, setPicks] = useState<Record<string, "current" | "gui" | "editor">>({});
   const [error, setError] = useState<string | null>(null);
+  // (欄の中身が作り直されたら、前の選択は捨てる。表示していない値を、古い選択で採らない)
+  useEffect(() => { setPicks({}); }, [pending?.basis, pending?.conflicts]);
   if (!pending) return null;
   const show = (v: unknown) => { const text = v === undefined ? t("(無し)") : typeof v === "string" ? v : JSON.stringify(v); return text.length > 80 ? text.slice(0, 80) + "…" : text; };
   const labels: Record<"current" | "gui" | "editor", string> = { current: t("今の値"), gui: t("退避した画面の値"), editor: t("退避したエディタの値") };
@@ -172,7 +174,7 @@ export function RestoreDialog() {
       ))}
       {error && <div className="sync-panel__line sync-panel__problem">{error}</div>}
       <div className="sync-panel__choices">
-        <button className="btn btn-sm" disabled={!done} onClick={() => { const message = apply(picks); setError(message); if (!message) setPicks({}); }}>{t("取り込む")}</button>
+        <button className="btn btn-sm" disabled={!done} onClick={() => { const message = apply(picks); setError(message); }}>{t("取り込む")}</button>
         <button className="btn btn-ghost btn-sm" onClick={() => { cancel(); setPicks({}); setError(null); }}>{t("やめる")}</button>
       </div>
     </div>
