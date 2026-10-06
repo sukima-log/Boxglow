@@ -21,8 +21,7 @@ import { bindingsOf, hashOf, SyncStateUnreadable } from "./state-store";
 import { resolveToken } from "./credentials";
 import { authHint } from "./login";
 import { bindingsFor, lockWatch, SyncWatcher, type WatchEvent } from "./watch";
-import type { Halt, RecoveryOutcome } from "../../src/sync/engine";
-import type { ClientHalt } from "./client";
+import type { RecoveryOutcome } from "../../src/sync/engine";
 
 /** sync コマンドの引数 (main.ts が解釈したオプションから作る) */
 export interface SyncCommandOptions {
@@ -111,34 +110,8 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
   return 2;
 }
 
-/** 止まったときの表示の 1 項目: 文章か、人が選べる操作 (CLI のコマンド / 画面のボタン) */
-export type HaltItem =
-  | { kind: "text"; text: string }
-  | { kind: "choice"; id: string; label: string; command: string; action: SyncAction };
-
-/** 人が選べる操作 (CLI の引数と 1 対 1。印は CLI と同じ値なので、画面で選んでも CLI で打っても同じ経路) */
-export type SyncAction =
-  | { kind: "resolve"; token: string; prefer: "local" | "remote" }
-  | { kind: "link"; token: string; prefer: "local" | "remote" }
-  | { kind: "relink"; token: string; prefer?: "local" | "remote" }
-  | { kind: "recover"; token: string; applied: boolean }
-  | { kind: "adopt"; approval: string }
-  | { kind: "restore"; approval: string }
-  | { kind: "account"; account: string };
-
-/**
- * 止まったときの表示の構造 (CLI の文字列と、画面の表示の両方を、ここから作る)
- *   target = 表示したときの対象 (初回の選択では同期の状態が無いので、ここに持つ)
- *   fix    = 選べる操作が無いときに、直す場所: local-file (手元のファイル) / sync-state (同期の状態のフォルダ) / server-content (サーバーの中身) /
- *            credentials (資格情報) / rerun (もう一度実行する) / none (何もできない。待つ)
- */
-export interface HaltView {
-  target: { file: string; server: string; remoteId: string };
-  reason: Halt["reason"] | ClientHalt["reason"];
-  done: { pulled: number; pushed: number; edited: number; backup?: string };
-  items: HaltItem[];
-  fix: "local-file" | "sync-state" | "server-content" | "credentials" | "rerun" | "none";
-}
+import type { HaltItem, HaltView, SyncAction } from "../../src/sync/status";
+export type { HaltItem, HaltView, SyncAction };
 
 /**
  * 止まったときの表示: 理由と、次にできること (1 回の同期と、常時の同期の両方から使う)

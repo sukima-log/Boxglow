@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Experimental, not announced yet: sync from the UI, first part. `boxglow serve --sync [--server <URL>]` runs a sync host next to the local server: the top bar shows a one-word sync chip (Synced / Unsent / Syncing / Action needed / Problem / Offline / Paused / Other process / Off), and its panel signs in with GitHub (device code shown in the panel), turns syncing on or off for the open plan, puts the plan on the server, syncs now, and offers the same choices as the CLI when sync stops (conflicts, first link, relink, recovery, protected deletions, account confirmation). Only the plan that is open and switched on is watched; a `boxglow sync --watch` that already owns the server is shown as "Other process". Tokens never appear in the UI state. The VS Code extension and the server-side Google sign-in are not wired yet.
 - Experimental sync, not announced yet: `boxglow sync --relink <token> [--prefer local|remote]`. When the server's history changed (a restore from backup), sync used to stop with no way to continue in the same folder. It now shows how the plan on the server and the local plan differ and lets you keep one of them; the previous state (local plan, sync records, any unfinished operation) is saved under the binding's `relinks/` folder first. Nothing is merged automatically from the old base, and an unfinished push from before the restore is never sent again. While a relink is in progress the local sync state uses format version 2, so 0.5.2 and earlier stop on it instead of treating it as a first link.
 
 ## 0.5.2 (2026-10-05)

@@ -17,6 +17,7 @@ import { mergeProjects } from "../model/merge";
 import { buildSampleProject } from "../model/sample";
 import exampleText from "../../examples/logic-daw/boxglow.json?raw";
 import type { Project } from "../model/types";
+import type { HostAction, SyncStatus } from "../sync/status";
 import { deleteProject, listProjects, loadProject, saveProject, type ProjectMeta } from "../lib/storage";
 import { t } from "../i18n"; // 画面に出す文言 (toast など) の言語切替
 
@@ -69,6 +70,15 @@ interface State {
   reload: () => Promise<void>;
   /** 手動の更新の最中か (ボタンを押せなくする) */
   reloading: boolean;
+  /**
+   * 画面からの同期の状態 (boxglow serve --sync / VS Code の拡張が裏方から流す)。無ければ、同期の表示は出さない。
+   * 画面は表示と操作の送信だけを行う (判断・通信・資格情報は裏方)
+   */
+  syncStatus: SyncStatus | null;
+  /** 同期の操作を裏方へ送る (serve は POST /api/sync、VS Code は postMessage)。応答の状態で syncStatus を更新する */
+  syncAct: (action: HostAction) => Promise<void>;
+  /** 裏方から届いた状態を受ける (古いセッションや古い通し番号の状態で、新しい状態を上書きしない) */
+  acceptSyncStatus: (status: SyncStatus) => void;
   peerVersion: PeerVersion | null;
   saveError: string | null;
   /** VS Code の中で、保存できない理由 (拡張がファイルを直接読み書きできない窓など)。あれば閲覧専用にして、この文を帯に出す */
@@ -318,6 +328,24 @@ export const useProjectStore = create<State>((set, get) => {
     }
   , saveNow: () => { if (saveTimer) clearTimeout(saveTimer); saveTimer = null; void persist(); }
   , reloading: false
+  , syncStatus: null
+  , acceptSyncStatus: (status) => {
+      const current = get().syncStatus;
+      // セッションが変わった (裏方が起動し直した) ら、通し番号は初期化して受け入れる
+      if (current && current.session === status.session && status.seq < current.seq) return;
+      set({ syncStatus: status });
+    }
+  , syncAct: async (action) => {
+      const { source } = get();
+      if (source === "serve") {
+        try {
+          const response = await fetch(serveApi("api/sync"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(action) });
+          if (response.ok) get().acceptSyncStatus(await response.json() as SyncStatus);
+        } catch { /* 通信の失敗は、次の状態の通知で分かる */ }
+      } else if (source === "vscode") {
+        vscodeApi?.postMessage({ type: "sync-action", action });
+      }
+    }
   , reload: async () => {
       // 計画を開いていない・すでに読み直している最中なら、何もしない
       if (!reloadNow || get().reloading) return;
@@ -614,6 +642,8 @@ export const useProjectStore = create<State>((set, get) => {
       serveEvents = new EventSource(serveApi("api/events"));
       serveEvents.addEventListener("change", () => { void reload(); });
       serveEvents.addEventListener("hello", () => { void reload(); });
+      // 画面からの同期の状態 (--sync で起動したときだけ流れる)
+      serveEvents.addEventListener("sync", (e) => { try { get().acceptSyncStatus(JSON.parse((e as MessageEvent).data) as SyncStatus); } catch { /* 読めない通知は無視 */ } });
       return true;
     }
 
@@ -639,6 +669,8 @@ export const useProjectStore = create<State>((set, get) => {
           }
           return;
         }
+        // 画面からの同期の状態 (拡張の裏方から)
+        if (msg.type === "sync-status" && msg.status && typeof msg.status === "object") { get().acceptSyncStatus(msg.status as SyncStatus); return; }
         if ((msg.type !== "load" && msg.type !== "update") || typeof msg.text !== "string") return;
         // 手動の更新で頼んだ読み直しの応答が届いた (この後の処理で、中身が画面に反映される)
         const waiter = vscodeReloadWaiter; vscodeReloadWaiter = null;

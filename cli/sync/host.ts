@@ -14,45 +14,14 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { t } from "../../src/i18n/core";
 import { inspectLock } from "../file-store";
 import { syncOnce, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
-import { haltView, type HaltView, type SyncAction } from "./command";
+import { haltView, type SyncAction } from "./command";
 import { credentialsPath, resolveToken } from "./credentials";
 import { runLogin, runLogout, runWhoami } from "./login";
 import { bindingsOf, hashOf, normalizeServer, realFile, SyncStateUnreadable } from "./state-store";
 import { lockWatch, SyncWatcher, type WatchEvent } from "./watch";
 
-/** 画面に知らせる、同期の状態 (設計書 2.3) */
-export interface SyncStatus {
-  /** 裏方のセッション ID (起動ごとの乱数) と、そのセッションの中の通し番号。画面は、セッションが変わったら通し番号を初期化する */
-  session: string;
-  seq: number;
-  /** この環境で、サインインを保存できるか (Windows で動く裏方は、まだ保存できない) */
-  support: "ok" | "unsupported-platform";
-  /** 資格情報の出どころと、確かめた利用者 (トークンの値は入れない) */
-  credentials: { source: "env" | "stored" | "none"; account?: { accountId: string; display: string; signedInWith: "github" | "google" | "unknown" } };
-  /** 常駐の同期の所有者: self = この裏方 / external = 別のプロセス / unknown = ロックの持ち主を判定できない / none = まだ取っていない */
-  owner: "self" | "external" | "unknown" | "none";
-  /** 今の画面のファイル (開いていなければ null) */
-  file: { path: string; enabled: boolean; binding: { server: string; remoteId: string } | null } | null;
-  state: "off" | "signed-out" | "unbound" | "synced" | "unsent" | "syncing" | "halted" | "problem" | "offline" | "paused" | "external" | "unsupported";
-  /** 最後にそろえたサーバーの版 (詳細の欄にだけ出す) */
-  revision: string | null;
-  /** 確認が要る場面 (選べる操作つき) */
-  halt?: HaltView & { choiceIds: Record<string, string> };
-  /** 選べる操作の無い問題 (認証・通信・拒否・状態の読み取り・busy) と、直す場所 */
-  problem?: { kind: "auth" | "network" | "rejected" | "state-unreadable" | "busy"; text: string; fix: "credentials" | "wait" | "local-file" | "sync-state" | "rerun" };
-  /** サインインの途中 (コードを表示している間) */
-  signIn?: { provider: "github"; userCode: string; verificationUrl: string; expiresAt: string };
-  /** 1 行の補足 */
-  message?: string;
-}
-
-/** 画面からの操作 */
-export type HostAction =
-  | { kind: "enable" } | { kind: "disable" }
-  | { kind: "signIn"; provider: "github" } | { kind: "cancelSignIn" } | { kind: "signOut" }
-  | { kind: "bind" } | { kind: "syncNow" }
-  | { kind: "choose"; choiceId: string }
-  | { kind: "pause" } | { kind: "resume" };
+import type { HostAction, SyncStatus } from "../../src/sync/status";
+export type { HostAction, SyncStatus };
 
 /** 裏方の指定 */
 export interface HostOptions {
