@@ -194,14 +194,18 @@ export class SyncHost {
   private lastCredentials: string | null = null;
   /** 1 秒ごと: 一時停止中は見張りだけ (同期しない)。実行中の同期の間は「同期中」と見せる */
   async tick(): Promise<void> {
-    if (!this.watcher || this.paused) return;
+    if (!this.watcher) return;
     if (this.running) return this.running;
     const w = this.watcher;
     // 資格情報が変わった (別の CLI の login / logout): 止まっていた計画も含めて確かめ直し、画面に知らせる (R39-03)。
-    // 変化の検知と画面への知らせは、送ってよいかの判定より先に行う (別の CLI で消されたときも、画面を「未サインイン」にする。R46-02)
+    // 変化の検知と画面への知らせは、送ってよいかの判定より先に行う (別の CLI で消されたときも、画面を「未サインイン」にする。R46-02)。
+    // 一時停止中も行う (止めるのは計画の送受信だけ。利用者の表示は今の資格情報に合わせる。R47-02)。
+    // (recheck は「次の機会に確かめ直す」印を付けるだけで、通信はしない)
     const credentials = this.credentialsGeneration();
     if (this.lastCredentials !== null && this.lastCredentials !== credentials) { w.recheck(); this.account = null; this.emit(); }
     this.lastCredentials = credentials;
+    // 一時停止中は、計画の同期をしない (再開すると、次の tick から)
+    if (this.paused) return;
     // (資格情報が無い間は、見張りも同期しない。サインインすれば、次の tick から)
     if (!resolveToken(this.server)) return;
     this.busy++; this.emit();
@@ -422,7 +426,9 @@ export class SyncHost {
     }
     const last = this.results.get(real);
     if (this.busy > 0 && (!last || this.wall() - last.at > 500)) { status.state = "syncing"; }
-    if (!last) { if (status.state !== "syncing") status.state = "syncing"; return status; }
+    // 結果がまだ無い: 一時停止中で、手動の同期も動いていなければ「一時停止」(結果が無いことだけを「同期中」の根拠にしない。
+    // 一時停止中は tick が進まないので、「同期中」のまま変わらなくなる。R47-01)。それ以外は、最初の同期を待っている「同期中」
+    if (!last) { status.state = this.paused && this.busy === 0 ? "paused" : "syncing"; return status; }
     const r = last.result;
     if (r.status === "error") {
       const e = r.error;

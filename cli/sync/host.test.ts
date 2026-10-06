@@ -631,4 +631,54 @@ describe("一時停止中の表示", () => {
     expect(host.status(file).state).toBe("halted");
     await host.stop();
   });
+
+  it("R47-01: 結び付け済みの計画を新しい裏方で開き、最初の同期の前に一時停止しても「同期中」にならない。再開すると同期する", async () => {
+    const { file } = planFile("p1");
+    signedIn();
+    // 1 つ目の裏方で結び付けて、終える
+    const first = make();
+    first.host.openFile(file); first.host.enable(file);
+    await first.host.act(file, { kind: "bind" });
+    await first.host.stop();
+    // 2 つ目の裏方 (結果をまだ持たない) で開き直し、tick の前に一時停止する
+    const { host, statuses } = make();
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "pause" });
+    expect(host.status(file).state).toBe("paused");
+    await advance(host, 40_000); await settle();
+    expect(host.status(file).state).toBe("paused");
+    await host.act(file, { kind: "resume" });
+    await advance(host, 1000); await advance(host, 40_000); await settle();
+    expect(statuses.at(-1)?.state).toBe("synced");
+    await host.stop();
+  });
+
+  it("R47-02: 一時停止中に別の CLI がサインアウト・サインインしても、画面に知らせる。再開までは同期の要求を送らない", async () => {
+    const { file, a } = planFile("p1");
+    signedIn();
+    const { host, statuses } = make();
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    await settle();
+    await host.act(file, { kind: "pause" });
+    const { credentialsPath } = await import("./credentials");
+    rmSync(credentialsPath(server.url));
+    const count = statuses.length;
+    await advance(host, 1000); await settle();
+    expect(statuses.length).toBeGreaterThan(count);
+    expect(statuses.at(-1)?.state).toBe("signed-out");
+    // 再びサインイン: 表示は戻るが、一時停止中なので手元の変更は送らない
+    edit(file, (p) => updateBlock(p, a, { title: "一時停止中の変更" }));
+    const puts = server.puts;
+    signedIn();
+    await advance(host, 1000); await advance(host, 40_000); await settle();
+    expect(statuses.at(-1)?.state).not.toBe("signed-out");
+    expect(server.puts).toBe(puts);
+    // 再開すると送る
+    await host.act(file, { kind: "resume" });
+    await advance(host, 1000); await advance(host, 40_000); await settle();
+    expect(server.puts).toBeGreaterThan(puts);
+    expect(statuses.at(-1)?.state).toBe("synced");
+    await host.stop();
+  });
 });
