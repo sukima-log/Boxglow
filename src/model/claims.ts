@@ -61,7 +61,7 @@ export function foreignClaimMessage(p:Project,id:string,c:Claim,who:ClaimIdentit
   const message=t("他の実行が受け持っています: {block} ({actor})。実行ID: {instance}、範囲: {scope}、期限: {expires}。人に解除を頼むか、別のボックスへ進んでください。",{
     block:p.blocks[id]?.key??id,actor:c.actor,instance:c.instanceId,scope:c.scope,expires:c.expiresAt,
   });
-  return message+(c.actor===who.actor?t("同じactorの別実行です。MCP再起動前の実行の可能性があります。他者の実行IDや受領証は使わないでください。"):"");
+  return message+(c.actor===who.actor?t("同じ名前の別の実行です。自分の再起動前の実行とは限りません。他者の実行IDや受領証は使わないでください。"):"");
 }
 /** 入力: 対象と実行者。副作用: 他者が有効な取得を持つ場合だけ例外で止める。 */
 export function rejectForeignClaim(p:Project,id:string,c:Claim,who:ClaimIdentity,now:number):void {
@@ -206,11 +206,11 @@ export function claimSummary(p: Project, who: Pick<ClaimIdentity,"actor"|"instan
     limitation:t("受け持ちは同じ共有ファイル内の協調制御です。同期先の別端末や旧版の書き込みを排他しません。")};
 }
 
-/** 入力: Undo先と現在。出力: 制御記録とそのログだけは現在のままの計画。旧版のログも識別する。 */
+/** 入力: Undo先と現在。出力: 制御記録と専用の印が付いたログだけは現在のままの計画。本文では判定しない。 */
 export function preserveClaimHistory(snapshot:Project,current:Project):Project {
   const log=[...snapshot.log], ids=new Set(log.map(e=>e.id));
   for(const entry of current.log) {
-    const control=entry.claimEvent || (entry.kind==="note" && /^(受け持ち設定: |受け持ちを解除: |Claim policy: |Claim released: )/.test(entry.message));
+    const control=entry.claimEvent === "policy" || entry.claimEvent === "release";
     if(control&&!ids.has(entry.id)){log.push(entry);ids.add(entry.id);}
   }
   log.sort((a,b)=>a.at.localeCompare(b.at));

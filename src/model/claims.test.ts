@@ -36,5 +36,5 @@ it("C2 H-2: 共有の自動入力の枝追加は子だけ、共有入力自体�
 it("C2 L-1: 受け持ちログだけUndo先へ持ち越し、重複させない",()=>{
  const p=fixture(),nowText=new Date(now).toISOString();
  const q={...p,log:[...p.log,{id:"policy",at:nowText,actor:"human",kind:"note" as const,claimEvent:"policy" as const,message:"control"},{id:"release-old",at:nowText,actor:"human",kind:"note" as const,message:"Claim released: stop"},{id:"ordinary",at:nowText,actor:"human",kind:"note" as const,message:"normal"}]};
- const kept=preserveClaimHistory(p,q);expect(kept.log.some(e=>e.id==="policy")).toBe(true);expect(kept.log.some(e=>e.id==="release-old")).toBe(true);expect(kept.log.some(e=>e.id==="ordinary")).toBe(false);expect(preserveClaimHistory(kept,q).log).toEqual(kept.log);
+ const kept=preserveClaimHistory(p,q);expect(kept.log.some(e=>e.id==="policy")).toBe(true);expect(kept.log.some(e=>e.id==="release-old")).toBe(false);expect(kept.log.some(e=>e.id==="ordinary")).toBe(false);expect(preserveClaimHistory(kept,q).log).toEqual(kept.log);
 });

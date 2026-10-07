@@ -121,7 +121,7 @@ When claims are enabled for the plan, fix a unique `BOXGLOW_INSTANCE_ID` for eac
 
 Never use another instance’s ID or receipt, including receipts reconstructed from plan data or claims output. After MCP restarts, the same actor is still a different instance: wait for expiry or ask a person to release it; never take it over automatically.
 
-Automatically promoted inputs belong to the original box’s scope. Changes to shared input content or other boxes’ layout require claims for all affected boxes. For plan settings such as focus or group, use `context root` → `start root` and pass that CLAIM receipt. A block-scoped root claim does not include ordinary boxes. End it with `leave root`. Context-guard tokens are still required.
+Automatically promoted inputs belong to the original box’s scope. Changes to shared input content or other boxes’ layout require claims for all affected boxes. For plan settings such as focus or group, use `context root` → `start root` and pass that CLAIM receipt. A block-scoped root claim does not include ordinary boxes and is sufficient for plan settings. A subtree claim on root blocks all parallel work: AI agents must not use it and must consult a person. End it with `leave root`. Context-guard tokens are still required.
 
 ---
 

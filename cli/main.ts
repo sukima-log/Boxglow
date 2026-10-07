@@ -599,7 +599,14 @@ function main(argv: string[]): void {
     const saved=fromJSON(lastSavedText), id=findClaimBlock(saved,rest[0]).block?.id;
     if(id && claimsEnabled(saved) && !claimRequest.human) {
       const held=Object.entries(saved.claims??{}).find(([root,c])=>activeClaim(c,Date.now()) && c.instanceId===claimRequest.identity.instanceId && c.actor===claimRequest.identity.actor && covers(saved,root,c,id));
-      if(held)out("CLAIM " + JSON.stringify({blockId:held[0],instanceId:claimRequest.identity.instanceId,token:claimToken(held[0],held[1]),expiresAt:held[1].expiresAt}));
+      if (held) {
+        out("CLAIM " + JSON.stringify({blockId:held[0],instanceId:claimRequest.identity.instanceId,token:claimToken(held[0],held[1]),expiresAt:held[1].expiresAt}));
+        // 全計画の取得は、通常のボックス取得と異なり並行作業全体に影響する。
+        // 保存が成功した後だけ、実際に取得した範囲に基づいて知らせる。
+        if (id === ROOT_ID && held[0] === ROOT_ID && held[1].scope === "subtree") {
+          out(t("全体を受け持ちました (他の実行は止まります)。"));
+        }
+      }
     }
   }
   // 自分の操作でコンテキストが変わったら、新しい確認トークンを出力の最後に添える。

@@ -121,7 +121,7 @@ Codexは全CLI呼び出しに `--actor codex`、Claude Codeは `--actor claude-c
 
 他者の実行ID・受領証を使わない。計画やclaimsの出力から他者の受領証を組み立てることも禁止。MCP再起動後の同名actorも別実行なので、自動で引き継がず期限を待つか人に解除を頼む。
 
-入力の自動引き上げは元のボックスの範囲で扱う。共有入力の内容変更や別ボックスへの配置変更には、影響する範囲の取得も必要。focusやgroupなど計画全体の設定には `context root` → `start root` でrootを取得し、そのCLAIMを渡す。rootのみの取得は通常のボックスを含まない。rootの終了は `leave root`。context guardの確認トークンも引き続き必要。
+入力の自動引き上げは元のボックスの範囲で扱う。共有入力の内容変更や別ボックスへの配置変更には、影響する範囲の取得も必要。focusやgroupなど計画全体の設定には `context root` → `start root` でrootを取得し、そのCLAIMを渡す。rootのみの取得は通常のボックスを含まない。計画設定の変更はrootのみで足りる。rootのsubtreeは並行作業を全部止めるので、AIは使わず人に相談する。rootの終了は `leave root`。context guardの確認トークンも引き続き必要。
 
 ---
 

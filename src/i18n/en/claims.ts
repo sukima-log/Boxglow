@@ -1,4 +1,5 @@
 export const claims: Record<string,string> = {
+  "全体を受け持ちました (他の実行は止まります)。": "You claimed the whole plan (other instances will be blocked).",
   "受け持ちの設定が正しくありません。期限は1〜1440分です。": "Invalid claim settings. The lease must be 1–1440 minutes.",
   "受け持ちの記録が正しくありません。": "Invalid claim record.",
   "受け持ちが期限切れ・解除済みか、実行IDまたは世代が違います。取り直してから作業してください。": "The claim expired, was released, or belongs to a different instance or generation. Acquire it again before working.",
@@ -48,5 +49,5 @@ export const claims: Record<string,string> = {
   ,"受け持ちの世代が上限に達しました。記録は変更していません。": "The claim generation reached its limit. No records were changed."
   ,"すでに解除されています。": "This claim has already been released."
   ,"他の実行が受け持っています: {block} ({actor})。実行ID: {instance}、範囲: {scope}、期限: {expires}。人に解除を頼むか、別のボックスへ進んでください。": "Another instance holds this claim: {block} ({actor}). Instance: {instance}; scope: {scope}; expires: {expires}. Ask a person to release it, or work on another block."
-  ,"同じactorの別実行です。MCP再起動前の実行の可能性があります。他者の実行IDや受領証は使わないでください。": " This is a different instance of the same actor, possibly from before an MCP restart. Do not use another instance's ID or receipt."
+  ,"同じ名前の別の実行です。自分の再起動前の実行とは限りません。他者の実行IDや受領証は使わないでください。": " This is a different instance of the same actor. It is not necessarily your own instance from before a restart. Do not use another instance's ID or receipt."
 };

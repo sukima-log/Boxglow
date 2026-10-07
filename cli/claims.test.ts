@@ -102,3 +102,14 @@ it("C2 L-4: 再解除は世代・理由・ログ・ファイルを変えない",
  const f=fixture();f.cli("start","alpha",...actor);expect(f.cli("claim-release","alpha","--reason","stop","--actor","human").status).toBe(0);
  const before=readFileSync(f.file,"utf8");const again=f.cli("claim-release","alpha","--reason","again","--actor","human");expect(again.status).toBe(0);expect(again.stdout).toContain("already been released");expect(readFileSync(f.file,"utf8")).toBe(before);
 });
+
+it("C3: 全体取得だけに日英の停止案内を出し、通常取得では出さない",()=>{
+ for(const lang of ["ja","en"]){
+  const f=fixture();const notice=lang==="ja"?"全体を受け持ちました (他の実行は止まります)。":"You claimed the whole plan (other instances will be blocked).";
+  const block=f.cli("start","root",...actor,"--lang",lang);expect(block.status,block.stderr).toBe(0);expect(block.stdout).not.toContain(notice);
+  const all=f.cli("start","root","--scope","subtree",...actor,"--claim-token",receipt(block.stdout).token,"--lang",lang);
+  expect(all.status,all.stderr).toBe(0);expect(all.stdout).toContain(notice);
+  const other=f.cli("start","alpha","--actor","codex","--instance","two","--lang",lang);
+  expect(other.status).toBe(1);expect(other.stderr).toContain(lang==="ja"?"自分の再起動前の実行とは限りません":"not necessarily your own instance");expect(other.stdout).not.toContain(notice);
+ }
+});

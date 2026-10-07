@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- C3: Preserve only explicitly marked claim logs through Undo/Redo; clarify that a same-named instance may be another worker; document the whole-plan claim restriction for agents and announce its effect after acquisition.
+
 - C2 review: restore Git merge on claim-enabled plans; attribute promoted inputs to their original boxes and support explicit root claims for plan settings. Explain active foreign claims and MCP restarts, preserve Project JSON output and human claim logs through Undo/Redo, suppress claims-only merge notices, make repeated release a no-op, and style the release action as a button.
 - Recorder identity intentionally follows AI execution markers before an inherited human name in `BOXGLOW_ACTOR`: for example, `CLAUDECODE=1 BOXGLOW_ACTOR=hash` records `claude-code`. Explicit human CLI operations retain `--actor human` / `--actor human:name`; agents must use their own actor name.
 
