@@ -19,7 +19,7 @@ import { commitFile, FileBusy, FileConflict, revisionOf } from "./file-store";
 import { validateProjectText } from "../src/model/validate-file";
 // 文言を今の言語 (日本語 / 英語) で出す。言語は main.ts の serve の入口で決めてある
 import { t } from "../src/i18n/core";
-import { parseHostAction, SyncHost, type SyncStatus } from "./sync/host";
+import { MAX_SYNC_ACTION_BYTES, parseHostAction, SyncHost, type SyncStatus } from "./sync/host";
 
 /** PUT で受け付ける本文の上限 (バイト)。これを超える計画は保存を断る */
 export const MAX_BODY = 5 * 1024 * 1024;
@@ -40,13 +40,13 @@ class HttpError extends Error {
  * Input : req = HTTP リクエスト
  * Output: 本文の文字列 (UTF-8)。上限超過・中断は HttpError で reject
  */
-function readBody(req: IncomingMessage): Promise<string> {
+function readBody(req: IncomingMessage, limit = MAX_BODY): Promise<string> {
   return new Promise((ok, fail) => {
     let size = 0;
     const chunks: Buffer[] = [];
     req.on("data", (chunk: Buffer) => {
       size += chunk.length;
-      if (size > MAX_BODY) { fail(new HttpError(413, t("計画が大きすぎます (上限 5 MiB)"))); chunks.length = 0; }
+      if (size > limit) { fail(new HttpError(413, limit === MAX_BODY ? t("計画が大きすぎます (上限 5 MiB)") : t("要求が大きすぎます"))); chunks.length = 0; }
       else chunks.push(chunk);
     });
     req.on("end", () => ok(Buffer.concat(chunks).toString("utf8")));
@@ -135,8 +135,9 @@ export function startServe(opts: { file: string; port: number; dist: string; ope
         if (!syncHost) { send(404, JSON.stringify({ ok: false, error: t("画面からの同期は、boxglow serve --sync で起動したときだけ使えます") })); return; }
         if (req.method === "GET") { send(200, JSON.stringify(syncHost.status(file))); return; }
         if (req.method !== "POST") throw new HttpError(405, t("このメソッドは使えません"));
-        if (Number(req.headers["content-length"]) > 4096) throw new HttpError(413, t("要求が大きすぎます"));
-        const action = parseHostAction(await readBody(req));
+        // グループ別の選択は4KiBを超えることがある。ヘッダーと受信中の両方で同じ上限を守る。
+        if (Number(req.headers["content-length"]) > MAX_SYNC_ACTION_BYTES) throw new HttpError(413, t("要求が大きすぎます"));
+        const action = parseHostAction(await readBody(req, MAX_SYNC_ACTION_BYTES));
         if (!action) throw new HttpError(400, t("同期の操作として読めません"));
         send(200, JSON.stringify(await syncHost.act(file, action)));
         return;

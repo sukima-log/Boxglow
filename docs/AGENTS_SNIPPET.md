@@ -108,4 +108,13 @@ npx boxglow done B12 --artifact "<名前>=<パス>" --context-token <新しい�
 - MCP は boxglow_scope / boxglow_focus / boxglow_policy、boxglow_start の reason、boxglow_resume の includeCompleted を使う。変更には contextToken を付ける。
 - データ形式は v5 のままで全項目は任意。旧版 (0.4.2以前) は新しい規則を実行せず、保存時に計画の workflowPolicy / focusBlockId を落とす。これらを使う計画の書き手 (CLI・serve・画面・拡張内のアプリ) は対応したビルドに揃える。版番号だけでなくビルド日時も確認する。
 
+
+### Sync decisions
+
+AI may only sync already bound projects and inspect comparisons. If sync stops for a conflict or a human choice, summarize the differences and use ask to notify the user. Never resolve conflicts, create a new binding, relink, recover, adopt, restore, or confirm an account. A human must use the UI or explicitly run CLI with --actor human. AI must never add --actor human, including after a chat answer; record the answer and wait for the human to apply the sync choice.
+
 ---
+
+同期の人専用操作は、強制的な権限分離ではなく誤操作の防止です。AI は `--actor human` を名乗らず、比較と停止理由を人へ伝えてください。MCP と AI として識別した CLI は、人用の選択コマンドを出力しません。
+
+人のCLI操作は `--actor human:名前` も受け付けます。AIはこの形でも人を名乗らないでください。AI向け停止文の `boxglow sync --help` は、AI環境を引き継いだ人への案内です。AIの代行許可ではありません。

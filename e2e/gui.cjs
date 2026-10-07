@@ -96,8 +96,13 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     const dialog=p.getByRole('dialog');
     check('競合: 全部の項目を選ぶまで統合できない',!(await dialog.getByRole('button',{name:'Merge selected values'}).isEnabled()));
     check('競合: 両方の題名が見える',await dialog.getByText('Local title',{exact:true}).isVisible() && await dialog.getByText('Remote title',{exact:true}).isVisible());
-    await dialog.locator('fieldset').filter({has: p.locator('legend').filter({hasText:/^Name$/})}).getByRole('radio',{name:/^Latest file/}).check();
-    await dialog.locator('fieldset').filter({has: p.locator('legend').filter({hasText:/^Description$/})}).getByRole('radio',{name:/^Your edits/}).check();
+    await dialog.getByRole('button', { name: 'Choose by field', exact: true }).click();
+    await dialog.locator('.conflict-field').filter({ has: p.getByRole('heading', { name: 'Name', exact: true }) }).getByRole('radio', { name: /^Latest file/ }).check();
+    await dialog.locator('.conflict-field').filter({ has: p.getByRole('heading', { name: 'Description', exact: true }) }).getByRole('radio', { name: /^Your edits/ }).check();
+    if (process.env.BOXGLOW_B_SCREENSHOTS) {
+      fs.mkdirSync(process.env.BOXGLOW_B_SCREENSHOTS, { recursive: true });
+      await p.screenshot({ path: path.join(process.env.BOXGLOW_B_SCREENSHOTS, 'save-fields-en.png') });
+    }
     await dialog.getByRole('button',{name:'Merge selected values'}).click();
     await p.waitForFunction(()=>window.__posted.some(m=>m.type==='save'));
     const saved=await p.evaluate(()=>window.__posted.find(m=>m.type==='save'));

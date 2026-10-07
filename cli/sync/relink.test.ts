@@ -255,7 +255,7 @@ describe("結び直し: レビュー 32 の指摘", () => {
     // 表示: 見比べと、新しい印のコマンド。「消されています」は出ない
     process.env.BOXGLOW_CONFIG_DIR = A.config;
     const lines: string[] = [];
-    expect(await runSyncCommand({ file: A.file }, (line) => lines.push(line))).toBe(2);
+    expect(await runSyncCommand({ actor: "human", file: A.file }, (line) => lines.push(line))).toBe(2);
     expect(lines.join("\n")).toContain(`--relink ${next.token} --prefer local`);
     expect(lines.join("\n")).not.toContain("消されています");
     // 新しい見比べから、結び直せる (残っていた送信は、控えに写るだけ)
@@ -543,7 +543,7 @@ describe("結び直し: コマンドの表示", () => {
     const { A } = await restored();
     process.env.BOXGLOW_CONFIG_DIR = A.config;
     const lines: string[] = [];
-    expect(await runSyncCommand({ file: A.file }, (line) => lines.push(line))).toBe(2);
+    expect(await runSyncCommand({ actor: "human", file: A.file }, (line) => lines.push(line))).toBe(2);
     const shown = lines.join("\n");
     expect(shown).toContain("サーバーの履歴が、前回そろえたときから変わっています");
     expect(shown).toContain("--prefer remote");
@@ -551,9 +551,9 @@ describe("結び直し: コマンドの表示", () => {
     const token = /--relink ([0-9a-f]{16})/.exec(shown)![1];
     // 2 つ選べるのに、どちらを採るかを付けなかった: 何もしない
     const none: string[] = [];
-    expect(await runSyncCommand({ file: A.file, relink: token }, (line) => none.push(line))).toBe(2);
+    expect(await runSyncCommand({ actor: "human", file: A.file, relink: token }, (line) => none.push(line))).toBe(2);
     const done: string[] = [];
-    expect(await runSyncCommand({ file: A.file, relink: token, prefer: "local" }, (line) => done.push(line))).toBe(0);
+    expect(await runSyncCommand({ actor: "human", file: A.file, relink: token, prefer: "local" }, (line) => done.push(line))).toBe(0);
     expect(done.join("\n")).toContain(join(A.store().dir, "relinks"));
     expect(server.project("plan-1")!.head!.text).toBe(A.text);
   });

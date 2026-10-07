@@ -1,3 +1,4 @@
+import { conflicts } from "./conflicts";
 import { treeSync } from "./treeSync";
 import { workflow } from "./workflow";
 import { sync } from "./sync";
@@ -16,4 +17,4 @@ import { cli } from "./cli";
 import { model } from "./model";
 import { report } from "./report";
 
-export const en: Record<string, string> = { ...common, ...inspector, ...parts, ...canvas, ...app, ...cli, ...model, ...report, ...gui, ...canvasReview, ...workflow, ...sync, ...treeSync };
+export const en: Record<string, string> = { ...common, ...inspector, ...parts, ...canvas, ...app, ...cli, ...model, ...report, ...gui, ...canvasReview, ...workflow, ...sync, ...treeSync, ...conflicts };

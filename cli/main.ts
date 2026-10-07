@@ -310,7 +310,9 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  blocked / review / leave / checkpoint は --context-token <context で得た contextToken> が要る (読んだ後に指示・回答・引き継ぎが変わっていたら拒否)。
                                                  人 (--actor human) には要求しない。AI が off にするときは --context-token が要る
   version [--json]                               boxglow の版と、保存の取り決めの版を出す (--version でも可)
-  sync [--server <URL>] [--project <ID>] [--watch]  (試験中) 計画のファイルを同期サーバーとそろえる。初回は --server で結び付ける。止まったら理由と次の操作を表示
+  sync [--server <URL>] [--project <ID>] [--watch] [--actor human]  (試験中) 計画のファイルを同期サーバーとそろえる。初回は人が --server <URL> --actor human で結び付ける。止まったら理由と次の操作を表示
+                                                 競合: --resolve <印> --block <内部ID>=local|remote (繰り返し可) / --settings local|remote
+                                                 共通JSON: --choices-file <ファイル>。一括選択: --resolve <印> --prefer local|remote
                                                  --watch = 常時の同期 (Ctrl+C で終了。この端末の、同じサーバーに結び付いた計画すべてを受け持つ)
                                                  --adopt <印> = 消えた設定の削除を採って送る / --restore <印> = 消えた設定を手元に戻す
                                                  --resolve <印> --prefer local|remote = 競合を手元 / サーバーの値に決める / --link <印> --prefer local|remote = 初回に中身が違うときの選択
@@ -397,7 +399,9 @@ Usage (npx boxglow <command> ...):
                                                  blocked / review / leave / checkpoint need --context-token <contextToken from context> (rejected if instructions, answers or handoff notes changed after reading).
                                                  People (--actor human) are not asked for it. An AI needs --context-token to turn it off
   version [--json]                               Print the boxglow version and the save-protocol version (--version also works)
-  sync [--server <URL>] [--project <ID>] [--watch]  (experimental) Bring the plan file in line with a sync server. Bind with --server the first time. When it stops, it prints why and what to do
+  sync [--server <URL>] [--project <ID>] [--watch] [--actor human]  (experimental) Bring the plan file in line with a sync server. A human binds with --server <URL> --actor human the first time. When it stops, it prints why and what to do
+                                                 Conflicts: --resolve <token> --block <internal-id>=local|remote (repeatable) / --settings local|remote
+                                                 Shared JSON: --choices-file <file>. All groups: --resolve <token> --prefer local|remote
                                                  --watch = keep syncing (Ctrl+C to stop; covers every plan on this machine bound to the same server)
                                                  --adopt <token> = send the deletion of settings / --restore <token> = put the deleted settings back locally
                                                  --resolve <token> --prefer local|remote = settle conflicts / --link <token> --prefer local|remote = choose a side on first link
@@ -782,7 +786,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const ours = read(oursPath);
       const theirs = read(theirsPath);
       if (!ours || !theirs) throw new Error(t("ours / theirs が読めません"));
-      const r = mergeProjects(base, ours, theirs);
+      const r = mergeProjects(base, ours, theirs, {}, new Date().toISOString());
       let q = r.project;
       // 競合が 0 件でも、合わせた結果が壊れた計画になることがある (互いを相手の中へ移した、など)。
       // 壊れた計画は書かずに、自分の側のファイルをそのまま残して失敗にする (Git は競合として扱う)
@@ -1200,7 +1204,16 @@ if (argv[0] === "mcp") {
   if (str(options.file)) process.env.BOXGLOW_FILE = resolve(str(options.file)!);
   if (str(options.actor)) process.env.BOXGLOW_ACTOR = str(options.actor)!; // 記録者の名前 (各ツールの実行に引き継ぐ)
   if (str(options.lang)) process.env.BOXGLOW_LANG = str(options.lang)!; // ツールの説明の言語 (各コマンドの文言は計画の言語)
-  startMcp(runCli).catch((e) => { console.error(`[boxglow mcp] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });
+  const mcpFile = locateFile(str(options.file));
+  startMcp(async args => {
+    if (args[0] !== "sync") return runCli(args);
+    if (args.length !== 1) throw new Error(t("この同期には人の判断が必要です。AIは変更の違いと停止理由を要約してaskで知らせ、人が画面またはCLIで選ぶまで待ってください。AIは選択を代行しないでください。") + "\n" + t("人が実行している場合は、boxglow sync --help の「人の操作」を参照してください。"));
+    const lines: string[] = [];
+    try { setLang(explicitLang(options) ?? load(mcpFile).lang ?? "ja"); } catch { /* 停止理由は返す */ }
+    const code = await runSyncCommand({ file: mcpFile, actor: "agent", audience: "ai" }, line => lines.push(line));
+    if (code === 1) throw new Error(lines.join("\n"));
+    return lines.join("\n");
+  }).catch((e) => { console.error(`[boxglow mcp] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });
 } else if (argv[0] === "login" || argv[0] === "logout" || argv[0] === "whoami") {
   // 同期サーバーへのサインイン (通信と、利用者の操作を待つので、ほかのコマンドとは別扱い)
   const { options } = parseArgs(argv.slice(1));
@@ -1224,25 +1237,35 @@ if (argv[0] === "mcp") {
   process.stdout.on("error", (e: NodeJS.ErrnoException) => { if (e.code === "EPIPE") process.exit(process.exitCode ?? 0); else throw e; });
   (async () => {
     setLang(explicitLang(options) ?? "ja");
+    if (options.help) {
+      out((getLang() === "en" ? HELP_EN : HELP_JA).trim());
+      out(t("人の操作: 初回の結び付けや競合の選択は、人が --actor human または --actor human:名前 を明示して実行します。BOXGLOW_ACTORだけでは選択を許可しません。AIは人を名乗らず、比較を伝えて人の操作を待ってください。"));
+      return;
+    }
     const file = locateFile(str(options.file));
     try { setLang(explicitLang(options) ?? load(file).lang ?? "ja"); } catch { /* 読めない計画でも、止まった理由は表示する */ }
     // 知らない指定 (まだ無い --watch など) を、黙って「1 回の同期」として実行しない
-    const known = new Set(["file", "lang", "actor", "watch", "server", "project", "adopt", "restore", "resolve", "link", "prefer", "recover", "applied", "not-applied", "account", "relink"]);
+    const known = new Set(["file", "lang", "actor", "watch", "server", "project", "adopt", "restore", "resolve", "link", "prefer", "recover", "applied", "not-applied", "account", "relink", "block", "settings", "choices-file"]);
     const unknown = Object.keys(options).filter((k) => !known.has(k));
     if (unknown.length > 0) { out(t("boxglow sync が知らない指定です: {list}", { list: unknown.map((k) => "--" + k).join(", ") })); process.exitCode = 1; return; }
     process.exitCode = await (options.watch ? runWatchCommand : runSyncCommand)({
       file
+    , actor: str(options.actor)
+    , rawArgs: argv.slice(1)
     , server: str(options.server)
     , project: str(options.project)
     , adopt: str(options.adopt)
     , restore: str(options.restore)
     , resolve: str(options.resolve)
+    , block: options.block === undefined ? undefined : list(options.block)
+    , settings: str(options.settings)
+    , choicesFile: str(options["choices-file"])
     , link: str(options.link)
     , prefer: str(options.prefer)
     , recover: str(options.recover)
     , relink: str(options.relink)
-    , applied: !!options.applied
-    , notApplied: !!options["not-applied"]
+    , applied: options.applied === undefined ? undefined : !!options.applied
+    , notApplied: options["not-applied"] === undefined ? undefined : !!options["not-applied"]
     , account: str(options.account)
     }, out);
   })().catch((e) => { console.error(`[boxglow sync] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });

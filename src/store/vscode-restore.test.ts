@@ -194,7 +194,8 @@ describe("保存の衝突からの退避 (VS Code の store)", () => {
     const { L, a, b } = plans();
     const store = await openStore(L);
     store.getState().apply((p) => updateBlock(p, b, { title: "画面だけ" }));
-    const R = toJSON(updateBlock(fromJSON(L), a, { title: "受け取った" }));
+    // 自動統合の対象にならない実際の競合を作り、退避の取消・鮮度確認は引き続き検査する。
+    const R = toJSON(updateBlock(updateBlock(fromJSON(L), a, { title: "受け取った" }), b, { title: "相手のB" }));
     deliver({ type: "save-error", requestId: "", error: "x", conflict: true, ...(editorDirty ? { editorDirty: true } : {}), text: R, version: ++version });
     await wait(10);
     expect(store.getState().conflict).not.toBeNull();
@@ -261,7 +262,79 @@ describe("保存の衝突からの退避 (VS Code の store)", () => {
     const state = store.getState();
     expect(state.conflict).toBeNull();
     expect(state.project!.blocks[a].title).toBe("受け取った");
-    expect(state.project!.blocks[b].title).toBe("B");
+    expect(state.project!.blocks[b].title).toBe("相手のB");
     expect(state.restoreNotice?.text).toContain("/tmp/copy.json");
+  });
+});
+
+describe("段階B: 保存の自動統合と共通選択", () => {
+  /** 入力: 保存要求。出力: 最新の版番号で成功応答を返す。 */
+  const saved = (req: { requestId?: string }) => deliver({ type: "saved", requestId: req.requestId, version: ++version });
+  it.each([false, true])("競合ゼロなら最新の版へCAS保存し、成功後だけ通知する (同じブロックの別項目=%s)", async sameBlock => {
+    const { L, a, b } = plans();
+    const store = await openStore(L);
+    store.getState().apply(p => updateBlock(p, a, { title: "Local" }));
+    store.getState().saveNow();
+    const first = sent.filter(m => m.type === "save").at(-1)!;
+    const remote = toJSON(updateBlock(fromJSON(L), sameBlock ? a : b, sameBlock ? { description: "Remote note" } : { title: "Remote" }));
+    const latestVersion = ++version;
+    deliver({ type: "save-error", requestId: first.requestId, conflict: true, text: remote, version: latestVersion });
+    await wait(10);
+    const retry = sent.filter(m => m.type === "save").at(-1)! as Record<string, unknown>;
+    expect(retry.requestId).not.toBe(first.requestId);
+    expect(retry.version).toBe(latestVersion); expect(retry.baseText).toBe(remote);
+    const merged = fromJSON(String(retry.text));
+    expect(merged.blocks[a].title).toBe("Local");
+    expect(sameBlock ? merged.blocks[a].description : merged.blocks[b].title).toBe(sameBlock ? "Remote note" : "Remote");
+    expect(store.getState().conflict).toBeNull();
+    saved(retry); await wait(10);
+    expect(store.getState().saveState).toBe("saved");
+    expect(store.getState().toast).toBe("両方の変更を統合して保存しました。");
+  });
+
+  it("editorDirty付きの保存失敗は、競合ゼロでも再保存しない", async () => {
+    const { L, a, b } = plans();
+    const store = await openStore(L);
+    store.getState().apply(p => updateBlock(p, a, { title: "Local" })); store.getState().saveNow();
+    const first = sent.filter(m => m.type === "save").at(-1)!;
+    const count = sent.filter(m => m.type === "save").length;
+    deliver({ type: "save-error", requestId: first.requestId, conflict: true, editorDirty: true, text: toJSON(updateBlock(fromJSON(L), b, { title: "Remote" })), version: ++version });
+    await wait(450);
+    expect(store.getState().conflict?.editorDirty).toBe(true);
+    expect(sent.filter(m => m.type === "save")).toHaveLength(count);
+    expect(store.getState().project!.blocks[a].title).toBe("Local");
+  });
+
+  it.each(["saved", "save-error"])("新しい版の通知が先に来ても古い保存応答で基準を戻さず再保存する (%s)", async response => {
+    const { L, a, b } = plans();
+    const store = await openStore(L);
+    store.getState().apply(p => updateBlock(p, a, { title: "Local" })); store.getState().saveNow();
+    const first = sent.filter(m => m.type === "save").at(-1)!;
+    const oldVersion = ++version, newVersion = ++version;
+    const remote = toJSON(updateBlock(fromJSON(L), b, { title: "Later" }));
+    deliver({ type: "save-error", requestId: "external", conflict: true, text: remote, version: newVersion });
+    deliver(response === "saved" ? { type: "saved", requestId: first.requestId, version: oldVersion }
+      : { type: "save-error", requestId: first.requestId, version: newVersion, conflict: true, text: remote }); await wait(10);
+    const retry = sent.filter(m => m.type === "save").at(-1)! as Record<string, unknown>;
+    expect(retry.version).toBe(newVersion); expect(retry.baseText).toBe(remote);
+    expect(fromJSON(String(retry.text)).blocks[b].title).toBe("Later");
+    saved(retry); await wait(10); expect(store.getState().saveState).toBe("saved");
+  });
+
+  it("共通選択は手元が変わると失効し、全グループを選び直してから保存する", async () => {
+    const { L, a, b } = plans(); const store = await openStore(L);
+    store.getState().apply(p => updateBlock(updateBlock(p, a, { title: "Local A" }), b, { title: "Local B" }));
+    const remote = toJSON(updateBlock(updateBlock(fromJSON(L), a, { title: "Remote A" }), b, { title: "Remote B" }));
+    deliver({ type: "save-error", requestId: "external", conflict: true, text: remote, version: ++version });
+    const old = store.getState().previewConflictReview()!;
+    store.getState().apply(p => updateBlock(p, a, { description: "Later edit" }));
+    const picks = Object.fromEntries(old.groups.map(g => [g.id, g.blocks.some(x => x.id === a) ? "local" as const : "remote" as const]));
+    expect(store.getState().resolveConflictGroups({ version: 1, token: old.token, groups: picks })).toBe(false);
+    const current = store.getState().previewConflictReview()!;
+    expect(store.getState().resolveConflictGroups({ version: 1, token: current.token, groups: {} })).toBe(false);
+    expect(store.getState().resolveConflictGroups({ version: 1, token: current.token, groups: picks })).toBe(true);
+    const p = store.getState().project!;
+    expect(p.blocks[a].title).toBe("Local A"); expect(p.blocks[b].title).toBe("Remote B"); expect(p.blocks[a].description).toBe("Later edit");
+    store.getState().saveNow(); saved(sent.filter(m => m.type === "save").at(-1)!); await wait(10);
   });
 });

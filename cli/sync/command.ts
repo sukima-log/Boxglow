@@ -1,3 +1,4 @@
+import { isHumanActor } from "../../src/model/graph";
 /**
  * boxglow sync: 計画のファイルを、同期サーバーとそろえる (1 回)
  * 使い方:
@@ -12,11 +13,12 @@
  *   boxglow sync --account <利用者の ID>                              利用者の記録が無い結び付けを、表示された利用者のものとして続ける
  * 止まったとき (競合・確認が要る場面) は、理由と次の操作を表示して、終了コード 2 で終わる。通信の失敗は終了コード 1 (もう一度実行すれば続きから)。
  *   boxglow sync --watch                                              常時の同期 (Ctrl+C で終了)。この端末の、同じサーバーに結び付いた計画すべてを受け持つ
- * まだ無いもの: 競合を 1 件ずつ選ぶ操作、サインイン (login)
+ * グループごとの選択: --block / --settings / --choices-file (詳しい形式は docs/SYNC_CONFLICTS.md)
  */
+import { blockResolutionKey, parseConflictResolution, type ConflictResolution, type ResolutionInput } from "../../src/model/conflict-groups";
 import { t } from "../../src/i18n/core";
 import { readFileSync } from "node:fs";
-import { syncOnce, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
+import { syncOnce, HumanSyncRequired, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
 import { bindingsOf, hashOf, SyncStateUnreadable } from "./state-store";
 import { resolveToken } from "./credentials";
 import { authHint } from "./login";
@@ -25,12 +27,23 @@ import type { RecoveryOutcome } from "../../src/sync/engine";
 
 /** sync コマンドの引数 (main.ts が解釈したオプションから作る) */
 export interface SyncCommandOptions {
+  /** CLIの明示フラグのみ。環境変数では人専用操作を許可しない。 */
+  actor?: string;
+  /** 表示だけの対象者。権限はactorの明示指定で別に確認する。MCPは常にai。 */
+  audience?: "ai" | "human";
+  /** 人が打ち直すときの元の引数。通信には使わない。 */
+  rawArgs?: string[];
   file: string;
   server?: string;
   project?: string;
   adopt?: string;
   restore?: string;
   resolve?: string;
+  block?: string[];
+  settings?: string;
+  choicesFile?: string;
+  /** MCP からは同じ要求を直接受け取る。CLIのフラグとの混在は受け付けない。 */
+  resolution?: ConflictResolution;
   link?: string;
   /** --prefer の値 (local / remote)。--resolve と --link で使う */
   prefer?: string;
@@ -50,14 +63,61 @@ export interface SyncCommandOptions {
  * Input : o = 引数, out = 出力の関数
  * Output: 終了コード (0 = そろった / 進められなかったが待てば直る, 2 = 人の確認が要る, 1 = 失敗)
  */
+/** 入力: CLI引数。出力: 人の判断を要求する指定があるか (空の値も指定として拒否)。 */
+const hasHumanChoice = (o: SyncCommandOptions): boolean => [o.resolve, o.block, o.settings, o.choicesFile, o.resolution, o.prefer, o.link, o.relink, o.recover, o.applied, o.notApplied, o.adopt, o.restore, o.account].some(v => v !== undefined);
+
+/** 入力: CLIの識別。出力: AI向けの案内にするか。自己申告を認証の代わりにはしない。 */
+export const syncAudience = (o: SyncCommandOptions): "ai" | "human" => {
+  if (o.audience) return o.audience;
+  const actor = o.actor || process.env.BOXGLOW_ACTOR;
+  if (actor && isHumanActor(actor)) return "human";
+  // 記録者名や設定フォルダの所在だけでは、AIの実行だと判定しない。
+  if (actor && /^(?:agent|ai|codex|claude(?:-code)?|copilot|cursor)(?::|$)/i.test(actor)) return "ai";
+  return process.env.CLAUDECODE || process.env.CLAUDE_CODE || process.env.CODEX_SANDBOX || process.env.CODEX_THREAD_ID ? "ai" : "human";
+};
+/** 入力: 人が実行した引数。出力: 対象と選択を省略しない、人用の打ち直しコマンド。 */
+export function humanSyncCommand(o: SyncCommandOptions): string {
+  const args = o.rawArgs ? [...o.rawArgs] : ["--file", o.file];
+  if (!o.rawArgs) {
+    for (const [key, value] of Object.entries(o)) {
+      if (["file", "actor", "audience", "rawArgs", "resolution"].includes(key) || value === undefined || value === false) continue;
+      const flag = key === "choicesFile" ? "choices-file" : key === "notApplied" ? "not-applied" : key;
+      for (const item of Array.isArray(value) ? value : [value]) { args.push("--" + flag); if (item !== true) args.push(String(item)); }
+    }
+  }
+  return "boxglow sync " + [...args, "--actor", "human"].map(quote).join(" ");
+}
+/** 常時同期が別の計画で止まった場合も、言語などの元引数を保ったまま対象だけ替える。 */
+export function retargetSyncArgs(args: string[], file: string): string[] {
+  const next: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--file") { i++; continue; }
+    if (args[i].startsWith("--file=") || args[i] === "--watch" || args[i].startsWith("--watch=")) continue;
+    next.push(args[i]);
+  }
+  return [...next, "--file", file];
+}
+/** 入力: 呼出元と出力先。出力: AIには相談内容、人には元の引数を保った打ち直し方法。 */
+function humanRequired(o: SyncCommandOptions, out: (text: string) => void): number {
+  if (syncAudience(o) === "ai") out(new HumanSyncRequired().message);
+  else {
+    out(t("この操作には人による確認が必要です。内容を確認したうえで、次のコマンドを実行してください。"));
+    out(humanSyncCommand(o));
+  }
+  return 2;
+}
+
 export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) => void): Promise<number> {
+  if (!isHumanActor(o.actor ?? "") && hasHumanChoice(o)) {
+    return humanRequired(o, out);
+  }
   // サーバー: 指定 > 環境変数 > そのファイルの結び付け (1 つだけのとき)
   let server = o.server ?? process.env.BOXGLOW_SERVER;
   if (!server) {
     const { bindings: bound, unreadable } = bindingsOf(o.file);
     if (bound.length === 1) server = bound[0].server;
     else if (bound.length === 0) {
-      out(t("同期先が決まっていません。初めて結び付けるときは boxglow sync --server <URL> を指定してください"));
+      out(syncAudience(o) === "ai" ? t("同期先が決まっていません。人に同期先の確認と初回の結び付けを依頼してください。") + "\n" + t("人が実行している場合は、boxglow sync --help の「人の操作」を参照してください。") : t("同期先が決まっていません。初めて結び付けるときは boxglow sync --server <URL> --actor human を指定してください"));
       // 読めない状態のフォルダがあるときは、「結び付けが無い」と決めつけずに知らせる
       if (unreadable.length > 0) out(t("同期の状態を読めないフォルダがあります (この計画の結び付けかもしれません。消さずに、中身を確かめてください): {list}", { list: unreadable.join(", ") }));
       return 1;
@@ -66,22 +126,25 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
   }
   if (!server) return 1;
   if (o.recover && o.applied === o.notApplied) { out(t("--recover には --applied (反映済みとして続ける) か --not-applied (反映されていないものとして続ける) のどちらかを付けてください")); return 1; }
-  if ((o.resolve || o.link) && o.prefer !== "local" && o.prefer !== "remote") { out(t("--resolve / --link には --prefer local (手元を採る) か --prefer remote (サーバーを採る) を付けてください")); return 1; }
+  if (o.link && o.prefer !== "local" && o.prefer !== "remote") { out(t("--resolve / --link には --prefer local (手元を採る) か --prefer remote (サーバーを採る) を付けてください")); return 1; }
   if (o.relink && o.prefer !== undefined && o.prefer !== "local" && o.prefer !== "remote") { out(t("--relink には、選べるものが 2 つあるときは --prefer local (手元を採る) か --prefer remote (サーバーを採る) を付けてください")); return 1; }
   const prefer = o.prefer as "local" | "remote";
   let result: SyncResult;
   try {
+    const resolution = resolutionOptions(o);
     result = await syncOnce({
-      file: o.file, server, remoteId: o.project, token: resolveToken(server)?.token
+      humanActions: isHumanActor(o.actor ?? ""), file: o.file, server, remoteId: o.project, token: resolveToken(server)?.token
     , approvedDeletion: o.adopt
     , restoreDeletion: o.restore
-    , resolution: o.resolve ? { token: o.resolve, prefer } : undefined
+    , resolution
     , firstLink: o.link ? { token: o.link, prefer } : undefined
     , recover: o.recover ? { token: o.recover, applied: !!o.applied } : undefined
     , relink: o.relink ? { token: o.relink, prefer: o.prefer as "local" | "remote" | undefined } : undefined
     , confirmAccount: o.account
     });
   } catch (e) {
+    if (e instanceof HumanSyncRequired) return humanRequired(o, out);
+    if (e instanceof ResolutionOptionError) { out(e.message); return 1; }
     if (e instanceof SyncRejectedError) { out(t("サーバーが、この計画の同期を受け付けませんでした (待っても直りません)。やりかけの操作は残してあります: {status} {detail}", { status: e.status, detail: rejectionHint(e.status) }));
       // 手元を直すだけでは、残った操作の中身は変わらない。次の実行で、その操作を片付けてから、今の中身で送り直すことを伝える
       out(t("手元のファイルを直してから、もう一度 boxglow sync を実行してください。断られた送信は送り直さず、サーバーで受理済みか・取り消すかを確定させてから、今の手元の内容で送り直します"));
@@ -106,7 +169,7 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
     out(result.what === "file" ? t("計画のファイルが書き込み中のため、今回は進めませんでした。少し待ってからもう一度実行してください") : t("この計画の同期が、ほかで動いています。終わってからもう一度実行してください"));
     return 0;
   }
-  describeHalt(result, o.file, out);
+  describeHalt(result, o.file, out, syncAudience(o));
   return 2;
 }
 
@@ -118,11 +181,14 @@ export type { HaltItem, HaltView, SyncAction };
  * Input : result = 止まった結果, file = 計画のファイル, out = 出力の関数
  * Output: なし (out に書く)。中身は haltView() の構造から作る
  */
-export function describeHalt(result: Extract<SyncResult, { status: "halted" }>, file: string, out: (text: string) => void): void {
-  for (const item of haltView(result, file).items) {
-    if (item.kind === "text") out(item.text);
-    else out(`  ${item.command}`);
+export function describeHalt(result: Extract<SyncResult, { status: "halted" }>, file: string, out: (text: string) => void, audience: "ai" | "human" = "human"): void {
+  for (const item of haltView(result, file, audience).items) {
+    if (item.kind === "text") {
+      // 比較値は省略しない。操作の案内だけをhaltViewで対象者に合わせる。
+      out(item.text);
+    } else out(audience === "human" ? `  ${item.command}` : t("人が確認する選択肢: {label}", { label: item.label }));
   }
+  if (audience === "ai") out(new HumanSyncRequired().message);
 }
 
 /**
@@ -130,14 +196,14 @@ export function describeHalt(result: Extract<SyncResult, { status: "halted" }>, 
  * Input : result = 止まった結果, file = 計画のファイル
  * Output: HaltView (文章の順番は、CLI の表示の順番)
  */
-export function haltView(result: Extract<SyncResult, { status: "halted" }>, file: string): HaltView {
+export function haltView(result: Extract<SyncResult, { status: "halted" }>, file: string, audience: "ai" | "human" = "human"): HaltView {
   const o = { file };
   const halt = result.halt;
   const items: HaltItem[] = [];
   let fix: HaltView["fix"] = "none";
   const out = (text: string) => { items.push({ kind: "text", text }); };
   // 選べる操作: 表示するコマンド (対象つき) と、画面で使う操作の内容
-  const choice = (label: string, command: string, action: SyncAction) => { items.push({ kind: "choice", id: `${action.kind}:${items.length}`, label, command: command.trim(), action }); };
+  const choice = (label: string, command: string, action: SyncAction) => { items.push({ kind: "choice", id: `${action.kind}:${items.length}`, label, command: command.trim() + " --actor human", action }); };
   // 表示するコマンドには、対象 (ファイル・サーバー・サーバー側の計画) をそのまま付ける。
   // 省くと、実行する場所や環境によって、別の対象に対する操作になってしまう (特に、まだ結び付けが無い初回の選択)
   const target = ` --file ${quote(result.target.file)}`;
@@ -151,13 +217,29 @@ export function haltView(result: Extract<SyncResult, { status: "halted" }>, file
   if (result.pulled === 0 && result.pushed === 0 && result.edited === 0) out(t("この実行では、手元のファイルもサーバーも変えていません。"));
   switch (halt.reason) {
     case "conflicts":
-      out(t("手元とサーバーで、同じ項目が別の値に変わっています ({count} 件):", { count: halt.conflicts.length }));
-      for (const c of halt.conflicts) out(`  - ${c.path}: ${t("手元")} ${JSON.stringify(c.ours)} / ${t("サーバー")} ${JSON.stringify(c.theirs)}`);
+      if (halt.resolutionError) out(halt.resolutionError);
+      out(t("競合する変更を比較"));
+      for (const group of halt.review?.groups ?? []) {
+        out(group.blocks.map(b => [b.key, b.title].filter(Boolean).join(" ")).concat(group.settings ? [t("計画の設定")] : []).join(" / "));
+        if (group.structural) out(t("削除・移動と関連する変更を一緒に確認してください。"));
+        if (group.deleted?.local) out(t("手元側をグループ全体に採用すると削除: {n} ボックス", { n: group.deleted.local }));
+        if (group.deleted?.remote) out(t("相手側をグループ全体に採用すると削除: {n} ボックス", { n: group.deleted.remote }));
+        if (group.retained?.local.length) out(t("手元側を採用しても追加保護で残る: {names}", { names: group.retained.local.join(" / ") }));
+        if (group.retained?.remote.length) out(t("相手側を採用しても追加保護で残る: {names}", { names: group.retained.remote.join(" / ") }));
+        for (const field of group.fields) {
+          out("  " + field.label);
+          out("    " + t("手元の編集") + ": " + field.localText);
+          out("    " + t("サーバーの値") + ": " + field.remoteText);
+          for (const side of ["local", "remote"] as const) if (field.unassigned?.[side]) out("    " + t(side === "local" ? "手元の編集" : "サーバーの値") + ": " + t("この選択で担当が外れるボックス: 最大 {n}（他の項目の選択によって変わります）", { n: field.unassigned[side] }));
+        }
+        if (audience === "human") out("  " + t("詳細 (CLIの選択キー)") + ": " + JSON.stringify({ group: group.id, blocks: group.blocks.map(b => b.id), fields: group.fields.map(f => ({ id: f.id, path: f.path })) }));
+      }
+      if (audience === "human") out(t("--resolve の印と --block <内部ID>=local|remote / --settings local|remote、または --choices-file <JSON> で全グループを選んでください。"));
       out(t("表示した項目を、手元の値に決めるなら (表示していない項目は、今までどおり自動で合わせます):"));
       choice(t("手元の値に決める"), `boxglow sync --resolve ${halt.token} --prefer local${target}`, { kind: "resolve", token: halt.token, prefer: "local" });
       out(t("サーバーの値に決めるなら:"));
       choice(t("サーバーの値に決める"), `boxglow sync --resolve ${halt.token} --prefer remote${target}`, { kind: "resolve", token: halt.token, prefer: "remote" });
-      out(t("項目ごとに選び分けたいときは、手元のファイルで採りたい値に直してから、もう一度 boxglow sync を実行してください (サーバーと同じ値にした項目は、競合になりません)"));
+
       break;
     case "invalid-merge":
       fix = "local-file";
@@ -257,7 +339,7 @@ export function haltView(result: Extract<SyncResult, { status: "halted" }>, file
       break;
     case "binding-target":
       fix = "rerun";
-      out(t("この計画は、サーバー側の計画 {bound} に結び付いています。指定された {requested} とは違うので、何もしていません。結び付け済みの計画と同期するなら、--project を付けずに実行してください", { bound: halt.bound, requested: halt.requested }));
+      out(audience === "ai" ? t("この計画は {bound} に結び付いており、指定された {requested} とは違います。何も変更していません。人に同期対象を確認してください。", { bound: halt.bound, requested: halt.requested }) : t("この計画は、サーバー側の計画 {bound} に結び付いています。指定された {requested} とは違うので、何もしていません。結び付け済みの計画と同期するなら、--project を付けずに実行してください", { bound: halt.bound, requested: halt.requested }));
       break;
     case "bound-elsewhere":
       fix = "none";
@@ -269,7 +351,7 @@ export function haltView(result: Extract<SyncResult, { status: "halted" }>, file
       break;
     case "choice-not-applied":
       fix = "rerun";
-      out(halt.choice === "relink" ? t("--relink の選択は、今の状態には当てはまりません (表示のあとで、手元かサーバーが変わった・選べる内容が違う)。何もしていません。boxglow sync でもう一度確かめてください") : halt.choice === "firstLink"
+      out(audience === "ai" ? t("指定された選択は今の状態に当てはまりません。何も変更していません。最新の比較を人に確認してもらってください。") : halt.choice === "relink" ? t("--relink の選択は、今の状態には当てはまりません (表示のあとで、手元かサーバーが変わった・選べる内容が違う)。何もしていません。boxglow sync でもう一度確かめてください") : halt.choice === "firstLink"
         ? t("--link の選択は、今の状態には当てはまりません (同期の対象が、選択を表示したときと違う可能性があります)。何もしていません。表示されたコマンドを、--server・--project・--file を付けたまま実行してください")
         : t("--resolve の選択は、今の状態には当てはまりません (競合がもう無い、または対象が違います)。何もしていません。boxglow sync でもう一度確かめてください"));
       break;
@@ -292,6 +374,7 @@ export function haltView(result: Extract<SyncResult, { status: "halted" }>, file
       break;
   }
   return {
+    ...(halt.reason === "conflicts" ? { review: halt.review, resolutionError: halt.resolutionError } : {}),
     target: { ...result.target }
   , reason: halt.reason
   , done: { pulled: result.pulled, pushed: result.pushed, edited: result.edited, ...(result.relinkBackup ? { backup: result.relinkBackup } : {}) }
@@ -308,8 +391,9 @@ export function haltView(result: Extract<SyncResult, { status: "halted" }>, file
 export async function runWatchCommand(o: SyncCommandOptions, out: (text: string) => void, stop?: Promise<void>): Promise<number> {
   // まず 1 回同期する (初めてなら結び付ける。止まった場合は理由を表示して、見張りは続ける)
   const first = await runSyncCommand({ ...o, watch: false }, out);
-  if (first === 1) return 1;
+  if (first === 1 || (!isHumanActor(o.actor ?? "") && hasHumanChoice(o))) return first;
   const bound = bindingsOf(o.file).bindings;
+  if (!bound.length) return first;
   const server = o.server ?? process.env.BOXGLOW_SERVER ?? bound[0]?.server;
   if (!server) return 1;
   // 同じ端末・同じサーバーの常時の同期は 1 つだけ (確認の要求を、計画の数だけ倍にしないため)
@@ -324,8 +408,9 @@ export async function runWatchCommand(o: SyncCommandOptions, out: (text: string)
     else if (e.kind === "network") out(`[${stamp()}] ` + t("サーバーと通信できません。{seconds} 秒後にやり直します: {message}", { seconds: Math.round(e.retryInMs / 1000), message: e.message }));
     else if (e.kind === "auth") out(`[${stamp()}] ` + t("サーバーが利用者を確かめられません (トークンが無い、または無効です)。常時の同期を止めずに待ちます。トークンを直してから、起動し直してください"));
     else if (e.kind === "checked" || e.kind === "authOk") return;   // (変更なしの確認・利用者の確認は、表示しない)
+    else if (e.kind === "error" && e.message === new HumanSyncRequired().message) humanRequired({ ...o, file: e.file ?? o.file, watch: false, rawArgs: o.rawArgs ? retargetSyncArgs(o.rawArgs, e.file ?? o.file) : undefined }, out);
     else if (e.kind === "error") out(`[${stamp()}] ${e.file ? e.file + ": " : ""}` + t("この計画の同期を止めています: {message}", { message: e.message }));
-    else { out(`[${stamp()}] ${e.file}:`); describeHalt(e.result, e.file, (line) => out("  " + line)); out("  " + t("(上のコマンドは、その計画のフォルダで、別の端末画面から実行してください。常時の同期は動かしたままで構いません)")); }
+    else { out(`[${stamp()}] ${e.file}:`); describeHalt(e.result, e.file, (line) => out("  " + line), syncAudience(o)); if (syncAudience(o) === "human") out("  " + t("(上のコマンドは、その計画のフォルダで、別の端末画面から実行してください。常時の同期は動かしたままで構いません)")); }
   };
   const watcher = new SyncWatcher({ server, token: resolveToken(server)?.token, onEvent });
   out(t("常時の同期を始めました (Ctrl+C で終了)。サーバー: {server}、計画: {count} 件", { server, count: bindingsFor(server).states.length }));
@@ -355,5 +440,49 @@ function rejectionHint(status: number): string {
 
 /** コマンドの引数として表示する値を、空白などがあっても 1 つの引数になるように引用符で囲む */
 function quote(value: string): string {
+  if (process.platform === "win32") return /^[A-Za-z0-9_\-./:@]+$/.test(value) ? value : "'" + value.replace(/'/g, "''") + "'";
   return /^[A-Za-z0-9_\-./:@]+$/.test(value) ? value : `"${value.replace(/(["\\$`])/g, "\\$1")}"`;
+}
+
+/**
+ * 入力: CLI/MCPの指定。出力: 共通の解決要求、旧prefer、または未指定。
+ * 曖昧な混在や誤記は通信前に拒否する。依存グループの重複・完全性は最新比較を持つengineで検証する。
+ */
+class ResolutionOptionError extends Error {}
+
+export function resolutionOptions(o: SyncCommandOptions): ResolutionInput | undefined {
+  const fail = () => { throw new ResolutionOptionError(t("競合の指定が不正です。共通JSON、--prefer、--block / --settings のいずれかを使ってください。")); };
+  const granular = o.block !== undefined || o.settings !== undefined;
+  if (o.resolution || o.choicesFile) {
+    if ((o.resolution && o.choicesFile) || granular || o.prefer !== undefined) return fail();
+    let value: unknown = o.resolution;
+    if (!value) {
+      let text: string;
+      try { text = readFileSync(o.choicesFile!, "utf8"); }
+      catch { throw new ResolutionOptionError(t("選択ファイルを読めません。--choices-file のパスと読み取り権限を確認してください。")); }
+      try { value = JSON.parse(text); }
+      catch { throw new ResolutionOptionError(t("選択ファイルが正しいJSONではありません。内容を確認してください。")); }
+    }
+    const request = parseConflictResolution(value);
+    if (!request || (o.resolve !== undefined && request.token !== o.resolve)) return fail();
+    return request;
+  }
+  if (!o.resolve) { if (granular) return fail(); return undefined; }
+  if (o.prefer !== undefined) {
+    if (granular || !["local", "remote"].includes(o.prefer)) return fail();
+    return { token: o.resolve, prefer: o.prefer as "local" | "remote" };
+  }
+  if (!granular) return fail();
+  const groups: Record<string, "local" | "remote"> = Object.create(null);
+  for (const flag of o.block ?? []) {
+    const split = flag.lastIndexOf("=");
+    const id = flag.slice(0, split), side = flag.slice(split + 1);
+    if (split < 1 || !["local", "remote"].includes(side) || Object.hasOwn(groups, blockResolutionKey(id))) return fail();
+    groups[blockResolutionKey(id)] = side as "local" | "remote";
+  }
+  if (o.settings !== undefined) {
+    if (!["local", "remote"].includes(o.settings)) return fail();
+    groups.settings = o.settings as "local" | "remote";
+  }
+  return { version: 1, token: o.resolve, groups };
 }

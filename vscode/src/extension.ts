@@ -12,7 +12,7 @@
 import * as vscode from "vscode";
 import { readFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { saveDocument, diskAccess } from "./save";
+import { saveDocument, diskAccess, conflictSnapshot, saveFailureBase } from "./save";
 import { FileConflict } from "../../cli/file-store";
 import { rewriteIndexHtml } from "./html";
 import { APP_VERSION, SAVE_PROTOCOL } from "../../src/model/version";
@@ -115,13 +115,13 @@ class BoxglowEditorProvider implements vscode.CustomTextEditorProvider {
         // CLI の書き込みは VS Code のファイル監視より先に起きることがある。そのときはディスクの中身を最新として返す
         let disk = diskBase;
         try { disk = readFileSync(document.uri.fsPath, "utf8"); } catch { /* ファイルが消されていても、失敗の応答は必ず返す */ }
-        // 改行だけの違い (CRLF のファイル) は「ディスクが変わった」とみなさない
-        const lf = (value: string) => value.replace(/\r\n/g, "\n");
-        const text = lf(disk) !== lf(diskBase) ? disk : document.getText();
-        // ファイルのある場所を拡張が読み書きできないときは、その理由と対処を返す (英語の内部エラーのままにしない)
+        const snapshot = conflictSnapshot(disk, document.getText(), document.isDirty);
+        // 保存中にファイル監視が読み直した場合、send() は省略される。
+        // 未保存編集がなく文書とディスクが一致すると確認できた時だけ基準も追い付かせる。
+        diskBase = saveFailureBase(diskBase, disk, document.getText(), document.isDirty);
         const error = diskAccess(document.uri.fsPath) ?? (e instanceof Error ? e.message : String(e));
-        void panel.webview.postMessage({ type: "save-error", requestId: msg.requestId, error, conflict, text, version: document.version });
-        if (conflict) diskBase = disk;
+        void panel.webview.postMessage({ type: "save-error", requestId: msg.requestId, error, conflict, ...snapshot, version: document.version });
+        // 古い文書や未保存編集では、失敗応答を返しても基準は進めない。
       } finally { saving = false; }
     });
     // 退避と、退避したファイルの読み込み (同期の設定が無くても使う。保存の衝突の帯から使う。R49-03)

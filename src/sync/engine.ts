@@ -12,6 +12,7 @@
  */
 import { fromJSON, toJSON, KNOWN_PROJECT_KEYS } from "../model/graph";
 import { mergeProjects, type MergeConflict } from "../model/merge";
+import { groupConflicts, resolveGroupChoices, type ConflictReview, type ResolutionInput } from "../model/conflict-groups";
 import { projectProblem, validateProjectText } from "../model/validate-file";
 import type { Project } from "../model/types";
 import { t } from "../i18n/core";
@@ -67,7 +68,7 @@ export type Pending = PendingPush | PendingPull;
 /** 止まった理由 (人に確かめる内容) */
 export type Halt =
   /** 統合で、人の選択が要る競合があった。選択は、この組 (基準・手元・サーバー) に対してだけ有効 */
-  | { reason: "conflicts"; base: Base; localHash: string; remoteRevision: Revision; conflicts: MergeConflict[]; token: string }
+  | { reason: "conflicts"; base: Base; localHash: string; remoteRevision: Revision; conflicts: MergeConflict[]; token: string; review?: ConflictReview; resolutionError?: string }
   /** 統合の結果が、計画として正しくない (競合が 0 件でも起こる。互いのボックスを相手の中へ移した、など) */
   | { reason: "invalid-merge"; problem: string }
   /** 手元 / サーバーの中身が、計画として読めない */
@@ -154,8 +155,8 @@ export interface SyncInput {
   approvedDeletion?: string;
   /** 「消えた項目を基準から戻す」という人の選択 (protected-deletion の approval と同じ値なら、その項目だけを手元に戻す) */
   restoreDeletion?: string;
-  /** 競合への人の選択: 表示した競合の組の印 (conflicts の token) と、その組の競合すべてでどちらを採るか */
-  resolution?: { token: string; prefer: "local" | "remote" };
+  /** 競合への人の選択: 表示した比較の印と、全グループ/全項目への選択。旧preferも現在のグループへ展開する */
+  resolution?: ResolutionInput;
   /** 初めて結び付けるときに、手元とサーバーの中身が違った場合の人の選択: 印 (first-link の token) と、どちらを採るか */
   firstLink?: { token: string; prefer: "local" | "remote" };
   /** 結び直しへの人の選択: 印 (relinkPreview の token) と、どちらを採るか (選べるものが 1 つだけのときは、prefer は要らない) */
@@ -366,17 +367,24 @@ export function decide(input: SyncInput): Decision {
     if ("problem" in b) return halt({ reason: "base-missing" });
     const l = read(local.text);
     if ("problem" in l) return halt({ reason: "invalid-local", problem: l.problem });
-    let merged = mergeProjects(b.project, l.project, r.project);
+    let merged = mergeProjects(b.project, l.project, r.project, {}, now.toISOString());
     let resolved = false;
     const conflicts = merged.conflicts.filter((c) => !c.automatic);
     if (conflicts.length > 0) {
       // 選択の印は、この組 (結び付け・基準・手元・サーバー・競合の一覧) に結び付ける。
       // 選んでいる間に手元かサーバーが変わったら、印が合わなくなり、もう一度止まって表示し直す (見ていない値を、前の選択で上書きしない)
-      const token = input.hashOf(JSON.stringify(["conflicts", input.bindingId, state.epoch, base.revision, base.hash, local.hash, remote.revision, conflicts.map((c) => c.id)])).slice(0, 16);
-      if (input.resolution?.token !== token) return halt({ reason: "conflicts", base, localHash: local.hash, remoteRevision: remote.revision, conflicts, token });
-      // 表示した競合だけを、選んだ側で決める (計画全体を置き換えるのではない。競合していない変更は、両方とも残る)
-      const side = input.resolution.prefer === "local" ? "ours" : "theirs";
-      merged = mergeProjects(b.project, l.project, r.project, Object.fromEntries(conflicts.map((c) => [c.id, side] as const)));
+      const groups = groupConflicts(b.project, l.project, r.project, conflicts);
+      const token = input.hashOf(JSON.stringify(["conflicts-v1", input.bindingId, state.epoch, base.revision, base.hash, local.hash, remote.revision, remote.content.hash, groups.map(g => [g.id, g.blocks.map(b => b.id), g.settings, g.structural, g.fields.map(f => f.id)])])).slice(0, 32);
+      const review: ConflictReview = { version: 1, token, groups };
+      const waiting = { reason: "conflicts" as const, base, localHash: local.hash, remoteRevision: remote.revision, conflicts, token, review };
+      if (!input.resolution) return halt(waiting);
+      // 全競合の選択を先に検証する。部分選択では、独立した変更も含めて何も書かずに止まる。
+      const selected = resolveGroupChoices(review, input.resolution);
+      if ("error" in selected) return halt({ ...waiting, resolutionError: selected.error });
+      merged = mergeProjects(b.project, l.project, r.project, selected.choices, now.toISOString());
+      // 選択の組み合わせの誤りは、ファイル修正ではなく同じ比較で選び直してもらう。
+      const selectionProblem = projectProblem(merged.project);
+      if (selectionProblem) return halt({ ...waiting, resolutionError: t("この組み合わせでは参照がつながりません。同じ比較で選び直してください。") + " " + selectionProblem });
       resolved = true;
     }
     // 競合が 0 件でも、合わせた結果が壊れていることがある。壊れていたら書かない

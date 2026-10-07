@@ -10,7 +10,22 @@ import { validateProjectText } from "../../src/model/validate-file";
 // 文言を今の言語 (日本語 / 英語) で出す。言語は呼び出し側 (extension.ts) が計画の言語に合わせてある
 import { t } from "../../src/i18n/core";
 
-/** webview からの保存の要求: text = 保存したい中身, baseText = 画面が元にした中身, version = 画面が元にしたドキュメントの版 */
+/** 保存失敗時に返す確認用の本文と、文書の追い付き待ち・未保存の印を組み立てる。 */
+export function conflictSnapshot(disk: string, document: string, dirty: boolean): { text: string; editorBehind: boolean; editorDirty: boolean } {
+  // 入力: ディスク・文書・未保存状態。出力: 最新の確認用本文と、統合を止める印。
+  // 既に読んだdiskBaseとの比較では、2回目に古い文書を最新と取り違える。
+  // dirty は通常のテキスト編集も含む。画面との共通祖先を保証できないので保守的に統合を止める。
+  const different = lf(disk) !== lf(document);
+  return { text: different ? disk : document, editorBehind: different && !dirty, editorDirty: dirty };
+}
+
+/** 入力: 旧基準、ディスク、文書、未保存状態。出力: 保存失敗後に安全に使える基準。 */
+export function saveFailureBase(previous: string, disk: string, document: string, dirty: boolean): string {
+  const snapshot = conflictSnapshot(disk, document, dirty);
+  return !snapshot.editorBehind && !snapshot.editorDirty ? document : previous;
+}
+
+/** webviewからの要求: text=保存本文、baseText=元にした本文、version=元にした文書の版。 */
 export interface SaveRequest { text: string; baseText: string; version: number }
 
 /** 保存先のドキュメントの操作 (本番は vscode.TextDocument を包んだもの、テストは模擬) */

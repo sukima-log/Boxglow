@@ -30,6 +30,7 @@ node e2e/checks.cjs
 node e2e/reliability.cjs
 
 node e2e/gui.cjs
+node e2e/conflict-review.cjs
 node e2e/canvas.cjs
 
 node e2e/experience.cjs

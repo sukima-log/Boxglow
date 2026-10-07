@@ -9,6 +9,7 @@
  * 「別のプロセスが受け持っている」と表示して、自分が制御できるようには見せない。
  * 設計: docs/private/SYNC_GUI_DESIGN.md (第 4 版)
  */
+import { parseConflictResolution, type ConflictResolution } from "../../src/model/conflict-groups";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { APP_VERSION } from "../../src/model/version";
@@ -340,6 +341,7 @@ export class SyncHost {
       case "bind":
       case "syncNow": if (real) await this.syncFile(real, {}); break;
       case "choose": await this.choose(action.choiceId, real); break;
+      case "resolveGroups": await this.choose(action.choiceId, real, action.resolution); break;
     }
     return this.status(file);
   }
@@ -375,7 +377,7 @@ export class SyncHost {
   /** 停止した (stop の後。この裏方では、もう同期を始めない) */
   private stopped = false;
   /** 選択 ID で、人の選択を実行する。対象・状態の世代・資格情報の世代が、表示したときと違えば、何もしない */
-  private async choose(choiceId: string, file: string | null): Promise<void> {
+  private async choose(choiceId: string, file: string | null, resolution?: ConflictResolution): Promise<void> {
     const c = this.choices.get(choiceId);
     // (要求のファイルと、選択のファイルが同じであること。別のファイルの選択を、この画面から実行しない)
     if (!c || c.file !== file) { this.message = t("その選択は、今の表示のものではありません。表示を確かめてから、選び直してください"); this.emit(); return; }
@@ -384,8 +386,14 @@ export class SyncHost {
     }
     // 状態の世代は、同期のロックの中で照合する (事前に読むだけでは、照合とロックの間の変化を見落とす。R39-02)
     const a = c.action;
+    // 共通形式も従来の一括選択と同じ能力IDへ結び付ける。別の確認のtokenでは実行させない。
+    if (resolution && (a.kind !== "resolve" || resolution.token !== a.token || !parseConflictResolution(resolution))) {
+      this.message = t("表示したときから、状態が変わっています。選び直してください");
+      this.emit();
+      return;
+    }
     const extra: Partial<Parameters<typeof syncOnce>[0]> =
-      a.kind === "resolve" ? { resolution: { token: a.token, prefer: a.prefer } }
+      a.kind === "resolve" ? { resolution: resolution ?? { token: a.token, prefer: a.prefer } }
       : a.kind === "link" ? { remoteId: c.remoteId, firstLink: { token: a.token, prefer: a.prefer } }
       : a.kind === "relink" ? { relink: { token: a.token, prefer: a.prefer } }
       : a.kind === "recover" ? { recover: { token: a.token, applied: a.applied } }
@@ -454,7 +462,8 @@ export class SyncHost {
         this.choices.set(id, { action: item.action, file: real, server: view.target.server, remoteId: view.target.remoteId, generation: (r as { stateGeneration?: number }).stateGeneration ?? null, credentials: last.credentials });
         choiceIds[item.id] = id;
       }
-      status.halt = { ...view, choiceIds };
+      const resolveItem = view.items.find(item => item.kind === "choice" && item.action.kind === "resolve");
+      status.halt = { ...view, choiceIds, ...(view.review && resolveItem?.kind === "choice" ? { resolutionChoiceId: choiceIds[resolveItem.id] } : {}) };
       return status;
     }
     // そろった: 結果の localHash が今のディスクと同じで、資格情報の世代が同じなら synced。違えば unsent (送信待ち)
@@ -478,7 +487,11 @@ export class SyncHost {
  * Input : text = 要求の本文 (JSON)
  * Output: HostAction。読めなければ null
  */
+/** ブロック/項目ごとの選択を載せられる上限。serveとVS Codeで同じバイト数を適用する。 */
+export const MAX_SYNC_ACTION_BYTES = 256 * 1024;
+
 export function parseHostAction(text: string): HostAction | null {
+  if (Buffer.byteLength(text, "utf8") > MAX_SYNC_ACTION_BYTES) return null;
   let v: unknown;
   try { v = JSON.parse(text); } catch { return null; }
   if (typeof v !== "object" || v === null) return null;
@@ -487,6 +500,11 @@ export function parseHostAction(text: string): HostAction | null {
     case "enable": case "disable": case "cancelSignIn": case "signOut": case "bind": case "syncNow": case "pause": case "resume":
       return { kind: o.kind };
     case "signIn": return o.provider === "github" || o.provider === "google" ? { kind: "signIn", provider: o.provider } : null;
+    case "resolveGroups": {
+      const resolution = parseConflictResolution(o.resolution);
+      return resolution && typeof o.choiceId === "string" && o.choiceId.length <= 128
+        ? { kind: "resolveGroups", choiceId: o.choiceId, resolution } : null;
+    }
     case "choose": return typeof o.choiceId === "string" && o.choiceId.length <= 128 ? { kind: "choose", choiceId: o.choiceId } : null;
     default: return null;
   }

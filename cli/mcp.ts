@@ -5,6 +5,8 @@
  * Input : run = CLI を関数として実行するもの (main.ts の runCli)
  * Output: 接続が切れるまで常駐
  */
+
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -13,15 +15,15 @@ import { setLang, t } from "../src/i18n/core";
 // サーバの版はアプリの版 (package.json) と同じにする (直書きすると版を上げたときに食い違う)
 import { APP_VERSION } from "../src/model/version";
 
-type Run = (argv: string[]) => string;
+type Run = (argv: string[]) => string | Promise<string>;
 
 /** ツールの結果 (文字列 1 つ) */
 const text = (s: string) => ({ content: [{ type: "text" as const, text: s.trim() || t("(出力なし)") }] });
 
 /** 失敗は isError 付きで返す (例外で落とさない) */
-const safe = (run: Run, argv: string[]) => {
+const safe = async (run: Run, argv: string[]) => {
   try {
-    return text(run(argv));
+    return text(await run(argv));
   } catch (e) {
     return { ...text(`[boxglow] ${e instanceof Error ? e.message : String(e)}`), isError: true };
   }
@@ -40,6 +42,13 @@ export async function startMcp(run: Run): Promise<void> {
   const envLang = (process.env.BOXGLOW_LANG ?? "").toLowerCase();
   if (envLang === "en" || envLang === "ja") setLang(envLang);
   const server = new McpServer({ name: "boxglow", version: APP_VERSION });
+  // 入力はなし。任意のfileや人の選択を指定した要求は、通常同期へ読み替えず拒否する。
+  server.registerTool("boxglow_sync", {
+    description: t("結び付け済みの計画を同期し、停止理由と比較を返す。判断が必要ならAIはaskで人に知らせる。人が画面かCLIで選ぶ。"),
+    inputSchema: z.object({}).catchall(z.unknown()),
+  }, async a => Object.keys(a).length
+    ? safe(() => { throw new Error(t("この同期には人の判断が必要です。AIは変更の違いと停止理由を要約してaskで知らせ、人が画面またはCLIで選ぶまで待ってください。AIは選択を代行しないでください。") + "\n" + t("人が実行している場合は、boxglow sync --help の「人の操作」を参照してください。")); }, [])
+    : safe(run, ["sync"]));
   const block = z.string().describe(t("ボックスの B 番号 (B12) か題名"));
 
   server.registerTool("boxglow_status", { description: t("計画の今の状況: 判断待ち・作業中・次の候補・階層の一覧 (セッションの最初に読む)"), inputSchema: { brief: z.boolean().optional().describe(t("階層の一覧を省く (判断・活動・次の候補は残す)")) }, annotations: { readOnlyHint: true } }, async ({ brief }) => safe(run, brief ? ["status", "--brief"] : ["status"]));

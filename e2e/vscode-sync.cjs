@@ -31,6 +31,7 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     let p = tools.createProject('VS Code の同期の検査');
     p.lang = 'ja';   // (画面の文言を日本語にそろえる。計画に言語が無いと、VS Code の表示言語に従う)
     const block = tools.addBlock(p, { parentId: tools.defaultTaskParent(p), title: 'A' }); p = block.project;
+    const other = tools.addBlock(p, { parentId: tools.defaultTaskParent(p), title: 'B' }); p = other.project;
     const work = path.join(tmp, 'work'); fs.mkdirSync(work);
     const fileA = path.join(work, 'boxglow.json');
     fs.writeFileSync(fileA, tools.toJSON(p) + '\n');
@@ -135,16 +136,38 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     check('VS Code: ディスクのファイルも 2 台目の題名', JSON.parse(fs.readFileSync(fileA, 'utf8')).blocks[block.blockId].title === '2 台目の題名');
     // 競合 → 欄で解決 (準備の間は常駐の同期を止める。途中で自動の受け取りが入ると、競合にならないことがある)
     await frame.evaluate(() => window.boxglow.store.getState().syncAct({ kind: 'pause' }));
-    fs.writeFileSync(fileB, tools.toJSON(tools.updateBlock(tools.fromJSON(fs.readFileSync(fileB, 'utf8')), block.blockId, { title: '2 台目の案' })) + '\n');
+    fs.writeFileSync(fileB, tools.toJSON(tools.updateBlock(tools.updateBlock(tools.fromJSON(fs.readFileSync(fileB, 'utf8')), block.blockId, { title: '2 台目の案' }), other.blockId, { title: 'B remote' })) + '\n');
     await tools.syncOnce({ file: fileB, server: server.url, token });
-    await frame.evaluate((id) => { const s = window.boxglow.store.getState(); s.apply((p) => ({ ...p, blocks: { ...p.blocks, [id]: { ...p.blocks[id], title: 'VS Code の案' } } })); s.saveNow(); }, block.blockId);
+    await frame.evaluate(([id, other]) => { const s = window.boxglow.store.getState(); s.apply((p) => ({ ...p, blocks: { ...p.blocks, [id]: { ...p.blocks[id], title: 'VS Code の案' }, [other]: { ...p.blocks[other], title: 'B local' } } })); s.saveNow(); }, [block.blockId, other.blockId]);
     await frame.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved', null, { timeout: 15000 });
     await button('今すぐ同期').click();
     check('VS Code: 競合で「確認」', await chipText('確認'));
-    await button('手元の値に決める').click();
+    const groups = frame.locator('.conflict-group');
+    await groups.first().waitFor();
+    const submit = frame.getByRole('button', { name: /^(選択した内容で統合|Merge selected values)$/ });
+    check('VS Code: ブロック別の比較が2つあり、初期選択なし', await groups.count() === 2 && await submit.isDisabled());
+    await groups.filter({ hasText: 'VS Code の案' }).locator('.conflict-group__picks input').first().check();
+    check('VS Code: 1グループだけでは送らない', await submit.isDisabled());
+    await groups.filter({ hasText: 'B local' }).locator('.conflict-group__picks input').last().check();
+    if (process.env.BOXGLOW_B_SCREENSHOTS) {
+      fs.mkdirSync(process.env.BOXGLOW_B_SCREENSHOTS, { recursive: true });
+      await win.screenshot({ path: path.join(process.env.BOXGLOW_B_SCREENSHOTS, 'vscode-groups.png') });
+    }
+    await submit.click();
     await frame.evaluate(() => window.boxglow.store.getState().syncAct({ kind: 'resume' }));
     check('VS Code: 選ぶと「同期済み」', await chipText('同期済み'));
-    check('VS Code: サーバーは選んだ手元の値', JSON.parse(server.project(remoteId, 'acc-vscode').head.text).blocks[block.blockId].title === 'VS Code の案');
+    const selected = JSON.parse(server.project(remoteId, 'acc-vscode').head.text);
+    check('VS Code: グループごとに別の側を採用', selected.blocks[block.blockId].title === 'VS Code の案' && selected.blocks[other.blockId].title === 'B remote');
+    // GUIだけの未保存変更とディスクの独立変更。実拡張からのupdate/CAS失敗を通して自動保存まで確かめる。
+    await frame.evaluate(() => window.boxglow.store.getState().syncAct({ kind: 'pause' }));
+    await frame.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved');
+    const diskBefore = tools.fromJSON(fs.readFileSync(fileA, 'utf8'));
+    await frame.evaluate(id => { window.boxglow.store.getState().apply(p => ({ ...p, blocks: { ...p.blocks, [id]: { ...p.blocks[id], description: 'GUI independent' } } })); }, block.blockId);
+    fs.writeFileSync(fileA, tools.toJSON(tools.updateBlock(diskBefore, other.blockId, { description: 'Disk independent' })) + '\n');
+    await frame.waitForFunction(([a, b]) => { const s = window.boxglow.store.getState(); return s.saveState === 'saved' && s.project.blocks[a].description === 'GUI independent' && s.project.blocks[b].description === 'Disk independent'; }, [block.blockId, other.blockId], { timeout: 20000 });
+    const autoSaved = JSON.parse(fs.readFileSync(fileA, 'utf8'));
+    check('VS Code: 競合ゼロのGUIとディスク変更を自動統合して保存', autoSaved.blocks[block.blockId].description === 'GUI independent' && autoSaved.blocks[other.blockId].description === 'Disk independent');
+    await frame.evaluate(() => window.boxglow.store.getState().syncAct({ kind: 'resume' }));
     // ---- 保存の衝突: エディタ (TextDocument) に未保存の編集があるときに受け取る → 退避 → 最新を開く → 取り込む → Save → 同期 ----
     // (エディタを分割し、片方をテキストエディターにして、計画の名前の末尾に文字を足す。保存はしない)
     // (キーが webview の中に吸われないよう、先に作業中のタブを押して VS Code 本体にフォーカスを移してから、コマンドのキーを押す)

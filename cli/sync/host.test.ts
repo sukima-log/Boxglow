@@ -189,7 +189,7 @@ describe("サインインとサインアウト", () => {
 });
 
 describe("確認が要る場面の選択", () => {
-  it("競合で止まると選べる操作が出る。選択 ID で進められる。表示したときから状態が変わった選択は断る", async () => {
+  it.each([false, true])("競合の選択IDは対象と鮮度を検証する (共通形式=%s)", async grouped => {
     const { file, a } = planFile("p1");
     signedIn();
     const { host } = make();
@@ -214,12 +214,16 @@ describe("確認が要る場面の選択", () => {
     // 表示したときから手元が変わった → 同じ選択 ID では進めない (印が合わず、同期は止まったまま。何も送らない)
     const puts = server.puts;
     edit(file, (p) => updateBlock(p, a, { title: "手元 2" }));
-    const stale = await host.act(file, { kind: "choose", choiceId: local });
+    const stale = await host.act(file, grouped
+      ? { kind: "resolveGroups", choiceId: local, resolution: { version: 1, token: halted.halt!.review!.token, groups: { [halted.halt!.review!.groups[0].id]: "local" } } }
+      : { kind: "choose", choiceId: local });
     expect(server.puts).toBe(puts);
     expect(stale.state).toBe("halted");
     // 今の表示の選択 ID で進める
     const fresh = stale.halt!.choiceIds[(stale.halt!.items.find((i) => i.kind === "choice") as { id: string }).id];
-    const done = await host.act(file, { kind: "choose", choiceId: fresh });
+    const done = await host.act(file, grouped
+      ? { kind: "resolveGroups", choiceId: fresh, resolution: { version: 1, token: stale.halt!.review!.token, groups: { [stale.halt!.review!.groups[0].id]: "local" } } }
+      : { kind: "choose", choiceId: fresh });
     expect(done.state).toBe("synced");
     expect(JSON.parse(server.project(remoteId)!.head!.text).blocks[a].title).toBe("手元 2");
     // 知らない選択 ID は、何もしない
@@ -254,6 +258,13 @@ describe("boxglow serve --sync (HTTP の口)", () => {
       expect((await post(JSON.stringify({ kind: "delete-everything" }))).status).toBe(400);
       expect((await post(JSON.stringify({ kind: "choose", choiceId: 42 }))).status).toBe(400);
       expect((await post("not json")).status).toBe(400);
+      // 300ブロックの選択は旧4KiB制限を超えるが、形としては受け付ける (未知の選択IDなので実行はしない)。
+      const groups = Object.fromEntries(Array.from({ length: 300 }, (_, i) => ["block:internal-" + i, "local"]));
+      const large = JSON.stringify({ kind: "resolveGroups", choiceId: "unknown", resolution: { version: 1, token: "t", groups } });
+      expect(Buffer.byteLength(large)).toBeGreaterThan(4096);
+      expect((await post(large)).status).toBe(200);
+      expect((await post(JSON.stringify({ kind: "resolveGroups", choiceId: "unknown", resolution: { version: 2, token: "t", groups } }))).status).toBe(400);
+      expect((await post(" ".repeat(256 * 1024 + 1))).status).toBe(413);
       const bound = await (await post(JSON.stringify({ kind: "bind" }))).json() as SyncStatus;
       expect(bound.state).toBe("synced");
       // 別のサイトからは受け付けない

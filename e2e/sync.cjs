@@ -28,6 +28,7 @@ const ROOT = path.resolve(__dirname, '..');
     server = new tools.TestSyncServer(); await server.start();
     let p = tools.createProject('同期の画面の検査');
     const block = tools.addBlock(p, { parentId: tools.defaultTaskParent(p), title: 'A' }); p = block.project;
+    const other = tools.addBlock(p, { parentId: tools.defaultTaskParent(p), title: 'B' }); p = other.project;
     const fileA = path.join(tmp, 'a', 'boxglow.json'); fs.mkdirSync(path.dirname(fileA));
     fs.writeFileSync(fileA, tools.toJSON(p) + '\n');
     const configA = path.join(tmp, 'config-a'), configB = path.join(tmp, 'config-b');
@@ -87,22 +88,83 @@ const ROOT = path.resolve(__dirname, '..');
     check('同期: 1 台目の画面に、2 台目の変更が届く', received);
     check('同期: 受け取った後も「同期済み」', await chipText('同期済み'));
 
+    await fetch(base + 'api/sync', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'pause' }) });
+    const page2 = await (await browser.newContext()).newPage();
+    await page2.goto(base + '?serve=1&lang=ja');
+    await page2.waitForFunction(() => window.boxglow?.store.getState().project);
+    let releasePut, seenPut;
+    const held = new Promise(resolve => { releasePut = resolve; });
+    const arrived = new Promise(resolve => { seenPut = resolve; });
+    let once = false;
+    await page.route('**/api/project', async route => {
+      if (route.request().method() === 'PUT' && !once) { once = true; seenPut(); await held; }
+      await route.continue();
+    });
+    await page.evaluate(id => { const s = window.boxglow.store.getState(); s.apply(p => ({ ...p, blocks: { ...p.blocks, [id]: { ...p.blocks[id], description: 'Browser A' } } })); s.saveNow(); }, block.blockId);
+    await arrived;
+    await page2.evaluate(id => { const s = window.boxglow.store.getState(); s.apply(p => ({ ...p, blocks: { ...p.blocks, [id]: { ...p.blocks[id], description: 'Browser B' } } })); s.saveNow(); }, other.blockId);
+    await page2.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved');
+    // 通知が先に到着した最悪の順序を固定する (以前は412の同じ版を再競合と誤認して止まった)。
+    await page.waitForTimeout(300);
+    check('保存: PUT応答待ちの通知では基準を進めない', await page.evaluate(id => window.boxglow.store.getState().project.blocks[id].description !== 'Browser B', other.blockId));
+    releasePut();
+    await page.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved');
+    const savedBoth = JSON.parse(fs.readFileSync(fileA, 'utf8'));
+    check('保存: 2画面の別ブロック編集をCASで自動統合し、確認を出さない', savedBoth.blocks[block.blockId].description === 'Browser A' && savedBoth.blocks[other.blockId].description === 'Browser B' && await page.evaluate(() => !window.boxglow.store.getState().conflict));
+    await page.unroute('**/api/project');
+    // 今度は書き込み済みのPUTの応答だけ止め、その上で別画面が元へ戻す。
+    // 成功応答の本文を共通基準にできないと、その「戻す」が消える。
+    let releaseAck, acceptedPut;
+    const ackHeld = new Promise(resolve => { releaseAck = resolve; });
+    const accepted = new Promise(resolve => { acceptedPut = resolve; });
+    let ackOnce = false;
+    await page.route('**/api/project', async route => {
+      if (route.request().method() === 'PUT' && !ackOnce) {
+        ackOnce = true;
+        const response = await route.fetch();
+        acceptedPut(); await ackHeld;
+        await route.fulfill({ response }); return;
+      }
+      await route.continue();
+    });
+    await page.evaluate(id => { const s = window.boxglow.store.getState(); s.apply(p => ({ ...p, blocks: { ...p.blocks, [id]: { ...p.blocks[id], description: 'Temporary X' } } })); s.saveNow(); }, block.blockId);
+    await accepted;
+    await page2.waitForFunction(id => window.boxglow.store.getState().project.blocks[id].description === 'Temporary X', block.blockId);
+    await page2.evaluate(id => { const s = window.boxglow.store.getState(); s.apply(p => ({ ...p, blocks: { ...p.blocks, [id]: { ...p.blocks[id], description: 'Browser A' } } })); s.saveNow(); }, block.blockId);
+    await page2.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved');
+    await page.waitForTimeout(300); releaseAck();
+    await page.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved');
+    check('保存: 成功応答前に届いた他者の取り消しを消さない', JSON.parse(fs.readFileSync(fileA, 'utf8')).blocks[block.blockId].description === 'Browser A');
+    await page.unroute('**/api/project'); await page2.context().close();
+
     // 競合: 2 台目と 1 台目が同じ題名を別の値に → 1 台目が止まり、欄で選んで進む (準備の間は常駐の同期を止める。途中で自動の受け取りが入ると、競合にならないことがある)
     await fetch(base + 'api/sync', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'pause' }) });
-    fs.writeFileSync(fileB, tools.toJSON(tools.updateBlock(tools.fromJSON(fs.readFileSync(fileB, 'utf8')), block.blockId, { title: '2 台目の案' })) + '\n');
+    fs.writeFileSync(fileB, tools.toJSON(tools.updateBlock(tools.updateBlock(tools.fromJSON(fs.readFileSync(fileB, 'utf8')), block.blockId, { title: '2 台目の案' }), other.blockId, { title: 'B remote' })) + '\n');
     await tools.syncOnce({ file: fileB, server: server.url, token });
-    await page.evaluate((id) => { const s = window.boxglow.store.getState(); s.apply((p) => ({ ...p, blocks: { ...p.blocks, [id]: { ...p.blocks[id], title: '1 台目の案' } } })); s.saveNow(); }, block.blockId);
+    await page.evaluate(([id, other]) => { const s = window.boxglow.store.getState(); s.apply((p) => ({ ...p, blocks: { ...p.blocks, [id]: { ...p.blocks[id], title: '1 台目の案' }, [other]: { ...p.blocks[other], title: 'B local' } } })); s.saveNow(); }, [block.blockId, other.blockId]);
     try { await page.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved', null, { timeout: 10000 }); }
     catch (e) { throw new Error('保存が終わらない: ' + JSON.stringify(await page.evaluate(() => { const s = window.boxglow.store.getState(); return { saveState: s.saveState, saveError: s.saveError, conflict: !!s.conflict }; }))); }
     await page.getByRole('button', { name: '今すぐ同期', exact: true }).click();
     check('同期: 同じ項目を両方で変えると、印が「確認」', await chipText('確認'));
-    const choose = page.getByRole('button', { name: '手元の値に決める', exact: true });
-    check('同期: 欄に、手元 / サーバーの値に決めるボタンが出る', await choose.isVisible({ timeout: 5000 }).catch(() => false) && await page.getByRole('button', { name: 'サーバーの値に決める', exact: true }).isVisible());
-    await choose.click();
+    const groups = page.locator('.conflict-group');
+    await groups.first().waitFor();
+    check('同期: ブロック別の比較が2つあり、初期選択なし', await groups.count() === 2 && await page.getByRole('button', { name: '選択した内容で統合', exact: true }).isDisabled());
+    await groups.filter({ hasText: '1 台目の案' }).locator('.conflict-group__picks input').first().check();
+    check('同期: 1つだけ選んでも送れない', await page.getByRole('button', { name: '選択した内容で統合', exact: true }).isDisabled());
+    await groups.filter({ hasText: 'B local' }).locator('.conflict-group__picks input').last().check();
+    if (process.env.BOXGLOW_B_SCREENSHOTS) {
+      fs.mkdirSync(process.env.BOXGLOW_B_SCREENSHOTS, { recursive: true });
+      await page.screenshot({ path: path.join(process.env.BOXGLOW_B_SCREENSHOTS, 'serve-groups-ja.png') });
+      await page.setViewportSize({ width: 430, height: 900 });
+      await page.screenshot({ path: path.join(process.env.BOXGLOW_B_SCREENSHOTS, 'serve-groups-narrow.png') });
+      check('同期: 狭い画面でも比較が横にはみ出さない', await page.locator('.sync-panel').evaluate(el => el.scrollWidth <= el.clientWidth + 1));
+      await page.setViewportSize({ width: 1280, height: 800 });
+    }
+    await page.getByRole('button', { name: '選択した内容で統合', exact: true }).click();
     await fetch(base + 'api/sync', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'resume' }) });
     check('同期: 選ぶと「同期済み」に戻る', await chipText('同期済み'));
     const head = JSON.parse(server.project(remoteId, 'acc-e2e').head.text);
-    check('同期: サーバーの題名は、選んだ手元の値', head.blocks[block.blockId].title === '1 台目の案');
+    check('同期: グループごとに別の側を採用', head.blocks[block.blockId].title === '1 台目の案' && head.blocks[other.blockId].title === 'B remote');
 
     // serve との接続が切れたら、印は古い「同期済み」ではなく「接続なし」。同じポートで起動し直すと戻る (作者の手動確認で見つけた)
     child.kill();

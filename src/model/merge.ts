@@ -168,6 +168,7 @@ function restoreDeleted(out: Dict, deleter: Project, keeper: Project, explicitly
  * 3 方向マージ
  * Input : base = 共通の祖先, ours = 自分の版, theirs = 相手の版 (すべて fromJSON 済みの Project),
  *         choices = 競合した項目ごとの選択 (省略時は既定: ふつうは ours、削除と変更がぶつかった項目は変更された側)
+ * recordedAt = 保存を伴う統合の時刻 (呼出元の時計)。省略する比較では入力の既知時刻を使う。
  * Output: { project, merged, conflicts }
  */
 /**
@@ -180,7 +181,7 @@ const MERGED_ELSEWHERE: ReadonlySet<string> = new Set([
 , "schemaVersion", "id", "createdAt", "updatedAt", "version"
 ]);
 
-export function mergeProjects(base: Project | null, ours: Project, theirs: Project, choices: ConflictChoices = {}): MergeResult {
+export function mergeProjects(base: Project | null, ours: Project, theirs: Project, choices: ConflictChoices = {}, recordedAt?: string): MergeResult {
   const r: MergeContext = { project: ours, merged: 0, conflicts: [], choices };
   const b = (base ?? undefined) as unknown as Dict | undefined;
   const o = ours as unknown as Dict;
@@ -242,10 +243,26 @@ export function mergeProjects(base: Project | null, ours: Project, theirs: Proje
   // id の配列
   out.members = mergeArrayById(["members"], base?.members, ours.members ?? [], theirs.members ?? [], r);
   out.inputGroups = mergeArrayById(["inputGroups"], base?.inputGroups, ours.inputGroups ?? [], theirs.inputGroups ?? [], r);
+  // 削除済みの担当・入力グループ参照は removeMember / fromJSON と同じく除く。
+  // 入力側を変更しないよう、変わった要素だけを複製する。
+  const removedAssignments: { blockId: string; memberId: string }[] = [];
+  const memberIds = new Set((out.members as Project["members"]).map(m => m.id));
+  const groupIds = new Set((out.inputGroups as NonNullable<Project["inputGroups"]>).map(g => g.id));
+  for (const [id, b] of Object.entries(mergedBlocks)) {
+    const assigned = (b.assigneeIds ?? []) as string[];
+    if (assigned.some(m => !memberIds.has(m))) {
+      for (const memberId of new Set(assigned.filter(m => !memberIds.has(m)))) removedAssignments.push({ blockId: id, memberId });
+      mergedBlocks[id] = { ...b, assigneeIds: assigned.filter(m => memberIds.has(m)) };
+    }
+  }
+  for (const [id, port] of Object.entries(mergedPorts)) {
+    if (port.groupId && !groupIds.has(port.groupId as string)) {
+      const next = { ...port }; delete next.groupId; mergedPorts[id] = next;
+    }
+  }
   // ログは両方を合わせて時刻順 (同じ id は 1 つ)
   const log = new Map<string, Project["log"][number]>();
   for (const e of [...(ours.log ?? []), ...(theirs.log ?? [])]) log.set(e.id, e);
-  out.log = [...log.values()].sort((p, q) => (p.at < q.at ? -1 : p.at > q.at ? 1 : 0));
   // ボックスの短い ID (B 番号) の衝突: 両方が同じ番号を別のボックスに付けていたら、theirs 側を新しい番号に振り直す
   const blocks = out.blocks as Record<string, Dict>;
   const used = new Map<string, string>();
@@ -262,6 +279,29 @@ export function mergeProjects(base: Project | null, ours: Project, theirs: Proje
     } else used.set(key, id);
   }
   out.nextKey = nextKey;
+  // B番号が確定してから解除を記録する。時計は保存する呼出元から渡し、比較は副作用なしで作る。
+  if (removedAssignments.length) {
+    const sources = [ours, theirs];
+    const eventIds = sources.map(p => [...p.log].reverse().find(e => !e.id.startsWith("merge:unassign:"))?.id ?? p.createdAt).sort();
+    const at = recordedAt ?? [...sources.map(p => p.createdAt), ...[...log.values()].map(e => e.at)].sort().at(-1)!;
+    for (const { blockId, memberId } of removedAssignments) {
+      // 同じ基準からの再試行は同じID。次の同期基準に前回の記録が入れば別の発生として数える。
+      let occurrence = 1;
+      for (const e of base?.log ?? []) {
+        if (!e.id.startsWith("merge:unassign:")) continue;
+        try {
+          const parts = JSON.parse(e.id.slice("merge:unassign:".length));
+          if (parts[0] === blockId && parts[1] === memberId) occurrence = Math.max(occurrence, (Number.isSafeInteger(parts[3]) ? parts[3] : 0) + 1);
+        } catch { /* 旧版や外部のIDはそのまま残す。 */ }
+      }
+      const member = [...(base?.members ?? []), ...ours.members, ...theirs.members].find(m => m.id === memberId);
+      const block = blocks[blockId];
+      const id = "merge:unassign:" + JSON.stringify([blockId, memberId, eventIds, occurrence]);
+      if (!log.has(id)) log.set(id, { id, at, actor: "merge", kind: "note", blockId,
+        message: t("削除されたメンバー {member} の担当を {block} から外しました。", { member: member?.name ?? memberId, block: [block.key, block.title].filter(Boolean).join(" ") }) });
+    }
+  }
+  out.log = [...log.values()].sort((p, q) => (p.at < q.at ? -1 : p.at > q.at ? 1 : 0));
   r.project = out as unknown as Project;
   return { project: r.project, merged: r.merged, conflicts: r.conflicts };
 }

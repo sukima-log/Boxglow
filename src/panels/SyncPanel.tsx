@@ -6,6 +6,7 @@
  * - CLI の説明文は共有しても、コマンド文字列を実行しない。許可された種類の操作と opaque な choiceId を送る。
  * 裏方が状態を流す serve --sync / VS Code の拡張でだけ表示する。秘密のトークンを画面へ渡さない。
  */
+import { ConflictGroups } from "./ConflictGroups";
 import { useEffect, useRef, useState } from "react";
 import { useProjectStore } from "../store/useProjectStore";
 import { t } from "../i18n";
@@ -74,6 +75,8 @@ export function SyncChip() {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState({ left: 8, top: 60 });
   const ref = useRef<HTMLDivElement>(null);
+  // 比較中は左右の値を読める幅へ広げ、外枠と配置計算で同じ幅を使う。
+  const panelWidth = status?.halt?.review && !lost ? 680 : 400;
   useEffect(() => {
     if (!open) return;
     // 入力: ボタンの座標と viewport。出力: パネルの左上。狭い画面でも右端へはみ出さないよう制限する。
@@ -81,7 +84,7 @@ export function SyncChip() {
       const box = ref.current?.getBoundingClientRect();
       if (box)
         setPosition({
-          left: Math.max(8, Math.min(box.left, innerWidth - Math.min(400, innerWidth - 16) - 8)),
+          left: Math.max(8, Math.min(box.left, innerWidth - Math.min(panelWidth, innerWidth - 16) - 8)),
           top: Math.max(8, Math.min(box.bottom + 8, innerHeight - 160)),
         });
     };
@@ -105,7 +108,7 @@ export function SyncChip() {
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", escape);
     };
-  }, [open]);
+  }, [open, panelWidth]);
   if (!status) return null;
   const c = lost ? { label: t("停止中"), icon: "Ⅱ", tone: "problem" } : chip(status);
   return (
@@ -125,7 +128,12 @@ export function SyncChip() {
       {open && (
         <div
           className="sync-popover"
-          style={{ left: position.left, top: position.top, maxHeight: `calc(100dvh - ${position.top + 8}px)` }}
+          style={{
+            width: `min(${panelWidth}px, calc(100vw - 16px))`,
+            left: position.left,
+            top: position.top,
+            maxHeight: `calc(100dvh - ${position.top + 8}px)`,
+          }}
         >
           {lost ? (
             <div className="sync-panel" role="dialog" aria-label={t("同期")}>
@@ -167,8 +175,9 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
   // 表示の文と操作を分離。command の文面を解釈せず、ホストの choiceIds だけを操作に渡す。
   const choices =
     status.halt?.items.filter((i): i is Extract<HaltItem, { kind: "choice" }> => i.kind === "choice") ?? [];
-  const texts = status.halt?.items.filter((i): i is Extract<HaltItem, { kind: "text" }> => i.kind === "text") ?? [];
-  // 現行ホストは競合値を「  - path: 手元 ... / サーバー ...」として返す。
+  const texts =
+    status.halt?.items.filter((i): i is Extract<HaltItem, { kind: "text" }> => i.kind === "text") ?? [];
+  // 旧ホストは競合値を「  - path: 手元 ... / サーバー ...」として返す。
   // 値そのものは解釈せず表示し、共通の前置きだけを詳細へ移す。全件を見比べられるように残す。
   const conflicts =
     status.halt?.reason === "conflicts" ? texts.filter((item) => item.text.trimStart().startsWith("- ")) : [];
@@ -214,46 +223,70 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
               {t("サーバーに置く")}
             </button>
           )}
-          {file?.enabled && ready && file.binding && status.state !== "external" && status.state !== "halted" && (
-            <button
-              className="btn btn-sm"
-              disabled={status.state === "syncing"}
-              onClick={() => void act({ kind: "syncNow" })}
-            >
-              {t("今すぐ同期")}
-            </button>
-          )}
+          {file?.enabled &&
+            ready &&
+            file.binding &&
+            status.state !== "external" &&
+            status.state !== "halted" && (
+              <button
+                className="btn btn-sm"
+                disabled={status.state === "syncing"}
+                onClick={() => void act({ kind: "syncNow" })}
+              >
+                {t("今すぐ同期")}
+              </button>
+            )}
         </div>
       )}
       {status.halt && (
         <div className="sync-panel__halt">
-          {/* 置き換え・復旧の注意も含むホストの説明を維持する。競合時は左右の選択を隣に置く。 */}
-          <div className="sync-panel__comparison">
-            {comparison.map((item, n) => (
-              <div className="sync-panel__line" key={n}>
-                {item.text}
-              </div>
-            ))}
-          </div>
-          {choices.length ? (
-            <div className="sync-panel__choices">
-              {choices.map((ch) => (
-                <button
-                  key={ch.id}
-                  className="btn btn-sm"
-                  disabled={unsaved}
-                  title={unsaved ? t("先に保存してください") : ch.label}
-                  onClick={() => {
-                    const id = status.halt!.choiceIds[ch.id];
-                    if (id) void act({ kind: "choose", choiceId: id });
-                  }}
-                >
-                  {ch.label}
-                </button>
-              ))}
-            </div>
+          {status.halt.review && status.halt.resolutionChoiceId ? (
+            <>
+              <ConflictGroups
+                review={status.halt.review}
+                remoteLabel={t("サーバーの値")}
+                disabled={unsaved}
+                onSubmit={(resolution) =>
+                  void act({
+                    kind: "resolveGroups",
+                    choiceId: status.halt!.resolutionChoiceId!,
+                    resolution,
+                  })
+                }
+              />
+              {status.halt.resolutionError && <p role="status">{status.halt.resolutionError}</p>}
+            </>
           ) : (
-            <div className="muted">{fixHint(status.halt.fix)}</div>
+            <>
+              {/* 置き換え・復旧の注意も含むホストの説明を維持する。競合時は左右の選択を隣に置く。 */}
+              <div className="sync-panel__comparison">
+                {comparison.map((item, n) => (
+                  <div className="sync-panel__line" key={n}>
+                    {item.text}
+                  </div>
+                ))}
+              </div>
+              {choices.length ? (
+                <div className="sync-panel__choices">
+                  {choices.map((ch) => (
+                    <button
+                      key={ch.id}
+                      className="btn btn-sm"
+                      disabled={unsaved}
+                      title={unsaved ? t("先に保存してください") : ch.label}
+                      onClick={() => {
+                        const id = status.halt!.choiceIds[ch.id];
+                        if (id) void act({ kind: "choose", choiceId: id });
+                      }}
+                    >
+                      {ch.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="muted">{fixHint(status.halt.fix)}</div>
+              )}
+            </>
           )}
         </div>
       )}

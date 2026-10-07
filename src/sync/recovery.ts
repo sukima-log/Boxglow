@@ -68,7 +68,7 @@ export function prepareRestore(recovery: Recovery, current: Project, step: Resto
  * Input : recovery, current, step, picks = 競合ごとの選択 (prepareRestore の全部の競合について必要)
  * Output: { project, merged } / { error } (選んでいない競合がある・統合の結果が正しくない。何も変えない)
  */
-export function applyRestore(recovery: Recovery, current: Project, step: RestoreStep, picks: RestorePicks): { project: Project; merged: number } | { error: string } {
+export function applyRestore(recovery: Recovery, current: Project, step: RestoreStep, picks: RestorePicks, recordedAt?: string): { project: Project; merged: number } | { error: string } {
   const prepared = prepareRestore(recovery, current, step);
   if ("error" in prepared) return prepared;
   if (prepared.conflicts.some((c) => !picks[c.id])) return { error: "unresolved" };
@@ -76,7 +76,7 @@ export function applyRestore(recovery: Recovery, current: Project, step: Restore
   const saved = step === "gui" ? p.gui : p.editor!;
   const choices: ConflictChoices = {};
   for (const c of prepared.conflicts) choices[c.id] = picks[c.id] === "saved" ? "ours" : "theirs";
-  const result = mergeProjects(p.base, saved, current, choices);
+  const result = mergeProjects(p.base, saved, current, choices, recordedAt);
   // 統合の結果が計画として正しいか (個別には正しい編集どうしでも、親子の循環などができることがある。R40-04)
   let text: string;
   try { text = toJSON(result.project); validateProjectText(text); } catch (e) { return { error: "invalid:" + (e instanceof Error ? e.message : String(e)) }; }

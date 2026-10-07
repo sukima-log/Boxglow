@@ -361,7 +361,7 @@ export class SyncWatcher {
     const cred = this.creds();
     const tag = cred.tag;
     try {
-      result = await syncOnce({ file, server: this.options.server, token: cred.token, fetch: this.options.fetch, now: () => new Date(this.wall()) });
+      result = await syncOnce({ humanActions: false, file, server: this.options.server, token: cred.token, fetch: this.options.fetch, now: () => new Date(this.wall()) });
       // 自分の同期が処理した状態の世代番号を覚え直す (自分で進めた分を「別の実行が進めた」と数えて、同期を繰り返さないように)。
       // 値は、同期がロックの中で確かめたもの (結果に入っている)。ロックを外した後に読み直すと、その隙に別の実行が進めた分を「自分が処理した」と
       // 取り違えて、その実行の続き (結び直しなど) を見落とす (R33-01)

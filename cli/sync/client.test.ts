@@ -250,7 +250,7 @@ describe("boxglow sync コマンド", () => {
    * Output: 終了コードと標準出力
    */
   const run = (d: Device, ...args: string[]) => new Promise<{ status: number | null; stdout: string }>((done) => {
-    const child = spawn(process.execPath, ["bin/boxglow.js", "sync", ...args, "--file", d.file, "--lang", "ja"]
+    const child = spawn(process.execPath, ["bin/boxglow.js", "sync", "--actor", "human", ...args, "--file", d.file, "--lang", "ja"]
     , { env: { ...process.env, BOXGLOW_CONFIG_DIR: d.config, BOXGLOW_SERVER: "", BOXGLOW_TOKEN: "" } });
     let stdout = "";
     child.stdout.on("data", (c: Buffer) => { stdout += c.toString(); });
@@ -262,10 +262,13 @@ describe("boxglow sync コマンド", () => {
     B.edit((p) => updateBlock(p, a, { title: "B の案" }));
     const stopped = await run(B);
     expect(stopped.status).toBe(2);
-    expect(stopped.stdout).toContain(`blocks.${a}.title`);
+    expect(stopped.stdout).toContain("B2 B の案");
+    expect(stopped.stdout).toContain("題名");
+    expect(stopped.stdout).toContain("手元の編集: B の案");
+    expect(stopped.stdout).toContain("サーバーの値: A の案");
     const command = /boxglow sync (--resolve \S+ --prefer local)/.exec(stopped.stdout);
     expect(command).not.toBeNull();
-    const done = await run(B, ...command![1].split(" "));
+    const done = await run(B, ...command![1].split(" "), "--actor", "human");
     expect(done.status).toBe(0);
     expect(B.project.blocks[a].title).toBe("B の案");
   }, 30_000);
@@ -1083,3 +1086,60 @@ describe("断られた送りを片付けるときは、サーバーに結果を�
   });
 });
 
+
+it("段階B: 2端末でグループ別に選び、部分指定と古い印ではファイルもサーバーも変えない", async () => {
+  const { A, B, a, b } = await twoDevices();
+  A.edit(p => updateBlock(updateBlock(p, a, { title: "Remote A" }), b, { title: "Remote B" })); await A.sync();
+  B.edit(p => updateBlock(updateBlock(p, a, { title: "Local A" }), b, { title: "Local B" }));
+  const result = await B.sync();
+  if (result.status !== "halted" || result.halt.reason !== "conflicts") throw new Error("Expected conflict");
+  const review = result.halt.review!;
+  expect(review.groups).toHaveLength(2);
+  const before = readFileSync(B.file, "utf8"), head = server.project("plan-1")!.head!.revision;
+  const groups = Object.fromEntries(review.groups.map(g => [g.id, g.blocks.some(x => x.id === a) ? "local" as const : "remote" as const]));
+  for (const resolution of [ { version: 1 as const, token: review.token, groups: { [review.groups[0].id]: "local" as const } }, { version: 1 as const, token: "stale", groups } ]) {
+    expect((await B.sync({ resolution })).status).toBe("halted");
+    expect(readFileSync(B.file, "utf8")).toBe(before); expect(server.project("plan-1")!.head!.revision).toBe(head);
+  }
+  expect((await B.sync({ resolution: { version: 1, token: review.token, groups } })).status).toBe("synced");
+  await A.sync();
+  for (const device of [A, B]) { expect(device.project.blocks[a].title).toBe("Local A"); expect(device.project.blocks[b].title).toBe("Remote B"); }
+});
+
+it("解決を使った後の二巡目でサーバーが進んだら、古いresolutionを使わず比較を返す", async () => {
+  const { A, B, a } = await twoDevices();
+  A.edit(p => updateBlock(p, a, { title: "Remote1" })); await A.sync();
+  B.edit(p => updateBlock(p, a, { title: "Local" }));
+  const first = await B.sync();
+  if (first.status !== "halted" || first.halt.reason !== "conflicts") throw Error("conflicts expected");
+  const review = first.halt.review!;
+  let advanced = false;
+  const result = await B.sync({
+    resolution: { version: 1, token: review.token, groups: Object.fromEntries(review.groups.map(g => [g.id, "local" as const])) },
+    onStep: async kind => {
+      if (!advanced && kind === "set-base") {
+        advanced = true;
+        A.edit(p => updateBlock(p, a, { title: "Remote2" }));
+        await A.sync();
+        process.env.BOXGLOW_CONFIG_DIR = B.config;
+      }
+    },
+  });
+  expect(advanced).toBe(true);
+  expect(result).toMatchObject({ status: "halted", halt: { reason: "conflicts", resolutionError: expect.any(String) } });
+  expect(B.project.blocks[a].title).toBe("Local");
+  expect(fromJSON(server.project("plan-1")!.head!.text).blocks[a].title).toBe("Remote2");
+});
+
+it("担当削除と別端末の担当追加は、競合なしで参照を整理して同期する", async () => {
+  const { A, B, a } = await twoDevices();
+  A.edit(p => ({ ...p, members: [{ id: "m", name: "M", color: "red" }] }));
+  await A.sync(); await B.sync();
+  A.edit(p => ({ ...p, members: [] }));
+  B.edit(p => ({ ...p, blocks: { ...p.blocks, [a]: { ...p.blocks[a], assigneeIds: ["m"] } } }));
+  await A.sync();
+  expect(await B.sync({ humanActions: false })).toMatchObject({ status: "synced" });
+  expect(B.project.blocks[a].assigneeIds).toEqual([]);
+  expect(await A.sync({ humanActions: false })).toMatchObject({ status: "synced" });
+  expect(A.project.blocks[a].assigneeIds).toEqual([]);
+});

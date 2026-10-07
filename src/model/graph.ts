@@ -1080,6 +1080,7 @@ export function fromJSON(text: string): Project {
     if (!Array.isArray(b.decisions)) b.decisions = [];
     if (!Array.isArray(b.artifacts)) b.artifacts = [];
     if (!Array.isArray(b.assigneeIds)) b.assigneeIds = [];
+    b.assigneeIds = b.assigneeIds.filter(id => q.members.some(m => m.id === id));
     if (b.progress !== undefined && typeof b.progress !== "number") delete b.progress;
   }
   // 版 3 まで: 入力の required は既定 false で、しかも何にも効いていなかった。版 4 から「必須」が意味を持つので全部 必須 に直す

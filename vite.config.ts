@@ -17,6 +17,8 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    globalSetup: ["./cli/test-global-setup.ts"],
+    setupFiles: ["./cli/test-environment.ts"],
     include: ["src/**/*.test.ts", "cli/**/*.test.ts"],
   },
 });

@@ -1,3 +1,4 @@
+import { t } from "../../src/i18n/core";
 /**
  * 同期の実行 (手元のファイル・状態の置き場・サーバーとの通信をつなぐ)
  * 判断は src/sync/engine.ts の decide に任せ、ここは「読む → 判断 → 記録 → 実行 → 状態を進める」を、noop か halt になるまで繰り返す。
@@ -7,6 +8,7 @@
  *   - 手元への書き込みは、今の保存の手順 (commitFile: ロック + 版の照合 + 原子的な置換) を通す。計画のファイルのロックを、通信の間は持たない。
  *   - 状態用のロックを、1 回の同期の間持つ (同じ結び付けを扱う同期の処理は 1 つだけ)。
  */
+import type { ResolutionInput } from "../../src/model/conflict-groups";
 import { randomUUID } from "node:crypto";
 import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { commitFile, FileBusy, FileConflict, revisionOf } from "../file-store";
@@ -94,8 +96,13 @@ function rejectUnauthorized(res: Response): void {
   if (res.status === 401 || res.status === 403) throw new SyncAuthError(res.status);
 }
 
+/** AI用入口から人の判断が必要な操作を要求した場合。通信や状態の作成より前に拒否する。 */
+export class HumanSyncRequired extends Error { constructor() { super(t("この同期には人の判断が必要です。AIは変更の違いと停止理由を要約してaskで知らせ、人が画面またはCLIで選ぶまで待ってください。AIは選択を代行しないでください。") + "\n" + t("人が実行している場合は、boxglow sync --help の「人の操作」を参照してください。")); } }
+
 /** 同期の指定 */
 export interface SyncOptions {
+  /** CLI/MCPは明示的に設定。GUIホストは人の操作として既存経路を使う。 */
+  humanActions?: boolean;
   /** 計画のファイル */
   file: string;
   /** サーバーの場所 (URL) */
@@ -109,7 +116,7 @@ export interface SyncOptions {
   /** 「消えた項目を基準から戻す」という人の選択の印 */
   restoreDeletion?: string;
   /** 競合への人の選択 (表示した競合の組の印と、どちらを採るか) */
-  resolution?: { token: string; prefer: "local" | "remote" };
+  resolution?: ResolutionInput;
   /** 初めて結び付けるときに、手元とサーバーの中身が違った場合の人の選択 */
   firstLink?: { token: string; prefer: "local" | "remote" };
   /** 止まっている「受け取りの再開」への人の選択: 印 (recoveryToken の値) と、反映済みとして続けるか */
@@ -310,10 +317,15 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
     const known = bindingsOf(file);
     const elsewhere = known.bindings.find((b) => b.server !== server);
     if (elsewhere) return halted({ reason: "bound-elsewhere", server: elsewhere.server });
+    if (options.humanActions === false && (
+      options.resolution || options.firstLink || options.relink || options.recover || options.approvedDeletion || options.restoreDeletion || options.confirmAccount
+      || !known.bindings.some(b => b.server === server)
+    )) throw new HumanSyncRequired();
     const store = new StateStore(bindingDir(file, server));
     unlock = store.lock();
     if (!unlock) return { status: "busy", what: "sync" };
     stored = store.read();
+    if (options.humanActions === false && !stored) throw new HumanSyncRequired();
     // 画面で選んだ選択は、表示したときの状態の世代と、ロックの中で照合する (違えば、送りも書き込みもしない)
     if (options.expectGeneration !== undefined && (stored?.generation ?? null) !== options.expectGeneration) return halted({ reason: "state-changed" });
     // 新しい結び付けを作ることになる場合: 状態を読めないフォルダがあると、このファイルがすでに結び付いているかを確かめられない。

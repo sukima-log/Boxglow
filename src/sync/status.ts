@@ -4,6 +4,8 @@
  * 設計: docs/private/SYNC_GUI_DESIGN.md 2.3 〜 2.5
  */
 
+import type { ConflictResolution, ConflictReview } from "../model/conflict-groups";
+
 /** 人が選べる操作 (CLI の引数と 1 対 1。印は CLI と同じ値) */
 export type SyncAction =
   | { kind: "resolve"; token: string; prefer: "local" | "remote" }
@@ -25,6 +27,9 @@ export interface HaltView {
   reason: string;
   done: { pulled: number; pushed: number; edited: number; backup?: string };
   items: HaltItem[];
+  /** 共通のブロック比較。古い裏方から届かない場合は従来の表示を使う。 */
+  review?: ConflictReview;
+  resolutionError?: string;
   /** 選べる操作が無いときに、直す場所 */
   fix: "local-file" | "sync-state" | "server-content" | "credentials" | "rerun" | "none";
 }
@@ -46,7 +51,7 @@ export interface SyncStatus {
   /** 最後にそろえたサーバーの版 (詳細の欄にだけ出す) */
   revision: string | null;
   /** 確認が要る場面 (選べる操作つき。choiceIds = 項目の id → 選択 ID) */
-  halt?: HaltView & { choiceIds: Record<string, string> };
+  halt?: HaltView & { choiceIds: Record<string, string>; resolutionChoiceId?: string };
   /** 選べる操作の無い問題と、直す場所 */
   problem?: { kind: "auth" | "network" | "rejected" | "state-unreadable" | "busy"; text: string; fix: "credentials" | "wait" | "local-file" | "sync-state" | "rerun" };
   /** サインインの途中 (コードを表示している間) */
@@ -62,4 +67,5 @@ export type HostAction =
   | { kind: "signIn"; provider: "github" | "google" } | { kind: "cancelSignIn" } | { kind: "signOut" }
   | { kind: "bind" } | { kind: "syncNow" }
   | { kind: "choose"; choiceId: string }
+  | { kind: "resolveGroups"; choiceId: string; resolution: ConflictResolution }
   | { kind: "pause" } | { kind: "resume" };

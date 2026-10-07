@@ -875,3 +875,18 @@ describe("やりかけの送りと、消された計画", () => {
     expect(A.project.blocks[a].title).toBe("A 改");
   });
 });
+
+it("段階B: 項目別に親の削除と子の保持を選んでも、孤立する結果は書かない", () => {
+  const { A, B, a } = twoDevices();
+  const child = addBlock(A.project, { parentId: a, title: "Child" });
+  A.local = content(textOf(child.project)); A.sync(); B.sync();
+  A.edit(p => updateBlock(updateBlock(p, a, { title: "Changed parent" }), child.blockId, { title: "Changed child" })); A.sync();
+  B.edit(p => removeBlock(p, a));
+  const waiting = B.sync();
+  if (waiting.kind !== "halt" || waiting.halt.reason !== "conflicts") throw new Error("Expected conflict");
+  const review = waiting.halt.review!, before = B.local!.text, head = B.server.head!.revision;
+  const fields = Object.fromEntries(review.groups.flatMap(g => g.fields.map(f => [f.id, f.id === JSON.stringify(["blocks", a]) ? "local" as const : "remote" as const])));
+  const result = B.sync({ resolution: { version: 1, token: review.token, groups: {}, fields } });
+  expect(result).toMatchObject({ kind: "halt", halt: { reason: "conflicts", resolutionError: expect.any(String), review: { token: review.token } } });
+  expect(B.local!.text).toBe(before); expect(B.server.head!.revision).toBe(head);
+});

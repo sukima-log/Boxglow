@@ -155,14 +155,14 @@ describe("logout / whoami / 同期での利用", () => {
   it("サインインすると、boxglow sync は保存済みのトークンで同期する。結び付けの利用者は、サーバーが確かめた利用者", async () => {
     await login(approve(ALICE));
     const file = plan();
-    expect(await runSyncCommand({ file, server: server.url, project: "p1" }, out)).toBe(0);
+    expect(await runSyncCommand({ actor: "human", file, server: server.url, project: "p1" }, out)).toBe(0);
     expect(server.project("p1", "acc-alice")?.head).toBeTruthy();
   });
 
   it("logout: サーバー側で取り消してから、手元を消す。その後の同期は、サインインの案内を出す", async () => {
     await login(approve(ALICE));
     const file = plan();
-    await runSyncCommand({ file, server: server.url, project: "p1" }, out);
+    await runSyncCommand({ actor: "human", file, server: server.url, project: "p1" }, out);
     expect(await runLogout({ server: server.url, out })).toBe(0);
     expect(readCredentials(server.url)).toBeNull();
     expect([...server.revoked]).toEqual(["tok-acc-alice-1"]);
@@ -189,7 +189,7 @@ describe("logout / whoami / 同期での利用", () => {
   it("取り消されたトークンでの同期は、使ったトークンの出どころに合わせて、直し方を案内する", async () => {
     await login(approve(ALICE));
     const file = plan();
-    await runSyncCommand({ file, server: server.url, project: "p1" }, out);
+    await runSyncCommand({ actor: "human", file, server: server.url, project: "p1" }, out);
     server.revoked.add("tok-acc-alice-1");
     await expect(syncOnce({ file, server: server.url, token: "tok-acc-alice-1" })).rejects.toBeInstanceOf(SyncAuthError);
     lines = [];
@@ -399,7 +399,7 @@ describe("配布する入口 (bin/boxglow.js) を、サブプロセスで通す"
     mkdirSync(join(root, "cli-plan"), { recursive: true });
     const file = join(root, "cli-plan", "boxglow.json");
     writeFileSync(file, toJSON(fromJSON(toJSON(createProject("入口の試験")))) + "\n");
-    const synced = await run(["sync", "--server", server.url, "--project", "cli-1", "--file", file]);
+    const synced = await run(["sync", "--server", server.url, "--project", "cli-1", "--file", file, "--actor", "human"]);
     expect(synced.status).toBe(0);
     expect(server.project("cli-1", "acc-alice")?.head).toBeTruthy();
     const out1 = await run(["logout", "--server", server.url]);

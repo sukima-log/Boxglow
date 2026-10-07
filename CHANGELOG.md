@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- 段階B再レビュー B5: CLI試験から起動元のAI識別環境を分離。人の記録者名・設定フォルダだけによる誤判定を修正し、`human:名前` と人向けヘルプを追加。Undoで外部の入出力や配線を失う段は通知して停止し、項目の一部を戻せない場合も通知。常時同期の再実行案内から `--watch` を除去。担当解除ログは統合時刻・発生回・確定後のB番号を記録。
+
+- 段階B再レビュー B4: 単体試験の前にCLIを再ビルド。外部更新の履歴を項目単位へ圧縮し、保存通知の判別をハッシュ化。担当解除をログ・比較欄に表示し、Undo/Redoの境界を通知。同期のAI向け出力から人専用コマンドを除き、人向けには元の引数で再実行方法を案内。
+- 段階B再レビュー: 担当参照の正規化、保存中の文書読み直しと自己通知の競合を修正。Undo/Redoの外部差分反映を遅延化し、比較グループと値の表示を整理。
+- 同期の競合解決・初回結び付けなどの判断はGUIまたは明示的なCLI `--actor human` に限定。MCPは固定対象の通常同期と比較取得のみ。
+
+- Conflict resolution now groups changes by block in comparisons across the CLI, MCP and UI, with a separate project settings group and joint review for dependent wires, deletions and moves. The shared versioned request supports block and field choices; partial or stale choices never apply. See [conflict resolution](docs/SYNC_CONFLICTS.md).
+- File-save collisions with no conflicting fields merge automatically and save against the latest CAS revision. Unsaved VS Code text-editor edits and edits held for manual review remain protected; success is reported only after saving.
+
 - The block tree has its own sidebar button, separate from filters, members and parts. Compact rows show hierarchy guides and category icons; branches can be expanded or collapsed individually or all at once. The tree supports keyboard navigation and block management (add, rename, move, change status and delete with Undo), follows canvas selection, and remembers whether the sidebar is open.
 - The sync chip groups the existing states into five labels: Synced, Transferring, Needs review, Stopped and Not syncing. Its panel puts the current explanation, main actions and comparisons first, with account information, details and settings folded away. File save status is labelled separately from server sync status.
 - Category labels stay visible in block headers, including the overview. The category selector is directly below the block title in every inspector tab; the tree shows the category as an icon with its name in the tooltip.

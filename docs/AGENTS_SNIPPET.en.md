@@ -108,4 +108,13 @@ npx boxglow done B12 --artifact "<name>=<path>" --context-token <new context tok
 - MCP: boxglow_scope / boxglow_focus / boxglow_policy, reason on boxglow_start, and includeCompleted on boxglow_resume. Pass contextToken for writes.
 - All data fields are optional; schema v5 is unchanged. Old versions (0.4.2 and earlier) do not enforce these checks and drop workflowPolicy / focusBlockId when saving. Align all writers (CLI, serve, web app, bundled extension app) to a supporting build before using these settings. Check build time as well as version.
 
+
+### Sync decisions
+
+AI may only sync already bound projects and inspect comparisons. If sync stops for a conflict or a human choice, summarize the differences and use ask to notify the user. Never resolve conflicts, create a new binding, relink, recover, adopt, restore, or confirm an account. A human must use the UI or explicitly run CLI with --actor human. AI must never add --actor human, including after a chat answer; record the answer and wait for the human to apply the sync choice.
+
 ---
+
+Human-only sync operations prevent accidental actions; they are not enforced authorization or OS-level isolation. AI must never identify itself with `--actor human`. Report the comparison and stop reason to the user. MCP and AI-identified CLI output do not provide executable human choice commands.
+
+Human CLI actions also accept `--actor human:name`; AI must not impersonate a human using either form. The `boxglow sync --help` hint in AI halt output is for humans who inherited an AI environment, not permission for AI to apply their choice.

@@ -1,3 +1,5 @@
+import { externalHistoryPatch, combineHistoryPatch, applyHistoryPatch, historyPatchMasksChanges, type HistoryPatch } from "./history-rebase";
+import { groupConflicts, resolveGroupChoices, type ConflictReview, type ConflictResolution } from "../model/conflict-groups";
 import type { PeerVersion } from "../model/version";
 import { validateProjectText } from "../model/validate-file";
 import type { ConflictChoices, MergeResult } from "../model/merge";
@@ -146,6 +148,9 @@ interface State {
   /** 保存の衝突 (editorDirty = VS Code のエディタに未保存の編集があるときに受け取った。画面の基準がエディタの中身まで進んでいるので、画面では統合しない。R49-02) */
   conflict: { text: string; revision: string; paths: string[]; editorDirty?: boolean } | null;
   previewConflict: () => MergeResult | null;
+  /** 共通比較と選択。tokenは手元・相手・基準の組が変わるたびに失効する。 */
+  previewConflictReview: () => ConflictReview | null;
+  resolveConflictGroups: (request: ConflictResolution) => boolean;
   resolveConflict: (choice: "merge" | "remote", choices?: ConflictChoices, revision?: string) => boolean;
 
   embed: boolean;
@@ -256,7 +261,6 @@ let epoch = 0;
  */
 let holdSave = false;
 let inFlight = false;
-let inFlightText = "";
 let refreshExternal: (() => Promise<void>) | null = null;
 /**
  * 手動の更新で呼ぶ「今すぐ読み直す」処理 (開き方ごとに差し替える。計画を開いていないときは null)。
@@ -268,38 +272,104 @@ let vscodeReloadWaiter: (() => void) | null = null;
 /** VS Code の中: 拡張から届いた「空のファイル」の中身と版 (名前を付けて計画を作るときの、保存の基準にする) */
 let vscodeEmpty: { text: string; version: number; name: string } | null = null;
 let messageHandler: ((ev: MessageEvent) => void) | null = null;
-const pendingSaves = new Map<string, { resolve: (version: number) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+const pendingSaves = new Map<string, { base: string; resolve: (version: number) => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
 function saveToVsCode(text: string): Promise<number> {
   const requestId = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { pendingSaves.delete(requestId); reject(new Error(t("保存の応答がありません。編集は画面に残っています。再試行してください。"))); }, 10000);
-    pendingSaves.set(requestId, { resolve, reject, timer });
+    pendingSaves.set(requestId, { base: baseText, resolve, reject, timer });
     vscodeApi!.postMessage({ type: "save", requestId, text, baseText, version: vscodeVersion });
   });
 }
 /** ファイルの監視間隔 (ms) */
 const WATCH_INTERVAL = 1500;
 
+/** CASの失敗を安全に自動統合できた場合だけ、同じ保存ループを最新の版でやり直す。 */
+class AutoMergeRetry extends Error {}
+
 export const useProjectStore = create<State>((set, get) => {
-  const markConflict = (text: string, revision: string, editorDirty = false) => {
+  let mergeSerial = 0;
+  let mergedNotice = false;
+  // 保存の受理前後が未確定の通知は保留する。受理済みなら送った本文が共通の基準になる。
+  let deferredRemote: { text: string; revision: string } | null = null;
+  // 同じ予約を持つ履歴は新しい差分も共有する。予約は項目ごとの最新値だけで、全文や更新列は残さない。
+  const historyRebases = new WeakMap<Project, HistoryPatch>();
+  const rebaseHistories = (past: Project[], future: Project[], base: Project | null, remote: Project) => {
+    const delta = externalHistoryPatch(base, remote);
+    const combined = new Map<HistoryPatch | undefined, HistoryPatch>();
+    const rebase = (history: Project[]) => history.map(snapshot => {
+      const old = historyRebases.get(snapshot);
+      let patch = combined.get(old);
+      if (!patch) { patch = combineHistoryPatch(old, delta); combined.set(old, patch); }
+      const copy = { ...snapshot }; historyRebases.set(copy, patch); return copy;
+    });
+    return { past: rebase(past), future: rebase(future) };
+  };
+  const materializeHistory = (snapshot: Project): Project | null => {
+    const patch = historyRebases.get(snapshot);
+    return patch ? applyHistoryPatch(snapshot, patch) : snapshot;
+  };
+  const historyNotice = (snapshot: Project): string | null => {
+    const patch = historyRebases.get(snapshot);
+    return patch && historyPatchMasksChanges(snapshot, patch)
+      ? t("一部は相手の変更と重なるため戻せませんでした。相手の変更は保持しています。") : null;
+  };
+  let reviewBasis: { project: Project; conflict: State["conflict"]; base: string; token: string } | null = null;
+  const markConflict = (text: string, revision: string, editorDirty = false, allowAuto = true) => {
     const current = get().project;
-    if (!current || text === baseText) return;
-    const remote = fromJSON(text);
-    const result = mergeProjects(baseText ? fromJSON(baseText) : null, current, remote);
+    if (!current || (text === baseText && !editorDirty)) return false;
+    // 読めない最新も衝突として保持する。例外で保存Promiseを宙に浮かせない。
+    let remote: Project, base: Project | null;
+    let result: ReturnType<typeof mergeProjects>;
+    try {
+      remote = validateProjectText(text);
+      base = baseText ? fromJSON(baseText) : null;
+      result = mergeProjects(base, current, remote, {}, new Date().toISOString());
+    } catch {
+      mergedNotice = false;
+      set({ conflict: { text, revision, paths: [], ...(editorDirty ? { editorDirty: true } : {}) }, saveState: "unsaved",
+        saveError: t("受け取った計画の形式や参照を確認できません。編集は保持しています。退避してファイルを確認してください。") });
+      return false;
+    }
+    // 入力: 外部の最新JSONと版。出力: 自動統合した場合だけtrue。
+    // R49: エディタ側の未保存編集・追い付き待ち・手動確認待ちには自動保存を適用しない。
+    const state = get();
+    if (allowAuto && !editorDirty && !state.conflict?.editorDirty && !state.editorBehind && !holdSave && !state.readonly
+      && (state.source === "serve" || state.source === "vscode")
+      && !result.conflicts.some(c => !c.automatic)) {
+      try {
+        validateProjectText(toJSON(result.project));
+        const { past, future } = rebaseHistories(state.past, state.future, base, remote);
+        baseText = text;
+        if (state.source === "serve") serveRevision = revision;
+        else vscodeVersion = Number(revision);
+        mergeSerial++;
+        mergedNotice = true;
+        set({ project: result.project, conflict: null, saveError: null, saveState: "unsaved",
+          past, future });
+        scheduleSave();
+        return true;
+      } catch { /* 競合ゼロでも循環参照などが生まれる。比較の案内を残し、保存は進めない。 */ }
+    }
+    mergedNotice = false;
     // (エディタに未保存の編集があるときは、統合ではなく退避と開き直しを案内する。R49-02)
     set({ conflict: { text, revision, paths: result.conflicts.map((c) => c.path), ...(editorDirty ? { editorDirty: true } : {}) }, saveState: "unsaved"
     , saveError: editorDirty
         ? t("同期で新しい中身を受け取りましたが、エディタに未保存の編集があるため、ここでは統合できません。手元の編集を退避してから、このファイルのタブを全部閉じて (保存しない) 開き直し、⋯ メニューの「退避した編集を読み込む」で取り込んでください。")
         : t("他の編集と競合しました。両方の変更を保持しているので、統合方法を選んでください。") });
+    return false;
   };
   const acceptRemote = (text: string, revision = "") => {
     const current = get().project;
-    if (text === baseText || text === inFlightText) return;
+    if (inFlight) { deferredRemote = { text, revision }; return; }
+    if (text === baseText) return;
     if (get().saveState !== "saved" && current) { markConflict(text, revision); return; }
     const next = fromJSON(text);
+    const base = baseText ? fromJSON(baseText) : null;
+    const { past, future } = rebaseHistories(get().past, get().future, base, next);
     baseText = text;
     if (get().source === "serve") serveRevision = revision;
-    set({ project: next, past: current ? [...get().past.slice(-HISTORY_LIMIT + 1), current] : [], future: [], selection: get().selection.blockId && !next.blocks[get().selection.blockId!] ? NO_SELECTION : get().selection });
+    set({ project: next, past, future, selection: get().selection.blockId && !next.blocks[get().selection.blockId!] ? NO_SELECTION : get().selection });
   };
   const persist = async (explicit = false) => {
     // (止めている間は、明示的な Save だけが送る)
@@ -308,49 +378,110 @@ export const useProjectStore = create<State>((set, get) => {
     if (!initial.project || initial.ephemeral || initial.readonly || initial.conflict || inFlight) return;
     const generation = epoch, source = initial.source;
     inFlight = true;
+    let attempts = 0;
+    let writes = 0;
+    // この保存ループ内で受理済みの本文。遅れて届いた自己通知は統合しない。終了後は最新を再取得する。
+    const written = new Set<string>(); // 全文ではなくSHA-256だけを保持する。
     try {
       do {
+        if (get().conflict) { set({ saveState: "unsaved" }); return; }
+        // 相手が連続で変わるときは無制限に送り続けない。中身は画面に残して再試行を案内する。
+        if (attempts >= 8) throw new Error(t("変更が続いているため保存を待っています。編集は保持しています。保存を再試行してください。"));
+        if (writes++ > 0 && holdSave) { set({ saveState: "unsaved" }); return; }
+        const serial = mergeSerial;
         const project = get().project!;
         const text = toJSON(project) + "\n";
-        inFlightText = text;
         set({ saveState: "saving", saveError: null });
         if (source === "serve") {
           const response = await fetch(serveApi("api/project"), { method: "PUT", headers: { "content-type": "application/json", "if-match": serveRevision }, body: text });
           if (generation !== epoch) return;
           if (response.status === 412) {
+            attempts++;
+            deferredRemote = null; // この後のGETで最新を取り直す。通知だけでは基準を進めない。
             const latest = await fetch(serveApi("api/project"), { cache: "no-store" });
             if (!latest.ok) throw new Error(t("最新のファイルを取得できません。接続を確認して保存を再試行してください。"));
             const remote = await latest.text();
             if (generation !== epoch) return;
+            deferredRemote = null;
             if (remote === text) serveRevision = latest.headers.get("etag") ?? ""; // 前の書き込みは成功していて、応答だけが届かなかった (ディスクは今の中身と同じ)
-            else { markConflict(remote, latest.headers.get("etag") ?? ""); throw new Error(t("他の編集と競合しました。両方の変更を保持しているので、統合方法を選んでください。")); }
+            else {
+              // SSEで先にこの版へ統合済みなら、412の読み直しを新しい競合として扱わず最新CASで続ける。
+              if (remote === baseText && serial !== mergeSerial && !get().conflict) {
+                serveRevision = latest.headers.get("etag") ?? "";
+                continue;
+              }
+              if (markConflict(remote, latest.headers.get("etag") ?? "")) continue;
+              throw new Error(t("他の編集と競合しました。両方の変更を保持しているので、統合方法を選んでください。"));
+            }
           }
           if (response.status === 423) throw new Error(t("別の保存処理が進行中です。編集は保持しています。少し待って保存を再試行してください。"));
           if (response.status === 400) throw new Error(t("計画の形式や参照に問題があり、保存できません。編集を JSON で退避して確認してください。"));
           if (response.status === 413) throw new Error(t("計画が保存可能なサイズ（5 MiB）を超えています。編集を JSON で退避してください。"));
           if (!response.ok && response.status !== 412) throw new Error(t("サーバに書けません ({status})", { status: response.status }));
-          if (response.ok) serveRevision = response.headers.get("etag") ?? "";
+          if (response.ok && serial === mergeSerial) serveRevision = response.headers.get("etag") ?? "";
         } else if (source === "vscode") {
           // エディタがディスクの最新に追い付いていない間は保存しない (古い中身の上に書かない。退避して開き直す)
           if (get().editorBehind) throw new Error(t("VS Code のエディタが、同期で受け取った最新の中身をまだ読み込んでいません。編集を退避してから、ファイルを閉じて開き直してください"));
-          vscodeVersion = await saveToVsCode(text);
+          try {
+            const savedVersion = await saveToVsCode(text);
+            if (serial === mergeSerial) vscodeVersion = savedVersion;
+          } catch (error) {
+            if (error instanceof AutoMergeRetry && generation === epoch) { attempts++; continue; }
+            throw error;
+          }
         } else if (source === "file") {
           throw new Error(t("共同編集は npx boxglow serve --open または VS Code 拡張で開いてください。"));
         } else { await saveProject(project); void get().refreshList(); }
         if (generation !== epoch) return;
+        // 保存応答を待つ間に届いた新しい版を、古い保存の応答で巻き戻さない。
+        if (serial !== mergeSerial) continue;
+        written.add(await sha256(text));
+        if (generation !== epoch) return;
         baseText = text;
+        // 成功した要求の本文を基準にしてから保留通知を統合する。元に戻した変更も失わない。
+        let received = deferredRemote as { text: string; revision: string } | null;
+        let retryMerged = false;
+        while (received) {
+          deferredRemote = null;
+          const ownEcho = written.has(await sha256(received.text));
+          if (generation !== epoch) return;
+          // ハッシュの待機中にも通知は届く。古い通知の判定で最新を捨てず、最後の本文を確かめる。
+          if (deferredRemote) {
+            if (++attempts >= 8) throw new Error(t("変更が続いているため保存を待っています。編集は保持しています。保存を再試行してください。"));
+            received = deferredRemote;
+            continue;
+          }
+          if (!ownEcho) {
+            attempts++;
+            retryMerged = markConflict(received.text, received.revision);
+          }
+          break;
+        }
+        if (retryMerged) continue;
         if (get().conflict) { set({ saveState: "unsaved" }); return; }
         // 保存中に次の編集が入っていたら「保存済み」にしない。新しい中身を続けて (1 つずつ順に) 保存する
-        if (get().project === project) { set({ saveState: "saved", saveError: null }); break; }
+        if (get().project === project) {
+          set({ saveState: "saved", saveError: null });
+          if (mergedNotice) { mergedNotice = false; set({ toast: t("両方の変更を統合して保存しました。") }); }
+          break;
+        }
         // (保存を止めている間に入った中身 = 取り込んだ退避の編集など は、続けて送らない。Save を待つ)
         if (holdSave) { set({ saveState: "unsaved" }); break; }
       } while (generation === epoch && get().project);
     } catch (error) {
+      if (generation === epoch) {
+        mergedNotice = false;
+        const received = deferredRemote as { text: string; revision: string } | null;
+        deferredRemote = null;
+        // 成功か不明な保存の通知は、誤った祖先で自動統合せず確認に回す。
+        if (received && !get().conflict) markConflict(received.text, received.revision, false, false);
+      }
+      if (generation === epoch && saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
       if (generation === epoch) set({ saveState: "unsaved", saveError: error instanceof TypeError ? t("接続できません。編集は保持しています。サーバーを確認して保存を再試行してください。") : error instanceof Error ? error.message : String(error) });
       // (serve に届かなかった: 同期の印も「接続なし」にする)
       if (generation === epoch && error instanceof TypeError && get().source === "serve") set({ syncLost: true });
     } finally {
-      if (generation === epoch) { inFlight = false; inFlightText = ""; if (get().saveState === "saved") void refreshExternal?.(); }
+      if (generation === epoch) { inFlight = false; if (get().saveState === "saved") { if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; } void refreshExternal?.(); } }
     }
   };
   /**
@@ -404,7 +535,7 @@ export const useProjectStore = create<State>((set, get) => {
   const commitRestore = (recovery: Recovery, step: RestoreStep, picks: RestorePicks): string | null => {
     const current = get().project;
     if (!current) return t("取り込むものがありません");
-    const result = applyRestore(recovery, current, step, picks);
+    const result = applyRestore(recovery, current, step, picks, new Date().toISOString());
     if ("error" in result) {
       return result.error === "unresolved" ? t("全部の項目について、どの値を採るかを選んでください")
         : result.error.startsWith("invalid:") ? t("取り込んだ結果が、計画として正しくなりません (親子の関係などが矛盾します)")
@@ -412,7 +543,7 @@ export const useProjectStore = create<State>((set, get) => {
     }
     // 結果は未保存 (保存の基準は今の中身のまま)。自動では保存しない: 予約した保存を取り消し、進行中の保存の続きも止める。Save で送る (R40-03 / R41-03)
     if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-    holdSave = true;
+    holdSave = true; mergedNotice = false;
     set({ project: result.project, past: [...get().past.slice(-HISTORY_LIMIT + 1), current], future: [], saveState: "unsaved", saveHeld: true, evacuated: null, saveError: null });
     return null;
   };
@@ -426,13 +557,14 @@ export const useProjectStore = create<State>((set, get) => {
   };
   const canLeave = () => !["unsaved", "saving"].includes(get().saveState) || confirm(t("未保存の編集があります。必要なら先に JSON を書き出してください。編集を破棄して移動しますか？"));
   const stopWatching = () => {
-    epoch++; holdSave = false; set({ saveHeld: false, syncLost: false }); inFlight = false; inFlightText = ""; refreshExternal = null; reloadNow = null; vscodeReloadWaiter = null; vscodeEmpty = null;
+    mergedNotice = false; deferredRemote = null; reviewBasis = null;
+    epoch++; holdSave = false; set({ saveHeld: false, syncLost: false }); inFlight = false; refreshExternal = null; reloadNow = null; vscodeReloadWaiter = null; vscodeEmpty = null;
     if (saveTimer) clearTimeout(saveTimer); saveTimer = null;
     if (watchTimer) clearInterval(watchTimer); watchTimer = null; fileHandle = null;
     serveEvents?.close(); serveEvents = null;
     if (messageHandler) window.removeEventListener("message", messageHandler); messageHandler = null;
     for (const save of pendingSaves.values()) { clearTimeout(save.timer); save.reject(new Error("Project closed")); } // (計画を閉じた後なので、この失敗は画面には出ない) pendingSaves.clear();
-    set({ conflict: null, saveError: null, peerVersion: null });
+    set({ conflict: null, saveError: null, peerVersion: null, editorBehind: null });
   };
 
   const rememberInUrl = (id: string | null) => {
@@ -598,15 +730,36 @@ export const useProjectStore = create<State>((set, get) => {
   , conflict: null
   , previewConflict: () => {
       const { conflict, project } = get();
-      return conflict && project ? mergeProjects(baseText ? fromJSON(baseText) : null, project, fromJSON(conflict.text)) : null;
+      try { return conflict && project ? mergeProjects(baseText ? fromJSON(baseText) : null, project, validateProjectText(conflict.text)) : null; } catch { return null; }
+    }
+  , previewConflictReview: () => {
+      const { conflict, project } = get();
+      if (!conflict || !project) return null;
+      if (!reviewBasis || reviewBasis.project !== project || reviewBasis.conflict !== conflict || reviewBasis.base !== baseText) {
+        reviewBasis = { project, conflict, base: baseText, token: crypto.randomUUID() };
+      }
+      let remote: Project;
+      try { remote = validateProjectText(conflict.text); } catch { return null; }
+      const base = baseText ? fromJSON(baseText) : null;
+      return { version: 1, token: reviewBasis.token, groups: groupConflicts(base, project, remote, mergeProjects(base, project, remote).conflicts) };
+    }
+  , resolveConflictGroups: (request) => {
+      const review = get().previewConflictReview();
+      if (!review) return false;
+      const result = resolveGroupChoices(review, request);
+      if ("error" in result) { set({ saveError: result.error }); return false; }
+      return get().resolveConflict("merge", result.choices, get().conflict?.revision);
     }
   , resolveConflict: (choice, choices = {}, revision) => {
       const conflict = get().conflict, current = get().project;
       if (!conflict || !current || inFlight || (revision !== undefined && revision !== conflict.revision)) return false;
       // (エディタに未保存の編集があるときの衝突は、画面では統合も置き換えもしない: 基準がエディタの中身まで進んでいて、その編集が落ちる。退避へ案内する。R49-02)
-      if (conflict.editorDirty) return false;
-      const remote = fromJSON(conflict.text);
-      const result = mergeProjects(baseText ? fromJSON(baseText) : null, current, remote, choices);
+      if (conflict.editorDirty || get().editorBehind) return false;
+      mergedNotice = false;
+      let remote: Project;
+      try { remote = validateProjectText(conflict.text); }
+      catch { set({ saveError: t("受け取った計画の形式や参照を確認できません。編集は保持しています。退避してファイルを確認してください。") }); return false; }
+      const result = mergeProjects(baseText ? fromJSON(baseText) : null, current, remote, choices, new Date().toISOString());
       if (choice === "merge" && result.conflicts.some((item) => !item.automatic && !choices[item.id])) return false;
       const next = choice === "remote" ? remote : result.project;
       try { validateProjectText(toJSON(next)); }
@@ -706,8 +859,9 @@ export const useProjectStore = create<State>((set, get) => {
       if (get().readonly) return;
       const { project, past, future } = get();
       if (!project || past.length === 0) return;
-      const prev = past[past.length - 1];
-      set({ project: prev, past: past.slice(0, -1), future: [project, ...future] });
+      const prev = materializeHistory(past[past.length - 1]);
+      if (!prev) { set({ past: [], toast: t("これより前には戻せません。相手の変更と矛盾するため、古い履歴を終了しました。") }); return; }
+      set({ project: prev, past: past.slice(0, -1), future: [project, ...future], toast: historyNotice(past[past.length - 1]) });
       scheduleSave();
     }
 
@@ -715,8 +869,10 @@ export const useProjectStore = create<State>((set, get) => {
       if (get().readonly) return;
       const { project, past, future } = get();
       if (!project || future.length === 0) return;
-      const [next, ...rest] = future;
-      set({ project: next, past: [...past, project], future: rest });
+      const [snapshot, ...rest] = future;
+      const next = materializeHistory(snapshot);
+      if (!next) { set({ future: [], toast: t("これより先には進めません。相手の変更と矛盾するため、やり直しの履歴を終了しました。") }); return; }
+      set({ project: next, past: [...past, project], future: rest, toast: historyNotice(snapshot) });
       scheduleSave();
     }
 
@@ -907,13 +1063,30 @@ export const useProjectStore = create<State>((set, get) => {
         }
         if (msg.type === "saved" || msg.type === "save-error") {
           const pending = pendingSaves.get(msg.requestId);
-          // 保存の要求に対する応答ではない衝突 (同期の受け取りで、ディスクが変わった): 画面の編集は捨てず、受け取った中身を衝突として持つ
-          if (!pending) { if (msg.type === "save-error" && msg.conflict && typeof msg.text === "string") markConflict(msg.text, String(msg.version), msg.editorDirty === true); return; }
+          if (msg.editorBehind === true && typeof msg.text === "string") set({ editorBehind: { text: msg.text } });
+          if (!pending) {
+            if (msg.type === "save-error" && msg.conflict && typeof msg.text === "string") {
+              if (inFlight && !msg.editorDirty && !msg.editorBehind) deferredRemote = { text: msg.text, revision: String(msg.version) };
+              else markConflict(msg.text, String(msg.version), msg.editorDirty === true);
+            }
+            return;
+          }
           clearTimeout(pending.timer); pendingSaves.delete(msg.requestId);
           if (msg.type === "saved") pending.resolve(msg.version);
           else {
-            if (msg.conflict && typeof msg.text === "string") { markConflict(msg.text, String(msg.version)); if (msg.text === baseText) vscodeVersion = msg.version; }
-            pending.reject(new Error(msg.error || t("保存に失敗しました")));
+            let failure: Error = new Error(msg.error || t("保存に失敗しました"));
+            try {
+              if (msg.conflict && typeof msg.text === "string") {
+                deferredRemote = null;
+                const alreadyMerged = msg.text === baseText && pending.base !== baseText && !msg.editorDirty && !get().conflict && !get().editorBehind;
+                if (alreadyMerged || markConflict(msg.text, String(msg.version), msg.editorDirty === true)) {
+                  if (alreadyMerged) vscodeVersion = Math.max(vscodeVersion, Number(msg.version));
+                  failure = new AutoMergeRetry();
+                } else if (get().saveError) failure = new Error(get().saveError!);
+              }
+            } catch {
+              failure = new Error(t("受け取った計画の形式や参照を確認できません。編集は保持しています。退避してファイルを確認してください。"));
+            } finally { pending.reject(failure); }
           }
           return;
         }
