@@ -1,3 +1,4 @@
+import { ClaimMark, useClaimClock, visibleClaim } from "../panels/Claims";
 /**
  * ブロック (ボックス) のノード
  * 状態はボックスの見た目で表す: black = 濃い塗り、gray = 細い斜線帯 + 進捗バー、white = 明るい塗り + チェック (完了時だけ光る)
@@ -58,6 +59,8 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   // ストアからはプロジェクト本体だけを取り (参照が変わるのは変更時だけ)、表示用の値は useMemo で導く。
   // セレクタで毎回新しい配列を作ると React が無限ループ (エラー #185) になるため。
   const project = useShownProject()!;
+  const claimNow=useClaimClock();
+  const claimed=visibleClaim(project,blockId,claimNow);
   const view = useMemo(() => {
     const p = project;
     const b = p.blocks[blockId];
@@ -159,11 +162,12 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         {view.status !== "white" && view.percent > 0 && (
           <span className="meta-chip bg-block__secondary" title={view.kids > 0 ? t("下の階層の完了 {done}", { done: view.progressText }) : t("進捗")}>{view.percent}%</span>
         )}
-        {view.activity && !(view.pending > 0 && view.activity.state === "needs_decision") && (
+        {!claimed && view.activity && !(view.pending > 0 && view.activity.state === "needs_decision") && (
           <span className={`meta-chip activity ${view.activity.state}`} title={`${view.activity.actor}: ${t(ACTIVITY_LABEL[view.activity.state])} ${view.activity.note}`}>
             {t(ACTIVITY_LABEL[view.activity.state])}<span className="bg-block__actor-name"> ({actorName(view.activity.actor)})</span>
           </span>
         )}
+        <ClaimMark project={project} blockId={blockId} />
         {view.pending > 0 && <span className="meta-chip needs_decision">{t("判断待ち {n}", { n: view.pending })}</span>}
         {view.dueDate && view.status !== "white" && (
           <span className={`meta-chip ${view.overdue ? "overdue" : "bg-block__secondary"}`} title={view.daysLeft === null ? t("期日 {date}", { date: view.dueDate }) : view.daysLeft < 0 ? t("期日 {date} ({d} 日超過)", { date: view.dueDate, d: -view.daysLeft }) : t("期日 {date} (あと {d} 日)", { date: view.dueDate, d: view.daysLeft })}>

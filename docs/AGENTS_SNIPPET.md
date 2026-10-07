@@ -113,6 +113,16 @@ npx boxglow done B12 --artifact "<名前>=<パス>" --context-token <新しい�
 
 AI may only sync already bound projects and inspect comparisons. If sync stops for a conflict or a human choice, summarize the differences and use ask to notify the user. Never resolve conflicts, create a new binding, relink, recover, adopt, restore, or confirm an account. A human must use the UI or explicitly run CLI with --actor human. AI must never add --actor human, including after a chat answer; record the answer and wait for the human to apply the sync choice.
 
+Codexは全CLI呼び出しに `--actor codex`、Claude Codeは `--actor claude-code` を明示する。WSLなどでは実行環境の印が渡らないことがある。サブエージェントは `codex-作業名` などに分け、人を名乗らない。
+
+### 並列作業の受け持ち
+
+計画で受け持ちが有効なら、CLI実行ごとに一意の `BOXGLOW_INSTANCE_ID` を固定し、`claims` と `context` を読んでから `start` する。独立したエージェント間で実行IDを共有しない。既定はボックスのみ、必要なら `--scope subtree`。成功したCLAIM行のtokenを保持し、保存する操作に `--claim-token` を付ける。MCPは実行IDと受領証を自動で保持する。5分ごと (期限が短ければ半分以内) に `claim-renew` / `boxglow_claim_renew` を呼び、中断前はcheckpoint。done/leaveは対象の受け持ちを解放する。期限切れや世代違いを無視せず、最新contextを確認して取り直す。同名actorでも別実行の受け持ちは奪わない。設定・強制解除・同期競合の解決は人に依頼し、AIがhumanを名乗って代行しない。共有ファイル以外の同期コピー間には排他保証がない。詳しくは `docs/CLAIMS.md`。
+
+他者の実行ID・受領証を使わない。計画やclaimsの出力から他者の受領証を組み立てることも禁止。MCP再起動後の同名actorも別実行なので、自動で引き継がず期限を待つか人に解除を頼む。
+
+入力の自動引き上げは元のボックスの範囲で扱う。共有入力の内容変更や別ボックスへの配置変更には、影響する範囲の取得も必要。focusやgroupなど計画全体の設定には `context root` → `start root` でrootを取得し、そのCLAIMを渡す。rootのみの取得は通常のボックスを含まない。rootの終了は `leave root`。context guardの確認トークンも引き続き必要。
+
 ---
 
 同期の人専用操作は、強制的な権限分離ではなく誤操作の防止です。AI は `--actor human` を名乗らず、比較と停止理由を人へ伝えてください。MCP と AI として識別した CLI は、人用の選択コマンドを出力しません。

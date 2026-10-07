@@ -50,9 +50,13 @@ export function setupAgent(opts: { root: string; agent: string; snippet: string;
   // 同梱の指示書は前置きが付いているので、「---」で挟まれた本文だけを貼る
   const parts = snippet.split(/^---$/m);
   const body = (parts.length >= 3 ? parts.slice(1, -1).join("---") : snippet).trim();
-  const block = `${BEGIN}\n${body}\n${END}\n`;
+
   // 既定 (all) は今までどおり両方の指示書に書く。Codex だけ・Claude Code だけも選べる
   for (const name of [...(codex ? ["AGENTS.md"] : []), ...(claude ? ["CLAUDE.md"] : [])]) {
+    const actor = name === "AGENTS.md" ? "codex" : "claude-code";
+    // WSLなどへ渡ると識別環境が失われることがある。人のシェル設定にも依存しない。
+    const identity = t("このエージェントはすべてのBoxglow CLI呼び出しに --actor {actor} を付けてください。サブエージェントには {actor}-作業名 のように別名を付けます。人を名乗って同期の選択を代行しないでください。", { actor });
+    const block = `${BEGIN}\n${body}\n\n${identity}\n${END}\n`;
     const path = join(root, name);
     const cur = existsSync(path) ? readFileSync(path, "utf8") : "";
     const begin = cur.indexOf(BEGIN);

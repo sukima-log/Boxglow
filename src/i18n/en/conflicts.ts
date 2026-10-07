@@ -84,4 +84,5 @@ export const conflicts: Record<string, string> = {
   "一部は相手の変更と重なるため戻せませんでした。相手の変更は保持しています。": "Some changes could not be reverted because they overlap with external changes. The external changes have been preserved.",
   "人が実行している場合は、boxglow sync --help の「人の操作」を参照してください。": "If you are running this as a person, see Human operations in boxglow sync --help.",
   "人の操作: 初回の結び付けや競合の選択は、人が --actor human または --actor human:名前 を明示して実行します。BOXGLOW_ACTORだけでは選択を許可しません。AIは人を名乗らず、比較を伝えて人の操作を待ってください。": "Human operations: For initial binding or conflict choices, a person explicitly supplies --actor human or --actor human:name. BOXGLOW_ACTOR alone does not authorize choices. AI must not impersonate a person; report the comparison and wait for human action.",
+  "このエージェントはすべてのBoxglow CLI呼び出しに --actor {actor} を付けてください。サブエージェントには {actor}-作業名 のように別名を付けます。人を名乗って同期の選択を代行しないでください。": "This agent must supply --actor {actor} on every Boxglow CLI call. Give subagents distinct names such as {actor}-task. Never impersonate a human to apply sync choices.",
 };

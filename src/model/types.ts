@@ -122,6 +122,8 @@ export type LogKind = "added" | "split" | "started" | "done" | "blocked" | "aske
 
 /** 時系列ログ 1 件 */
 export interface LogEvent {
+  /** Undoでも残す受け持ちの操作履歴。 */
+  claimEvent?: "policy" | "release";
   id: string;
   at: string;
   actor: string;
@@ -231,6 +233,9 @@ export type Visibility = "private" | "link" | "public";
 
 /** プロジェクト (= ブロック図の全体。JSON 書き出しの単位) */
 export interface Project {
+  /** 計画ごとに有効化する協調制御。未設定は従来どおり。 */
+  claims?: Record<string, import("./claims").Claim>;
+  claimPolicy?: import("./claims").ClaimPolicy;
   workflowPolicy?: WorkflowPolicy;
   /** 今回優先するボックスの内部 id。この配下を候補一覧の先頭にする。 */
   focusBlockId?: string;

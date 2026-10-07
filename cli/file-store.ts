@@ -655,7 +655,7 @@ function renameWithRetry(from: string, to: string): void {
  *         opts = ロックの待ち時間など (lockFile と同じ。省略時は既定)
  * Output: 書いた後のリビジョン。版が違えば FileConflict、数秒待ってもロックが空かなければ FileBusy を投げる (どちらも書き込まない)
  */
-export function commitFile(file: string, text: string, expected: string | null, opts: { waitMs?: number } = {}): string {
+export function commitFile(file: string, text: string, expected: string | null, opts: { waitMs?: number; prepare?: (current: string | null, proposed: string) => string } = {}): string {
   const target = canonical(file);
   const unlock = lockFile(file, opts);
   let temp: string | undefined;
@@ -663,6 +663,8 @@ export function commitFile(file: string, text: string, expected: string | null, 
     // ロックの中で読み直して照合する (照合と置換の間に他の書き手が入らない)
     const current = existsSync(target) ? readFileSync(target, "utf8") : null;
     if ((current === null ? null : revisionOf(current)) !== expected) throw new FileConflict();
+    // 期限・世代の照合もこのロック内で行い、待ち時間で期限が切れた書き込みを防ぐ。
+    if (opts.prepare) text = opts.prepare(current, text);
     // 同じフォルダに一時ファイルを作る (別のファイルシステムだと改名が原子的にならないため)。
     // 権限は元のファイルに合わせる。新しく作るファイルは既定 (0666 から umask を引いたもの。ふつうのファイルと同じ) にする
     temp = join(dirname(target), `.${randomUUID()}.boxglow-tmp`);

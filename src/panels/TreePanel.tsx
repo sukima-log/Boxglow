@@ -1,3 +1,4 @@
+import { ClaimMark } from "./Claims";
 /**
  * 図を素早く探して移動するための独立した階層一覧。行は題名と小さな分類・状態の印に絞る。
  * 開閉とキーボードの位置はこの表示だけの状態。図の折りたたみや共有ファイルには保存しない。
@@ -404,6 +405,7 @@ export function TreePanel({ project, filter, onClose }: { project: Project; filt
                   <span className="tree-row__title">{b.title}</span>
                 </span>
               )}
+              <ClaimMark project={project} blockId={b.id} compact />
               {alert && (
                 <span className="tree-alert" role="img" aria-label={alert} title={alert}>
                   !

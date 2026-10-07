@@ -129,6 +129,8 @@ function conflictFieldKey(field: string): string {
     members: "メンバー",
     inputGroups: "入力グループ",
     handoffs: "引き継ぎメモ",
+    claims: "受け持ち",
+    claimPolicy: "受け持ち制御",
     note: "引き継ぎメモ",
     visibility: "公開範囲",
     terminals: "入出力の位置",
@@ -307,9 +309,9 @@ export function groupConflicts(
   const owners = (c: MergeConflict): string[] => {
     const [kind, id] = c.segments;
     // 古いファイルに所属先のないメモが残っていても比較を落とさない。所属を推測せず設定側で見比べる。
-    if (kind === "handoffs" && !projects.some((p) => p.blocks[id]))
+    if ((kind === "handoffs" || kind === "claims") && !projects.some((p) => p.blocks[id]))
       return [SETTINGS];
-    if (kind === "blocks" || kind === "handoffs") return [owner(id)];
+    if (kind === "blocks" || kind === "handoffs" || kind === "claims") return [owner(id)];
     if (kind === "ports") return portOwners(id);
     if (kind === "edges") return edgeOwners(id);
     return [SETTINGS];

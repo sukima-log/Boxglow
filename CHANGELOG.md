@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- C2 review: restore Git merge on claim-enabled plans; attribute promoted inputs to their original boxes and support explicit root claims for plan settings. Explain active foreign claims and MCP restarts, preserve Project JSON output and human claim logs through Undo/Redo, suppress claims-only merge notices, make repeated release a no-op, and style the release action as a button.
+- Recorder identity intentionally follows AI execution markers before an inherited human name in `BOXGLOW_ACTOR`: for example, `CLAUDECODE=1 BOXGLOW_ACTOR=hash` records `claude-code`. Explicit human CLI operations retain `--actor human` / `--actor human:name`; agents must use their own actor name.
+
+- Stage C: opt-in per-plan claims for CLI/MCP with instance IDs, expiry and generation fencing; compact GUI indicators and reasoned human release. See `docs/CLAIMS.md` for the same-file coordination boundary.
+
+- B6: Share AI identity detection between recorder and sync output, document explicit agent names across WSL, and reject undo steps that would discard external assignment or input-group references.
+
 - 段階B再レビュー B5: CLI試験から起動元のAI識別環境を分離。人の記録者名・設定フォルダだけによる誤判定を修正し、`human:名前` と人向けヘルプを追加。Undoで外部の入出力や配線を失う段は通知して停止し、項目の一部を戻せない場合も通知。常時同期の再実行案内から `--watch` を除去。担当解除ログは統合時刻・発生回・確定後のB番号を記録。
 
 - 段階B再レビュー B4: 単体試験の前にCLIを再ビルド。外部更新の履歴を項目単位へ圧縮し、保存通知の判別をハッシュ化。担当解除をログ・比較欄に表示し、Undo/Redoの境界を通知。同期のAI向け出力から人専用コマンドを除き、人向けには元の引数で再実行方法を案内。

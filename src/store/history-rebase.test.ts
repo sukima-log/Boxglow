@@ -52,3 +52,28 @@ it.each(["position", "artifacts", "decisions", "assigneeIds"] as const)("%sの�
   expect(historyPatchMasksChanges(p, patch)).toBe(true);
   expect(historyPatchMasksChanges(saved, patch)).toBe(false);
 });
+
+it("Undoの正規化で外部の担当参照を失う段を拒否する", () => {
+  const { p, a } = fixture(), saved = structuredClone(p);
+  saved.members = [{id: "m1", name: "M1", color: "red"}, {id: "m2", name: "M2", color: "blue"}];
+  saved.blocks[a].assigneeIds = ["m1"];
+  const remote = structuredClone(saved); remote.blocks[a].assigneeIds.push("m2");
+  const patch = externalHistoryPatch(saved,remote);
+  expect(applyHistoryPatch(p,patch)).toBeNull();
+  expect(applyHistoryPatch(saved,patch)!.blocks[a].assigneeIds).toEqual(["m1","m2"]);
+});
+it("Undoの正規化で外部の入力グループ参照を失う段を拒否する", () => {
+  const { p } = fixture(), saved = structuredClone(p), id = Object.keys(p.ports)[0];
+  saved.inputGroups = [{id: "g", name: "G", description: "", position: {x:0,y:0}}];
+  const remote = structuredClone(saved); remote.ports[id].groupId = "g";
+  const patch = externalHistoryPatch(saved,remote);
+  expect(applyHistoryPatch(p,patch)).toBeNull();
+  expect(applyHistoryPatch(saved,patch)!.ports[id].groupId).toBe("g");
+});
+
+it("C2 L-2: claimsとpolicyの予約では編集を戻せないと通知せず、実際の名前の競合は通知",()=>{
+ const {p}=fixture();const base={...p,claimPolicy:{mode:"warn" as const,leaseMinutes:30}},snapshot={...base,claimPolicy:{mode:"off" as const,leaseMinutes:30}};
+ const remote={...base,claimPolicy:{mode:"reject" as const,leaseMinutes:30}};
+ expect(historyPatchMasksChanges(snapshot,externalHistoryPatch(base,remote))).toBe(false);
+ expect(historyPatchMasksChanges({...snapshot,name:"old name"},externalHistoryPatch(base,{...remote,name:"remote"}))).toBe(true);
+});

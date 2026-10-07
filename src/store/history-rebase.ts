@@ -92,14 +92,27 @@ export function applyHistoryPatch(snapshot: Project, patch: HistoryPatch): Proje
     }
     if (p.focusBlockId && !p.blocks[p.focusBlockId]) delete p.focusBlockId;
     if (p.handoffs) p.handoffs = Object.fromEntries(Object.entries(p.handoffs).filter(([id]) => p.blocks[id] || !snapshot.blocks[id]));
-    return validateProjectText(toJSON(p));
+    const normalized = validateProjectText(toJSON(p));
+    // fromJSONは失われたメンバー/入力グループ参照を正規化する。外部が予約した値を
+    // その過程で落とすなら、成功したUndoとして保存せず、ポート・配線と同じ境界にする。
+    const reserved = (change: EntityChange, field: string) => change.replace
+      ? change.value !== undefined && Object.hasOwn(dict(change.value), field)
+      : Object.hasOwn(change.fields, field);
+    for (const [id, change] of Object.entries(patch.maps.blocks ?? {})) {
+      if (reserved(change, "assigneeIds") && !same(p.blocks[id]?.assigneeIds, normalized.blocks[id]?.assigneeIds)) return null;
+    }
+    for (const [id, change] of Object.entries(patch.maps.ports ?? {})) {
+      if (reserved(change, "groupId") && !same(p.ports[id]?.groupId, normalized.ports[id]?.groupId)) return null;
+    }
+    return normalized;
   } catch { return null; }
 }
 
 /** 外部更新前と異なる履歴の値を、予約の最新値が上書きする場合は部分的なUndo/Redoとして知らせる。 */
 export function historyPatchMasksChanges(snapshot: Project, patch: HistoryPatch): boolean {
   const masks = (value: Dict, before: Dict, after: Dict) => Object.keys(after).some(k => !same(value[k], before[k]) && !same(value[k], after[k]));
-  if (masks(dict(snapshot), patch.before, patch.fields)) return true;
+  const editable=Object.fromEntries(Object.entries(patch.fields).filter(([key])=>!["claims","claimPolicy"].includes(key)));
+  if (masks(dict(snapshot), patch.before, editable)) return true;
   return Object.entries(patch.maps).some(([key, changes]) => {
     const values = entityMap(snapshot, key);
     return Object.entries(changes).some(([id, change]) => !change.replace && !!values[id] && masks(dict(values[id]), change.before, change.fields));

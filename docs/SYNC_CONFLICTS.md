@@ -92,3 +92,11 @@ Undo/Redoの古い段に相手が更新した対象が無い場合や、参照�
 Human sync actions accept explicit `--actor human` or `--actor human:name`. An ordinary recorder name or `CODEX_HOME` alone does not identify AI. Halt messages point misidentified humans to `boxglow sync --help` without suggesting impersonation to AI. Environment-only actor settings do not authorize human actions; MCP remains AI-only. Watch retry commands omit `--watch` and execute once beside the existing watcher.
 
 Undo/redo rejects a historical step if an externally edited entity is absent or cleanup would discard external ports or wires. Rejection leaves the current plan unchanged and does not save. Positions and nested arrays remain atomic fields: when external changes prevent fully restoring one, a partial-undo notice appears. Assignment cleanup logs use the caller's merge time, final block key, and an occurrence number derived from the common base; retries share an ID while subsequent cleanup events receive a new one.
+
+## B6: 実行環境と参照の保護
+
+AI実行の印は継承した人のactorより優先する。明示CLIの `--actor human[:名前]` は人向け表示になる。Codexは `CODEX_THREAD_ID` / `CODEX_SESSION_ID` / `CODEX_SANDBOX`、Claude Codeは `CLAUDECODE` / `CLAUDE_CODE` を共通判定に使う。`CODEX_HOME` だけではAIと判定しない。WSLなどの境界で印が失われる場合は、AIが全CLIで `--actor codex` 等を明示する。これはsetup-agentの指示にも含む。環境変数の設定だけでは人専用の同期操作を許可しない。
+
+Undo/Redoの正規化で外部の担当・入力グループ参照が失われる場合も、入出力・配線と同じくその段を拒否し、現在の計画を変更・保存しない。
+
+Runtime AI markers override inherited human recorder names. Recorder and sync classification share one implementation; explicit actor names cover environment boundaries. Undo/redo also rejects normalization that would discard reserved external assignments or input-group references.

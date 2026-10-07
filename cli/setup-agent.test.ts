@@ -58,3 +58,13 @@ describe("agent setup", () => {
     expect(() => setupAgent({ ...opts, agent: "typo" })).toThrow(/--agent/);
   });
 });
+
+it("生成する両エージェントの指示に明示actorを付け、再実行で増やさない", () => {
+  const root = mkdtempSync(join(tmpdir(), "boxglow-identity-"));
+  try {
+    setupAgent({root, agent: "all", snippet: "---\nInstructions\n---", skill: "Skill"});
+    expect(readFileSync(join(root,"AGENTS.md"),"utf8")).toContain("--actor codex");
+    expect(readFileSync(join(root,"CLAUDE.md"),"utf8")).toContain("--actor claude-code");
+    expect(setupAgent({root,agent:"all",snippet:"---\nInstructions\n---",skill:"Skill"})).toHaveLength(1);
+  } finally { rmSync(root,{recursive:true,force:true}); }
+});

@@ -162,3 +162,52 @@ describe("B5 再検証", () => {
     s.redo(); expect(store.getState().project!.name).toBe("名前を変更");
   });
 });
+
+it.each(["assignment", "input-group"])("B6: 外部の%s参照を失うUndoは拒否し、保存しない", async kind => {
+  const { L, a } = plans(); const store = await open(L);
+  const id = Object.keys(fromJSON(L).ports)[0];
+  store.getState().apply(q => {
+    const p = structuredClone(q);
+    if (kind === "assignment") {
+      p.members = [{id:"m1",name:"M1",color:"red"},{id:"m2",name:"M2",color:"blue"}];
+      p.blocks[a].assigneeIds = ["m1"];
+    } else p.inputGroups = [{id:"g",name:"G",description:"",position:{x:0,y:0}}];
+    return p;
+  });
+  await wait(900);
+  external(p => {
+    if (kind === "assignment") p.blocks[a].assigneeIds.push("m2");
+    else p.ports[id].groupId = "g";
+    return p;
+  });
+  await wait(100);
+  const disk = ext.disk, current = toJSON(store.getState().project!), saves = sent.filter(m => m.type === "save").length;
+  store.getState().undo();
+  expect(store.getState().toast).toMatch(/これより前には戻せません/);
+  expect(toJSON(store.getState().project!)).toBe(current);
+  await wait(900);
+  expect(ext.disk).toBe(disk); expect(sent.filter(m => m.type === "save")).toHaveLength(saves);
+});
+
+it("C2 L-1: 人の解除・設定のログをUndo/Redoとディスクにも保持",async()=>{
+ const {L,a}=plans();const store=await open(L);store.getState().setToast(null);
+ store.getState().apply(p=>updateBlock(p,a,{title:"own edit"}));await wait(500);
+ store.getState().apply(p=>({...p,claimPolicy:{mode:"reject",leaseMinutes:30},log:[...p.log,{id:"claim-policy-event",at:new Date().toISOString(),actor:"human",kind:"note",claimEvent:"policy",message:"設定"},{id:"claim-release-event",at:new Date().toISOString(),actor:"human",kind:"note",claimEvent:"release",message:"解除"}]}),{history:false});
+ await wait(500);store.getState().undo();await wait(500);
+ expect(store.getState().project!.blocks[a].title).toBe("A");expect(store.getState().project!.claimPolicy!.mode).toBe("reject");
+ for(const text of [toJSON(store.getState().project!),ext.disk]){const p=fromJSON(text);expect(p.log.filter(e=>e.claimEvent)).toHaveLength(2);}
+ store.getState().redo();await wait(500);expect(fromJSON(ext.disk).log.filter(e=>e.claimEvent)).toHaveLength(2);expect(fromJSON(ext.disk).blocks[a].title).toBe("own edit");
+});
+it("C2 L-2/L-3: 延長だけは無通知で保存しUndoも誤通知しない、通常編集は通知",async()=>{
+ const {L,a,b}=plans();const p=fromJSON(L),at=Date.parse("2026-10-08T00:00:00Z");
+ p.claimPolicy={mode:"reject",leaseMinutes:30};p.claims={[a]:{actor:"codex",instanceId:"session",claimId:"claim",scope:"block",generation:1,acquiredAt:new Date(at).toISOString(),renewedAt:new Date(at).toISOString(),expiresAt:new Date(at+1800000).toISOString()}};
+ const store=await open(toJSON(p));store.getState().setToast(null);
+ store.getState().apply(q=>updateBlock(q,a,{title:"first"}));
+ external(q=>({...q,claims:{...q.claims,[a]:{...q.claims![a],renewedAt:new Date(at+300000).toISOString(),expiresAt:new Date(at+2100000).toISOString()}}}));await wait(600);
+ expect(store.getState().toast).toBeNull();expect(fromJSON(ext.disk).blocks[a].title).toBe("first");expect(fromJSON(ext.disk).claims![a].renewedAt).toBe(new Date(at+300000).toISOString());
+ store.getState().apply(q=>updateBlock(q,a,{description:"second"}));await wait(500);
+ external(q=>({...q,claims:{...q.claims,[a]:{...q.claims![a],renewedAt:new Date(at+600000).toISOString(),expiresAt:new Date(at+2400000).toISOString()}}}));
+ store.getState().undo();await wait(500);expect(store.getState().toast).toBeNull();
+ store.getState().apply(q=>updateBlock(q,a,{description:"third"}));external(q=>updateBlock(q,b,{title:"remote"}));await wait(600);
+ expect(store.getState().toast).toBe("両方の変更を統合して保存しました。");expect(fromJSON(ext.disk).blocks[b].title).toBe("remote");
+});

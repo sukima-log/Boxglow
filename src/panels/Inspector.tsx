@@ -1,3 +1,4 @@
+import { ClaimSettings, ClaimDetails } from "./Claims";
 /**
  * 詳細パネル: 選んでいるものに応じて中身を切り替える
  *   ブロック / 線 / 入力ノード / 最終成果物ノード / プロジェクト設定
@@ -57,6 +58,7 @@ function ProjectInspector({ project }: { project: Project }) {
     <div className="flex flex-col gap-4 p-3">
       <PanelHead title="Project" />
       <WorkflowSettings project={project} />
+      <ClaimSettings project={project} />
       <input className="input font-head text-[16px]" value={project.name} disabled={readonly}
         onChange={(e) => apply((p) => ({ ...structuredClone(p), name: e.target.value }))} />
       <DebouncedText multiline className="input" placeholder={t("ゴール (何を達成したいか)")} value={project.description} disabled={readonly}
@@ -244,6 +246,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           </select>
         </label>
 
+      <ClaimDetails project={project} blockId={blockId} />
       <WorkScopePanel project={project} blockId={blockId} editing={scopeEditing} onClose={() => setScopeEditing(false)} />
       {descriptionReminder(b) && <p className="text-[12px] description-reminder" style={{ color: "var(--accent)" }}>{descriptionReminder(b)}</p>}
 

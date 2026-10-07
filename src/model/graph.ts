@@ -1,3 +1,4 @@
+import { validateClaims } from "./claims";
 /**
  * ブロック図の操作 (純粋関数)
  *
@@ -1024,7 +1025,7 @@ export function toJSON(p: Project): string {
  */
 export const KNOWN_PROJECT_KEYS: ReadonlySet<string> = new Set([
   "schemaVersion", "id", "name", "description", "createdAt", "visibility", "members", "blocks", "ports", "edges", "terminals"
-, "log", "agents", "nextKey", "inputGroups", "contextGuard", "workflowPolicy", "focusBlockId", "handoffs", "lang", "updatedAt", "version"
+, "log", "agents", "nextKey", "inputGroups", "contextGuard", "workflowPolicy", "focusBlockId", "handoffs", "claims", "claimPolicy", "lang", "updatedAt", "version"
 ]);
 
 /**
@@ -1040,6 +1041,7 @@ export function fromJSON(text: string): Project {
   }
   if (typeof data !== "object" || data === null) throw new Error(t("プロジェクトの形式ではありません"));
   const d = data as Partial<Project>;
+  validateClaims(d);
   const ver = Number(d.schemaVersion);
   if (![1, 2, 3, 4, 5].includes(ver)) throw new Error(t("対応していないデータ形式の版です (schemaVersion={version})", { version: String(d.schemaVersion) }));
   if (!d.blocks || !d.ports || !d.edges || !d.blocks[ROOT_ID]) throw new Error(t("ブロック・ポート・線のデータが足りません"));
@@ -1066,6 +1068,8 @@ export function fromJSON(text: string): Project {
   if (typeof d.focusBlockId === "string" && q.blocks[d.focusBlockId]) q.focusBlockId = d.focusBlockId;
   if (d.handoffs && typeof d.handoffs === "object") q.handoffs = d.handoffs;
   if (d.lang === "en" || d.lang === "ja") q.lang = d.lang; // CLI の文言の言語 (無ければ ja 扱い)
+  if(d.claims!==undefined) q.claims=d.claims;
+  if(d.claimPolicy!==undefined) q.claimPolicy=d.claimPolicy;
   // この版が知らない直下の項目 (新しい版が足した設定など) は、そのまま持ち続ける。
   // 落とすと、古い版で一度保存しただけで新しい版の設定が消え、Git や同期でほかの人・端末にまで配られてしまう
   // (ボックス・入出力・線の中の知らない項目は、d.blocks などを丸ごと引き継いでいるので、もともと残る)

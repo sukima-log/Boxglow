@@ -1,0 +1,52 @@
+export const claims: Record<string,string> = {
+  "受け持ちの設定が正しくありません。期限は1〜1440分です。": "Invalid claim settings. The lease must be 1–1440 minutes.",
+  "受け持ちの記録が正しくありません。": "Invalid claim record.",
+  "受け持ちが期限切れ・解除済みか、実行IDまたは世代が違います。取り直してから作業してください。": "The claim expired, was released, or belongs to a different instance or generation. Acquire it again before working.",
+  "時計が受け持ちの更新時刻より前です。時計を確認してください。": "Your clock is earlier than the claim renewal. Check the clock before continuing.",
+  "この計画では受け持ち制御が無効です。人が設定で有効にしてください。": "Claims are disabled for this plan. Ask a person to enable them in settings.",
+  "受け持ちには対象と固定した実行IDが必要です。--instance または BOXGLOW_INSTANCE_ID を指定してください。": "Claims require a target and a fixed instance ID. Use --instance or BOXGLOW_INSTANCE_ID.",
+  "他の実行が受け持っています: {block} ({actor})": "Another instance holds this claim: {block} ({actor})",
+  "受け持ちがありません。": "No claim exists.",
+  "解除する理由を入力してください。": "Enter a reason for releasing the claim.",
+  "受け持ちの確認情報が正しくありません。": "Invalid claim receipt.",
+  "受け持ちの範囲外です: {block}。必要な範囲を取得してください。": "Outside your claim: {block}. Acquire the required scope first.",
+  "受け持ちは同じ共有ファイル内の協調制御です。同期先の別端末や旧版の書き込みを排他しません。": "Claims coordinate writers of the same shared file. They do not lock remote synced copies or older writers.",
+  "受け持ちの設定と強制解除は人が行います。AIは人に依頼してください。": "Claim settings and forced release are human actions. AI agents must ask a person.",
+  "受け持ち制御を無効化": "Claim enforcement disabled",
+  "受け持ち設定: {mode}": "Claim policy: {mode}",
+  "受け持ちを解除: {reason}": "Claim released: {reason}",
+  "受け持ちの設定と記録は専用の操作で変更してください。": "Use the dedicated commands to change claim settings and records.",
+  "受け持ちの範囲は block または subtree です。": "Claim scope must be block or subtree.",
+  "受け持ちの警告: {message}": "Claim warning: {message}",
+  "ボックスの削除": "Block deleted",
+  "受け持ちを更新しました。": "Claim updated.",
+  "MCPでは実行IDと受け持ちを自動管理します。人の操作は人に依頼してください。": "MCP manages instance IDs and claim receipts automatically. Ask a person to perform human actions.",
+  "受け持ち一覧 (自分・他者・期限切れ)": "Claims grouped by own, others, and expired",
+  "受け持ちの期限を延長する (5分ごと、または長い処理の前に実行)": "Renew your claim (every 5 minutes or before a long operation)",
+  "受け持ち中: {actor}": "Claimed by {actor}",
+  "受け持ち期限切れ: {actor}": "Expired claim: {actor}",
+  "範囲: {scope}": "Scope: {scope}",
+  "配下を含む": "Including descendants",
+  "このボックス": "This block",
+  "期限: {date}": "Expires: {date}",
+  "期限切れ": "Expired",
+  "AI の受け持ち": "AI claims",
+  "受け持ち制御": "Claim enforcement",
+  "無効 (既定)": "Off (default)",
+  "有効・範囲外を拒否 (推奨)": "On · Reject outside scope (recommended)",
+  "有効・警告のみ": "On · Warn only",
+  "受け持ち期限 (分)": "Claim lease (minutes)",
+  "CLI・MCPの保存に適用します。人の画面操作は継続できます。期限や解除はUndoでは戻しません。": "Applies to CLI and MCP writes. Human edits remain available. Undo does not restore claim expiry or released claims.",
+  "受け持ちの詳細": "Claim details",
+  "実行ID": "Instance ID",
+  "解除する理由": "Reason for release",
+  "受け持ちが変わりました。確認し直してください。": "The claim changed. Review it again.",
+  "理由を記録して解除": "Record reason and release",
+  "受け持ち": "Claim"
+  ,"受け持ちが重なります。既存の範囲を使うか、解放してから取得してください。": "Claims overlap. Use the existing scope, or release it before acquiring a new claim."
+  ,"受け持ち制御中の計画へ書き出しで上書きできません。別の出力先を指定してください。": "Export cannot overwrite a plan with claims enabled. Choose another output file."
+  ,"受け持ちの世代が上限に達しました。記録は変更していません。": "The claim generation reached its limit. No records were changed."
+  ,"すでに解除されています。": "This claim has already been released."
+  ,"他の実行が受け持っています: {block} ({actor})。実行ID: {instance}、範囲: {scope}、期限: {expires}。人に解除を頼むか、別のボックスへ進んでください。": "Another instance holds this claim: {block} ({actor}). Instance: {instance}; scope: {scope}; expires: {expires}. Ask a person to release it, or work on another block."
+  ,"同じactorの別実行です。MCP再起動前の実行の可能性があります。他者の実行IDや受領証は使わないでください。": " This is a different instance of the same actor, possibly from before an MCP restart. Do not use another instance's ID or receipt."
+};

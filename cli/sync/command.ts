@@ -1,3 +1,4 @@
+import { syncAudienceFor } from "../actor";
 import { isHumanActor } from "../../src/model/graph";
 /**
  * boxglow sync: 計画のファイルを、同期サーバーとそろえる (1 回)
@@ -67,14 +68,7 @@ export interface SyncCommandOptions {
 const hasHumanChoice = (o: SyncCommandOptions): boolean => [o.resolve, o.block, o.settings, o.choicesFile, o.resolution, o.prefer, o.link, o.relink, o.recover, o.applied, o.notApplied, o.adopt, o.restore, o.account].some(v => v !== undefined);
 
 /** 入力: CLIの識別。出力: AI向けの案内にするか。自己申告を認証の代わりにはしない。 */
-export const syncAudience = (o: SyncCommandOptions): "ai" | "human" => {
-  if (o.audience) return o.audience;
-  const actor = o.actor || process.env.BOXGLOW_ACTOR;
-  if (actor && isHumanActor(actor)) return "human";
-  // 記録者名や設定フォルダの所在だけでは、AIの実行だと判定しない。
-  if (actor && /^(?:agent|ai|codex|claude(?:-code)?|copilot|cursor)(?::|$)/i.test(actor)) return "ai";
-  return process.env.CLAUDECODE || process.env.CLAUDE_CODE || process.env.CODEX_SANDBOX || process.env.CODEX_THREAD_ID ? "ai" : "human";
-};
+export const syncAudience = (o: SyncCommandOptions): "ai" | "human" => o.audience ?? syncAudienceFor(o.actor);
 /** 入力: 人が実行した引数。出力: 対象と選択を省略しない、人用の打ち直しコマンド。 */
 export function humanSyncCommand(o: SyncCommandOptions): string {
   const args = o.rawArgs ? [...o.rawArgs] : ["--file", o.file];

@@ -1,3 +1,7 @@
+import { findClaimBlock, claimCommand, prepareClaimSave, type ClaimCommand } from "./claims";
+import { covers, activeClaim, claimSummary, claimToken, claimsEnabled } from "../src/model/claims";
+import { randomUUID } from "node:crypto";
+import { actorOf } from "./actor";
 /**
  * boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポジトリ内の boxglow.json を操作する入口
  *
@@ -96,15 +100,6 @@ function locateFile(opt: string | undefined, forInit = false): string {
   throw new Error(t("boxglow.json が見つかりません (--file で指定するか、`boxglow init` で作ってください)"));
 }
 
-/** 誰として操作するか */
-function actorOf(opt: string | undefined): string {
-  if (opt) return opt;
-  if (process.env.BOXGLOW_ACTOR) return process.env.BOXGLOW_ACTOR;
-  if (process.env.CLAUDECODE || process.env.CLAUDE_CODE) return "claude-code";
-  if (process.env.CODEX_SANDBOX || process.env.CODEX_HOME) return "codex";
-  return "agent";
-}
-
 /**
  * 成果物の指定 ("題名=URL またはパス"、または "URL またはパス") から Artifact を作る
  * パスが Git 管理下なら Git の参照 (コミット + パス + blob)、それ以外のパスは file、URL は url
@@ -143,6 +138,7 @@ const readRevisions = new Map<string, string | null>();
  * (ディスクを読み直すと、その間に他の人が書いた変更までトークンに含めてしまうので、読み直さない)
  */
 let lastSavedText: string | null = null;
+let claimRequest: ClaimCommand;
 
 /** 書き込みの時点で他の変更とぶつかったとき (FileConflict)、最新を読み直してコマンドをやり直す回数の上限 */
 const CONFLICT_RETRIES = 8;
@@ -169,18 +165,31 @@ function save(path: string, p: Project): void {
   // つないだ入力の名前は供給元にそろえる (古いファイルの食い違いもここで直る)
   // 読んでいないパス (新規作成) は「ファイルが無い」ことを前提にする
   const expected = readRevisions.has(resolve(path)) ? readRevisions.get(resolve(path))! : null;
-  const text = toJSON(resolveAllOverlaps(normalizeCollapsed(normalizeInputNames(p).project), (q, id) => blockSize(q, id))) + "\n";
-  const revision = commitFile(path, text, expected);
+  let text = toJSON(resolveAllOverlaps(normalizeCollapsed(normalizeInputNames(p).project), (q, id) => blockSize(q, id))) + "\n";
+  const warnings:string[]=[];
+  const revision = commitFile(path, text, expected, {prepare:(current,proposed) => text=prepareClaimSave(current,proposed,claimRequest,s=>warnings.push(s))});
+  for(const warning of warnings) out(warning);
   // 同じ実行の中で続けて書く場合に備えて、書いた後の版を覚え直す
   readRevisions.set(resolve(path), revision);
   // 書いた中身を覚える (新しい確認トークンの元にする)
   lastSavedText = text;
 }
 
+/** 書き出し先が受け持ち制御中の計画なら停止。通常の保存検証を経ない上書きを防ぐ。 */
+function writeExport(target: string, text: string): void {
+  let guarded=false;
+  if(existsSync(target)) {
+    try { guarded=claimsEnabled(fromJSON(readFileSync(target,"utf8"))); } catch { /* 計画以外の出力ファイル */ }
+  }
+  if(guarded) throw new Error(t("受け持ち制御中の計画へ書き出しで上書きできません。別の出力先を指定してください。"));
+  writeFileSync(target,text,"utf8");
+}
+
 /** ブロックを探す (見つからなければ候補を示して終了) */
 function mustFind(p: Project, ref: string | undefined, what = "block") {
   if (!ref) throw new Error(t("<{what}> を指定してください (id または題名)", { what }));
-  const r = findBlock(p, ref);
+  const rootClaim=ref===ROOT_ID && claimsEnabled(p) && ["context","start","leave","checkpoint","claim-renew","claim-release"].includes(claimRequest.command);
+  const r = rootClaim ? findClaimBlock(p,ref) : findBlock(p, ref);
   if (!r.block) {
     // 文を組み立てずに、場合ごとに 1 文ずつ訳せる形にする (候補あり = 1 つに決まらない / 候補なし = 見つからない)
     if (r.candidates.length > 0) throw new Error(t("ブロック「{ref}」が1 つに決まりません。 候補: {list}", { ref, list: r.candidates.map((b) => `${b.title} (id: ${b.id})`).join(", ") }));
@@ -296,6 +305,15 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   init [--name <名前>] [--file <path>]           boxglow.json を作る
   setup-agent [--agent codex|claude-code|all] [--dir <path>]                     AI が自律的に使えるように設定する: AGENTS.md / CLAUDE.md に手順を追記、
                                                  Codex は AGENTS.md と .agents/skills、Claude Code は CLAUDE.md・スキル・フック・.mcp.json (既定: all)
+  claims                                        受け持ち一覧 (自分・他者・期限切れ)
+  claim-policy --mode reject|warn|off [--minutes 30] --actor human  計画ごとの有効化 (人の操作)
+  start <block> --instance <固定ID> [--scope subtree]              取得、受領証 CLAIM を表示
+  claim-renew <block> --instance <固定ID> --claim-token <受領証>    期限を延長
+  claim-release <block> --reason <理由> --actor human              人が強制解除
+  受け持ち有効時: 保存する操作に --instance と --claim-token。通常の start は block 範囲。
+  focus/groupなど計画設定: context root → start root で取得、終了は leave root。
+  自動で引き上げる入力は元のボックスの範囲。他者の実行ID・受領証を借りない。
+  checkpoint は延長、done/leave は解放。同じ共有ファイルの協調制御。別端末の同期は排他しない。
   resume [--json] [--include-completed]           現況・着手できる候補・入力待ちを表示。完了済みの引き継ぎは件数のみ (指定で展開)
   scope <block> [--goal <本文>] [--non-goals <本文>] [--acceptance <本文>] [--consult <本文>]
                                                  今回達成すること / 対象外 / 完了条件 / 相談条件。省略は表示、none で項目を消す
@@ -385,6 +403,15 @@ Usage (npx boxglow <command> ...):
   init [--name <name>] [--file <path>]           Create boxglow.json
   setup-agent [--agent codex|claude-code|all] [--dir <path>]                     Set things up so AI can use Boxglow on its own: append the instructions to AGENTS.md / CLAUDE.md,
                                                  Codex: AGENTS.md and .agents/skills. Claude Code: CLAUDE.md, skill, hook and .mcp.json (default: all)
+  claims                                        Claims grouped by own/others/expired
+  claim-policy --mode reject|warn|off [--minutes 30] --actor human  Opt in per plan (human)
+  start <block> --instance <fixed-ID> [--scope subtree]             Acquire; prints CLAIM receipt
+  claim-renew <block> --instance <fixed-ID> --claim-token <receipt>  Renew expiry
+  claim-release <block> --reason <reason> --actor human             Human force release
+  When enabled, writes require --instance and --claim-token. Default start scope: block.
+  Plan settings (focus/group): context root → start root; release with leave root.
+  Promoted inputs use the original box scope. Never borrow another instance ID or receipt.
+  checkpoint renews; done/leave releases. Coordination for one shared file, not a distributed lease.
   resume [--json] [--include-completed]           Current work, ready/waiting candidates, then handoffs; completed notes are counted unless requested
   scope <block> [--goal <text>] [--non-goals <text>] [--acceptance <text>] [--consult <text>]
                                                  Goal / non-goals / acceptance / consult before expansion. No flags reads; none clears a field
@@ -493,6 +520,7 @@ function main(argv: string[]): void {
     return;
   }
   const actor = actorOf(str(options.actor));
+  claimRequest=claimCommand(cmd,rest[0],options,actor);
 
   if (cmd === "unlock") {
     // 残った保存ロックの状態を見る / 人の判断で解除する。計画の中身は読まない (壊れた計画でも使えるように)
@@ -567,6 +595,13 @@ function main(argv: string[]): void {
     }
   }
   runCommand(cmd, rest, options, actor, path, p, AGENTS_SNIPPET, SKILL_MD);
+  if(lastSavedText && cmd === "start") {
+    const saved=fromJSON(lastSavedText), id=findClaimBlock(saved,rest[0]).block?.id;
+    if(id && claimsEnabled(saved) && !claimRequest.human) {
+      const held=Object.entries(saved.claims??{}).find(([root,c])=>activeClaim(c,Date.now()) && c.instanceId===claimRequest.identity.instanceId && c.actor===claimRequest.identity.actor && covers(saved,root,c,id));
+      if(held)out("CLAIM " + JSON.stringify({blockId:held[0],instanceId:claimRequest.identity.instanceId,token:claimToken(held[0],held[1]),expiresAt:held[1].expiresAt}));
+    }
+  }
   // 自分の操作でコンテキストが変わったら、新しい確認トークンを出力の最後に添える。
   // 自分で変えた内容は読み直さなくても分かっているので、続けて次の操作ができる
   // (人の回答・人の指示の変更・他の AI の引き継ぎで変わった場合は、操作の前の照合で拒否している)
@@ -637,10 +672,27 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       out(JSON.stringify({ startWithoutInputs: patch.startWithoutInputs ?? "warn", doneWithoutArtifacts: patch.doneWithoutArtifacts ?? "warn" }, null, 2));
       return;
     }
+    case "claims": {
+      out(JSON.stringify(claimSummary(p,claimRequest.identity),null,2)); return;
+    }
+    case "claim-policy": {
+      if(!options.mode && !options.minutes) {out(JSON.stringify(claimSummary(p,claimRequest.identity),null,2));return;}
+      if(!claimRequest.human) throw new Error(t("受け持ちの設定と強制解除は人が行います。AIは人に依頼してください。"));
+      const mode=str(options.mode)??p.claimPolicy?.mode??"reject";
+      if(!["off","warn","reject"].includes(mode)) throw new Error(t("受け持ちの設定が正しくありません。期限は1〜1440分です。"));
+      p={...p,claimPolicy:{mode:mode as "off"|"warn"|"reject",leaseMinutes:options.minutes===undefined?(p.claimPolicy?.leaseMinutes??30):Number(str(options.minutes))}};
+      save(path,p);out(t("受け持ち設定: {mode}",{mode}));return;
+    }
+    case "claim-release":
+    case "claim-renew": {
+      const target=mustFind(p,rest[0]);
+      if(cmd==="claim-release" && p.claims?.[target.id]?.releasedAt) {out(t("すでに解除されています。"));return;}
+      save(path,p);out(t("受け持ちを更新しました。"));return;
+    }
     case "context": {
       // ボックスのコンテキストと確認トークンを JSON で出す (読むだけ)
       // --brief: 短いコンテキスト (対象の情報は全部、親・上流は絞る)。確認トークンは、全部の出力と同じ
-      out(JSON.stringify((options.brief ? briefReceipt : contextReceipt)(p, mustFind(p, rest[0]).id), null, 2));
+      out(JSON.stringify({...(options.brief ? briefReceipt : contextReceipt)(p, mustFind(p, rest[0]).id),...(claimsEnabled(p)?{claimSummary:claimSummary(p,claimRequest.identity)}:{})}, null, 2));
       return;
     }
     case "guard": {
@@ -663,19 +715,19 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     }
     case "resume": {
       // 再開用の概要 (読むだけ。回答を確認済みにはしない)
-      out(options.json ? JSON.stringify(resumeSummary(p, { includeCompleted: !!options["include-completed"] }), null, 2) : resumeReport(p, { includeCompleted: !!options["include-completed"] }));
+      out(options.json ? JSON.stringify({...resumeSummary(p, { includeCompleted: !!options["include-completed"] }),...(claimsEnabled(p)?{claimSummary:claimSummary(p,claimRequest.identity)}:{})}, null, 2) : resumeReport(p, { includeCompleted: !!options["include-completed"] }) + (claimsEnabled(p) ? "\n"+JSON.stringify(claimSummary(p,claimRequest.identity),null,2):""));
       return;
     }
     case "status": {
       if (options.json) out(JSON.stringify(p, null, 2));
-      else out(statusReport(p, { brief: !!options.brief }));
+      else out(statusReport(p, { brief: !!options.brief }) + (claimsEnabled(p)?"\n"+JSON.stringify(claimSummary(p,claimRequest.identity),null,2):""));
       return;
     }
     case "export": {
       const fmt = str(options.format) ?? "md";
       const text = fmt === "json" ? toJSON(p) + "\n" : projectToMarkdown(p);
       const target = str(options.out);
-      if (target) { writeFileSync(target, text, "utf8"); out(t("書き出し: {target}", { target })); }
+      if (target) { writeExport(target, text); out(t("書き出し: {target}", { target })); }
       else out(text);
       return;
     }
@@ -710,7 +762,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const tags = str(options.tags) ? str(options.tags)!.split(/[,、]/).map((s) => s.trim()).filter(Boolean) : [];
       const tpl = extractTemplate(p, b.id, { tags });
       const target = str(options.out) ?? `${b.title.replace(/[\\/:*?"<>|\s]/g, "_")}.boxglow-block.json`;
-      writeFileSync(target, JSON.stringify(tpl, null, 2) + "\n", "utf8");
+      writeExport(target, JSON.stringify(tpl, null, 2) + "\n");
       out(t("テンプレートを書き出し: {target} ({count} 個の子)", { target, count: tpl.root.children.length }));
       return;
     }
@@ -745,7 +797,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const gp = inputGroupsOf(p).find((g) => g.name === rest.join(" "));
       if (!gp) throw new Error(t("グループが見つかりません"));
       const target = str(options.out) ?? `${gp.name.replace(/[\\/:*?"<>|\s]/g, "_")}.boxglow-inputs.json`;
-      writeFileSync(target, exportInputGroup(p, gp.id) + "\n", "utf8");
+      writeExport(target, exportInputGroup(p, gp.id) + "\n");
       out(t("書き出し: {target}", { target }));
       return;
     }
@@ -801,6 +853,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
           : t("マージで両側が変更: {path} (採用: {ours} / 相手: {theirs})", { path: c.path, ours: JSON.stringify(c.ours), theirs: JSON.stringify(c.theirs) });
         q = { ...q, log: [...q.log, { id: `m${Math.random().toString(36).slice(2, 10)}`, at: new Date().toISOString(), actor: "merge", kind: "note", message }] };
       }
+      // Gitは保存済みの両側を統合する。作業の取得検証はせず、claimsも3方向マージの結果を保存する。
       commitFile(oursPath, toJSON(q) + "\n", readRevisions.get(resolve(oursPath))!);
       const both = r.conflicts.length - kept.length;
       out(
@@ -1205,8 +1258,17 @@ if (argv[0] === "mcp") {
   if (str(options.actor)) process.env.BOXGLOW_ACTOR = str(options.actor)!; // 記録者の名前 (各ツールの実行に引き継ぐ)
   if (str(options.lang)) process.env.BOXGLOW_LANG = str(options.lang)!; // ツールの説明の言語 (各コマンドの文言は計画の言語)
   const mcpFile = locateFile(str(options.file));
+  const mcpInstance=randomUUID(), mcpTokens=new Map<string,string>();
+  const configuredActor=actorOf(str(options.actor));
+  const mcpActor=isHumanActor(configuredActor)?"agent":configuredActor;
   startMcp(async args => {
-    if (args[0] !== "sync") return runCli(args);
+    if (args[0] !== "sync") {
+      if(args.some(a=>/^--(?:actor|instance|claim-token|file)(?:=|$)/.test(a)) || (["claim-policy","claim-release"].includes(args[0]) || (args[0]==="unlock" && args.some(a=>a==="--remove" || a.startsWith("--remove="))))) throw new Error(t("MCPでは実行IDと受け持ちを自動管理します。人の操作は人に依頼してください。"));
+      const result=runCli([...args,"--file",mcpFile,"--actor",mcpActor,"--instance",mcpInstance,...[...mcpTokens.values()].flatMap(token=>["--claim-token",token])]);
+      for(const line of result.split("\n")) if(line.startsWith("CLAIM ")) {const receipt=JSON.parse(line.slice(6));mcpTokens.set(receipt.blockId,receipt.token);}
+      if(["done","leave"].includes(args[0])) {const id=findClaimBlock(load(mcpFile),args[1]).block?.id;if(id)mcpTokens.delete(id);}
+      return result;
+    }
     if (args.length !== 1) throw new Error(t("この同期には人の判断が必要です。AIは変更の違いと停止理由を要約してaskで知らせ、人が画面またはCLIで選ぶまで待ってください。AIは選択を代行しないでください。") + "\n" + t("人が実行している場合は、boxglow sync --help の「人の操作」を参照してください。"));
     const lines: string[] = [];
     try { setLang(explicitLang(options) ?? load(mcpFile).lang ?? "ja"); } catch { /* 停止理由は返す */ }

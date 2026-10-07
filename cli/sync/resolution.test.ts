@@ -120,7 +120,7 @@ function cli(
         BOXGLOW_CONFIG_DIR: config,
         BOXGLOW_TOKEN: "",
         BOXGLOW_SERVER: "",
-        CODEX_HOME: "", CODEX_SANDBOX: "", CODEX_THREAD_ID: "", CLAUDECODE: "", CLAUDE_CODE: "",
+        CODEX_HOME: "", CODEX_SANDBOX: "", CODEX_THREAD_ID: "", CODEX_SESSION_ID: "", CLAUDECODE: "", CLAUDE_CODE: "",
         ...environment,
       },
     });
@@ -385,4 +385,14 @@ it("watch中の打ち直しは対象と言語を保ち、単発コマンドに�
   expect(changed).toEqual(["--lang", "en", "--server", "http://127.0.0.1:1234", "--file", "other plan.json"]);
   expect(humanSyncCommand({ file: "other plan.json", rawArgs: changed })).not.toContain("--watch");
   expect(retargetSyncArgs(["--watch=true", "--file=old.json"], "new.json")).toEqual(["--file", "new.json"]);
+});
+
+it.each(["human", "human:hash", "codex-sub", "claude-code-research"])("継承したactor %sでAIに人用コマンドを出さない", async actor => {
+  const file = join(caseDir, "identity.json"), config = join(caseDir, "config");
+  writeFileSync(file, toJSON(createProject("P")));
+  for (const mark of [{ CLAUDECODE: "1" }, { CODEX_SESSION_ID: "test-session" }]) {
+    const r = await cli(["sync", "--file", file, "--server", server.url], config, { BOXGLOW_ACTOR: actor, ...mark });
+    expect(r.code).toBe(2); expect(r.output).not.toContain("--actor human"); expect(r.output).toContain("sync --help");
+  }
+  expect(server.puts).toBe(0);
 });

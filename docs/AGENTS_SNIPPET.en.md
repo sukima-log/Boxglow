@@ -113,6 +113,16 @@ npx boxglow done B12 --artifact "<name>=<path>" --context-token <new context tok
 
 AI may only sync already bound projects and inspect comparisons. If sync stops for a conflict or a human choice, summarize the differences and use ask to notify the user. Never resolve conflicts, create a new binding, relink, recover, adopt, restore, or confirm an account. A human must use the UI or explicitly run CLI with --actor human. AI must never add --actor human, including after a chat answer; record the answer and wait for the human to apply the sync choice.
 
+Codex must pass `--actor codex` on every CLI call; Claude Code must pass `--actor claude-code`. Execution markers may not survive a WSL boundary. Give subagents names such as `codex-task`; never impersonate a human.
+
+### Claims for parallel work
+
+When claims are enabled for the plan, fix a unique `BOXGLOW_INSTANCE_ID` for each independent CLI session. Do not share it between agents. Read `claims` and `context`, then acquire with `start` (default block scope, `--scope subtree` for descendants). Keep the token from the successful CLAIM line and pass `--claim-token` on writes. MCP keeps its own instance ID and acquired receipts automatically. Renew with `claim-renew` / `boxglow_claim_renew` every 5 minutes (or within half the lease for shorter leases); checkpoint before handoff. done/leave releases the target claim. On expiry or a generation mismatch, reread context and acquire again. The same actor name does not make another instance yours. Ask a person to change claim settings, force release, or resolve sync conflicts; never impersonate human. Synced copies on different devices are not protected by a distributed lock. See `docs/CLAIMS.md`.
+
+Never use another instance’s ID or receipt, including receipts reconstructed from plan data or claims output. After MCP restarts, the same actor is still a different instance: wait for expiry or ask a person to release it; never take it over automatically.
+
+Automatically promoted inputs belong to the original box’s scope. Changes to shared input content or other boxes’ layout require claims for all affected boxes. For plan settings such as focus or group, use `context root` → `start root` and pass that CLAIM receipt. A block-scoped root claim does not include ordinary boxes. End it with `leave root`. Context-guard tokens are still required.
+
 ---
 
 Human-only sync operations prevent accidental actions; they are not enforced authorization or OS-level isolation. AI must never identify itself with `--actor human`. Report the comparison and stop reason to the user. MCP and AI-identified CLI output do not provide executable human choice commands.

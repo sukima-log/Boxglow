@@ -1,3 +1,4 @@
+import { preserveClaimHistory, onlyClaimsChanged } from "../model/claims";
 import { externalHistoryPatch, combineHistoryPatch, applyHistoryPatch, historyPatchMasksChanges, type HistoryPatch } from "./history-rebase";
 import { groupConflicts, resolveGroupChoices, type ConflictReview, type ConflictResolution } from "../model/conflict-groups";
 import type { PeerVersion } from "../model/version";
@@ -344,7 +345,7 @@ export const useProjectStore = create<State>((set, get) => {
         if (state.source === "serve") serveRevision = revision;
         else vscodeVersion = Number(revision);
         mergeSerial++;
-        mergedNotice = true;
+        mergedNotice = mergedNotice || !onlyClaimsChanged(base,remote);
         set({ project: result.project, conflict: null, saveError: null, saveState: "unsaved",
           past, future });
         scheduleSave();
@@ -861,7 +862,7 @@ export const useProjectStore = create<State>((set, get) => {
       if (!project || past.length === 0) return;
       const prev = materializeHistory(past[past.length - 1]);
       if (!prev) { set({ past: [], toast: t("これより前には戻せません。相手の変更と矛盾するため、古い履歴を終了しました。") }); return; }
-      set({ project: prev, past: past.slice(0, -1), future: [project, ...future], toast: historyNotice(past[past.length - 1]) });
+      set({ project: preserveClaimHistory(prev,project), past: past.slice(0, -1), future: [project, ...future], toast: historyNotice(past[past.length - 1]) });
       scheduleSave();
     }
 
@@ -872,7 +873,7 @@ export const useProjectStore = create<State>((set, get) => {
       const [snapshot, ...rest] = future;
       const next = materializeHistory(snapshot);
       if (!next) { set({ future: [], toast: t("これより先には進めません。相手の変更と矛盾するため、やり直しの履歴を終了しました。") }); return; }
-      set({ project: next, past: [...past, project], future: rest, toast: historyNotice(snapshot) });
+      set({ project: preserveClaimHistory(next,project), past: [...past, project], future: rest, toast: historyNotice(snapshot) });
       scheduleSave();
     }
 

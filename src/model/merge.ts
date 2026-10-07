@@ -95,7 +95,7 @@ function mergeMap(path: string[], base: Record<string, Dict> | undefined, ours: 
     const t = theirs[id];
     // 引き継ぎメモは書いた人・時刻とメモが 1 組なので、項目ごとに混ぜず丸ごと 1 つの値として比べる
     // 片方だけにある・片方が消した場合も pick に任せる (消した側と変えた側がぶつかれば競合として記録する)
-    if (o && t && path[0] !== "handoffs") { out[id] = mergeObject([...path, id], b, o, t, r); continue; }
+    if (o && t && path[0] !== "handoffs" && path[0] !== "claims") { out[id] = mergeObject([...path, id], b, o, t, r); continue; }
     const value = pick([...path, id], b, o, t, r);
     if (value !== undefined) out[id] = value as Dict;
   }
@@ -177,7 +177,7 @@ function restoreDeleted(out: Dict, deleter: Project, keeper: Project, explicitly
  */
 const MERGED_ELSEWHERE: ReadonlySet<string> = new Set([
   "name", "description", "visibility", "terminals", "contextGuard", "workflowPolicy", "focusBlockId", "lang"
-, "blocks", "ports", "edges", "agents", "handoffs", "members", "inputGroups", "log", "nextKey"
+, "blocks", "ports", "edges", "agents", "handoffs", "claims", "members", "inputGroups", "log", "nextKey"
 , "schemaVersion", "id", "createdAt", "updatedAt", "version"
 ]);
 
@@ -201,9 +201,10 @@ export function mergeProjects(base: Project | null, ours: Project, theirs: Proje
     if (value !== undefined) out[k] = value; else delete out[k];
   }
   // id の辞書
-  for (const k of ["blocks", "ports", "edges", "agents", "handoffs"]) {
+  for (const k of ["blocks", "ports", "edges", "agents", "handoffs", "claims"]) {
     out[k] = mergeMap([k], b?.[k] as Record<string, Dict> | undefined, (o[k] ?? {}) as Record<string, Dict>, (th[k] ?? {}) as Record<string, Dict>, r);
   }
+  if (!base?.claims && !ours.claims && !theirs.claims) delete out.claims;
   // 片方が消したボックスが (もう片方の変更を残すために) 残ったときは、そのボックスの親・中のボックス・入出力・線も戻して参照をそろえる
   // 保護のための自動復元は、利用者が明示した削除を取り消してはいけない。
   const explicitlyDeleted = (kind: string, id: string): boolean => {
