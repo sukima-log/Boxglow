@@ -1,7 +1,7 @@
 {
   "name": "boxglow",
   "private": false,
-  "version": "0.5.2",
+  "version": "0.6.0",
   "type": "module",
   "description": "See at a glance what your AI agents and your team are working on: tasks as input/output boxes that go from BlackBox to WhiteBox. Web app + CLI, one boxglow.json in your repo.",
   "scripts": {

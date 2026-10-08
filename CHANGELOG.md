@@ -1,45 +1,36 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-10-08)
 
-- `boxglow remote delete` (and deleting from the sync panel) no longer fails with HTTP 412 against the hosted server: Cloudflare turns the ETag into a weak one (`W/"…"`) when it compresses a response, and the revision taken from it kept the `W/` prefix. The same rule as sync now strips it.
-- Stage E: confirmation-based server plan deletion, 30-day trash and restoration to a new server ID in CLI / serve / VS Code. Local files remain and deleted IDs stay blocked. Requires the Stage E server for recovery.
-- D5: treat unsafe HTTP URLs as configuration errors, stop watch retries, and document migrating existing HTTP bindings.
+Goes with the VS Code extension 0.5.0. Update the CLI, `serve` and the extension together. The hosted sync server was updated on 2026-10-08 (plan list, deletion and restore); older clients keep working with it.
 
-- **Authentication compatibility change:** `BOXGLOW_TOKEN` alone is no longer used for the product sync server, including explicit URLs and existing bindings. Also set `BOXGLOW_TOKEN_SERVER` to the matching URL. See `docs/SYNC_START.md` for Windows CLI instructions. Custom servers retain unscoped-token compatibility, but non-localhost HTTP sync is now rejected; use HTTPS.
-- D4 review: share HTTPS/local HTTP validation across sign-in, sync and watch, reject sync redirects, protect HTTP spellings and trailing-dot variants of the product host, and align Windows sign-in guidance. Legacy plans without an ID must retain their original creation time to auto-merge; generated IDs no longer cause a false partial-Undo warning.
+### Highlights
 
-- D3 review: unscoped `BOXGLOW_TOKEN` is never sent to the product sync server, including explicit URLs and existing bindings. Set `BOXGLOW_TOKEN_SERVER` to the matching sync URL to use an environment token there (for example in CI). URL comparison normalizes host case, default ports and trailing slashes. A configured token server restricts custom servers too; custom servers without it retain their existing behavior. Logout messages follow the same rule. Legacy plans without an ID can still merge their first external ID assignment; the start panel shares one details section and limits comparison advice to the current-file destination.
+- **Block tree**: a sidebar with its own button (separate from filters, members and parts). Expand or collapse branches, move with the keyboard, and add, rename, move, change the status of or delete boxes from the tree. Filters apply to the tree too.
+- **Clearer sync display**: the sync chip uses five plain states (Synced, Transferring, Needs review, Stopped, Not syncing). The panel shows the current situation and the next action first; account, settings and details are folded away. The file's save state and the sync state are labelled separately.
+- **Conflicts by block**: when the same field changed on both sides, the comparison is grouped by box (with the box title, the field and both values) and you choose per box, or per field. Changes to different boxes never ask; they are merged automatically. Wires, deletions and moves that depend on each other are kept in one group so a choice cannot break the plan.
+- **No more "merge both" prompt for unrelated edits**: when a file changes on disk while you have unsaved edits in the UI and nothing actually conflicts, both changes are merged and saved automatically. Undo after such a merge keeps the other side's changes.
+- **Claims for parallel agents (opt-in per plan)**: an agent that starts a box can hold it for a limited time (30 minutes by default) so other agents and sub-agents do not edit it at the same time. Claims are cooperative within one shared file, not a lock across synced machines. People can release a claim with a reason. See `docs/CLAIMS.md`.
+- **Starting sync is one flow**: "Start syncing" in `serve` and the VS Code extension asks whether to put this plan on the server or open one of your plans there, signs you in if needed, and continues. A second machine picks the plan from a list instead of typing an ID. GitHub sign-in copies the code and opens the page with one button. Nothing is sent until you start.
+- **Delete and restore plans on the server**: delete a plan from the sync panel or with `boxglow remote delete`; it can be restored for 30 days (`boxglow remote trash` / `restore`). A restored plan gets a new ID, and a machine that still has the old plan can reconnect to it and keep its unsent edits.
+- **Only people resolve sync conflicts**: AI agents (MCP, or the CLI run by an agent) can sync and read the comparison, but resolving a conflict or linking a plan to a server for the first time needs a person (the UI, or the CLI with `--actor human`). This prevents mistakes; it is not an access control.
+- Category labels stay visible on every box; the overview tab is now called **Top**.
+- `boxglow sync --relink <token> [--prefer local|remote]`: when the server's history was restored from a backup, compare the plan on the server with the local one and keep one of them, instead of being stuck. The previous local state is saved first.
 
-- Stage D: a default sync server with explicit opt-out, a single start flow, account-scoped paged plan lists and destination selection in serve / VS Code. Keep existing bindings and remembered enablement; copy GitHub codes and open authorization in one click. See `docs/SYNC_START.md`.
+### Compatibility changes
 
-- C3: Preserve only explicitly marked claim logs through Undo/Redo; clarify that a same-named instance may be another worker; document the whole-plan claim restriction for agents and announce its effect after acquisition.
+- **`BOXGLOW_TOKEN` is not sent to the hosted sync server** unless `BOXGLOW_TOKEN_SERVER` names that server. Sign in with `boxglow login` instead, or set `BOXGLOW_TOKEN_SERVER` (for example in CI, or on Windows where sign-in cannot be stored yet). Your own servers keep using `BOXGLOW_TOKEN` as before.
+- **Sync over plain HTTP is refused** except for localhost. Use an `https://` URL; `docs/SYNC_START.md` describes how to move an existing HTTP binding.
+- Resolving conflicts and first-time linking from the CLI now need `--actor human`. The commands printed when sync stops include it.
+- Claims add the optional `claims` / `claimPolicy` fields to `boxglow.json`. Plans that do not turn claims on are unchanged.
+- When `CLAUDECODE` or Codex execution markers are present, the log records the agent name even if `BOXGLOW_ACTOR` holds a person's name.
 
-- C2 review: restore Git merge on claim-enabled plans; attribute promoted inputs to their original boxes and support explicit root claims for plan settings. Explain active foreign claims and MCP restarts, preserve Project JSON output and human claim logs through Undo/Redo, suppress claims-only merge notices, make repeated release a no-op, and style the release action as a button.
-- Recorder identity intentionally follows AI execution markers before an inherited human name in `BOXGLOW_ACTOR`: for example, `CLAUDECODE=1 BOXGLOW_ACTOR=hash` records `claude-code`. Explicit human CLI operations retain `--actor human` / `--actor human:name`; agents must use their own actor name.
+### Fixes
 
-- Stage C: opt-in per-plan claims for CLI/MCP with instance IDs, expiry and generation fencing; compact GUI indicators and reasoned human release. See `docs/CLAIMS.md` for the same-file coordination boundary.
-
-- B6: Share AI identity detection between recorder and sync output, document explicit agent names across WSL, and reject undo steps that would discard external assignment or input-group references.
-
-- 段階B再レビュー B5: CLI試験から起動元のAI識別環境を分離。人の記録者名・設定フォルダだけによる誤判定を修正し、`human:名前` と人向けヘルプを追加。Undoで外部の入出力や配線を失う段は通知して停止し、項目の一部を戻せない場合も通知。常時同期の再実行案内から `--watch` を除去。担当解除ログは統合時刻・発生回・確定後のB番号を記録。
-
-- 段階B再レビュー B4: 単体試験の前にCLIを再ビルド。外部更新の履歴を項目単位へ圧縮し、保存通知の判別をハッシュ化。担当解除をログ・比較欄に表示し、Undo/Redoの境界を通知。同期のAI向け出力から人専用コマンドを除き、人向けには元の引数で再実行方法を案内。
-- 段階B再レビュー: 担当参照の正規化、保存中の文書読み直しと自己通知の競合を修正。Undo/Redoの外部差分反映を遅延化し、比較グループと値の表示を整理。
-- 同期の競合解決・初回結び付けなどの判断はGUIまたは明示的なCLI `--actor human` に限定。MCPは固定対象の通常同期と比較取得のみ。
-
-- Conflict resolution now groups changes by block in comparisons across the CLI, MCP and UI, with a separate project settings group and joint review for dependent wires, deletions and moves. The shared versioned request supports block and field choices; partial or stale choices never apply. See [conflict resolution](docs/SYNC_CONFLICTS.md).
-- File-save collisions with no conflicting fields merge automatically and save against the latest CAS revision. Unsaved VS Code text-editor edits and edits held for manual review remain protected; success is reported only after saving.
-
-- The block tree has its own sidebar button, separate from filters, members and parts. Compact rows show hierarchy guides and category icons; branches can be expanded or collapsed individually or all at once. The tree supports keyboard navigation and block management (add, rename, move, change status and delete with Undo), follows canvas selection, and remembers whether the sidebar is open.
-- The sync chip groups the existing states into five labels: Synced, Transferring, Needs review, Stopped and Not syncing. Its panel puts the current explanation, main actions and comparisons first, with account information, details and settings folded away. File save status is labelled separately from server sync status.
-- Category labels stay visible in block headers, including the overview. The category selector is directly below the block title in every inspector tab; the tree shows the category as an icon with its name in the tooltip.
-- Renamed the overview tab from All to Top, including the tab list, breadcrumbs and wire navigation labels and tooltips.
-
-- `boxglow serve --sync`: when the page loses its connection to `serve` (serve stopped, or a save could not reach it), the sync chip shows "Disconnected" instead of keeping the last state such as "Synced", and its panel explains that the state is unknown. When `serve` comes back, the chip picks up the current state again (and disappears if `serve` was restarted without `--sync`).
-- VS Code extension, experimental sync from the UI: when sync receives new content while the text editor still has unsaved edits, the conflict bar no longer offers to merge or to open the latest file (merging there dropped the editor's unsaved edits, and the extension cannot safely discard edits in one specific editor). It offers "Save a copy of my edits" instead, then asks you to close every tab of the file (Don't Save) and reopen it, and "Load saved edits" in the ⋯ menu brings both the view and the editor edits back. The copy uses the last saved content as its base. Saving a copy and loading it now also work when no sync server is set (before, the buttons waited and failed). For other save conflicts, "Export mine and open the latest file" switches only after the copy is written and only if the view did not change in the meantime.
-- Experimental, not announced yet: sync from the UI, first part. `boxglow serve --sync [--server <URL>]` runs a sync host next to the local server: the top bar shows a one-word sync chip (Synced / Unsent / Syncing / Action needed / Problem / Offline / Paused / Other process / Off), and its panel signs in with GitHub (device code shown in the panel), turns syncing on or off for the open plan, puts the plan on the server, syncs now, and offers the same choices as the CLI when sync stops (conflicts, first link, relink, recovery, protected deletions, account confirmation). Only the plan that is open and switched on is watched; a `boxglow sync --watch` that already owns the server is shown as "Other process". Tokens never appear in the UI state. The VS Code extension and the server-side Google sign-in are not wired yet.
-- Experimental sync, not announced yet: `boxglow sync --relink <token> [--prefer local|remote]`. When the server's history changed (a restore from backup), sync used to stop with no way to continue in the same folder. It now shows how the plan on the server and the local plan differ and lets you keep one of them; the previous state (local plan, sync records, any unfinished operation) is saved under the binding's `relinks/` folder first. Nothing is merged automatically from the old base, and an unfinished push from before the restore is never sent again. While a relink is in progress the local sync state uses format version 2, so 0.5.2 and earlier stop on it instead of treating it as a first link.
+- `serve --sync`: when the page loses its connection to `serve`, the chip shows that it is disconnected instead of the last state.
+- VS Code: when sync receives new content while the text editor has unsaved edits, you save a copy of your edits, reopen the file and load them back, instead of being offered a merge that would drop the editor's edits. Saving a copy and loading it also work without a sync server.
+- Undo no longer removes changes that arrived from another editor or agent, and stops with a notice when going further back would contradict them.
+- Deleting a plan no longer fails with HTTP 412 against the hosted server (Cloudflare marks the ETag as weak).
 
 ## 0.5.2 (2026-10-05)
 
