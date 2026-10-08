@@ -236,7 +236,7 @@ Boxglow is open core: everything that works with the one file on your machine (w
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173/apps/boxglow/
+npm run dev        # http://localhost:5173/
 npm test           # Vitest (graph rules, merge, routing helpers)
 npm run build      # web app -> dist/, CLI -> bin/boxglow.js
 node bin/boxglow.js help
@@ -248,7 +248,7 @@ The CLI speaks the plan's language: `npx boxglow init --lang en` (or `ja`; the d
 
 URL parameters: `?demo=1` (sample), `&readonly=1`, `&embed=1`, `&theme=dark|light`, `&lang=en|ja` (UI language; otherwise the browser language, remembered once switched from the ⋯ menu), `?view=article` (= demo + embed + readonly), `#p=<id>`.
 
-The web app is hosted on Cloudflare Pages (`npm run deploy:pages` builds with `VITE_BASE=/` into `dist-pages/` and uploads it). Any static host works: `vite build` with `VITE_BASE` set to the path you serve from (the default `/apps/boxglow/` is the author's blog mirror).
+The web app is hosted on Cloudflare Pages (`npm run deploy:pages` builds with `VITE_BASE=/` into `dist-pages/` and uploads it). Any static host works: the default build uses relative paths, so `dist/` can be served from any path (set `VITE_BASE` to use absolute paths).
 
 Browser checks live in `e2e/` (`npm run e2e`): wires never crossing boxes on every tab of the example plans (also with squeezed positions), tab switching time, double-click / selection / decision flows, the English UI and the VS Code webview mode. They need Playwright from outside this repository (`PLAYWRIGHT=<path>`; see `e2e/run.sh`) and are not part of CI; the unit and property tests (`npm test`) are.
 
