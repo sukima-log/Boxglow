@@ -246,7 +246,6 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           </select>
         </label>
 
-      <ClaimDetails project={project} blockId={blockId} />
       <WorkScopePanel project={project} blockId={blockId} editing={scopeEditing} onClose={() => setScopeEditing(false)} />
       {descriptionReminder(b) && <p className="text-[12px] description-reminder" style={{ color: "var(--accent)" }}>{descriptionReminder(b)}</p>}
 
@@ -365,6 +364,10 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       {/* 2. 担当: 割り当て済みはチップ、追加は検索で */}
       {tab === "owner" && (
       <section className="sec">
+        {/* AI の受け持ち (誰がこのボックスを作業中に持っているか)。「誰が担当か」の情報なので担当タブに置く。
+            題名の下に置くと、狭い画面で「回答が必要です」の質問が画面の外へ押し出された (質問を先に見せる方針)。
+            受け持ちは図のボックスの札とツリーの錠でも見える */}
+        <ClaimDetails project={project} blockId={blockId} />
         <div className="sec__head"><span className="label">{t("担当")}</span></div>
         <div className="flex items-center gap-1 flex-wrap">
           {b.assigneeIds.map((id) => {

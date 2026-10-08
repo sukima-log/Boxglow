@@ -15,6 +15,7 @@ Goes with the VS Code extension 0.5.0. Update the CLI, `serve` and the extension
 - **Delete and restore plans on the server**: delete a plan from the sync panel or with `boxglow remote delete`; it can be restored for 30 days (`boxglow remote trash` / `restore`). A restored plan gets a new ID, and a machine that still has the old plan can reconnect to it and keep its unsent edits.
 - **Only people resolve sync conflicts**: AI agents (MCP, or the CLI run by an agent) can sync and read the comparison, but resolving a conflict or linking a plan to a server for the first time needs a person (the UI, or the CLI with `--actor human`). This prevents mistakes; it is not an access control.
 - Category labels stay visible on every box; the overview tab is now called **Top**. The zoom panel no longer shows the "Overview / Standard" label (the simplified drawing below 65% still switches automatically).
+- **A fuller sample** ("Try the sample" / `?demo=1`): it now shows claims held by two sub-agents and a second agent, a blocked box, a handoff note, an answered question, dates, scope, an issue link and an input group. The claim details moved to the **Owner** tab of the side panel.
 - `boxglow sync --relink <token> [--prefer local|remote]`: when the server's history was restored from a backup, compare the plan on the server with the local one and keep one of them, instead of being stuck. The previous local state is saved first.
 
 ### Compatibility changes

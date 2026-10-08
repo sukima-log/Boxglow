@@ -15,6 +15,8 @@ const {chromium,open,check,result}=require('./lib.cjs');
         s.apply(original=>{
           const p=structuredClone(original), boxes=Object.values(p.blocks);
           const b=key=>boxes.find(x=>x.key===key);
+          // (サンプルには、受け持ちと詰まりの例も入っている。この検査は候補の並べ方を見るので、それらを外して始める)
+          delete p.claims;delete p.claimPolicy;for(const x of boxes) if(x.activity?.state==='blocked') x.activity=null;
           p.focusBlockId=b('B4').id;
           b('B6').status='black';
           b('B5').activity=null;b('B5').decisions=[];

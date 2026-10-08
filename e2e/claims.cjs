@@ -8,6 +8,8 @@ const fs=require('node:fs'),path=require('node:path');
    const {page,errors}=await open(browser,{query:`?demo=1&lang=${lang}&theme=${theme}`,lang});
    await page.clock.install();await page.reload();
    await page.waitForFunction(()=>window.boxglow?.store?.getState().project);
+   // (サンプルには受け持ちの例が入っている。この検査は「未設定の計画は無効」から始めるので、受け持ちを外した計画にする)
+   await page.evaluate(()=>window.boxglow.store.getState().apply(original=>{const p=structuredClone(original);delete p.claims;delete p.claimPolicy;return p;}));
    await page.locator('.project-name').click();await page.locator('.claim-settings summary').click();
    const settings=page.locator('.claim-settings');const mode=settings.locator('select');
    check(`${lang}/${theme}: 既定は無効`,await mode.inputValue()==='off');
@@ -31,6 +33,8 @@ const fs=require('node:fs'),path=require('node:path');
    });
    check(`${lang}/${theme}: 暗いボックスでも札の文字が4.5:1以上`,contrast>=4.5,String(contrast));
    check(`${lang}/${theme}: ボックスで担当名、活動バッジと重複しない`,(await node.locator('.claim-mark').innerText()).includes('codex')&&await node.locator('.meta-chip.activity').count()===0);
+   // (受け持ちの詳細は「担当」タブの先頭にある)
+   await page.locator('.panel.right .seg__btn').filter({hasText:/^(担当|Owner)$/}).click();
    await page.locator('.claim-details summary').click();const details=page.locator('.claim-details');
    check(`${lang}/${theme}: 実行IDと期限を詳細で確認`,(await details.innerText()).includes('review-session-1')&&(await details.innerText()).includes(lang==='ja'?'期限:':'Expires:'));
    await page.evaluate(()=>window.boxglow.rf.fitView({duration:0,padding:0.12}));

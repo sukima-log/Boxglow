@@ -16,7 +16,8 @@ describe("サンプルプロジェクト", () => {
     expect(rootIns.some((q) => q.name === "テストデータ" && q.promotedFrom)).toBe(true);
     const nodes = buildNodes(p, { selectedBlockId: null, readonly: false });
     const edges = buildEdges(p, { selectedEdgeId: null });
-    expect(nodes.length).toBe(Object.keys(p.blocks).length - 1 + 2);
+    // (ボックス - root + Inputs と Outputs + 入力のグループの箱)
+    expect(nodes.length).toBe(Object.keys(p.blocks).length - 1 + 2 + (p.inputGroups?.length ?? 0));
     expect(edges.length).toBe(Object.keys(p.edges).length);
     // 線の両端のノードが存在する
     const ids = new Set(nodes.map((n) => n.id));

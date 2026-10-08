@@ -2,7 +2,8 @@
  * サンプルプロジェクト (記事の体験版と「サンプルを開く」で使う)
  * 題材: 小さな Web アプリを公開するまで。SW 開発らしく、部品を組み合わせて最終成果物を作る流れにする。
  */
-import { addBlock, addMember, addPort, askDecision, connect, createArtifact, createProject, portsOf, setActivity, setCategory, setProgress, updateBlock, updatePort } from "./graph";
+import { ackDecisions, addBlock, addInputGroup, addMember, addPort, answerDecision, askDecision, connect, createArtifact, createProject, portsOf, setActivity, setCategory, setInputGroup, setProgress, setSchedule, updateBlock, updatePort } from "./graph";
+import { acquireClaim } from "./claims";
 import { ROOT_ID, type Project } from "./types";
 import { normalizeCollapsed, projectBlocks } from "./graph";
 import { layoutAll } from "./autolayout";
@@ -116,6 +117,53 @@ export function buildSampleProject(): Project {
   p = setActivity(p, be.blockId, "claude-code", "working", "OpenAPI 定義から API のひな形を生成中");
   p = setProgress(p, be.blockId, 40, "claude-code");
   p = askDecision(p, release.blockId, "codex", "公開先はどれにしますか?", ["静的ホスティング", "自前のサーバー"], "最初に公開するのは静的な紹介ページです。フォーム送信などのサーバー処理は、別の API を使う想定です。\n静的ホスティング: 運用の手間を抑えやすく、今回の範囲に合います。\n自前のサーバー: 自由度は高い一方、更新・監視も自分たちで行います。\nこの判断を記録してから公開作業へ進みます。").project;
+
+  // ---- ここから: 画面の機能をひととおり見せるための例 (ボックスは増やさない。完了数 3 / 7 と記事の説明はそのまま) ----
+
+  // 日付は、サンプルを開いた日を基準にする (いつ開いても「期日まであと何日」が自然に見えるように)
+  // 入力: 今日からの日数 (負なら過去)。出力: YYYY-MM-DD
+  const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+
+  // 回答済みの判断 (履歴の例): 設計の途中で AI が聞き、人が答えた
+  const asked = askDecision(p, design.blockId, "claude-code", "API の形式はどれにしますか?", ["REST", "GraphQL"], "画面は 2 つだけで、データの形も単純です。\nREST: 定義 (OpenAPI) とテストの道具がそろっていて、今回の規模に合います。\nGraphQL: 画面が増えたときに柔軟ですが、最初の手間が増えます。");
+  p = asked.project;
+  // (設計はもう完了しているので、AI はこの回答を読み終えている = 確認済み)
+  if (asked.decisionId) p = ackDecisions(answerDecision(p, design.blockId, asked.decisionId, "REST", "さとう"), design.blockId, "claude-code", asked.decisionId);
+
+  // 日程: 実装するは期日が近い、公開するは来週
+  p = setSchedule(p, impl.blockId, { startDate: day(-5), dueDate: day(3), estimateHours: 24 }, "human");
+  p = setSchedule(p, release.blockId, { dueDate: day(10), estimateHours: 4 }, "human");
+
+  // 作業の範囲 (目標・対象外・完了条件): AI に渡す文脈 (context) にも入る
+  p.blocks[impl.blockId].scope = {
+    goal: "設計書どおりに画面と API を作り、結合テストが通る状態にする"
+  , nonGoals: "デザインの作り込み、多言語対応"
+  , acceptance: "結合テストがすべて通り、ビルドが作れる"
+  };
+
+  // 外部の課題 (GitHub の issue など) へのリンク: ボックスに番号の札が出る
+  p.blocks[be.blockId].issue = "https://github.com/example/notes/issues/12";
+
+  // 結合テストは、別のサブエージェントが準備中だが、テストデータが無くて詰まっている
+  p = setActivity(p, it.blockId, "claude-code", "blocked", "テストデータの置き場所が決まっていない");
+
+  // 引き継ぎメモ (中断・交代のときに、次の担当が読む): 活動ログとは別に残る
+  p.handoffs = {
+    ...(p.handoffs ?? {})
+  , [be.blockId]: { note: "ノートの一覧・作成・削除の API まで実装済み。次は認証 (方式は「公開する」の判断の後で決める)。テストは test/api に追加している。", actor: "claude-code", at: new Date().toISOString() }
+  };
+
+  // 最上位の入力のまとまり (入力グループ): 資料をまとめて扱う
+  const group = addInputGroup(p, "資料");
+  p = setInputGroup(group.project, rin.portId, group.groupId);
+
+  // AI の受け持ち (計画ごとに有効にする): 並行して動く AI が、互いのボックスを書き換えないようにする
+  // 同じ Claude Code でも、実行 ID (instanceId) が違えば別の書き手 (サブエージェント)。期限は開いた時刻から 30 分
+  p.claimPolicy = { mode: "reject", leaseMinutes: 30 };
+  const now = Date.now();
+  p = acquireClaim(p, be.blockId, "block", { actor: "claude-code", instanceId: "api-worker", tokens: [] }, now - 5 * 60_000, "sample-claim-api");
+  p = acquireClaim(p, it.blockId, "block", { actor: "claude-code", instanceId: "test-worker", tokens: [] }, now - 2 * 60_000, "sample-claim-test");
+  p = acquireClaim(p, release.blockId, "block", { actor: "codex", instanceId: "release-worker", tokens: [] }, now - 10 * 60_000, "sample-claim-release");
 
   // 依存関係で並べ直す (線が読みやすい配置にする)
   return layoutAll(normalizeCollapsed(p)); // 大項目は畳んだ前提で並べる (Top は大項目までしか出さない)

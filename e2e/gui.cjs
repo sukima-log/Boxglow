@@ -54,7 +54,7 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('詳細パネル: 別のボックスを選んでも開いているタブ (More) を保つ',await page.locator('.panel.right .seg__btn').filter({hasText:/^その他$/}).getAttribute('data-on')==='true');
     await page.locator('.summary-chip').click();
     await page.getByRole('button',{name:/^Resume/}).click();
-    check('Resume タブ: AI 未確認の回答が残り、引き継ぎメモが無いときの案内が出る',await page.getByText('引き継ぎメモはまだありません。各タスクの「AI への引き継ぎ」に残せます。').isVisible() && await page.getByText('静的ホスティング',{exact:true}).isVisible());
+    check('Resume タブ: AI 未確認の回答が残り、サンプルの引き継ぎメモ (バックエンド) が出る',await page.getByText(/ノートの一覧・作成・削除の API まで実装済み/).first().isVisible() && await page.getByText('静的ホスティング',{exact:true}).isVisible());
     await page.locator('.topbar button[title="Menu"]').click();
     check('狭い幅 (390px): 追加・Auto Layout・Undo / Redo は ⋯ メニューの中にある',await page.locator('.menu-actions').getByRole('button',{name:'+ Block',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Auto Layout',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Undo',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Redo',exact:true}).isVisible());
     check('画面: 実行時のエラーが無い',errors.length===0,errors.join(';'));
