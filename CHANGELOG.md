@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `boxglow remote delete` (and deleting from the sync panel) no longer fails with HTTP 412 against the hosted server: Cloudflare turns the ETag into a weak one (`W/"…"`) when it compresses a response, and the revision taken from it kept the `W/` prefix. The same rule as sync now strips it.
 - Stage E: confirmation-based server plan deletion, 30-day trash and restoration to a new server ID in CLI / serve / VS Code. Local files remain and deleted IDs stay blocked. Requires the Stage E server for recovery.
 - D5: treat unsafe HTTP URLs as configuration errors, stop watch retries, and document migrating existing HTTP bindings.
 

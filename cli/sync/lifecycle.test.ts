@@ -71,3 +71,20 @@ it("J5: 保存上限の案内は30日保管中も保存量に含むと伝える"
  const f=fake(),p=await previewLifecycle({server,fetch:f.fetch},"delete","p");
  await expect(commitLifecycle({server,fetch:async()=>new Response("{}",{status:507})},p)).rejects.toThrow(/30/);
 });
+
+// 本番の配置の確認 (2026-10-08) で見つけた不具合の回帰の試験:
+// Cloudflare は応答を圧縮するときに ETag を弱い印 (W/"…") に書き換える。
+// 版を取り出すときに W/ を残すと、削除の要求の If-Match が '"W/"e1.1"' になり、サーバーが 412 で断る
+it("ETag が弱い印 (W/\"…\") でも、版を正しく取り出し、削除の要求に正しい If-Match を付ける", async () => {
+ // 入力: 計画の取得の応答の ETag が W/"e1.1" のサーバー。出力: 確認の版は e1.1、送る If-Match は "e1.1"
+ const writes: RequestInit[] = [];
+ const weak = vi.fn<typeof fetch>(async (_input, init) => {
+  if (init?.method === "DELETE") { writes.push(init); return new Response(JSON.stringify({ kind: "deleted", expiresAt: "2026-11-07T00:00:00.000Z" }), { headers: { "x-boxglow-account": "a", "x-boxglow-epoch": "e1" } }); }
+  return new Response(JSON.stringify({ name: "サーバー計画" }), { headers: { "x-boxglow-account": "a", "x-boxglow-epoch": "e1", etag: 'W/"e1.1"' } });
+ });
+ const o = { server, fetch: weak };
+ const p = await previewLifecycle(o, "delete", "p");
+ expect(p.revision).toBe("e1.1");
+ await commitLifecycle(o, p);
+ expect((writes[0].headers as Record<string, string>)["if-match"]).toBe('"e1.1"');
+});

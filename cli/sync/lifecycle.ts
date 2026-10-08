@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { resolveToken } from "./credentials";
 import { normalizeServer, hashOf } from "./state-store";
 import { serverProblem } from "./login";
+import { unquote } from "./client";
 import { t } from "../../src/i18n/core";
 export interface LifecycleOptions { server:string; fetch?:typeof fetch; allowEnvironmentToken?:boolean }
 export interface TrashProject {id:string;name:string;revision:string;deletedAt:string;expiresAt:string;restoredId:string|null;restorable:boolean}
@@ -41,7 +42,8 @@ export async function previewLifecycle(o:LifecycleOptions,kind:"delete"|"restore
   const c=connection(o);let name=id,revision="",expiresAt:string|undefined, res:Response;
   if(kind === "delete") {
     res=await c.request(`/v1/projects/${encodeURIComponent(id)}`);
-    revision=res.headers.get("etag")?.replace(/^"|"$/g,"") ?? "";
+    // 版は ETag から取る。弱い印 (W/"…"。Cloudflare が圧縮のときに付ける) も、同期と同じ規則で外す
+    revision=unquote(res.headers.get("etag")) ?? "";
     const body=await res.json(); if(typeof body.name === "string") name=body.name.slice(0,512);
   } else {
     // IDで始まるページを直接取得せず、公開一覧と同じ境界を通す。

@@ -259,8 +259,14 @@ export async function fetchHeads(o: { server: string; token?: string; fetch?: ty
 function headers(token?: string): Record<string, string> {
   return { ...(token ? { authorization: `Bearer ${token}` } : {}), "x-boxglow-version": APP_VERSION, "x-boxglow-protocol": String(SAVE_PROTOCOL) };
 }
-/** ETag の値から、前後の二重引用符を取る */
-const unquote = (etag: string | null): string | null => etag ? etag.replace(/^W\//, "").replace(/^"|"$/g, "") : null;
+/**
+ * ETag の値から版を取り出す
+ * Input : etag = 応答の ETag ヘッダーの値 ('"e2.2"'、または弱い印の 'W/"e2.2"'。無ければ null)
+ * Output: 版の文字列 ('e2.2')。無ければ null
+ * Cloudflare は応答を圧縮するときに ETag を弱い印 (W/"…") に書き換えるので、前の W/ も取り除く。
+ * (削除・復元の確認 (lifecycle.ts) でも同じ取り出し方を使う。引用符だけを取ると、本番で版が 'W/"e2.2' になり 412 で断られた)
+ */
+export const unquote = (etag: string | null): string | null => etag ? etag.replace(/^W\//, "").replace(/^"|"$/g, "") : null;
 
 /**
  * やりかけの送りの操作を送る (初めて送るときも、送り直すときも同じ要求)
