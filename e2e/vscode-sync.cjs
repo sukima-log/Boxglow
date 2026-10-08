@@ -108,16 +108,15 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     check('VS Code: 独立ツリーを開ける', await frame.locator('.tree-panel').isVisible());
     await frame.locator('.tree-toggle').click();
     await frame.locator('.sync-chip').click();
+    await frame.getByRole('button',{name:/^(同期を始める|Start syncing)$/}).click();
+    check('VS Code D: 開始前に送り先を表示', (await frame.locator('.sync-startup').textContent()).includes(server.url));
+    check('VS Code D3: 詳細欄を1つに集約', await frame.locator('.sync-panel summary').filter({hasText:/^(接続の詳細|詳細と設定|Connection details|Details and settings)$/}).count() === 1);
+    if(process.env.BOXGLOW_E2E_SHOTS){fs.mkdirSync(process.env.BOXGLOW_E2E_SHOTS,{recursive:true});await win.screenshot({path:path.join(process.env.BOXGLOW_E2E_SHOTS,'vscode-start.png')});}
+    await frame.getByRole('button',{name:/^(この計画を新しくサーバーに置く|Upload this plan as new)$/}).click();
     await button('GitHub でサインイン').click();
     await frame.locator('.sync-panel__code').waitFor({ timeout: 15000 });
     check('VS Code: サインインのコードが出る', /^TEST-/.test((await frame.locator('.sync-panel__code').textContent()) ?? ''));
     server.deviceCodes.set([...server.deviceCodes.keys()].at(-1), { account: 'acc-vscode', login: 'vscode-user' });
-    check('VS Code: 許可されると「オフ」(この計画はまだ同期していない)', await chipText('オフ'));
-    // この計画を同期する (有効化) → サーバーに置く
-    // (チェックの表示は、裏方からの状態で変わる。押した後は、印の状態で確かめる)
-    await frame.getByRole('button', { name: /^(この計画を同期する|Sync this plan)$/ }).click();
-    check('VS Code: 有効にすると「未接続」', await chipText('未接続'));
-    await button('サーバーに置く').click();
     check('VS Code: サーバーに置くと「同期済み」', await chipText('同期済み'));
     const remoteId = await frame.evaluate(() => window.boxglow.store.getState().syncStatus?.file?.binding?.remoteId);
     check('VS Code: サーバーに計画ができる', !!remoteId && !!server.project(remoteId, 'acc-vscode')?.head);
@@ -262,6 +261,49 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     let pushed = false;
     for (let i = 0; i < 60 && !pushed; i++) { const head = JSON.parse(server.project(remoteId, 'acc-vscode').head.text); pushed = head.name.endsWith('_EDITOR') && head.blocks[block.blockId].title === '衝突中に届いた題名'; if (!pushed) await win.waitForTimeout(250); }
     check('VS Code: Save と同期で、サーバーに両方の変更が届く', pushed);
+    // 段階D: 独立した拡張ホストと資格情報フォルダを2台目として使う。
+    const workD=path.join(tmp,'work-d');fs.mkdirSync(workD);
+    const fileD=path.join(workD,'boxglow.json');const localD=tools.toJSON({...tools.createProject('2台目の手元'),lang:'ja'});fs.writeFileSync(fileD,localD);
+    const udD=path.join(tmp,'ud-d');fs.mkdirSync(path.join(udD,'User'),{recursive:true});
+    fs.copyFileSync(path.join(ud,'User','settings.json'),path.join(udD,'User','settings.json'));
+    fs.writeFileSync(path.join(udD,'User','keybindings.json'),JSON.stringify([{key:'ctrl+alt+shift+4',command:'workbench.action.reloadWindow'}]));
+    const appD=await _electron.launch({executablePath:CODE,args:[workD,fileD,'--user-data-dir',udD,'--extensions-dir',path.join(tmp,'exts-d'),'--extensionDevelopmentPath',path.join(ROOT,'vscode'),'--disable-workspace-trust','--skip-release-notes','--disable-gpu','--no-sandbox'],env:(()=>{const env={...process.env,BOXGLOW_CONFIG_DIR:path.join(tmp,'config-d'),BOXGLOW_TOKEN:token};delete env.ELECTRON_RUN_AS_NODE;delete env.VSCODE_IPC_HOOK_CLI;return env;})()});
+    let watchingD=true;
+    let dismissD=Promise.resolve();
+    try {
+      const winD=await appD.firstWindow();
+      // 初回案内はwebviewの準備後に遅れて出ることがある。2台目の試験中も見張る。
+      dismissD=(async()=>{while(watchingD){
+        for(const name of ['Continue without Signing In','Get Started']){
+          const button=winD.getByRole('button',{name,exact:true});
+          if(await button.isVisible().catch(()=>false))await button.click().catch(()=>{});
+        }
+        await winD.waitForTimeout(300).catch(()=>{});
+      }})();
+      const findD=async(wanted)=>{
+        for(let i=0;i<120;i++){
+          for(const f of winD.frames()){try{if(await f.locator('.sync-chip').count()&&await f.evaluate(w=>window.boxglow?.store.getState().syncStatus?.file?.path===w,wanted))return f;}catch{}}
+          await winD.waitForTimeout(500);
+        }throw new Error('second VS Code frame missing: '+wanted);
+      };
+      let d=await findD(fileD);
+      await d.locator('.sync-chip').click();
+      await d.getByRole('button',{name:/^(同期を始める|Start syncing)$/}).click();
+      await d.getByRole('button',{name:/^(サーバーの計画を開く|Open a plan from the server)$/}).click();
+      await d.locator('.sync-project-row').first().waitFor();
+      check('VS Code D: 2台目の一覧に自分の計画名が出る',(await d.locator('.sync-project-row').first().textContent()).includes('VS Code'));
+      check('VS Code D2: 未連携の計画は新しいファイルが既定',await d.getByRole('radio',{name:/^(新しいファイル|New file)$/}).isChecked());
+      await d.getByRole('radio',{name:/^(新しいファイル|New file)$/}).check();
+      if(process.env.BOXGLOW_E2E_SHOTS)await winD.screenshot({path:path.join(process.env.BOXGLOW_E2E_SHOTS,'vscode-project-list.png')});
+      await d.locator('.sync-project-row').first().click();
+      const saveInput=winD.locator('.quick-input-widget input');await saveInput.waitFor();
+      const destination=path.join(workD,'received.boxglow.json');await saveInput.fill(destination);await winD.waitForTimeout(400);await winD.keyboard.press('Enter');
+      d=await findD(destination);
+      check('VS Code D: 保存ダイアログで選んだ計画が開き元のファイルは不変',fs.readFileSync(fileD,'utf8')===localD&&await d.evaluate(id=>window.boxglow.store.getState().project.id===id,p.id));
+      await winD.keyboard.press('Control+Alt+Shift+4');await winD.waitForTimeout(1500);d=await findD(destination);
+      check('VS Code D: ウィンドウ再読み込み後、同じ結び付けを操作なしで再開',await d.evaluate(id=>{const x=window.boxglow.store.getState().syncStatus;return x?.file?.enabled&&x.file.binding?.remoteId===id;},remoteId));
+    } finally {watchingD=false;await dismissD;await appD.close().catch(()=>{});}
+
     // サインアウト (開き直した画面から)
     if (!(await frame3.locator('.sync-panel').isVisible().catch(() => false))) await frame3.locator('.sync-chip').click();
     await frame3.locator('.sync-panel__details > summary').click();

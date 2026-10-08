@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Authentication compatibility change:** `BOXGLOW_TOKEN` alone is no longer used for the product sync server, including explicit URLs and existing bindings. Also set `BOXGLOW_TOKEN_SERVER` to the matching URL. See `docs/SYNC_START.md` for Windows CLI instructions. Custom servers retain unscoped-token compatibility, but non-localhost HTTP sync is now rejected; use HTTPS.
+- D4 review: share HTTPS/local HTTP validation across sign-in, sync and watch, reject sync redirects, protect HTTP spellings and trailing-dot variants of the product host, and align Windows sign-in guidance. Legacy plans without an ID must retain their original creation time to auto-merge; generated IDs no longer cause a false partial-Undo warning.
+
+- D3 review: unscoped `BOXGLOW_TOKEN` is never sent to the product sync server, including explicit URLs and existing bindings. Set `BOXGLOW_TOKEN_SERVER` to the matching sync URL to use an environment token there (for example in CI). URL comparison normalizes host case, default ports and trailing slashes. A configured token server restricts custom servers too; custom servers without it retain their existing behavior. Logout messages follow the same rule. Legacy plans without an ID can still merge their first external ID assignment; the start panel shares one details section and limits comparison advice to the current-file destination.
+
+- Stage D: a default sync server with explicit opt-out, a single start flow, account-scoped paged plan lists and destination selection in serve / VS Code. Keep existing bindings and remembered enablement; copy GitHub codes and open authorization in one click. See `docs/SYNC_START.md`.
+
 - C3: Preserve only explicitly marked claim logs through Undo/Redo; clarify that a same-named instance may be another worker; document the whole-plan claim restriction for agents and announce its effect after acquisition.
 
 - C2 review: restore Git merge on claim-enabled plans; attribute promoted inputs to their original boxes and support explicit root claims for plan settings. Explain active foreign claims and MCP restarts, preserve Project JSON output and human claim logs through Undo/Redo, suppress claims-only merge notices, make repeated release a no-op, and style the release action as a button.

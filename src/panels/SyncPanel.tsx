@@ -6,6 +6,7 @@
  * - CLI の説明文は共有しても、コマンド文字列を実行しない。許可された種類の操作と opaque な choiceId を送る。
  * 裏方が状態を流す serve --sync / VS Code の拡張でだけ表示する。秘密のトークンを画面へ渡さない。
  */
+import { SyncStartup } from "./SyncStartup";
 import { ConflictGroups } from "./ConflictGroups";
 import { useEffect, useRef, useState } from "react";
 import { useProjectStore } from "../store/useProjectStore";
@@ -188,19 +189,20 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
     <div className="sync-panel" role="dialog" aria-label={t("同期")}>
       <div className={`sync-panel__heading tone-${c.tone}`}>
         <span aria-hidden="true">{c.icon}</span>
-        <strong>{c.label}</strong>
+        <strong>{status.startup ? t("同期を始める") : c.label}</strong>
       </div>
-      <div className="sync-panel__line">{explanation(status)}</div>
+      {!status.startup && <div className="sync-panel__line">{explanation(status)}</div>}
       {unsaved && file?.enabled && (
         <div className="sync-panel__line muted">{t("未保存の編集があります。保存すると送られます")}</div>
       )}
       {/* R49: エディタの未保存編集がある受信待ちは、自動統合・自動の開き直しへ進めず、先に退避を案内する。 */}
       <EditorBehind />
+      {status.server && file && ((!file.binding && !status.halt) || status.startup) && status.support === "ok" && <SyncStartup key={status.startup?.operationId ?? "entry"} status={status} act={act} unsaved={unsaved}/>}
       {status.signIn ? (
         <SignInCode code={status.signIn} onCancel={() => void act({ kind: "cancelSignIn" })} />
       ) : (
         <div className="sync-panel__row">
-          {status.support === "ok" && !account && status.credentials.source !== "env" && (
+          {status.support === "ok" && !account && status.credentials.source !== "env" && (!status.server || file?.binding || status.startup?.stage === "signin") && (
             <>
               <button
                 className="btn btn-primary btn-sm"
@@ -213,12 +215,12 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
               </button>
             </>
           )}
-          {file && ready && !file.enabled && (
+          {file && ready && !file.enabled && !status.startup && (!status.server || file.binding) && (
             <button className="btn btn-primary btn-sm" onClick={() => void act({ kind: "enable" })}>
               {t("この計画を同期する")}
             </button>
           )}
-          {file?.enabled && ready && !file.binding && status.state === "unbound" && (
+          {file?.enabled && ready && !file.binding && !status.server && !status.startup && status.state === "unbound" && (
             <button className="btn btn-primary btn-sm" onClick={() => void act({ kind: "bind" })}>
               {t("サーバーに置く")}
             </button>
@@ -293,6 +295,9 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
       {/* 日常の操作を埋もれさせないよう設定を畳む。ホストの停止理由・控えの場所は省略しない。 */}
       <details className="sync-panel__details">
         <summary>{t("詳細と設定")}</summary>
+        {status.server && <div className="break-all">{t("送り先")}: {status.server}</div>}
+        {file && <div className="break-all">{t("今開いているファイル")}: {file.path}</div>}
+        {status.startup?.opened && <div className="break-all">{t("保存先")}: {status.startup.opened.path}</div>}
         {status.message && <div className="sync-panel__line">{status.message}</div>}
         {status.problem && (
           <div className="sync-panel__line sync-panel__problem">
@@ -319,7 +324,7 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
             status.credentials.source === "env" && <span>{t("環境変数のトークンで同期しています")}</span>
           )}
         </div>
-        {file && ready && (
+        {file && ready && (!status.server || file.binding) && (
           <label className="sync-panel__toggle">
             <input
               type="checkbox"
@@ -527,6 +532,7 @@ function RestoreEntry() {
 /** 入力: SyncStatus の signIn (プロバイダー別の公開案内情報) と取消コールバック。
  * 出力: 認可ページへのリンク、必要ならユーザーコード、取消ボタン。トークン保存・認可の監視はホストに任せる。 */
 function SignInCode({ code, onCancel }: { code: NonNullable<SyncStatus["signIn"]>; onCancel: () => void }) {
+  const [copyFailed,setCopyFailed] = useState(false);
   if (code.provider === "google") {
     return (
       <div className="sync-panel__signin">
@@ -543,9 +549,13 @@ function SignInCode({ code, onCancel }: { code: NonNullable<SyncStatus["signIn"]
   return (
     <div className="sync-panel__signin">
       <div>{t("ブラウザで次のページを開き、コードを入力してください")}</div>
-      <a href={code.verificationUrl} target="_blank" rel="noreferrer">
-        {code.verificationUrl}
-      </a>
+      <button className="btn btn-primary btn-sm" onClick={()=>{
+        // クリック内で開く。コピーできない環境でもコードを残し、認可を代行しない。
+        window.open(code.verificationUrl,"_blank","noopener,noreferrer");
+        void navigator.clipboard?.writeText(code.userCode).then(()=>setCopyFailed(false)).catch(()=>setCopyFailed(true));
+        if (!navigator.clipboard) setCopyFailed(true);
+      }}>{t("コードをコピーして許可のページを開く")}</button>
+      {copyFailed&&<p role="status">{t("コピーできませんでした。下のコードを入力してください。")}</p>}
       <div className="sync-panel__code">{code.userCode}</div>
       <button className="btn btn-ghost btn-sm" onClick={onCancel}>
         {t("中止")}

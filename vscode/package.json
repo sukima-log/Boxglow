@@ -99,9 +99,12 @@
       "title": "Boxglow",
       "properties": {
         "boxglow.sync.server": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Sync server URL for sync from the UI (experimental). Empty = sync from the UI is off. / 画面からの同期 (実験的) に使う同期サーバーの URL。空なら、画面からの同期は使わない。"
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null,
+          "markdownDescription": "Sync destination. Unset/null uses the existing binding or the product default. Empty or \"off\" disables sync. No plan is sent until you start sync. / 未指定は既存の結び付け、なければ製品の既定先。空文字またはoffで無効。開始するまで計画を送りません。"
         }
       }
     }

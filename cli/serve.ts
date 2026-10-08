@@ -10,6 +10,7 @@
  * Input : file = boxglow.json の場所, port, dist = Web アプリの置き場, open = ブラウザを開くか, log = 出力
  * Output: 起動した http.Server (常駐。Ctrl+C で終了)
  */
+import { rememberSync, syncWasEnabled } from "./sync/server-config";
 import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { existsSync, readFileSync, realpathSync, statSync, watch, type FSWatcher } from "node:fs";
@@ -19,7 +20,7 @@ import { commitFile, FileBusy, FileConflict, revisionOf } from "./file-store";
 import { validateProjectText } from "../src/model/validate-file";
 // 文言を今の言語 (日本語 / 英語) で出す。言語は main.ts の serve の入口で決めてある
 import { t } from "../src/i18n/core";
-import { MAX_SYNC_ACTION_BYTES, parseHostAction, SyncHost, type SyncStatus } from "./sync/host";
+import { MAX_SYNC_ACTION_BYTES, parseHostAction, SyncHost, SyncDestinationError, type SyncStatus } from "./sync/host";
 
 /** PUT で受け付ける本文の上限 (バイト)。これを超える計画は保存を断る */
 export const MAX_BODY = 5 * 1024 * 1024;
@@ -57,21 +58,35 @@ function readBody(req: IncomingMessage, limit = MAX_BODY): Promise<string> {
 
 
 export function startServe(opts: { file: string; port: number; dist: string; open: boolean; log: (text: string) => void
-  /** 画面からの同期 (--sync): 同期サーバーの場所を渡すと、裏方 (SyncHost) を動かして、このファイルを有効にする */
-; sync?: { server: string; host?: SyncHost } }) {
+  /** 同期先を渡すと開始の入口を提供する。autoEnable=falseは記憶した有効化だけを復元する */
+; sync?: { server: string; host?: SyncHost; autoEnable?: boolean; restoreEnabled?: boolean; allowEnvironmentToken?: boolean } }): ReturnType<typeof createServer> {
   const { file, dist, log } = opts;
   if (!existsSync(join(dist, "index.html"))) throw new Error(t("Web アプリが見つかりません: {dist} (npm run build で dist/ を作ってください)", { dist }));
+  const children: ReturnType<typeof createServer>[] = [];
   const clients = new Set<ServerResponse>();
   // 画面 (SSE でつながっている全員) に「ファイルが変わった」と知らせる
   const broadcast = () => { for (const res of clients) res.write("event: change\ndata: {}\n\n"); };
-  // ---- 画面からの同期の裏方 (--sync のときだけ)。状態が変わったら SSE の sync で知らせる ----
+  // ---- 画面からの同期の裏方 (同期先が有効なとき)。状態が変わったら SSE の sync で知らせる ----
   let syncHost: SyncHost | null = null;
   let lastSync: SyncStatus | null = null;
   const sendSync = (status: SyncStatus) => { lastSync = status; const data = JSON.stringify(status); for (const res of clients) res.write(`event: sync\ndata: ${data}\n\n`); };
   if (opts.sync) {
-    syncHost = opts.sync.host ?? new SyncHost({ server: opts.sync.server, onStatus: sendSync });
+    syncHost = opts.sync.host ?? new SyncHost({ server: opts.sync.server, allowEnvironmentToken: opts.sync.allowEnvironmentToken, onStatus: sendSync,
+      destinationPicker:"sibling",
+      chooseDestination:async (source,name) => {
+        // ディレクトリ移動・隠し設定・特殊デバイス名を画面から指定させない。
+        if (!name || !/^[^./\\][^/\\:<>"|?*]*\.json$/.test(name) || /[\x00-\x1f]/.test(name) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])\./i.test(name)) throw new SyncDestinationError(t("保存ファイル名を確認してください。フォルダを含めず、.jsonで終わる名前を指定します。"));
+        return join(dirname(source),name);
+      },
+      onOpened:async (target) => {
+        const child = startServe({file:target,port:0,dist,open:false,log,sync:{server:opts.sync!.server,allowEnvironmentToken:opts.sync!.allowEnvironmentToken,autoEnable:false}});
+        children.push(child);
+        await new Promise<void>((ok,fail)=>{child.once("listening",ok); child.once("error",fail);});
+        const address = child.address();
+        return `http://localhost:${typeof address === "object" && address ? address.port : 0}/?serve=1`;
+      }, onEnabled:(path,enabled)=>rememberSync(path,opts.sync!.server,enabled) });
     syncHost.openFile(file);
-    syncHost.enable(file);
+    if (opts.sync.autoEnable !== false || (opts.sync.restoreEnabled !== false && syncWasEnabled(file,opts.sync.server))) syncHost.enable(file);
   }
 
   // ファイルの監視 (ディレクトリを見て、同名のファイルの変化だけ拾う。連続する変化は 1 回にまとめる)
@@ -170,7 +185,7 @@ export function startServe(opts: { file: string; port: number; dist: string; ope
     }
   });
   // サーバを閉じるときは監視と SSE の接続も終える (テストで後始末できるように)
-  server.on("close", () => { watcher?.close(); clearTimeout(timer); for (const res of clients) res.end(); void syncHost?.stop(); });
+  server.on("close", () => { for (const child of children) { child.closeAllConnections(); child.close(); } watcher?.close(); clearTimeout(timer); for (const res of clients) res.end(); void syncHost?.stop(); });
   server.listen(opts.port, "127.0.0.1", () => {
     // port に 0 を渡したときは、実際に割り当てられたポートを使う
     const address = server.address();

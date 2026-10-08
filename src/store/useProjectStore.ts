@@ -322,10 +322,20 @@ export const useProjectStore = create<State>((set, get) => {
     // 読めない最新も衝突として保持する。例外で保存Promiseを宙に浮かせない。
     let remote: Project, base: Project | null;
     let result: ReturnType<typeof mergeProjects>;
+    let legacyBase = false;
+    let sameLegacyPlan = false;
     try {
       remote = validateProjectText(text);
       base = baseText ? fromJSON(baseText) : null;
+      // 古い本文にIDが無ければ、読み込みごとに補われる仮IDを比較しない。
+      const rawBase = baseText ? JSON.parse(baseText) : null;
+      legacyBase = !!rawBase && !rawBase.id;
+      // 仮IDしかない旧形式は、本文の作成日時が一致する場合だけ同じ計画として扱う。
+      sameLegacyPlan = legacyBase && typeof rawBase.createdAt === "string" && !!rawBase.createdAt
+        && rawBase.createdAt === JSON.parse(text).createdAt;
       result = mergeProjects(base, current, remote, {}, new Date().toISOString());
+      // 最初に外部が保存したIDを採用し、次の更新で別計画と誤判定しない。
+      if (sameLegacyPlan && JSON.parse(text).id) result.project = { ...result.project, id: remote.id };
     } catch {
       mergedNotice = false;
       set({ conflict: { text, revision, paths: [], ...(editorDirty ? { editorDirty: true } : {}) }, saveState: "unsaved",
@@ -335,7 +345,7 @@ export const useProjectStore = create<State>((set, get) => {
     // 入力: 外部の最新JSONと版。出力: 自動統合した場合だけtrue。
     // R49: エディタ側の未保存編集・追い付き待ち・手動確認待ちには自動保存を適用しない。
     const state = get();
-    if (allowAuto && !editorDirty && !state.conflict?.editorDirty && !state.editorBehind && !holdSave && !state.readonly
+    if ((sameLegacyPlan || (!legacyBase && remote.id === current.id && (!base || base.id === current.id))) && allowAuto && !editorDirty && !state.conflict?.editorDirty && !state.editorBehind && !holdSave && !state.readonly
       && (state.source === "serve" || state.source === "vscode")
       && !result.conflicts.some(c => !c.automatic)) {
       try {

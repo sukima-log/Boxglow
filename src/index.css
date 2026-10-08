@@ -1528,3 +1528,18 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .claim-details .claim-mark { align-self:flex-start; }
 
 .bg-block .claim-mark { color:inherit; opacity:1; }
+
+/* 計画一覧は押せる行として、名前と更新情報を分ける。狭い画面でも長い名前を折り返す。 */
+.sync-startup { display:flex; flex-direction:column; gap:8px; padding:8px 0; }
+.sync-project-row { display:flex; flex-direction:column; align-items:flex-start; gap:4px; width:100%; text-align:left; white-space:normal; overflow-wrap:anywhere; padding:8px; }
+.sync-project-row span { font-size:11px; opacity:.75; }
+
+/* 一覧が20件あっても、画面外へ操作を押し出さず、同期パネルの中をスクロールする。 */
+.sync-panel { max-height: calc(100dvh - 96px); overflow-y: auto; }
+.sync-startup p { margin: 0; line-height: 1.5; }
+.sync-startup .btn { white-space: normal; overflow-wrap: anywhere; }
+.sync-startup fieldset { border: 1px solid var(--line-soft); border-radius: 8px; padding: 8px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.sync-startup fieldset label { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sync-startup .input { min-width: 0; max-width: 100%; }
+.sync-project-row { width: 100%; min-width: 0; }
+.sync-project-row span { font-size: 12px; color: var(--text-muted); }

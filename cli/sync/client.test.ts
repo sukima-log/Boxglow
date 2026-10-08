@@ -251,7 +251,7 @@ describe("boxglow sync コマンド", () => {
    */
   const run = (d: Device, ...args: string[]) => new Promise<{ status: number | null; stdout: string }>((done) => {
     const child = spawn(process.execPath, ["bin/boxglow.js", "sync", "--actor", "human", ...args, "--file", d.file, "--lang", "ja"]
-    , { env: { ...process.env, BOXGLOW_CONFIG_DIR: d.config, BOXGLOW_SERVER: "", BOXGLOW_TOKEN: "" } });
+    , { env: { ...process.env, BOXGLOW_CONFIG_DIR: d.config, BOXGLOW_SERVER: undefined, BOXGLOW_TOKEN: "" } });
     let stdout = "";
     child.stdout.on("data", (c: Buffer) => { stdout += c.toString(); });
     child.on("exit", (status) => done({ status, stdout }));
@@ -280,12 +280,12 @@ describe("boxglow sync コマンド", () => {
     expect(r.stdout).toContain("--push-all");
     expect(server.puts).toBe(puts);
   }, 30_000);
-  it("結び付けの無い計画で、サーバーの指定なしに実行すると、結び付け方を案内して失敗する", async () => {
+  it("結び付けの無い計画で、明示的に無効にすると通信せず止まる", async () => {
     const lone = new Device("lone");
     lone.write(fromJSON(toJSON(createProject("まだ結び付けていない"))));
-    const r = await run(lone);
+    const r = await run(lone, "--server", "off");
     expect(r.status).toBe(1);
-    expect(r.stdout).toContain("boxglow sync --server");
+    expect(r.stdout).toContain("同期は無効");
   }, 30_000);
 });
 
@@ -437,7 +437,7 @@ describe("複数のプロセスを同時に動かす", () => {
   /** CLI を非同期に実行する (args[0] がコマンド) */
   const cli = (d: Device, ...args: string[]) => new Promise<number | null>((done) => {
     const child = spawn(process.execPath, ["bin/boxglow.js", ...args, "--file", d.file, "--lang", "ja", "--actor", "human"]
-    , { stdio: "ignore", env: { ...process.env, BOXGLOW_CONFIG_DIR: d.config, BOXGLOW_SERVER: "", BOXGLOW_TOKEN: "", BOXGLOW_FILE: "" } });
+    , { stdio: "ignore", env: { ...process.env, BOXGLOW_CONFIG_DIR: d.config, BOXGLOW_SERVER: undefined, BOXGLOW_TOKEN: "", BOXGLOW_FILE: "" } });
     child.on("exit", (status) => done(status));
   });
   it("同じ結び付けの sync を 3 つ同時に動かしても、状態は読める形のまま、手元とサーバーがそろう", async () => {

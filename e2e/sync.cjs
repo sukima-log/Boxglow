@@ -13,7 +13,7 @@ const ROOT = path.resolve(__dirname, '..');
 
 (async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'boxglow-e2e-sync-'));
-  let child = null, browser = null, server = null;
+  let child = null, childD = null, browser = null, server = null;
   try {
     // ---- 組み立て: 画面 (相対パス)、serve の入口、検査の道具 ----
     const dist = path.join(tmp, 'dist');
@@ -57,18 +57,29 @@ const ROOT = path.resolve(__dirname, '..');
 
     // サインイン: 欄の GitHub のボタン → コードが出る → (サーバー側で許可) → 印が「未接続」
     await chip.click();
+    check('同期D: 起動だけでは有効化しない', !(await status()).file.enabled);
+    await page.getByRole('button', {name:'同期を始める',exact:true}).click();
+    check('同期D: 開始前に送り先を表示', (await page.locator('.sync-startup').textContent()).includes(server.url));
+    check('同期D3: 詳細欄を1つに集約', await page.locator('.sync-panel summary').filter({hasText:/^(接続の詳細|詳細と設定)$/}).count() === 1);
+    if(process.env.BOXGLOW_E2E_SHOTS){fs.mkdirSync(process.env.BOXGLOW_E2E_SHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.BOXGLOW_E2E_SHOTS,'serve-start.png')});}
+    await page.getByRole('button', {name:'この計画を新しくサーバーに置く',exact:true}).click();
     await page.getByRole('button', { name: 'GitHub でサインイン', exact: true }).click();
     const code = page.locator('.sync-panel__code');
     await code.waitFor({ timeout: 10000 });
     check('同期: サインインのコードが欄に出る', /^TEST-/.test((await code.textContent()) ?? ''));
+    // 認可ページの実接続はしない。クリック時のコピー失敗と公開URLだけを検査する。
+    await page.evaluate(()=>{window.open=(...args)=>{window.__authOpen=args;return null;};Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw new Error('clipboard denied');}}});});
+    await page.getByRole('button',{name:'コードをコピーして許可のページを開く',exact:true}).click();
+    await page.getByText('コピーできませんでした。下のコードを入力してください。',{exact:true}).waitFor();
+    check('同期D: コピー不可でもコードが残り、認可ページを開く操作を保つ',await code.isVisible()&&await page.evaluate(()=>window.__authOpen[0]==='https://github.com/login/device'));
     const deviceCode = [...server.deviceCodes.keys()].at(-1);
     server.deviceCodes.set(deviceCode, { account: 'acc-e2e', login: 'e2e-user' });
-    check('同期: 許可されると、印が「未接続」(サインイン済み・まだサーバーに置いていない)', await chipText('未接続'));
+    check('同期D: 許可後は選んだ新規配置まで続き、同期済みになる', await chipText('同期済み'));
     check('同期: 欄にサインインした利用者が出る', await page.locator('.sync-panel__who').textContent({ timeout: 10000 }).then((t) => (t ?? '').length > 0).catch(() => false));
     check('同期: 画面の状態にトークンが出ない', !JSON.stringify(await status()).includes('tok-'));
 
     // サーバーに置く → 同期済み
-    await page.getByRole('button', { name: 'サーバーに置く', exact: true }).click();
+
     check('同期: 「サーバーに置く」で、印が「同期済み」', await chipText('同期済み'));
     const remoteId = (await status()).file.binding.remoteId;
     check('同期: サーバーに計画ができる', !!server.project(remoteId, 'acc-e2e')?.head);
@@ -178,6 +189,43 @@ const ROOT = path.resolve(__dirname, '..');
     try { await page.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'synced', null, { timeout: 30000 }); back = true; } catch { back = false; }
     check('同期: serve を起動し直すと、印が「同期済み」に戻る', back);
 
+    // 段階D: 2台目の通常起動 → 自分の一覧 → 保存先選択 → 受信 → 再開。
+    const fileD = path.join(tmp,'device-d','boxglow.json'); fs.mkdirSync(path.dirname(fileD));
+    const localD = tools.toJSON(tools.createProject('2台目の手元')); fs.writeFileSync(fileD,localD);
+    childD = spawn(process.execPath,[path.join(tmp,'serve.mjs'),fileD,dist,'0',server.url],{env:{...process.env,BOXGLOW_CONFIG_DIR:path.join(tmp,'config-d'),BOXGLOW_TOKEN:token},stdio:['ignore','pipe','pipe']});
+    let logD='';childD.stdout.on('data',d=>{logD+=d;});childD.stderr.on('data',d=>{logD+=d;});
+    let portD=0; for(let i=0;i<80&&!portD;i++){portD=Number(/localhost:(\d+)\//.exec(logD)?.[1]??0);if(!portD)await page.waitForTimeout(100);}
+    if(!portD)throw new Error('second serve failed: '+logD);
+    const pageD=await browser.newPage({viewport:{width:1280,height:900}});
+    await pageD.goto(`http://localhost:${portD}/?serve=1&lang=ja`);
+    await pageD.locator('.sync-chip').click();
+    await pageD.getByRole('button',{name:'同期を始める',exact:true}).click();
+    await pageD.getByRole('button',{name:'サーバーの計画を開く',exact:true}).click();
+    await pageD.locator('.sync-project-row').first().waitFor();
+    check('同期D: 2台目の一覧に計画名が出る', (await pageD.locator('.sync-project-row').first().textContent()).includes('同期の画面の検査'));
+    check('同期D2: 未連携の計画は新しいファイルが既定', await pageD.getByRole('radio',{name:'新しいファイル',exact:true}).isChecked());
+    check('同期D3: 新規保存先には比較の説明を出さない', !(await pageD.locator('.sync-startup').textContent()).includes('手元と内容が違う場合'));
+    await pageD.getByRole('radio',{name:/^今開いているファイル/}).check();
+    check('同期D3: 現在のファイルには比較を案内', (await pageD.locator('.sync-startup').textContent()).includes('手元と内容が違う場合'));
+    await pageD.getByRole('radio',{name:'新しいファイル',exact:true}).check();
+    await pageD.getByRole('textbox',{name:'保存ファイル名',exact:true}).fill('../unsafe.json');
+    await pageD.locator('.sync-project-row').first().click();
+    await pageD.getByRole('alert').filter({hasText:'保存ファイル名を確認'}).waitFor();
+    check('同期D2: 不正なファイル名を日本語で案内', (await pageD.locator('.sync-startup').textContent()).includes('保存ファイル名を確認'));
+    await pageD.getByRole('button',{name:'再読み込み',exact:true}).click();
+    await pageD.locator('.sync-project-row').first().waitFor();
+    await pageD.getByRole('radio',{name:'新しいファイル',exact:true}).check();
+    await pageD.getByRole('textbox',{name:'保存ファイル名',exact:true}).fill('received.boxglow.json');
+    if(process.env.BOXGLOW_E2E_SHOTS)await pageD.screenshot({path:path.join(process.env.BOXGLOW_E2E_SHOTS,'serve-project-list.png')});
+    await pageD.locator('.sync-project-row').first().click();
+    const openSaved=pageD.getByRole('link',{name:'保存した計画を開く',exact:true});await openSaved.waitFor();
+    check('同期D: 元の計画を変えずに別の保存先へ開く', fs.readFileSync(fileD,'utf8')===localD&&JSON.parse(fs.readFileSync(path.join(path.dirname(fileD),'received.boxglow.json'),'utf8')).id===p.id);
+    const savedUrl=await openSaved.getAttribute('href'); await pageD.goto(savedUrl+'&lang=ja');
+    await pageD.waitForFunction(()=>window.boxglow?.store.getState().syncStatus?.file?.enabled);
+    await pageD.reload();await pageD.waitForFunction(()=>window.boxglow?.store.getState().syncStatus?.file?.enabled);
+    check('同期D: 開き直しても操作なしで同じ結び付けを再開', await pageD.evaluate(id=>window.boxglow.store.getState().syncStatus?.file?.binding?.remoteId===id,remoteId));
+    await pageD.close(); childD.kill(); childD=null;
+
     // サインアウト → 未サインイン、資格情報が消える
     await page.locator('.sync-panel__details > summary').click();
     await page.getByRole('button', { name: 'サインアウト', exact: true }).click();
@@ -191,7 +239,7 @@ const ROOT = path.resolve(__dirname, '..');
     check('同期: 検査が最後まで動く', false, String(e && e.stack || e));
   } finally {
     await browser?.close();
-    child?.kill();
+    child?.kill(); childD?.kill();
     await server?.stop();
     fs.rmSync(tmp, { recursive: true, force: true });
   }

@@ -1,3 +1,4 @@
+import { DEFAULT_SYNC_SERVER, environmentTokenAllowed, isDefaultSyncServer, serverProblem } from "./server-policy";
 /**
  * boxglow login / logout / whoami: 同期サーバーへのサインイン (GitHub の端末向けの手順を、サーバーが仲立ちする)
  *   login : サーバーに手順を始めさせ、表示されたコードを利用者がブラウザで入力する。許可されたら、サーバーが発行したトークンを保存する
@@ -12,6 +13,8 @@ import { CredentialsBusy, CredentialsSaveFailed, CredentialsUnsafe, inspectCrede
 import { normalizeServer } from "./state-store";
 
 export interface LoginOptions {
+  /** 呼出元による追加の禁止。送り先URLの規則はこの値に関係なく適用する。 */
+  allowEnvironmentToken?: boolean;
   server: string;
   /** 出力の関数 */
   out: (text: string) => void;
@@ -89,26 +92,19 @@ export async function runGoogleLogin(o: Omit<LoginOptions, "onCode"> & { onUrl?:
         return 1;
       }
       try { saveCredentials({ server, account: issued.account, login: issued.account, token: issued.token, createdAt: new Date().toISOString() }); }
-      catch (e) { await revoke(server, issued.token, doFetch); out(t("資格情報を、安全に保存できませんでした: {reason}", { reason: e instanceof Error ? e.message : String(e) })); return 1; }
+      catch (e) { await revoke(server, issued.token, doFetch); out(t("資格情報を、安全に保存できませんでした: {reason}", { reason: e instanceof Error ? e.message : String(e) })); out(environmentTokenHint(server)); return 1; }
       if (previous && previous.token !== issued.token) await revoke(server, previous.token, doFetch);
       out(t("サインインしました: {login} ({account})", { login: issued.account, account: issued.account }));
       return 0;
     });
   } catch (e) {
     if (e instanceof CredentialsBusy) { out(t("ほかの boxglow login / logout が動いています。終わってから、もう一度実行してください")); return 1; }
-    if (e instanceof CredentialsUnsafe) { out(t("資格情報を、安全に保存できません: {reason}", { reason: e.reason })); return 1; }
+    if (e instanceof CredentialsUnsafe) { out(t("資格情報を、安全に保存できません: {reason}", { reason: e.reason })); out(environmentTokenHint(server)); return 1; }
     throw e;
   }
 }
 
-/** サーバーの場所が、トークンを送ってよい場所か (https、または手元の http) */
-export function serverProblem(server: string): string | null {
-  let url: URL;
-  try { url = new URL(server); } catch { return t("サーバーの場所が URL として読めません: {server}", { server }); }
-  if (url.protocol === "https:") return null;
-  if (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return null;
-  return t("https ではないサーバーには、サインインしません (手元の localhost を除く): {server}", { server });
-}
+export { serverProblem } from "./server-policy";
 
 const headers = (token?: string): Record<string, string> => ({ ...(token ? { authorization: `Bearer ${token}` } : {}), "content-type": "application/json", "x-boxglow-version": APP_VERSION });
 
@@ -208,18 +204,18 @@ export async function runLogin(o: LoginOptions): Promise<number> {
           ? t("今までの資格情報を、元の場所に戻せませんでした。控えはここにあります: {path}", { path: failed.backup })
           : t("資格情報の置き場に、今回のファイルが残っているかもしれません。確かめてください"));
         out(revoked ? t("今回発行されたトークンは、取り消しました。") : t("今回発行されたトークンを、サーバー側で取り消せませんでした (まだ有効かもしれません)。"));
-        out(t("保存せずに使うには、トークンを環境変数 BOXGLOW_TOKEN で渡してください"));
+        out(environmentTokenHint(server));
         return 1;
       }
       // 保存に成功してから、古いトークンを取り消す (同じ利用者のサインインし直し)
       if (previous && previous.token !== issued.token) await revoke(server, previous.token, doFetch);
       out(t("サインインしました: {login} ({account})", { login: issued.login, account: issued.account }));
-      if (process.env.BOXGLOW_TOKEN) out(t("注意: 環境変数 BOXGLOW_TOKEN が設定されています。同期では、保存したサインインより、そちらが優先されます"));
+      if (o.allowEnvironmentToken !== false && environmentTokenAllowed(server) && process.env.BOXGLOW_TOKEN) out(t("注意: 環境変数 BOXGLOW_TOKEN が設定されています。同期では、保存したサインインより、そちらが優先されます"));
       return 0;
     });
   } catch (e) {
     if (e instanceof CredentialsBusy) { out(t("ほかの boxglow login / logout が動いています。終わってから、もう一度実行してください")); return 1; }
-    if (e instanceof CredentialsUnsafe) { out(t("資格情報を、安全に保存できません: {reason}", { reason: e.reason })); out(t("保存せずに使うには、トークンを環境変数 BOXGLOW_TOKEN で渡してください")); return 1; }
+    if (e instanceof CredentialsUnsafe) { out(t("資格情報を、安全に保存できません: {reason}", { reason: e.reason })); out(environmentTokenHint(server)); return 1; }
     throw e;
   }
 }
@@ -228,7 +224,7 @@ export async function runLogin(o: LoginOptions): Promise<number> {
  * boxglow logout: 保存済みの資格情報だけを対象にする (環境変数のトークンは、取り消さない)
  * Output: 終了コード
  */
-export async function runLogout(o: Pick<LoginOptions, "server" | "out" | "fetch">): Promise<number> {
+export async function runLogout(o: Pick<LoginOptions, "server" | "out" | "fetch" | "allowEnvironmentToken">): Promise<number> {
   const { out } = o;
   const doFetch = o.fetch ?? fetch;
   const server = normalizeServer(o.server);
@@ -248,7 +244,8 @@ export async function runLogout(o: Pick<LoginOptions, "server" | "out" | "fetch"
         removeCredentials(server);
         out(revoked ? t("サインアウトしました (サーバー側のトークンも取り消しました)") : t("手元の資格情報を消しました。サーバーと通信できなかったので、サーバー側のトークンは取り消せていません (期限まで有効です)"));
       }
-      if (process.env.BOXGLOW_TOKEN) out(t("環境変数 BOXGLOW_TOKEN は、この操作では取り消されません (同期では、引き続きそのトークンが使われます)"));
+      if (o.allowEnvironmentToken !== false && environmentTokenAllowed(server) && process.env.BOXGLOW_TOKEN) out(t("環境変数 BOXGLOW_TOKEN は、この操作では取り消されません (同期では、引き続きそのトークンが使われます)"));
+      else if (process.env.BOXGLOW_TOKEN) out(t("環境変数 BOXGLOW_TOKEN は、この送り先では使われません。"));
       return 0;
     });
   } catch (e) {
@@ -267,17 +264,17 @@ export async function runLogout(o: Pick<LoginOptions, "server" | "out" | "fetch"
  * boxglow whoami: 今のトークン (環境変数 > 保存済み) の利用者と、端末・使用量を表示する
  * Output: 終了コード
  */
-export async function runWhoami(o: Pick<LoginOptions, "server" | "out" | "fetch">): Promise<number> {
+export async function runWhoami(o: Pick<LoginOptions, "server" | "out" | "fetch" | "allowEnvironmentToken">): Promise<number> {
   const { out } = o;
   const server = normalizeServer(o.server);
   const problem = serverProblem(server);
   if (problem) { out(problem); return 1; }
-  const resolved = resolveToken(server);
-  if (!resolved) { out(t("サインインしていません。boxglow login --server {server} を実行してください", { server })); return 1; }
+  const resolved = resolveToken(server, o.allowEnvironmentToken);
+  if (!resolved) { out(authHint(null, 401, server)); return 1; }
   let res: Response;
   try { res = await (o.fetch ?? fetch)(`${server}/v1/me`, { headers: headers(resolved.token), redirect: "error" }); }
   catch (e) { out(t("サーバーと通信できませんでした: {message}", { message: e instanceof Error ? e.message : String(e) })); return 1; }
-  if (res.status === 401 || res.status === 403) { out(authHint(resolved.source, res.status)); return 1; }
+  if (res.status === 401 || res.status === 403) { out(authHint(resolved.source, res.status, server)); return 1; }
   if (!res.ok) { out(t("サーバーの応答: {status}", { status: res.status })); return 1; }
   const me = await res.json() as { account?: string; login?: string; devices?: { name: string; current?: boolean; lastUsedAt?: string | null }[]; usage?: { projects: number; contentBytes: number }; limits?: { projects: number; contentBytes: number } };
   out(t("利用者: {login} ({account})", { login: me.login ?? "-", account: me.account ?? "-" }));
@@ -295,9 +292,16 @@ export async function runWhoami(o: Pick<LoginOptions, "server" | "out" | "fetch"
  * 利用者を確かめられなかったときの案内 (使ったトークンの出どころで変える)
  * Input : source = トークンの出どころ ("env" / "file" / null = 無し), status = 応答の状態コード
  */
-export function authHint(source: "env" | "file" | null, status: number): string {
+export function authHint(source: "env" | "file" | null, status: number, server = DEFAULT_SYNC_SERVER): string {
   if (status === 403) return t("このアカウントでは、同期を使えません (止められている、または招待されていません)");
   if (source === "env") return t("環境変数 BOXGLOW_TOKEN のトークンが無効です。直すか、外してください (外すと、保存済みのサインインを使います)");
   if (source === "file") return t("保存済みのサインインが無効になっています (期限切れ・取り消し)。boxglow login をやり直してください");
-  return t("サインインしていません。boxglow login --server <URL> を実行してください (または、環境変数 BOXGLOW_TOKEN)");
+  return t("サインインしていません。boxglow login --server {server} を実行してください", { server }) + "\n" + environmentTokenHint(server);
+}
+
+/** 保存できない環境でも、送り先に合った環境トークンの設定を案内する。秘密の値は表示しない。 */
+export function environmentTokenHint(server: string): string {
+  const hint = t("保存せずに使うには、トークンを環境変数 BOXGLOW_TOKEN で渡してください");
+  return isDefaultSyncServer(server) || process.env.BOXGLOW_TOKEN_SERVER !== undefined
+    ? hint + "\n" + t("この送り先では、BOXGLOW_TOKEN_SERVER={server} も設定してください。", { server: normalizeServer(server) }) : hint;
 }

@@ -111,7 +111,7 @@ export function applyHistoryPatch(snapshot: Project, patch: HistoryPatch): Proje
 /** 外部更新前と異なる履歴の値を、予約の最新値が上書きする場合は部分的なUndo/Redoとして知らせる。 */
 export function historyPatchMasksChanges(snapshot: Project, patch: HistoryPatch): boolean {
   const masks = (value: Dict, before: Dict, after: Dict) => Object.keys(after).some(k => !same(value[k], before[k]) && !same(value[k], after[k]));
-  const editable=Object.fromEntries(Object.entries(patch.fields).filter(([key])=>!["claims","claimPolicy"].includes(key)));
+  const editable=Object.fromEntries(Object.entries(patch.fields).filter(([key])=>!["id","claims","claimPolicy"].includes(key)));
   if (masks(dict(snapshot), patch.before, editable)) return true;
   return Object.entries(patch.maps).some(([key, changes]) => {
     const values = entityMap(snapshot, key);

@@ -4,4 +4,4 @@
  */
 import { startServe } from "../../cli/serve";
 const [file, dist, port, server] = process.argv.slice(2);
-startServe({ file, dist, port: Number(port), open: false, log: (line) => console.log(line), sync: { server } });
+startServe({ file, dist, port: Number(port), open: false, log: (line) => console.log(line), sync: { server, autoEnable: false } });

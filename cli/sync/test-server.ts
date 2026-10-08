@@ -18,7 +18,7 @@ import { validateProjectText } from "../../src/model/validate-file";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 interface StoredProject {
-  head: { revision: string; text: string } | null;
+  head: { revision: string; text: string; updatedAt?: string } | null;
   deleted: boolean;
   seq: number;
   /** 操作 ID → { 要求の印 (中身のハッシュと前提の版), 受理された版 } */
@@ -162,6 +162,15 @@ export class TestSyncServer {
       send(200, JSON.stringify([...projects.entries()].map(([id, p]) => ({ id, revision: p.head?.revision ?? null, deleted: p.deleted }))));
       return;
     }
+    // 画面向けのページング。監視用の引数なし一覧とは応答を分ける。
+    const listUrl = new URL(req.url ?? "/", "http://localhost");
+    if (req.method === "GET" && listUrl.pathname === "/v1/projects") {
+      const raw = listUrl.searchParams.get("limit") ?? "20", limit = Number(raw), cursor = listUrl.searchParams.get("cursor") ?? "";
+      if (!/^[0-9]+$/.test(raw) || !Number.isInteger(limit) || limit < 1 || limit > 100 || cursor.length > 256) { send(400, JSON.stringify({code:"bad-page"})); return; }
+      const rows = [...projects.entries()].filter(([id,p]) => !p.deleted && p.head && id > cursor).sort(([a],[b]) => a < b ? -1 : a > b ? 1 : 0);
+      send(200, JSON.stringify({ projects: rows.slice(0,limit).map(([id,p]) => ({id, name:JSON.parse(p.head!.text).name, revision:p.head!.revision, updatedAt:p.head!.updatedAt ?? null, bytes:Buffer.byteLength(p.head!.text)})), nextCursor: rows.length > limit ? rows[limit-1][0] : null }));
+      return;
+    }
     // 操作の結果を確定させる: 受理済みならその版。未受理なら、その操作 ID を今後も受理しないと記録する (割り込まれない 1 つの処理)
     const settleMatch = /^\/v1\/projects\/([^/]+)\/ops\/([^/]+)\/settle$/.exec(req.url ?? "");
     if (settleMatch && req.method === "POST") {
@@ -245,7 +254,7 @@ export class TestSyncServer {
     }
     // (4) 確定する: 最新の版・履歴・操作の結果を一緒に
     const revision = `${this.epoch}.${++project.seq}`;
-    project.head = { revision, text };
+    project.head = { revision, text, updatedAt:new Date().toISOString() };
     project.versions.push({ revision, hash });
     project.ops.set(op, { request, revision });
     projects.set(id, project);

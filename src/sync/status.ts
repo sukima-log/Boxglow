@@ -57,12 +57,31 @@ export interface SyncStatus {
   /** サインインの途中 (コードを表示している間) */
   signIn?: { provider: "github"; userCode: string; verificationUrl: string; expiresAt: string }
          | { provider: "google"; url: string; expiresAt: string };
+  /** 送信先は開始前にも表示する。省略は旧ホスト。 */
+  server?: string;
+  isDefaultServer?: boolean;
+  destinationPicker?: "dialog" | "sibling";
+  startup?: {
+    operationId:string;
+    stage:"choose" | "signin" | "list" | "working" | "opened";
+    opened?: {path:string; url?:string};
+    intent?:"new" | "existing";
+    projects?: {id:string;name:string;revision:string;updatedAt:string|null;bytes:number}[];
+    nextCursor?:string|null;
+    unsupported?:boolean;
+    error?:string;
+  };
   /** 1 行の補足 */
   message?: string;
 }
 
 /** 画面からの操作 */
 export type HostAction =
+  | { kind:"beginSync" } | {kind:"cancelBegin"}
+  | { kind:"continueStart"; operationId:string; intent:"new"|"existing" }
+  | { kind:"listProjects"; operationId:string; cursor?:string }
+  | { kind:"openProject"; operationId:string; projectId:string; destination?:"current"|"new"; name?:string }
+
   | { kind: "enable" } | { kind: "disable" }
   | { kind: "signIn"; provider: "github" | "google" } | { kind: "cancelSignIn" } | { kind: "signOut" }
   | { kind: "bind" } | { kind: "syncNow" }

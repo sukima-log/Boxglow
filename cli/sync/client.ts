@@ -1,3 +1,4 @@
+import { serverProblem } from "./server-policy";
 import { t } from "../../src/i18n/core";
 /**
  * 同期の実行 (手元のファイル・状態の置き場・サーバーとの通信をつなぐ)
@@ -109,6 +110,8 @@ export interface SyncOptions {
   server: string;
   /** サーバー側の計画の ID。初めて結び付けるときに省くと、新しい ID を作る。結び付いた後は、記録した ID を使う */
   remoteId?: string;
+  /** 一覧から開く操作は、存在しないIDへの新規送信へ変えない。 */
+  requireRemote?: boolean;
   /** アクセストークン (開発用のサーバーでは省ける) */
   token?: string;
   /** 人が承認した「保護する項目の削除」の印 */
@@ -169,7 +172,7 @@ function accountOf(res: Response): string {
 async function fetchRemote(o: { server: string; remoteId: string; token?: string; fetch: typeof fetch }): Promise<{ remote: Remote; account: string }> {
   let res: Response;
   try {
-    res = await o.fetch(`${o.server}/v1/projects/${encodeURIComponent(o.remoteId)}`, { headers: headers(o.token) });
+    res = await o.fetch(`${o.server}/v1/projects/${encodeURIComponent(o.remoteId)}`, { headers: headers(o.token), redirect: "error" });
   } catch (e) { throw new SyncNetworkError(String(e)); }
   rejectUnauthorized(res);
   const epoch = res.headers.get("x-boxglow-epoch");
@@ -196,7 +199,7 @@ async function fetchRemote(o: { server: string; remoteId: string; token?: string
 async function settleOperation(o: { server: string; remoteId: string; token?: string; fetch: typeof fetch; epoch: string }, opId: string): Promise<{ account: string; revision: string | null } | { history: string }> {
   let res: Response;
   try {
-    res = await o.fetch(`${o.server}/v1/projects/${encodeURIComponent(o.remoteId)}/ops/${encodeURIComponent(opId)}/settle`, { method: "POST", headers: { ...headers(o.token), "x-boxglow-epoch": o.epoch } });
+    res = await o.fetch(`${o.server}/v1/projects/${encodeURIComponent(o.remoteId)}/ops/${encodeURIComponent(opId)}/settle`, { method: "POST", redirect: "error", headers: { ...headers(o.token), "x-boxglow-epoch": o.epoch } });
   } catch (e) { throw new SyncNetworkError(String(e)); }
   rejectUnauthorized(res);
   if (res.status === 409) return { history: res.headers.get("x-boxglow-epoch") ?? "" };
@@ -218,8 +221,10 @@ async function settleOperation(o: { server: string; remoteId: string; token?: st
  *         通信できなければ SyncNetworkError
  */
 export async function fetchHeads(o: { server: string; token?: string; fetch?: typeof fetch }): Promise<{ epoch: string; account: string; heads: Map<string, { revision: string | null; deleted: boolean }> }> {
+  const problem = serverProblem(o.server);
+  if (problem) throw new SyncNetworkError(problem);
   let res: Response;
-  try { res = await (o.fetch ?? fetch)(`${normalizeServer(o.server)}/v1/projects`, { headers: headers(o.token) }); } catch (e) { throw new SyncNetworkError(String(e)); }
+  try { res = await (o.fetch ?? fetch)(`${normalizeServer(o.server)}/v1/projects`, { headers: headers(o.token), redirect: "error" }); } catch (e) { throw new SyncNetworkError(String(e)); }
   rejectUnauthorized(res);
   const epoch = res.headers.get("x-boxglow-epoch");
   if (res.status !== 200 || !epoch) throw new SyncNetworkError(`unexpected response ${res.status}`);
@@ -255,7 +260,7 @@ async function sendPush(o: { server: string; remoteId: string; token?: string; f
   let res: Response;
   try {
     res = await o.fetch(`${o.server}/v1/projects/${encodeURIComponent(o.remoteId)}`, {
-      method: "PUT"
+      method: "PUT", redirect: "error"
     , headers: {
         ...headers(o.token)
       , "content-type": "application/json"
@@ -288,6 +293,8 @@ async function sendPush(o: { server: string; remoteId: string; token?: string; f
  * Output: SyncResult。通信の失敗は SyncNetworkError (やりかけの操作は残る。もう一度実行すれば続きから)
  */
 export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
+  const problem = serverProblem(options.server);
+  if (problem) throw new SyncNetworkError(problem);
   const now = options.now ?? (() => new Date());
   const doFetch = options.fetch ?? fetch;
   const server = normalizeServer(options.server);
@@ -366,6 +373,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       const remoteOptions = { server, remoteId: binding.remoteId, token: options.token, fetch: doFetch };
       // ---- 読む: サーバー (やりかけの送りがあるときも取得する。履歴の世代が変わっていないかを、送り直しの前に確かめるため) ----
       const { remote, account } = await fetchRemote(remoteOptions);
+      if (options.requireRemote && remote.kind === "absent") throw new Error(t("選んだ計画はサーバーにありません。一覧から選び直してください。"));
       // ---- 利用者を確かめる (基準・やりかけの操作・人の選択を使う前に) ----
       // 利用者ごとに別の計画が、同じ ID・同じ版番号を持てる。確かめずに進むと、別の利用者の計画を、前の利用者の基準で「未変更」と読み違える
       if (options.confirmAccount !== undefined && options.confirmAccount !== account) return halted({ reason: "account-mismatch", bound: options.confirmAccount, actual: account });

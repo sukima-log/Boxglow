@@ -119,7 +119,7 @@ function cli(
         ...process.env,
         BOXGLOW_CONFIG_DIR: config,
         BOXGLOW_TOKEN: "",
-        BOXGLOW_SERVER: "",
+        BOXGLOW_SERVER: server.url,
         CODEX_HOME: "", CODEX_SANDBOX: "", CODEX_THREAD_ID: "", CODEX_SESSION_ID: "", CLAUDECODE: "", CLAUDE_CODE: "",
         ...environment,
       },
@@ -185,7 +185,7 @@ it("MCP: 人を名乗る環境でも解決・対象変更を拒否し、固定�
       BOXGLOW_ACTOR: "human",
       BOXGLOW_CONFIG_DIR: f.config,
       BOXGLOW_TOKEN: "",
-      BOXGLOW_SERVER: "",
+      BOXGLOW_SERVER: server.url,
     },
     stderr: "pipe",
   });

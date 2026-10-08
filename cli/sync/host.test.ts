@@ -593,6 +593,7 @@ describe("レビュー 46 の回帰 (裏方)", () => {
     // 手元の http (試験用サーバー) には送る
     const local = make({ fetch: ((...args: Parameters<typeof fetch>) => { calls++; return fetch(...args); }) as typeof fetch });
     local.host.openFile(file);
+    await local.host.act(file,{kind:"beginSync"});
     await settle();
     expect(calls).toBeGreaterThan(0);
     await host.stop(); await local.host.stop();
@@ -690,6 +691,275 @@ describe("一時停止中の表示", () => {
     await advance(host, 1000); await advance(host, 40_000); await settle();
     expect(server.puts).toBeGreaterThan(puts);
     expect(statuses.at(-1)?.state).toBe("synced");
+    await host.stop();
+  });
+});
+
+/** 段階D: 開始時の明示操作、一覧、既存比較、再試行を実ファイルで確かめる。 */
+describe("同期の開始", () => {
+  it("資格情報があっても起動だけでは通信しない。重複クリックと再起動で計画が増えない", async () => {
+    const { file } = planFile("start");
+    signedIn();
+    let requests = 0;
+    const { host } = make({ fetch: ((...args: Parameters<typeof fetch>) => { requests++; return fetch(...args); }) as typeof fetch });
+    host.openFile(file);
+    await settle();
+    expect(requests).toBe(0);
+    expect(host.status(file).file?.enabled).toBe(false);
+    const op = (await host.act(file, { kind: "beginSync" })).startup!;
+    await Promise.all([1, 2].map(() => host.act(file, { kind: "continueStart", operationId: op.operationId, intent: "new" })));
+    expect(host.status(file).state).toBe("synced");
+    const id = host.status(file).file!.binding!.remoteId;
+    await host.stop();
+    const next = make().host;
+    next.openFile(file);
+    const retry = (await next.act(file, { kind: "beginSync" })).startup!;
+    await next.act(file, { kind: "continueStart", operationId: retry.operationId, intent: "new" });
+    expect(next.status(file).file?.binding?.remoteId).toBe(id);
+    expect(await (await fetch(server.url + "/v1/projects", { headers: { authorization: "Bearer test" } })).json()).toHaveLength(1);
+    await next.stop();
+  });
+  it("サインイン前の意図と取消は計画を作らない。古い操作IDは使えない", async () => {
+    const { file } = planFile("cancel");
+    const { host } = make();
+    host.openFile(file);
+    const op = (await host.act(file, { kind: "beginSync" })).startup!;
+    expect((await host.act(file, { kind: "continueStart", operationId: op.operationId, intent: "new" })).startup?.stage).toBe("signin");
+    await host.act(file, { kind: "cancelBegin" });
+    signedIn();
+    await host.act(file, { kind: "continueStart", operationId: op.operationId, intent: "new" });
+    expect(host.status(file).file?.binding).toBeNull();
+    expect(host.status(file).file?.enabled).toBe(false);
+    await host.stop();
+  });
+  it("一覧は自分のメタデータだけでページングする。別ファイルに開き元を変更しない", async () => {
+    signedIn();
+    for (let i = 0; i < 21; i++) {
+      const { file } = planFile("plan" + i);
+      await syncOnce({ file, server: server.url, remoteId: "plan" + String(i).padStart(2, "0"), token: "test" });
+    }
+    const foreign = planFile("foreign");
+    await syncOnce({ file: foreign.file, server: server.url, remoteId: "foreign", token: "other" });
+    const { file } = planFile("destination");
+    const original = readFileSync(file, "utf8");
+    const target = join(root, "destination", "opened.json");
+    let opened = "";
+    const { host } = make({ chooseDestination: async () => target, onOpened: async (path) => { opened = path; } });
+    host.openFile(file);
+    const op = (await host.act(file, { kind: "beginSync" })).startup!;
+    let status = await host.act(file, { kind: "continueStart", operationId: op.operationId, intent: "existing" });
+    expect(status.startup?.projects).toHaveLength(20);
+    expect(JSON.stringify(status.startup)).not.toContain("blocks");
+    expect(JSON.stringify(status.startup)).not.toContain("foreign");
+    const cursor = status.startup!.nextCursor!;
+    status = await host.act(file, { kind: "listProjects", operationId: op.operationId, cursor });
+    expect(status.startup?.projects?.map(p => p.id)).toEqual(["plan20"]);
+    expect(status.startup?.nextCursor).toBeNull();
+    status = await host.act(file, { kind: "openProject", operationId: op.operationId, projectId: "plan20", destination: "new" });
+    expect(status.startup?.stage).toBe("opened");
+    expect(opened).toBe(target);
+    expect(readFileSync(file, "utf8")).toBe(original);
+    expect(read(target).name).toBe("plan20");
+    await host.stop();
+  });
+  it("既存ファイルとの差異は比較で止まり、不存在や他アカウントのIDを新規作成しない", async () => {
+    signedIn();
+    const source = planFile("remote");
+    await syncOnce({ file: source.file, server: server.url, remoteId: "existing", token: "test" });
+    const { file } = planFile("local");
+    const original = readFileSync(file, "utf8");
+    const { host } = make();
+    host.openFile(file);
+    const op = (await host.act(file, { kind: "beginSync" })).startup!;
+    await host.act(file, { kind: "continueStart", operationId: op.operationId, intent: "existing" });
+    expect((await host.act(file, { kind: "openProject", operationId: op.operationId, projectId: "missing" })).startup?.error).toBeTruthy();
+    expect(server.project("missing")).toBeUndefined();
+    const status = await host.act(file, { kind: "openProject", operationId: op.operationId, projectId: "existing" });
+    expect(status.state).toBe("halted");
+    expect(status.halt?.reason).toBe("first-link");
+    expect(readFileSync(file, "utf8")).toBe(original);
+    await host.stop();
+  });
+  it("旧サーバーの配列はID入力へ戻り、資格情報が変わった一覧の選択は拒否する", async () => {
+    signedIn();
+    const { file } = planFile("legacy");
+    const { host } = make({ fetch: ((input: string | URL | Request, init?: RequestInit) => String(input).includes("/v1/projects?") ? Promise.resolve(Response.json([])) : fetch(input, init)) as typeof fetch });
+    host.openFile(file);
+    const op = (await host.act(file, { kind: "beginSync" })).startup!;
+    let status = await host.act(file, { kind: "continueStart", operationId: op.operationId, intent: "existing" });
+    expect(status.startup?.unsupported).toBe(true);
+    signedIn("different");
+    status = await host.act(file, { kind: "openProject", operationId: op.operationId, projectId: "x" });
+    expect(status.startup?.error).toBeTruthy();
+    expect(status.file?.binding).toBeNull();
+    await host.stop();
+  });
+  it("新しい保存先に既存ファイルを選んでも上書きしない。保存ダイアログ取消も書かない", async () => {
+    signedIn();
+    const { file } = planFile("source");
+    const target = planFile("occupied").file;
+    const before = readFileSync(target, "utf8");
+    let chosen: string | null = target;
+    const { host } = make({ chooseDestination: async () => chosen });
+    host.openFile(file);
+    const op = (await host.act(file, { kind: "beginSync" })).startup!;
+    await host.act(file, { kind: "continueStart", operationId: op.operationId, intent: "existing" });
+    await host.act(file, { kind: "openProject", operationId: op.operationId, projectId: "x", destination: "new" });
+    expect(readFileSync(target, "utf8")).toBe(before);
+    chosen = null;
+    expect((await host.act(file, { kind: "openProject", operationId: op.operationId, projectId: "x", destination: "new" })).startup?.stage).toBe("list");
+    expect(host.status(file).file?.binding).toBeNull();
+    await host.stop();
+  });
+});
+/** 遅い応答と認可の失敗は、次の開始へ混ぜない。 */
+describe("開始処理の中断と再試行", () => {
+  it("新規送信の応答消失後にホストを再起動しても同じリモートIDへ再開する", async () => {
+    signedIn();
+    const { file } = planFile("lost-response");
+    const host = make().host;
+    host.openFile(file);
+    const op = (await host.act(file, { kind: "beginSync" })).startup!;
+    server.dropNextPutResponse = true;
+    const failed = await host.act(file, { kind: "continueStart", operationId: op.operationId, intent: "new" });
+    const id = failed.file?.binding?.remoteId;
+    expect(id).toBeTruthy();
+    expect(server.projects.size).toBe(1);
+    await host.stop();
+    const next = make().host;
+    next.openFile(file);
+    next.enable(file);
+    await next.act(file, { kind: "syncNow" });
+    expect(next.status(file).file?.binding?.remoteId).toBe(id);
+    expect(next.status(file).state).toBe("synced");
+    expect(server.projects.size).toBe(1);
+    await next.stop();
+  });
+  it("一覧取得中の資格情報変更で古い名前とカーソルを破棄する", async () => {
+    signedIn();
+    const { file } = planFile("late-list");
+    let release!: (r: Response) => void;
+    const delayed = new Promise<Response>(r => { release = r; });
+    const host = make({ fetch: ((input: string | URL | Request, init?: RequestInit) => String(input).includes("/v1/projects?") ? delayed : fetch(input, init)) as typeof fetch }).host;
+    host.openFile(file);
+    const op = (await host.act(file, { kind: "beginSync" })).startup!;
+    const pending = host.act(file, { kind: "continueStart", operationId: op.operationId, intent: "existing" });
+    signedIn("other");
+    release(Response.json({ projects: [{ id: "old", name: "古いアカウントの名前", revision: "e1.1", bytes: 10, updatedAt: null }], nextCursor: "old" }));
+    const status = await pending;
+    expect(status.startup?.projects).toEqual([]);
+    expect(status.startup?.nextCursor).toBeNull();
+    expect(status.startup?.error).toBeTruthy();
+    await host.stop();
+  });
+  it.each(["denied", "cancel"])("新規配置の認可が%sなら計画を作らない", async (mode) => {
+    const { file } = planFile("auth-" + mode);
+    const host = make().host;
+    host.openFile(file);
+    const op = (await host.act(file, { kind: "beginSync" })).startup!;
+    await host.act(file, { kind: "continueStart", operationId: op.operationId, intent: "new" });
+    host.signIn("github");
+    await settle();
+    const code = [...server.deviceCodes.keys()].at(-1)!;
+    if (mode === "cancel") {
+      host.cancelSignIn();
+      server.deviceCodes.set(code, { account: "test", login: "test" });
+    }
+    else
+      server.deviceCodes.set(code, "denied");
+    await new Promise(r => setTimeout(r, 80));
+    expect(readCredentials(server.url)).toBeNull();
+    expect(server.projects.size).toBe(0);
+    expect(host.status(file).file?.enabled).toBe(false);
+    await host.stop();
+  });
+  it("不正な送り先へ開始してもトークンを送らない", async () => {
+    process.env.BOXGLOW_TOKEN = "secret";
+    const { file } = planFile("unsafe");
+    let calls = 0;
+    const host = make({ server: "http://not-local.example", fetch: (async () => { calls++; return Response.json({}); }) as typeof fetch }).host;
+    host.openFile(file);
+    const op = (await host.act(file, { kind: "beginSync" })).startup!;
+    await host.act(file, { kind: "continueStart", operationId: op.operationId, intent: "new" });
+    expect(calls).toBe(0);
+    expect(host.status(file).startup?.error).toBeTruthy();
+    await host.stop();
+  });
+});
+
+/** D2: 別の送り先・計画・開始操作へ権限や取消を流用しない。 */
+describe("段階Dレビューの回帰", () => {
+  it("既定の入口は環境トークンを無視し、保存済み利用者は通信なしで表示する", async () => {
+    const { file } = planFile("credentials-scope");
+    signedIn("stored-user");
+    process.env.BOXGLOW_TOKEN = "foreign-secret";
+    const sent: string[] = [];
+    const host = make({ allowEnvironmentToken: false, fetch: (async (input, init) => {
+      sent.push(new Headers(init?.headers).get("authorization") ?? "");
+      return fetch(input, init);
+    }) as typeof fetch }).host;
+    host.openFile(file);
+    await settle();
+    expect(sent).toEqual([]);
+    expect(host.status(file).credentials).toMatchObject({ source: "stored", account: { display: "stored-user" } });
+    const op = (await host.act(file, { kind: "beginSync" })).startup!;
+    await host.act(file, { kind: "continueStart", operationId: op.operationId, intent: "existing" });
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.every(h => h === "Bearer stored-user")).toBe(true);
+    await host.stop();
+  });
+  it("現在のファイルも新しい保存先としては拒否し、日本語の理由を出す", async () => {
+    signedIn();
+    const { file } = planFile("same-target");
+    const before = readFileSync(file, "utf8");
+    const host = make({ chooseDestination: async () => file }).host;
+    host.openFile(file);
+    const op = (await host.act(file, { kind: "beginSync" })).startup!;
+    await host.act(file, { kind: "continueStart", operationId: op.operationId, intent: "existing" });
+    const status = await host.act(file, { kind: "openProject", operationId: op.operationId, projectId: "x", destination: "new" });
+    expect(status.startup?.error).toContain("既にファイル");
+    expect(readFileSync(file, "utf8")).toBe(before);
+    expect(status.file?.binding).toBeNull();
+    await host.stop();
+  });
+  it("一方の開始を取り消しても、もう一方の開始とその認可は保持する", async () => {
+    const a = planFile("cancel-a").file, b = planFile("cancel-b").file;
+    const host = make({ sleep: async () => new Promise(r => setTimeout(r, 20)) }).host;
+    host.openFile(a); host.openFile(b);
+    const oa = (await host.act(a, { kind: "beginSync" })).startup!;
+    const ob = (await host.act(b, { kind: "beginSync" })).startup!;
+    await host.act(a, { kind: "continueStart", operationId: oa.operationId, intent: "existing" });
+    await host.act(b, { kind: "continueStart", operationId: ob.operationId, intent: "existing" });
+    await host.act(b, { kind: "signIn", provider: "github" });
+    await settle();
+    await host.act(a, { kind: "cancelBegin" });
+    expect(host.status(a).startup).toBeUndefined();
+    expect(host.status(b).startup?.operationId).toBe(ob.operationId);
+    const code = [...server.deviceCodes.keys()].at(-1)!;
+    server.deviceCodes.set(code, { account: "test", login: "test" });
+    for (let i = 0; i < 100 && host.status(b).startup?.stage !== "list"; i++) await settle();
+    expect(readCredentials(server.url)?.account).toBe("test");
+    expect(host.status(b).startup?.stage).toBe("list");
+    await host.stop();
+  });
+  it("有効化の記憶は同期成功後だけ保存し、失敗では保存しない", async () => {
+    signedIn();
+    const { file } = planFile("remember-after-success");
+    const remembered: boolean[] = [];
+    let fail = true;
+    const host = make({ onEnabled: (_, enabled) => remembered.push(enabled), fetch: (async (input, init) => {
+      if (fail) throw new Error("offline");
+      return fetch(input, init);
+    }) as typeof fetch }).host;
+    host.openFile(file); host.enable(file);
+    expect(remembered).toEqual([]);
+    await host.act(file, { kind: "bind" });
+    expect(remembered).toEqual([]);
+    fail = false;
+    await host.act(file, { kind: "syncNow" });
+    expect(remembered).toEqual([true]);
+    host.disable(file);
+    expect(remembered).toEqual([true, false]);
     await host.stop();
   });
 });

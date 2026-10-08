@@ -35,6 +35,7 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     // ---- VS Code の専用の設定: 同期サーバーは設定しない (既定の空) ----
     const ud = path.join(tmp, 'ud'); fs.mkdirSync(path.join(ud, 'User'), { recursive: true });
     fs.writeFileSync(path.join(ud, 'User', 'settings.json'), JSON.stringify({
+      'boxglow.sync.server': '', // 段階D: 未指定は製品既定。同期なしの試験は明示的に無効化する。
       'workbench.editorAssociations': { '**/boxglow.json': 'boxglow.editor' }
     , 'files.simpleDialog.enable': true
     , 'security.workspace.trust.enabled': false, 'update.mode': 'none', 'telemetry.telemetryLevel': 'off', 'workbench.startupEditor': 'none', 'window.restoreWindows': 'none'

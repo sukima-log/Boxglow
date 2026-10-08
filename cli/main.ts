@@ -1,3 +1,4 @@
+import { selectSyncServer } from "./sync/server-config";
 import { findClaimBlock, claimCommand, prepareClaimSave, type ClaimCommand } from "./claims";
 import { covers, activeClaim, claimSummary, claimToken, claimsEnabled } from "../src/model/claims";
 import { randomUUID } from "node:crypto";
@@ -16,7 +17,6 @@ import { briefReceipt, contextReceipt, isCurrentToken, requireContext } from "./
 import { setupAgent } from "./setup-agent";
 import { runSyncCommand, runWatchCommand } from "./sync/command";
 import { runLogin, runLogout, runWhoami } from "./sync/login";
-import { bindingsOf } from "./sync/state-store";
 import { projectProblem } from "../src/model/validate-file";
 import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
 import { resumeSummary, resumeReport } from "../src/model/resume";
@@ -328,7 +328,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  blocked / review / leave / checkpoint は --context-token <context で得た contextToken> が要る (読んだ後に指示・回答・引き継ぎが変わっていたら拒否)。
                                                  人 (--actor human) には要求しない。AI が off にするときは --context-token が要る
   version [--json]                               boxglow の版と、保存の取り決めの版を出す (--version でも可)
-  sync [--server <URL>] [--project <ID>] [--watch] [--actor human]  (試験中) 計画のファイルを同期サーバーとそろえる。初回は人が --server <URL> --actor human で結び付ける。止まったら理由と次の操作を表示
+  sync [--server <URL>] [--project <ID>] [--watch] [--actor human]  (試験中) 計画のファイルを同期サーバーとそろえる。初回は人が --actor human で結び付ける (--server で送り先を上書き)。止まったら理由と次の操作を表示
                                                  競合: --resolve <印> --block <内部ID>=local|remote (繰り返し可) / --settings local|remote
                                                  共通JSON: --choices-file <ファイル>。一括選択: --resolve <印> --prefer local|remote
                                                  --watch = 常時の同期 (Ctrl+C で終了。この端末の、同じサーバーに結び付いた計画すべてを受け持つ)
@@ -355,8 +355,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   disconnect <題名.出力名> <題名.入力名>          線を外す
   tidy                                              ファイルを規則にそろえて保存し直す (つないだ入力の名前を供給元に合わせる、大項目を畳む、重なりを解く)
   remove <block> [--force]                          ボックスを消す (中にボックスがあるときは --force。線も外れる。元に戻せないので Git で管理していること)
-  serve [--port 4174] [--open] [--sync]             ローカルサーバ: 同梱の Web アプリを http://localhost:4174/?serve=1 で配信し、boxglow.json を読み書き (Firefox / Safari でも使える)
-                                                 --sync = 画面からの同期 (実験的。サインイン・自動の送受信・確認の選択を画面で行う。--server で同期サーバーを指定)
+  serve [--port 4174] [--open] [--sync|--no-sync]             ローカルサーバ: 同梱の Web アプリを http://localhost:4174/?serve=1 で配信し、boxglow.json を読み書き (Firefox / Safari でも使える)
+                                                 通常は「同期を始める」から開始。--sync = 明示有効化、--no-sync = 無効。送り先は --server > BOXGLOW_SERVER > 既存の結び付け > 製品既定。空/off も無効
   mcp [--file <path>]                               MCP サーバ (標準入出力)。Claude Code などから status / start / done / ask ... をツールとして使う (.mcp.json は setup-agent が書く)
   connect <題名.出力名> <題名[.入力名]>           結線 (受け側は題名だけでよい: 出力名と同じ名前の入力を作ってつなぐ。親子は自動で内側の面。最終成果物へは project)
   start <block> [--note <何をするか>] [--reason <理由>]  入力待ちは既定で警告。理由を記録すると警告なしで開始
@@ -426,7 +426,7 @@ Usage (npx boxglow <command> ...):
                                                  blocked / review / leave / checkpoint need --context-token <contextToken from context> (rejected if instructions, answers or handoff notes changed after reading).
                                                  People (--actor human) are not asked for it. An AI needs --context-token to turn it off
   version [--json]                               Print the boxglow version and the save-protocol version (--version also works)
-  sync [--server <URL>] [--project <ID>] [--watch] [--actor human]  (experimental) Bring the plan file in line with a sync server. A human binds with --server <URL> --actor human the first time. When it stops, it prints why and what to do
+  sync [--server <URL>] [--project <ID>] [--watch] [--actor human]  (experimental) Bring the plan file in line with a sync server. A human binds with --actor human the first time (--server overrides the destination). When it stops, it prints why and what to do
                                                  Conflicts: --resolve <token> --block <internal-id>=local|remote (repeatable) / --settings local|remote
                                                  Shared JSON: --choices-file <file>. All groups: --resolve <token> --prefer local|remote
                                                  --watch = keep syncing (Ctrl+C to stop; covers every plan on this machine bound to the same server)
@@ -453,8 +453,8 @@ Usage (npx boxglow <command> ...):
   disconnect <title.output> <title.input>          Remove a wire
   tidy                                              Normalize the file and save it again (match connected input names to their source, collapse top-level items, resolve overlaps)
   remove <block> [--force]                          Delete a box (--force if it contains boxes. Its wires are removed too. This cannot be undone, so keep the file in Git)
-  serve [--port 4174] [--open] [--sync]             Local server: serves the bundled web app at http://localhost:4174/?serve=1 and reads / writes boxglow.json (works in Firefox / Safari too)
-                                                 --sync = sync from the UI (experimental: sign in, automatic push/pull and choices in the UI; --server picks the sync server)
+  serve [--port 4174] [--open] [--sync|--no-sync]             Local server: serves the bundled web app at http://localhost:4174/?serve=1 and reads / writes boxglow.json (works in Firefox / Safari too)
+                                                 Normally use Start syncing in the UI. --sync enables; --no-sync disables. Server: --server > BOXGLOW_SERVER > existing binding > product default. Empty/off also disables.
   mcp [--file <path>]                               MCP server (stdio). Lets Claude Code and others use status / start / done / ask ... as tools (setup-agent writes .mcp.json)
   connect <title.output> <title[.input]>           Connect (the receiving side can be just a title: an input with the same name as the output is created and connected. Parent and child connect on the inner side automatically. Use project for the final deliverable)
   start <block> [--note <what you will do>] [--reason <reason>]  Missing inputs warn by default; a recorded reason allows starting without a warning
@@ -1292,8 +1292,9 @@ if (argv[0] === "mcp") {
     const unknown = Object.keys(options).filter((k) => !known.has(k));
     if (unknown.length > 0) { console.log(t("boxglow {cmd} が知らない指定です: {list}", { cmd: argv[0], list: unknown.map((k) => "--" + k).join(", ") })); process.exitCode = 1; return; }
     // サーバー: 指定 > 環境変数 > 計画のファイルの結び付け (1 つだけのとき)
-    let server = str(options.server) ?? process.env.BOXGLOW_SERVER;
-    if (!server) { try { const bound = bindingsOf(locateFile(str(options.file))).bindings; if (bound.length === 1) server = bound[0].server; } catch { /* 計画のファイルが無い場所でも使える */ } }
+    let file: string | undefined;
+    try { file = locateFile(str(options.file)); } catch { /* サインインは計画なしでも可能 */ }
+    const { server } = selectSyncServer(file,str(options.server)?.trim() || undefined);
     if (!server) { console.log(t("サーバーが決まっていません。--server <URL> を指定してください")); process.exitCode = 1; return; }
     const out = (text: string) => console.log(text);
     process.exitCode = argv[0] === "login" ? await runLogin({ server, out, deviceName: str(options.name) })
@@ -1347,12 +1348,11 @@ if (argv[0] === "mcp") {
     const file = locateFile(str(options.file));
     // 計画が読めなくてもサーバは今までどおり起動する (言語は上で決めたまま)
     try { setLang(explicitLang(options) ?? load(file).lang ?? "ja"); } catch { /* 読めないファイルは画面側で扱う */ }
-    // --sync: 画面からの同期 (実験的)。同期サーバーは --server > 環境変数 BOXGLOW_SERVER > このファイルの結び付け (1 つだけのとき)
-    let syncServer = options.sync ? (str(options.server) ?? process.env.BOXGLOW_SERVER) : undefined;
-    if (options.sync && !syncServer) { try { const bound = bindingsOf(file).bindings; if (bound.length === 1) syncServer = bound[0].server; } catch { /* 読めない状態は、裏方が知らせる */ } }
-    if (options.sync && !syncServer) throw new Error(t("同期サーバーが決まっていません。--server <URL> を指定してください"));
+    // 通常起動は入口だけ。明示--syncだけ従来どおり有効化し、--no-syncは入口も無効にする。
+    const selection = selectSyncServer(file, options["no-sync"] ? null : (str(options.server)?.trim() || undefined));
+    const syncServer = selection.server;
     startServe({ file, port: Number(str(options.port) ?? 4174), dist: fileURLToPath(new URL("../dist/", import.meta.url)), open: !!options.open, log: out
-    , ...(syncServer ? { sync: { server: syncServer } } : {}) });
+    , ...(syncServer ? { sync: { server: syncServer, restoreEnabled: selection.source !== "default", autoEnable:!!options.sync && selection.source !== "default" } } : {}) });
   } catch (e) {
     console.error(`[boxglow serve] ${e instanceof Error ? e.message : String(e)}`);
     process.exitCode = 1;

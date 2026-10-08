@@ -9,6 +9,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, fstatSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync, fsyncSync } from "node:fs";
+import { environmentTokenAllowed } from "./server-policy";
 import { join } from "node:path";
 import { FileBusy, lockFile } from "../file-store";
 import { configDir, hashOf, normalizeServer } from "./state-store";
@@ -205,8 +206,8 @@ export function removeCredentials(server: string): boolean {
  * Input : server = サーバーの場所
  * Output: { token, source = "env" / "file", login? }。どちらも無ければ null
  */
-export function resolveToken(server: string): { token: string; source: "env" | "file"; login?: string } | null {
-  if (process.env.BOXGLOW_TOKEN) return { token: process.env.BOXGLOW_TOKEN, source: "env" };
+export function resolveToken(server: string, allowEnvironmentToken = true): { token: string; source: "env" | "file"; login?: string } | null {
+  if (allowEnvironmentToken && environmentTokenAllowed(server) && process.env.BOXGLOW_TOKEN) return { token: process.env.BOXGLOW_TOKEN, source: "env" };
   const saved = readCredentials(server);
   return saved ? { token: saved.token, source: "file", login: saved.login } : null;
 }

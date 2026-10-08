@@ -9,6 +9,7 @@
  * 「別のプロセスが受け持っている」と表示して、自分が制御できるようには見せない。
  * 設計: docs/private/SYNC_GUI_DESIGN.md (第 4 版)
  */
+import { isDefaultSyncServer } from "./server-policy";
 import { parseConflictResolution, type ConflictResolution } from "../../src/model/conflict-groups";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
@@ -17,7 +18,7 @@ import { t } from "../../src/i18n/core";
 import { inspectLock } from "../file-store";
 import { syncOnce, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
 import { haltView, type SyncAction } from "./command";
-import { credentialsPath, resolveToken } from "./credentials";
+import { credentialsPath, readCredentials, resolveToken } from "./credentials";
 import { runGoogleLogin, runLogin, runLogout, serverProblem } from "./login";
 import { bindingsOf, hashOf, normalizeServer, realFile, SyncStateUnreadable } from "./state-store";
 import { lockWatch, SyncWatcher, type WatchEvent } from "./watch";
@@ -28,6 +29,15 @@ export type { HostAction, SyncStatus };
 /** 裏方の指定 */
 export interface HostOptions {
   server: string;
+  /** 呼出元が環境トークンを追加で禁止する場合はfalse。URLの共通規則が常に優先する。 */
+  allowEnvironmentToken?: boolean;
+  /** 入力: 元ファイルと提案名。出力: 人が選んだ未使用の保存先、取消はnull。任意パスは画面から受け取らない。 */
+  chooseDestination?: (file:string, name?:string) => Promise<string|null>;
+  destinationPicker?: "dialog" | "sibling";
+  /** 新しい保存先を開く。serveでは別の画面へのURL、拡張ではopenWithを使う。 */
+  onOpened?: (file:string) => Promise<string|void>;
+  /** 明示有効化をホスト設定へ保存する。計画JSONには書かない。 */
+  onEnabled?: (file:string, enabled:boolean) => void;
   /** 状態が変わったときに呼ぶ (画面へ知らせる) */
   onStatus?: (status: SyncStatus) => void;
   /** 通信の関数 (試験で差し替える) */
@@ -45,10 +55,13 @@ export interface HostOptions {
 }
 
 /** 進行中のサインイン (中止の合図つき) */
-interface SignIn { provider: "github" | "google"; code?: SyncStatus["signIn"]; cancelled: boolean; done: Promise<number> }
+interface SignIn { owner?: { file: string; operationId?: string }; provider: "github" | "google"; code?: SyncStatus["signIn"]; cancelled: boolean; done: Promise<number> }
 
 /** 人が選べる操作に付ける、選択 ID の中身 (対象・表示した操作・同期の状態の世代・資格情報の世代を結び付ける) */
 interface Choice { action: SyncAction; file: string; server: string; remoteId: string; generation: number | null; credentials: string }
+
+/** 保存先選択の安全な利用者向けエラー。外部サーバーの例外文とは区別する。 */
+export class SyncDestinationError extends Error {}
 
 export class SyncHost {
   readonly session = randomUUID();
@@ -84,12 +97,16 @@ export class SyncHost {
   /** この環境で、サインインを保存できるか */
   get support(): SyncStatus["support"] { return (this.options.platform ?? process.platform) === "win32" ? "unsupported-platform" : "ok"; }
 
+  /** 送り先の選択根拠をすべての認証処理で維持する。 */
+  private resolveCredentials() { return resolveToken(this.server, this.options.allowEnvironmentToken); }
+
   /**
    * 資格情報の世代: 出どころと、保存ファイルの印 (更新時刻・大きさ・内容のハッシュ)。値そのものは含めない。
    * 別の CLI の login / logout で変わる。要求ごとに世代を控え、違う世代の遅い応答を状態に採用しない
    */
   private credentialsGeneration(): string {
-    if (process.env.BOXGLOW_TOKEN) return "env:" + hashOf(process.env.BOXGLOW_TOKEN).slice(0, 16);
+    const resolved = this.resolveCredentials();
+    if (resolved?.source === "env") return "env:" + hashOf(resolved.token).slice(0, 16);
     const path = credentialsPath(this.server);
     try { const st = statSync(path); return `stored:${st.mtimeMs}:${st.size}:${hashOf(readFileSync(path, "utf8")).slice(0, 16)}`; } catch { return "none"; }
   }
@@ -117,13 +134,25 @@ export class SyncHost {
     if (this.stopping || this.stopped) { this.message = t("同期を止めています。終わってから、もう一度操作してください"); this.emit(); return; }
     const real = realFile(file);
     this.enabled.add(real);
+    this.rememberSuccessfulSync(real);
     this.ensureWatcher();
     this.applyTargets();
     this.emit();
   }
+  /** 成功した世代だけ再開設定を記憶する。失敗・比較待ちでは新たに保存しない。 */
+  private rememberSuccessfulSync(file: string): void {
+    const last = this.results.get(file);
+    if (this.enabled.has(file) && last?.result.status === "synced" && last.credentials === this.credentialsGeneration() && !this.remembered.has(file)) {
+      this.options.onEnabled?.(file, true);
+      this.remembered.add(file);
+    }
+  }
+  private readonly remembered = new Set<string>();
   /** この計画の同期を無効にする (次の 1 回を始めない。対象が無くなったら、見張りを止めて所有権を手放す) */
   disable(file: string): void {
     this.enabled.delete(realFile(file));
+    this.remembered.delete(realFile(file));
+    this.options.onEnabled?.(realFile(file), false);
     this.applyTargets();
     this.emit();
   }
@@ -157,7 +186,7 @@ export class SyncHost {
     this.watcher = new SyncWatcher({
       server: this.server
       // トークンと資格情報の世代を、1 回の同期の始めに一緒に解決する (出来事に世代が付く。R39-03)
-    , credentials: () => ({ token: resolveToken(this.server)?.token, tag: this.credentialsGeneration() })
+    , credentials: () => ({ token: this.resolveCredentials()?.token, tag: this.credentialsGeneration() })
     , targets: { mode: "selected", files: this.targets() }
     , fetch: this.doFetch, now: this.options.now, elapsed: this.options.elapsed, random: this.options.random
     , onEvent: (e) => this.onEvent(e)
@@ -208,7 +237,7 @@ export class SyncHost {
     // 一時停止中は、計画の同期をしない (再開すると、次の tick から)
     if (this.paused) return;
     // (資格情報が無い間は、見張りも同期しない。サインインすれば、次の tick から)
-    if (!resolveToken(this.server)) return;
+    if (!this.resolveCredentials()) return;
     this.busy++; this.emit();
     this.running = w.tick().finally(() => { this.running = null; this.busy--; this.emit(); });
     return this.running;
@@ -236,6 +265,7 @@ export class SyncHost {
     // 認証の失敗: この資格情報の世代について、成功の結果より優先して表示する (R39-10)
     else if (e.kind === "auth") this.authProblem = credentials;
     else if (e.kind === "network") this.network = { message: e.message, at: this.wall() };
+    if (e.kind === "synced" || e.kind === "checked") this.rememberSuccessfulSync(e.file);
     this.emit();
   }
   private network: { message: string; at: number } | null = null;
@@ -245,19 +275,27 @@ export class SyncHost {
   // ---------------------------------------------------------------- サインイン / サインアウト
 
   /** サインインを始める (GitHub の端末向けの手順)。コードは状態の signIn に出る。終わると状態が変わる */
-  signIn(provider: "github" | "google"): void {
+  signIn(provider: "github" | "google", file?: string): void {
     if (this.signingIn || this.support !== "ok") { this.emit(); return; }
-    const entry: SignIn = { provider, cancelled: false, done: Promise.resolve(1) };
+    const entry: SignIn = { ...(file ? { owner: { file, operationId: this.startups.get(file)?.operationId } } : {}), provider, cancelled: false, done: Promise.resolve(1) };
     this.signingIn = entry;
     const lines: string[] = [];
-    const common = { server: this.server, out: (line: string) => lines.push(line), fetch: this.doFetch, sleep: this.options.sleep, deviceName: this.options.deviceName, cancelled: () => entry.cancelled };
+    const common = { server: this.server, allowEnvironmentToken: this.options.allowEnvironmentToken, out: (line: string) => lines.push(line), fetch: this.doFetch, sleep: this.options.sleep, deviceName: this.options.deviceName, cancelled: () => entry.cancelled };
     entry.done = (provider === "google"
       ? runGoogleLogin({ ...common, onUrl: (info) => { entry.code = { provider: "google", ...info }; this.emit(); } })
       : runLogin({ ...common, onCode: (code) => { entry.code = { provider: "github", ...code }; this.emit(); } })
     ).then((code) => {
       if (this.signingIn === entry) { this.signingIn = null; if (code !== 0 && !entry.cancelled) this.message = lines.filter((l) => !l.startsWith("  ")).at(-1); else this.message = undefined; }
       this.account = null;
+      if (code !== 0 && !entry.cancelled) {
+        for (const op of this.startups.values()) {
+          if (op.stage === "signin") op.error = t("サインインできませんでした。もう一度サインインするか、中止してください。");
+        }
+      }
       this.emit();
+      if (code === 0 && !entry.cancelled) for (const [file,op] of this.startups) {
+        if (op.stage === "signin") void this.continueStart(file,op.operationId).catch(() => { op.stage = "choose"; op.error = t("開始できませんでした。接続とサインインを確認して再試行してください。"); this.emit(); });
+      }
       return code;
     });
     this.emit();
@@ -285,12 +323,15 @@ export class SyncHost {
     this.stopping = true;
     try {
       this.cancelSignIn();
+      for (const file of this.enabled) this.options.onEnabled?.(file,false);
       this.enabled.clear();
+      this.remembered.clear();
+      this.startups.clear();
       // 常駐の同期と、始めた手動の操作が終わってから、資格情報を失効させる (R39-01 / R40-02)
       await this.releaseWatcher();
       await Promise.allSettled([...this.manual]);
       const lines: string[] = [];
-      await runLogout({ server: this.server, out: (line) => lines.push(line), fetch: this.doFetch });
+      await runLogout({ server: this.server, allowEnvironmentToken: this.options.allowEnvironmentToken, out: (line) => lines.push(line), fetch: this.doFetch });
       this.account = null;
       this.results.clear();
       this.message = lines.at(-1);
@@ -305,7 +346,8 @@ export class SyncHost {
   private async refreshAccount(): Promise<void> {
     const credentials = this.credentialsGeneration();
     if (this.account?.credentials === credentials) return;
-    if (!resolveToken(this.server)) { this.account = { credentials }; return; }
+    if (!this.enabled.size && !this.startups.size && !this.signingIn) return;
+    if (!this.resolveCredentials()) { this.account = { credentials }; return; }
     // 資格情報を送ってよい場所か (https、または手元の http)。サインイン・同期と同じ制約を、利用者の確認にもかける (R46-01)
     const unsafe = serverProblem(this.server);
     if (unsafe) { this.account = { credentials, problem: unsafe }; return; }
@@ -313,7 +355,7 @@ export class SyncHost {
     type Me = { account?: unknown; login?: unknown; signedInWith?: unknown };
     const read = async (): Promise<{ me: Me | null; problem?: string }> => {
       try {
-        const res = await this.doFetch(`${this.server}/v1/me`, { headers: { authorization: `Bearer ${resolveToken(this.server)!.token}`, "x-boxglow-version": APP_VERSION }, redirect: "error" });
+        const res = await this.doFetch(`${this.server}/v1/me`, { headers: { authorization: `Bearer ${this.resolveCredentials()!.token}`, "x-boxglow-version": APP_VERSION }, redirect: "error" });
         return res.ok ? { me: await res.json() as Me } : { me: null, problem: `HTTP ${res.status}` };
       } catch (e) { return { me: null, problem: e instanceof Error ? e.message : String(e) }; }
     };
@@ -325,16 +367,220 @@ export class SyncHost {
     this.account = { credentials, account: { accountId: me.account, display: typeof me.login === "string" && me.login ? me.login : me.account, signedInWith } };
   }
 
+  /** 計画ごとの開始操作。IDは画面の古いクリックを拒否するための印。認証情報は入れない。 */
+  private readonly startups = new Map<string, NonNullable<SyncStatus["startup"]> & {
+    credentials?: string;
+  }>();
+  /** 入力: 開いている計画。出力: 開始選択の状態。ここでは送受信も有効化もしない。 */
+  private beginSync(file: string): void {
+    if (this.stopping || this.stopped || this.startups.get(file)?.stage === "working")
+      return;
+    this.startups.set(file, { operationId: randomUUID(), stage: "choose" });
+    this.emit();
+  }
+  /** 入力: 操作IDと意図。出力: 必要なサインイン、一覧、または新規配置へ進む。 */
+  private async continueStart(file: string, operationId: string, intent?: "new" | "existing"): Promise<void> {
+    const op = this.startups.get(file);
+    if (!op || op.operationId !== operationId || op.stage === "working" || this.stopping || this.stopped)
+      return;
+    if (intent)
+      op.intent = intent;
+    if (!op.intent)
+      return;
+    const unsafe = serverProblem(this.server);
+    if (unsafe) {
+      op.error = unsafe;
+      op.stage = "choose";
+      this.emit();
+      return;
+    }
+    if (!this.resolveCredentials()) {
+      op.stage = "signin";
+      this.emit();
+      return;
+    }
+    op.credentials = this.credentialsGeneration();
+    if (op.intent === "existing") {
+      await this.listProjects(file, operationId);
+      return;
+    }
+    op.stage = "working";
+    op.error = undefined;
+    this.emit();
+    // syncOnceが送信前に結び付けと操作を保存するので、再クリック・再起動も同じ計画へ再試行する。
+    await this.syncFile(file, {});
+    if (this.startups.get(file) !== op || this.stopped || this.stopping) return;
+    if (op.credentials !== this.credentialsGeneration()) {
+      op.stage = "choose";
+      op.error = t("表示したときから、状態が変わっています。選び直してください");
+      this.emit();
+      return;
+    }
+    const result = this.results.get(file)?.result;
+    if (result && result.status !== "error" && result.status !== "busy") {
+      this.enable(file);
+      this.startups.delete(file);
+    }
+    else {
+      op.stage = "choose";
+      op.error = t("開始できませんでした。接続とサインインを確認して再試行してください。");
+    }
+    this.emit();
+  }
+  /** 入力: 対象ファイル・操作ID・ページのcursor。出力: 公開メタデータをstartupへ設定する。
+   * 一覧は認証済みの同じ送り先だけ。遅い応答は操作IDと資格情報世代で捨てる。 */
+  private async listProjects(file: string, operationId: string, cursor?: string): Promise<void> {
+    const op = this.startups.get(file), credentials = this.credentialsGeneration();
+    if (!op || op.operationId !== operationId || op.stage === "working" || this.stopped || this.stopping)
+      return;
+    const token = this.resolveCredentials()?.token;
+    if (!token) {
+      op.stage = "signin";
+      this.emit();
+      return;
+    }
+    const unsafe = serverProblem(this.server);
+    if (unsafe) {
+      op.error = unsafe;
+      op.stage = "list";
+      this.emit();
+      return;
+    }
+    op.stage = "working";
+    op.error = undefined;
+    op.credentials = credentials;
+    this.emit();
+    try {
+      const res = await this.doFetch(`${this.server}/v1/projects?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, { headers: { authorization: `Bearer ${token}` }, redirect: "error" });
+      if (this.startups.get(file) !== op || credentials !== this.credentialsGeneration())
+        return;
+      if ([404, 405, 501].includes(res.status)) {
+        op.unsupported = true;
+        op.projects = [];
+        return;
+      }
+      if (!res.ok)
+        throw new Error(`HTTP ${res.status}`);
+      const body = await res.json() as {
+        projects?: unknown;
+        nextCursor?: unknown;
+      };
+      if (this.startups.get(file) !== op || credentials !== this.credentialsGeneration())
+        return;
+      // 旧サーバーはqueryを無視して配列を返す。本文を取りに行かずID入力へ戻す。
+      if (Array.isArray(body)) {
+        op.unsupported = true;
+        op.projects = [];
+        return;
+      }
+      if (!Array.isArray(body.projects) || body.projects.length > 100 || !(body.nextCursor === null || typeof body.nextCursor === "string" && body.nextCursor.length <= 256))
+        throw new Error("Invalid project list");
+      const projects = body.projects.map((p: Record<string, unknown>) => {
+        if (!p || typeof p.id !== "string" || !p.id || p.id.length > 256 || typeof p.name !== "string" || typeof p.revision !== "string" || typeof p.bytes !== "number" || !Number.isSafeInteger(p.bytes) || p.bytes < 0)
+          throw new Error("Invalid project list");
+        return { id: p.id, name: p.name.slice(0, 512), revision: p.revision, bytes: p.bytes, updatedAt: typeof p.updatedAt === "string" ? p.updatedAt : null };
+      });
+      op.projects = projects;
+      op.nextCursor = body.nextCursor as string | null;
+      op.credentials = credentials;
+      op.unsupported = false;
+    }
+    catch {
+      if (this.startups.get(file) === op)
+        op.error = t("計画一覧を取得できませんでした。接続とサインインを確認してください。");
+    }
+    finally {
+      if (this.startups.get(file) === op) {
+        if (credentials !== this.credentialsGeneration()) {
+          op.projects = [];
+          op.nextCursor = null;
+          op.credentials = undefined;
+          op.error = t("表示したときから、状態が変わっています。選び直してください");
+        }
+        op.stage = "list";
+        this.emit();
+      }
+    }
+  }
+  /** 入力: 一覧の操作ID、計画ID、保存先の種別。出力: 現在の比較、または新しい計画の画面。
+  * 新規保存先はホストが選び、存在確認と同期内のCASの両方で上書きを防ぐ。 */
+  private async openProject(file: string, action: Extract<HostAction, {
+    kind: "openProject";
+  }>): Promise<void> {
+    const op = this.startups.get(file);
+    if (!op || op.operationId !== action.operationId || op.stage !== "list" || this.stopping || this.stopped)
+      return;
+    if (op.credentials !== this.credentialsGeneration()) {
+      op.error = t("表示したときから、状態が変わっています。選び直してください");
+      this.emit();
+      return;
+    }
+    op.stage = "working";
+    op.error = undefined;
+    this.emit();
+    try {
+      if (serverProblem(this.server))
+        throw new Error("Invalid server");
+      const destination = action.destination === "new"
+        ? await this.options.chooseDestination?.(file, action.name) : file;
+      if (!destination) {
+        op.stage = "list";
+        this.emit();
+        return;
+      }
+      const target = realFile(destination);
+      if (action.destination === "new" && (existsSync(target) || bindingsOf(target).bindings.length))
+        throw new SyncDestinationError(t("保存先には既にファイルがあります。別の名前を選んでください。"));
+      if (this.startups.get(file) !== op || this.stopping || this.stopped) return;
+      if (op.credentials !== this.credentialsGeneration()) throw new Error("Credentials changed");
+      // 不存在のIDを作成に転じない条件を同期のロック内でも検証する。
+      await this.syncFile(target, { remoteId: action.projectId, requireRemote: true });
+      if (this.startups.get(file) !== op || this.stopping || this.stopped) return;
+      if (op.credentials !== this.credentialsGeneration()) throw new Error("Credentials changed");
+      const result = this.results.get(target)?.result;
+      if (!result || result.status === "error" || result.status === "busy")
+        throw new Error("Not opened");
+      if (target === file) {
+        this.enable(file);
+        this.startups.delete(file);
+      }
+      else {
+        if (result.status !== "synced")
+          throw new Error("Needs review");
+        this.options.onEnabled?.(target, true);
+        const url = await this.options.onOpened?.(target);
+        op.stage = "opened";
+        op.opened = { path: target, ...(url ? { url } : {}) };
+      }
+    }
+    catch (e) {
+      op.stage = "list";
+      op.error = e instanceof SyncDestinationError ? e.message : t("計画を開けませんでした。未使用の保存先を選び、接続と現在の一覧を確認してください。");
+    }
+    this.emit();
+  }
+
   // ---------------------------------------------------------------- 画面からの操作
 
   /** 操作を受ける (serve の POST /api/sync、拡張の sync-action)。結果は状態で返す */
   async act(file: string | null, action: HostAction): Promise<SyncStatus> {
     const real = file ? realFile(file) : null;
     switch (action.kind) {
+      case "beginSync": if (real) this.beginSync(real); break;
+      case "cancelBegin":
+        if (real && this.startups.get(real)?.stage !== "working") {
+          const op = this.startups.get(real);
+          if (op && this.signingIn?.owner?.file === real && this.signingIn.owner.operationId === op.operationId) this.cancelSignIn();
+          this.startups.delete(real);
+        }
+        break;
+      case "continueStart": if (real) await this.continueStart(real,action.operationId,action.intent); break;
+      case "listProjects": if (real) await this.listProjects(real,action.operationId,action.cursor); break;
+      case "openProject": if (real) await this.openProject(real,action); break;
       case "enable": if (real) this.enable(real); break;
       case "disable": if (real) this.disable(real); break;
-      case "signIn": this.signIn(action.provider); break;
-      case "cancelSignIn": this.cancelSignIn(); break;
+      case "signIn": this.signIn(action.provider, real ?? undefined); break;
+      case "cancelSignIn": if (!this.signingIn?.owner || this.signingIn.owner.file === real) this.cancelSignIn(); break;
       case "signOut": await this.signOut(); break;
       case "pause": this.paused = true; break;
       case "resume": this.paused = false; break;
@@ -348,7 +594,7 @@ export class SyncHost {
   /** 1 回の同期をこの場で行う (結び付け・今すぐ同期・人の選択)。常駐の同期と同じロックで排他される */
   private syncFile(file: string, extra: Partial<Parameters<typeof syncOnce>[0]>): Promise<void> {
     // 資格情報が無ければ同期しない (トークン無しの要求を送らない)
-    if (!resolveToken(this.server)) { this.message = t("先にサインインしてください"); this.emit(); return Promise.resolve(); }
+    if (!this.resolveCredentials()) { this.message = t("先にサインインしてください"); this.emit(); return Promise.resolve(); }
     // 停止の途中・停止の後は、新しい操作を始めない (R40-02)
     if (this.stopping || this.stopped) { this.message = t("同期を止めています。終わってから、もう一度操作してください"); this.emit(); return Promise.resolve(); }
     const op = this.syncFileNow(file, extra);
@@ -361,9 +607,10 @@ export class SyncHost {
     const credentials = this.credentialsGeneration();
     this.busy++; this.emit();
     try {
-      const token = resolveToken(this.server)?.token;
+      const token = this.resolveCredentials()?.token;
       const result = await syncOnce({ file, server: this.server, token, fetch: this.doFetch, now: () => new Date(this.wall()), ...extra });
       this.results.set(file, { result, at: this.wall(), credentials });
+      this.rememberSuccessfulSync(file);
       // (この資格情報で同期できた: 同じ世代の認証の失敗は解ける。R40-05)
       if (this.authProblem === credentials) this.authProblem = null;
     } catch (e) {
@@ -407,13 +654,19 @@ export class SyncHost {
   /** 今の状態を組み立てる (file = 今の画面のファイル) */
   status(file: string | null): SyncStatus {
     const real = file ? realFile(file) : null;
-    const credentialsSource = process.env.BOXGLOW_TOKEN ? "env" as const : existsSync(credentialsPath(this.server)) ? "stored" as const : "none" as const;
-    const credentials: SyncStatus["credentials"] = { source: credentialsSource, ...(this.account?.account ? { account: this.account.account } : {}) };
+    const resolved = this.resolveCredentials();
+    const credentialsSource = resolved?.source === "env" ? "env" : resolved ? "stored" : "none";
+    const saved = credentialsSource === "stored" ? readCredentials(this.server) : null;
+    const account = this.account?.credentials === this.credentialsGeneration() ? this.account.account
+      : saved ? { accountId: saved.account, display: saved.login, signedInWith: "unknown" as const } : undefined;
+    const credentials: SyncStatus["credentials"] = { source: credentialsSource, ...(account ? { account } : {}) };
     let binding: { server: string; remoteId: string } | null = null;
     if (real) { try { const b = bindingsOf(real).bindings.find((x) => x.server === this.server); if (b) binding = { server: b.server, remoteId: b.remoteId }; } catch { /* 読めない状態は problem に出る */ } }
     const enabled = real !== null && this.enabled.has(real);
     const status: SyncStatus = {
-      session: this.session, seq: ++this.seq, support: this.support, credentials, owner: this.owner
+      session: this.session, seq: ++this.seq, support: this.support, credentials, owner: this.owner,
+      server: this.server, isDefaultServer: isDefaultSyncServer(this.server), destinationPicker:this.options.destinationPicker,
+      ...(real && this.startups.has(real) ? {startup:(( {credentials:_,...safe} ) => safe)(this.startups.get(real)!)} : {})
     , file: real ? { path: real, enabled, binding } : null
     , state: "off", revision: null
     , ...(this.signingIn?.code ? { signIn: this.signingIn.code } : {})
@@ -425,7 +678,8 @@ export class SyncHost {
     if (credentialsSource === "none") { status.state = "signed-out"; return status; }
     if (!enabled) { status.state = "off"; return status; }
     if (this.owner === "external" || this.owner === "unknown") { status.state = "external"; status.message = this.owner === "external" ? t("別のプロセス (boxglow sync --watch など) が、このサーバーの同期を受け持っています。そちらを止めると、ここから同期できます") : t("同期のロックの持ち主を判定できません。boxglow unlock で確かめてください"); return status; }
-    if (!binding) { status.state = "unbound"; return status; }
+    // 初回の比較は結び付けをまだ保存しないため、結果があれば先に表示する。
+    if (!binding && !this.results.has(real)) { status.state = "unbound"; return status; }
     // 今の資格情報で、サーバーが利用者を確かめられなかった: 前の成功より優先する (R39-10)
     if (this.authProblem !== null && this.authProblem === this.credentialsGeneration()) {
       status.state = "problem";
@@ -491,13 +745,33 @@ export class SyncHost {
 export const MAX_SYNC_ACTION_BYTES = 256 * 1024;
 
 export function parseHostAction(text: string): HostAction | null {
-  if (Buffer.byteLength(text, "utf8") > MAX_SYNC_ACTION_BYTES) return null;
+  if (Buffer.byteLength(text, "utf8") > MAX_SYNC_ACTION_BYTES)
+    return null;
   let v: unknown;
-  try { v = JSON.parse(text); } catch { return null; }
-  if (typeof v !== "object" || v === null) return null;
+  try {
+    v = JSON.parse(text);
+  }
+  catch {
+    return null;
+  }
+  if (typeof v !== "object" || v === null)
+    return null;
   const o = v as Record<string, unknown>;
   switch (o.kind) {
-    case "enable": case "disable": case "cancelSignIn": case "signOut": case "bind": case "syncNow": case "pause": case "resume":
+    case "beginSync":
+    case "cancelBegin":
+      return { kind: o.kind };
+    case "continueStart": return typeof o.operationId === "string" && o.operationId.length <= 128 && (o.intent === "new" || o.intent === "existing") ? { kind: o.kind, operationId: o.operationId, intent: o.intent } : null;
+    case "listProjects": return typeof o.operationId === "string" && o.operationId.length <= 128 && (o.cursor === undefined || typeof o.cursor === "string" && o.cursor.length <= 256) ? { kind: o.kind, operationId: o.operationId, ...(typeof o.cursor === "string" ? { cursor: o.cursor } : {}) } : null;
+    case "openProject": return typeof o.operationId === "string" && o.operationId.length <= 128 && typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 && (o.destination === undefined || o.destination === "current" || o.destination === "new") && (o.name === undefined || typeof o.name === "string" && o.name.length <= 128) ? { kind: o.kind, operationId: o.operationId, projectId: o.projectId, destination: o.destination as "current" | "new" | undefined, name: o.name as string | undefined } : null;
+    case "enable":
+    case "disable":
+    case "cancelSignIn":
+    case "signOut":
+    case "bind":
+    case "syncNow":
+    case "pause":
+    case "resume":
       return { kind: o.kind };
     case "signIn": return o.provider === "github" || o.provider === "google" ? { kind: "signIn", provider: o.provider } : null;
     case "resolveGroups": {

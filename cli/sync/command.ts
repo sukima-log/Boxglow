@@ -1,3 +1,4 @@
+import { selectSyncServer, type SyncServerSelection } from "./server-config";
 import { syncAudienceFor } from "../actor";
 import { isHumanActor } from "../../src/model/graph";
 /**
@@ -70,7 +71,7 @@ const hasHumanChoice = (o: SyncCommandOptions): boolean => [o.resolve, o.block, 
 /** 入力: CLIの識別。出力: AI向けの案内にするか。自己申告を認証の代わりにはしない。 */
 export const syncAudience = (o: SyncCommandOptions): "ai" | "human" => o.audience ?? syncAudienceFor(o.actor);
 /** 入力: 人が実行した引数。出力: 対象と選択を省略しない、人用の打ち直しコマンド。 */
-export function humanSyncCommand(o: SyncCommandOptions): string {
+export function humanSyncCommand(o: SyncCommandOptions, server?: string): string {
   const args = o.rawArgs ? [...o.rawArgs] : ["--file", o.file];
   if (!o.rawArgs) {
     for (const [key, value] of Object.entries(o)) {
@@ -78,6 +79,14 @@ export function humanSyncCommand(o: SyncCommandOptions): string {
       const flag = key === "choicesFile" ? "choices-file" : key === "notApplied" ? "not-applied" : key;
       for (const item of Array.isArray(value) ? value : [value]) { args.push("--" + flag); if (item !== true) args.push(String(item)); }
     }
+  }
+  if (server) {
+    let found = false;
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === "--server") { args[++i] = server; found = true; }
+      else if (args[i].startsWith("--server=")) { args[i] = "--server=" + server; found = true; }
+    }
+    if (!found) args.push("--server", server);
   }
   return "boxglow sync " + [...args, "--actor", "human"].map(quote).join(" ");
 }
@@ -92,11 +101,12 @@ export function retargetSyncArgs(args: string[], file: string): string[] {
   return [...next, "--file", file];
 }
 /** 入力: 呼出元と出力先。出力: AIには相談内容、人には元の引数を保った打ち直し方法。 */
-function humanRequired(o: SyncCommandOptions, out: (text: string) => void): number {
+function humanRequired(o: SyncCommandOptions, out: (text: string) => void, selection?: SyncServerSelection): number {
   if (syncAudience(o) === "ai") out(new HumanSyncRequired().message);
   else {
     out(t("この操作には人による確認が必要です。内容を確認したうえで、次のコマンドを実行してください。"));
-    out(humanSyncCommand(o));
+    if (selection?.server) out(selection.source === "default" ? t("送り先（製品既定）: {server}", { server: selection.server }) : t("送り先: {server}", { server: selection.server }));
+    out(humanSyncCommand(o, selection?.server ?? undefined));
   }
   return 2;
 }
@@ -105,20 +115,12 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
   if (!isHumanActor(o.actor ?? "") && hasHumanChoice(o)) {
     return humanRequired(o, out);
   }
-  // サーバー: 指定 > 環境変数 > そのファイルの結び付け (1 つだけのとき)
-  let server = o.server ?? process.env.BOXGLOW_SERVER;
-  if (!server) {
-    const { bindings: bound, unreadable } = bindingsOf(o.file);
-    if (bound.length === 1) server = bound[0].server;
-    else if (bound.length === 0) {
-      out(syncAudience(o) === "ai" ? t("同期先が決まっていません。人に同期先の確認と初回の結び付けを依頼してください。") + "\n" + t("人が実行している場合は、boxglow sync --help の「人の操作」を参照してください。") : t("同期先が決まっていません。初めて結び付けるときは boxglow sync --server <URL> --actor human を指定してください"));
-      // 読めない状態のフォルダがあるときは、「結び付けが無い」と決めつけずに知らせる
-      if (unreadable.length > 0) out(t("同期の状態を読めないフォルダがあります (この計画の結び付けかもしれません。消さずに、中身を確かめてください): {list}", { list: unreadable.join(", ") }));
-      return 1;
-    }
-    else { out(t("この計画は複数のサーバーに結び付いています。--server <URL> で選んでください: {list}", { list: bound.map((b) => b.server).join(", ") })); return 1; }
-  }
-  if (!server) return 1;
+  // 共通の優先順で解決する。無効指定では通信しない。初回のAI制限はsyncOnceが維持する。
+  let selection: SyncServerSelection;
+  try { selection = selectSyncServer(o.file, o.server?.trim() || undefined); }
+  catch (e) { out((e as Error).message); return 1; }
+  const { server } = selection;
+  if (!server) { out(t("同期は無効です。送り先を指定してからやり直してください。")); return 1; }
   if (o.recover && o.applied === o.notApplied) { out(t("--recover には --applied (反映済みとして続ける) か --not-applied (反映されていないものとして続ける) のどちらかを付けてください")); return 1; }
   if (o.link && o.prefer !== "local" && o.prefer !== "remote") { out(t("--resolve / --link には --prefer local (手元を採る) か --prefer remote (サーバーを採る) を付けてください")); return 1; }
   if (o.relink && o.prefer !== undefined && o.prefer !== "local" && o.prefer !== "remote") { out(t("--relink には、選べるものが 2 つあるときは --prefer local (手元を採る) か --prefer remote (サーバーを採る) を付けてください")); return 1; }
@@ -137,7 +139,7 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
     , confirmAccount: o.account
     });
   } catch (e) {
-    if (e instanceof HumanSyncRequired) return humanRequired(o, out);
+    if (e instanceof HumanSyncRequired) return humanRequired(o, out, selection);
     if (e instanceof ResolutionOptionError) { out(e.message); return 1; }
     if (e instanceof SyncRejectedError) { out(t("サーバーが、この計画の同期を受け付けませんでした (待っても直りません)。やりかけの操作は残してあります: {status} {detail}", { status: e.status, detail: rejectionHint(e.status) }));
       // 手元を直すだけでは、残った操作の中身は変わらない。次の実行で、その操作を片付けてから、今の中身で送り直すことを伝える
@@ -146,7 +148,7 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
       return 2;
     }
     // 使ったトークンの出どころ (環境変数 / 保存済みのサインイン / 無し) に合わせて、直し方を案内する
-    if (e instanceof SyncAuthError) { out(t("サーバーが利用者を確かめられませんでした。やりかけの操作は残してあります")); out(authHint(resolveToken(server)?.source ?? null, e.status)); return 1; }
+    if (e instanceof SyncAuthError) { out(t("サーバーが利用者を確かめられませんでした。やりかけの操作は残してあります")); out(authHint(resolveToken(server)?.source ?? null, e.status, server)); return 1; }
     if (e instanceof SyncNetworkError) { out(t("サーバーと通信できませんでした (やりかけの操作は残してあります。もう一度 boxglow sync を実行すると、続きから進みます): {message}", { message: e.message })); return 1; }
     if (e instanceof SyncStateUnreadable) { out(t("同期の状態のファイルを読めません。自動では直しません (消すと、やりかけの操作と前回そろえた中身の記録を失います): {path} ({problem})", { path: e.path, problem: e.problem })); return 1; }
     throw e;
@@ -383,12 +385,12 @@ export function haltView(result: Extract<SyncResult, { status: "halted" }>, file
  * Output: 終了コード
  */
 export async function runWatchCommand(o: SyncCommandOptions, out: (text: string) => void, stop?: Promise<void>): Promise<number> {
+  const { server } = selectSyncServer(o.file, o.server?.trim() || undefined);
   // まず 1 回同期する (初めてなら結び付ける。止まった場合は理由を表示して、見張りは続ける)
   const first = await runSyncCommand({ ...o, watch: false }, out);
   if (first === 1 || (!isHumanActor(o.actor ?? "") && hasHumanChoice(o))) return first;
   const bound = bindingsOf(o.file).bindings;
   if (!bound.length) return first;
-  const server = o.server ?? process.env.BOXGLOW_SERVER ?? bound[0]?.server;
   if (!server) return 1;
   // 同じ端末・同じサーバーの常時の同期は 1 つだけ (確認の要求を、計画の数だけ倍にしないため)
   const lock = lockWatch(server);

@@ -77,3 +77,12 @@ it("C2 L-2: claimsとpolicyの予約では編集を戻せないと通知せず�
  expect(historyPatchMasksChanges(snapshot,externalHistoryPatch(base,remote))).toBe(false);
  expect(historyPatchMasksChanges({...snapshot,name:"old name"},externalHistoryPatch(base,{...remote,name:"remote"}))).toBe(true);
 });
+
+it("D4: 補われた仮IDの違いだけではUndoの部分失敗を通知しない", () => {
+  const { p } = fixture();
+  const base = { ...p, id: "temporary-base" }, remote = { ...p, id: "first-persisted" };
+  const patch = externalHistoryPatch(base, remote);
+  expect(historyPatchMasksChanges(p, patch)).toBe(false);
+  expect(applyHistoryPatch(p, patch)?.id).toBe(remote.id);
+  expect(historyPatchMasksChanges(p, externalHistoryPatch({ ...base, name: "base" }, { ...remote, name: "remote" }))).toBe(true);
+});
