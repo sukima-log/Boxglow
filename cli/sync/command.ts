@@ -20,7 +20,7 @@ import { isHumanActor } from "../../src/model/graph";
 import { blockResolutionKey, parseConflictResolution, type ConflictResolution, type ResolutionInput } from "../../src/model/conflict-groups";
 import { t } from "../../src/i18n/core";
 import { readFileSync } from "node:fs";
-import { syncOnce, HumanSyncRequired, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
+import { syncOnce, SyncConfigurationError, HumanSyncRequired, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
 import { bindingsOf, hashOf, SyncStateUnreadable } from "./state-store";
 import { resolveToken } from "./credentials";
 import { authHint } from "./login";
@@ -38,6 +38,7 @@ export interface SyncCommandOptions {
   file: string;
   server?: string;
   project?: string;
+  reconnectRestored?: string;
   adopt?: string;
   restore?: string;
   resolve?: string;
@@ -66,7 +67,7 @@ export interface SyncCommandOptions {
  * Output: 終了コード (0 = そろった / 進められなかったが待てば直る, 2 = 人の確認が要る, 1 = 失敗)
  */
 /** 入力: CLI引数。出力: 人の判断を要求する指定があるか (空の値も指定として拒否)。 */
-const hasHumanChoice = (o: SyncCommandOptions): boolean => [o.resolve, o.block, o.settings, o.choicesFile, o.resolution, o.prefer, o.link, o.relink, o.recover, o.applied, o.notApplied, o.adopt, o.restore, o.account].some(v => v !== undefined);
+const hasHumanChoice = (o: SyncCommandOptions): boolean => [o.reconnectRestored, o.resolve, o.block, o.settings, o.choicesFile, o.resolution, o.prefer, o.link, o.relink, o.recover, o.applied, o.notApplied, o.adopt, o.restore, o.account].some(v => v !== undefined);
 
 /** 入力: CLIの識別。出力: AI向けの案内にするか。自己申告を認証の代わりにはしない。 */
 export const syncAudience = (o: SyncCommandOptions): "ai" | "human" => o.audience ?? syncAudienceFor(o.actor);
@@ -76,7 +77,7 @@ export function humanSyncCommand(o: SyncCommandOptions, server?: string): string
   if (!o.rawArgs) {
     for (const [key, value] of Object.entries(o)) {
       if (["file", "actor", "audience", "rawArgs", "resolution"].includes(key) || value === undefined || value === false) continue;
-      const flag = key === "choicesFile" ? "choices-file" : key === "notApplied" ? "not-applied" : key;
+      const flag = key === "reconnectRestored" ? "reconnect-restored" : key === "choicesFile" ? "choices-file" : key === "notApplied" ? "not-applied" : key;
       for (const item of Array.isArray(value) ? value : [value]) { args.push("--" + flag); if (item !== true) args.push(String(item)); }
     }
   }
@@ -130,6 +131,7 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
     const resolution = resolutionOptions(o);
     result = await syncOnce({
       humanActions: isHumanActor(o.actor ?? ""), file: o.file, server, remoteId: o.project, token: resolveToken(server)?.token
+    , reconnectRestored: o.reconnectRestored
     , approvedDeletion: o.adopt
     , restoreDeletion: o.restore
     , resolution
@@ -149,6 +151,7 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
     }
     // 使ったトークンの出どころ (環境変数 / 保存済みのサインイン / 無し) に合わせて、直し方を案内する
     if (e instanceof SyncAuthError) { out(t("サーバーが利用者を確かめられませんでした。やりかけの操作は残してあります")); out(authHint(resolveToken(server)?.source ?? null, e.status, server)); return 1; }
+    if (e instanceof SyncConfigurationError) { out(e.message); return 1; }
     if (e instanceof SyncNetworkError) { out(t("サーバーと通信できませんでした (やりかけの操作は残してあります。もう一度 boxglow sync を実行すると、続きから進みます): {message}", { message: e.message })); return 1; }
     if (e instanceof SyncStateUnreadable) { out(t("同期の状態のファイルを読めません。自動では直しません (消すと、やりかけの操作と前回そろえた中身の記録を失います): {path} ({problem})", { path: e.path, problem: e.problem })); return 1; }
     throw e;
@@ -324,6 +327,8 @@ export function haltView(result: Extract<SyncResult, { status: "halted" }>, file
     case "remote-deleted":
       fix = "none";
       out(t("サーバー側で、この計画は消されています (自動では作り直しません)"));
+      if(result.reconnect) choice(t("復元した計画 {id} に結び直す",{id:result.reconnect.remoteId}),`boxglow sync --reconnect-restored ${result.reconnect.token}${target}`,{kind:"reconnectRestored",token:result.reconnect.token});
+      out(t("削除から30日以内なら、同期パネルの「サーバーの計画を管理」または boxglow remote trash から復元できます。復元後は新しいIDの計画を開いてください。"));
       break;
     case "local-missing":
       fix = "local-file";
@@ -401,6 +406,7 @@ export async function runWatchCommand(o: SyncCommandOptions, out: (text: string)
   const stamp = () => new Date().toTimeString().slice(0, 8);
   const onEvent = (e: WatchEvent) => {
     if (e.kind === "synced") out(`[${stamp()}] ${e.file}: ` + t("同期しました (受け取り {pulled} 回、送り {pushed} 回)。サーバーの版: {revision}", { pulled: e.pulled, pushed: e.pushed, revision: e.revision ?? "-" }));
+    else if (e.kind === "configuration") out(e.message);
     else if (e.kind === "network") out(`[${stamp()}] ` + t("サーバーと通信できません。{seconds} 秒後にやり直します: {message}", { seconds: Math.round(e.retryInMs / 1000), message: e.message }));
     else if (e.kind === "auth") out(`[${stamp()}] ` + t("サーバーが利用者を確かめられません (トークンが無い、または無効です)。常時の同期を止めずに待ちます。トークンを直してから、起動し直してください"));
     else if (e.kind === "checked" || e.kind === "authOk") return;   // (変更なしの確認・利用者の確認は、表示しない)
@@ -430,7 +436,7 @@ function rejectionHint(status: number): string {
   if (status === 413) return t("計画が大きすぎます");
   if (status === 426) return t("この版の Boxglow は古く、サーバーが受け付けません。更新してください");
   if (status === 400) return t("サーバーが、計画として正しくないと判断しました");
-  if (status === 507) return t("保存の上限 (計画の数、または保存量) に届いています。履歴の整理か、使っていない計画の削除が要ります");
+  if (status === 507) return t("サーバーの保存上限に達しています。管理者に確認してください。")+" "+t("削除した計画も30日間は保存量に含まれます。");
   return t("要求の形が合いません");
 }
 

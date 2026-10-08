@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Stage E: confirmation-based server plan deletion, 30-day trash and restoration to a new server ID in CLI / serve / VS Code. Local files remain and deleted IDs stay blocked. Requires the Stage E server for recovery.
+- D5: treat unsafe HTTP URLs as configuration errors, stop watch retries, and document migrating existing HTTP bindings.
+
 - **Authentication compatibility change:** `BOXGLOW_TOKEN` alone is no longer used for the product sync server, including explicit URLs and existing bindings. Also set `BOXGLOW_TOKEN_SERVER` to the matching URL. See `docs/SYNC_START.md` for Windows CLI instructions. Custom servers retain unscoped-token compatibility, but non-localhost HTTP sync is now rejected; use HTTPS.
 - D4 review: share HTTPS/local HTTP validation across sign-in, sync and watch, reject sync redirects, protect HTTP spellings and trailing-dot variants of the product host, and align Windows sign-in guidance. Legacy plans without an ID must retain their original creation time to auto-merge; generated IDs no longer cause a false partial-Undo warning.
 

@@ -9,6 +9,7 @@
  * 「別のプロセスが受け持っている」と表示して、自分が制御できるようには見せない。
  * 設計: docs/private/SYNC_GUI_DESIGN.md (第 4 版)
  */
+import { listTrash, previewLifecycle, commitLifecycle, type LifecyclePreview } from "./lifecycle";
 import { isDefaultSyncServer } from "./server-policy";
 import { parseConflictResolution, type ConflictResolution } from "../../src/model/conflict-groups";
 import { randomUUID } from "node:crypto";
@@ -16,7 +17,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { APP_VERSION } from "../../src/model/version";
 import { t } from "../../src/i18n/core";
 import { inspectLock } from "../file-store";
-import { syncOnce, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
+import { syncOnce, SyncConfigurationError, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
 import { haltView, type SyncAction } from "./command";
 import { credentialsPath, readCredentials, resolveToken } from "./credentials";
 import { runGoogleLogin, runLogin, runLogout, serverProblem } from "./login";
@@ -264,6 +265,7 @@ export class SyncHost {
     else if (e.kind === "error") this.results.set(e.file, { result: { status: "error", error: new Error(e.message) }, at: this.wall(), credentials });
     // 認証の失敗: この資格情報の世代について、成功の結果より優先して表示する (R39-10)
     else if (e.kind === "auth") this.authProblem = credentials;
+    else if (e.kind === "configuration") { this.network = null; }
     else if (e.kind === "network") this.network = { message: e.message, at: this.wall() };
     if (e.kind === "synced" || e.kind === "checked") this.rememberSuccessfulSync(e.file);
     this.emit();
@@ -560,11 +562,52 @@ export class SyncHost {
     this.emit();
   }
 
+  /** 確認内容はホストが保持。画面から版・送り先・復元先を受け取らない。 */
+  private readonly lifecycles = new Map<string,{state:NonNullable<SyncStatus["lifecycle"]>;credentials:string;preview?:LifecyclePreview}>();
+  private async lifecycleAction(file:string,action:HostAction):Promise<void> {
+    if(this.stopping || this.stopped || !this.open.has(file)) return;
+    const old=this.lifecycles.get(file);
+    if(old?.state.busy) return;
+    if(action.kind === "cancelLifecycle") {this.lifecycles.delete(file);this.emit();return;}
+    const credentials=this.credentialsGeneration();
+    if(action.kind === "confirmLifecycle" && (!old?.preview || old.state.choiceId !== action.choiceId || old.credentials !== credentials)) {
+      this.lifecycles.delete(file);this.message=t("表示したときから、状態が変わっています。選び直してください");this.emit();return;
+    }
+    const entry=action.kind === "confirmLifecycle" ? old! : {state:{choiceId:randomUUID(),busy:false} as NonNullable<SyncStatus["lifecycle"]>,credentials,preview:undefined as LifecyclePreview|undefined};
+    this.lifecycles.set(file,entry);entry.state.busy=true;entry.state.error=undefined;this.emit();
+    const o={server:this.server,fetch:this.doFetch,allowEnvironmentToken:this.options.allowEnvironmentToken};
+    try {
+      if(action.kind === "listTrash") Object.assign(entry.state,await listTrash(o,action.cursor));
+      if(action.kind === "previewDelete" || action.kind === "previewRestore") {
+        entry.preview=await previewLifecycle(o,action.kind === "previewDelete" ? "delete" : "restore",action.projectId);
+        const {kind,id,name,account,revision,expiresAt,targetId}=entry.preview;
+        entry.state.preview={kind,id,name,account,revision,expiresAt,targetId};
+      }
+      if(action.kind === "confirmLifecycle") {
+        const deletedId=entry.preview!.id;
+        const result=await commitLifecycle(o,entry.preview!);
+        entry.state.preview=undefined;entry.preview=undefined;
+        entry.state.message=result.kind === "restored" ? t("復元しました。元のファイルで「今すぐ同期」から結び直すか、一覧から新しいファイルとして開けます。")+" "+result.projectId : t("サーバーから削除しました。手元のファイルは残っています。")+" "+result.expiresAt;
+        // 開いた計画の同期結果を取り直す。削除の410は既存の停止理由となり、同じIDを作り直さない。
+        if(bindingsOf(file).bindings.some(b=>b.server === this.server && b.remoteId === deletedId)) await this.syncFile(file,{});
+      }
+    } catch(e) { entry.state.error=e instanceof Error ? e.message : String(e); }
+    finally {
+      entry.state.busy=false;
+      if(credentials !== this.credentialsGeneration()) this.lifecycles.delete(file);
+      this.emit();
+    }
+  }
+
   // ---------------------------------------------------------------- 画面からの操作
 
   /** 操作を受ける (serve の POST /api/sync、拡張の sync-action)。結果は状態で返す */
   async act(file: string | null, action: HostAction): Promise<SyncStatus> {
     const real = file ? realFile(file) : null;
+    if (["listTrash","cancelLifecycle","previewDelete","previewRestore","confirmLifecycle"].includes(action.kind)) {
+      if(real) { const work=this.lifecycleAction(real,action);this.manual.add(work);try {await work;} finally {this.manual.delete(work);} }
+      return this.status(file);
+    }
     switch (action.kind) {
       case "beginSync": if (real) this.beginSync(real); break;
       case "cancelBegin":
@@ -640,7 +683,8 @@ export class SyncHost {
       return;
     }
     const extra: Partial<Parameters<typeof syncOnce>[0]> =
-      a.kind === "resolve" ? { resolution: resolution ?? { token: a.token, prefer: a.prefer } }
+      a.kind === "reconnectRestored" ? {reconnectRestored:a.token}
+      : a.kind === "resolve" ? { resolution: resolution ?? { token: a.token, prefer: a.prefer } }
       : a.kind === "link" ? { remoteId: c.remoteId, firstLink: { token: a.token, prefer: a.prefer } }
       : a.kind === "relink" ? { relink: { token: a.token, prefer: a.prefer } }
       : a.kind === "recover" ? { recover: { token: a.token, applied: a.applied } }
@@ -666,12 +710,18 @@ export class SyncHost {
     const status: SyncStatus = {
       session: this.session, seq: ++this.seq, support: this.support, credentials, owner: this.owner,
       server: this.server, isDefaultServer: isDefaultSyncServer(this.server), destinationPicker:this.options.destinationPicker,
+      ...(real && this.lifecycles.get(real)?.credentials === this.credentialsGeneration() ? {lifecycle:this.lifecycles.get(real)!.state} : {}),
       ...(real && this.startups.has(real) ? {startup:(( {credentials:_,...safe} ) => safe)(this.startups.get(real)!)} : {})
     , file: real ? { path: real, enabled, binding } : null
     , state: "off", revision: null
     , ...(this.signingIn?.code ? { signIn: this.signingIn.code } : {})
     , ...(this.message ? { message: this.message } : {})
     };
+    if (serverProblem(this.server)) {
+      status.state = "problem";
+      status.problem = { kind: "configuration", text: new SyncConfigurationError(this.server).message, fix: "server-setting" };
+      return status;
+    }
     if (this.support !== "ok") { status.state = "unsupported"; return status; }
     if (!real) { status.state = credentialsSource === "none" ? "signed-out" : "off"; return status; }
     // 資格情報が無い間は、サインインの途中でも「未サインイン」(途中で「オフ」に見せない。サインインの欄は signIn で出る。実機の VS Code で見つけた)
@@ -696,7 +746,7 @@ export class SyncHost {
       const e = r.error;
       status.state = "problem";
       status.problem = e instanceof SyncAuthError ? { kind: "auth", text: t("サーバーが利用者を確かめられませんでした"), fix: "credentials" }
-        : e instanceof SyncRejectedError ? { kind: "rejected", text: t("サーバーが、この計画の同期を受け付けませんでした (待っても直りません)"), fix: "local-file" }
+        : e instanceof SyncRejectedError ? { kind: "rejected", text: t("サーバーが、この計画の同期を受け付けませんでした (待っても直りません)")+(e.status===507 ? " "+t("削除した計画も30日間は保存量に含まれます。") : ""), fix: "local-file" }
         : e instanceof SyncNetworkError ? { kind: "network", text: t("サーバーと通信できませんでした"), fix: "wait" }
         : e instanceof SyncStateUnreadable ? { kind: "state-unreadable", text: t("同期の状態のファイルを読めません"), fix: "sync-state" }
         : { kind: "busy", text: e instanceof Error ? e.message : String(e), fix: "rerun" };
@@ -758,6 +808,11 @@ export function parseHostAction(text: string): HostAction | null {
     return null;
   const o = v as Record<string, unknown>;
   switch (o.kind) {
+    case "listTrash": return o.cursor === undefined || typeof o.cursor === "string" && o.cursor.length <= 256 ? {kind:o.kind,cursor:o.cursor as string|undefined} : null;
+    case "previewDelete":
+    case "previewRestore": return typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 ? {kind:o.kind,projectId:o.projectId} : null;
+    case "confirmLifecycle": return typeof o.choiceId === "string" && o.choiceId.length <= 128 ? {kind:o.kind,choiceId:o.choiceId} : null;
+    case "cancelLifecycle":
     case "beginSync":
     case "cancelBegin":
       return { kind: o.kind };

@@ -1,3 +1,4 @@
+import { SyncLifecycle } from "./SyncLifecycle";
 /**
  * 画面からの同期: 上部バーの印と、押すと開く同期パネル。
  * - 印は「同期済み / 送受信中 / 確認が必要 / 停止中 / 未同期」の 5 群。元の状態は data-state に残す。
@@ -292,6 +293,7 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
           )}
         </div>
       )}
+      {status.support === "ok" && status.credentials.source !== "none" && <details className="sync-panel__management" open={status.lifecycle ? true : undefined}><summary>{t("サーバーの計画を管理")}</summary><SyncLifecycle status={status} act={act}/></details>}
       {/* 日常の操作を埋もれさせないよう設定を畳む。ホストの停止理由・控えの場所は省略しない。 */}
       <details className="sync-panel__details">
         <summary>{t("詳細と設定")}</summary>
@@ -568,6 +570,8 @@ function SignInCode({ code, onCancel }: { code: NonNullable<SyncStatus["signIn"]
  * 選べる操作がない場合も、どこを確かめるか伝える。ここでは修復処理を実行しない。 */
 function fixHint(fix: string): string {
   switch (fix) {
+    case "server-setting":
+      return t("同期先の設定を確認し、https の URL に変更してください。");
     case "local-file":
       return t("手元のファイルを直してください");
     case "sync-state":

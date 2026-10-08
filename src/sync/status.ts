@@ -8,6 +8,7 @@ import type { ConflictResolution, ConflictReview } from "../model/conflict-group
 
 /** 人が選べる操作 (CLI の引数と 1 対 1。印は CLI と同じ値) */
 export type SyncAction =
+  | { kind:"reconnectRestored"; token:string }
   | { kind: "resolve"; token: string; prefer: "local" | "remote" }
   | { kind: "link"; token: string; prefer: "local" | "remote" }
   | { kind: "relink"; token: string; prefer?: "local" | "remote" }
@@ -53,7 +54,7 @@ export interface SyncStatus {
   /** 確認が要る場面 (選べる操作つき。choiceIds = 項目の id → 選択 ID) */
   halt?: HaltView & { choiceIds: Record<string, string>; resolutionChoiceId?: string };
   /** 選べる操作の無い問題と、直す場所 */
-  problem?: { kind: "auth" | "network" | "rejected" | "state-unreadable" | "busy"; text: string; fix: "credentials" | "wait" | "local-file" | "sync-state" | "rerun" };
+  problem?: { kind: "configuration" | "auth" | "network" | "rejected" | "state-unreadable" | "busy"; text: string; fix: "server-setting" | "credentials" | "wait" | "local-file" | "sync-state" | "rerun" };
   /** サインインの途中 (コードを表示している間) */
   signIn?: { provider: "github"; userCode: string; verificationUrl: string; expiresAt: string }
          | { provider: "google"; url: string; expiresAt: string };
@@ -71,6 +72,12 @@ export interface SyncStatus {
     unsupported?:boolean;
     error?:string;
   };
+  lifecycle?: {
+    choiceId:string; busy:boolean; error?:string; message?:string;
+    projects?:{id:string;name:string;revision:string;deletedAt:string;expiresAt:string;restoredId:string|null;restorable:boolean}[];
+    nextCursor?:string|null;
+    preview?:{kind:"delete"|"restore";id:string;name:string;account:string;revision:string;expiresAt?:string;targetId?:string};
+  };
   /** 1 行の補足 */
   message?: string;
 }
@@ -82,6 +89,9 @@ export type HostAction =
   | { kind:"listProjects"; operationId:string; cursor?:string }
   | { kind:"openProject"; operationId:string; projectId:string; destination?:"current"|"new"; name?:string }
 
+  | { kind:"listTrash"; cursor?:string } | {kind:"cancelLifecycle"}
+  | {kind:"previewDelete"|"previewRestore";projectId:string}
+  | {kind:"confirmLifecycle";choiceId:string}
   | { kind: "enable" } | { kind: "disable" }
   | { kind: "signIn"; provider: "github" | "google" } | { kind: "cancelSignIn" } | { kind: "signOut" }
   | { kind: "bind" } | { kind: "syncNow" }

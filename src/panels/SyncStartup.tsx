@@ -41,9 +41,9 @@ export function SyncStartup({ status, act, unsaved }: {
    </fieldset>}
    <p>{destination === "current" ? t("開く計画を選んでください。手元と内容が違う場合は、比較してから進みます。") : t("開く計画を選んでください。")}</p>
    {op.unsupported && <p>{t("このサーバーは計画一覧に対応していません。計画IDを指定してください。")}</p>}
-   {op.projects?.map(p => <button key={p.id} className="sync-project-row btn" disabled={unsaved} onClick={() => void act({ kind: "openProject", operationId: op.operationId, projectId: p.id, destination, name })}>
+   {op.projects?.map(p => <div key={p.id} className="sync-panel__row"><button className="sync-project-row btn" disabled={unsaved} onClick={() => void act({ kind: "openProject", operationId: op.operationId, projectId: p.id, destination, name })}>
     <strong>{p.name || p.id}</strong><span>{p.updatedAt ? new Date(p.updatedAt).toLocaleString() : t("更新日時不明")} · {Math.ceil(p.bytes / 1024)} KB</span>
-   </button>)}
+   </button><button className="btn btn-ghost btn-sm" aria-label={t("サーバーから削除…")+" "+p.name} title={t("サーバーから削除…")} onClick={()=>void act({kind:"previewDelete",projectId:p.id})}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg></button></div>)}
    {!op.unsupported && op.projects?.length === 0 && !op.error && <p>{t("このアカウントの計画はありません。")}</p>}
    <div className="sync-panel__row">
     <button className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "listProjects", operationId: op.operationId })}>{t("再読み込み")}</button>

@@ -4,7 +4,9 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { syncOnce, fetchHeads } from "./client";
+import { SyncHost } from "./host";
+import { runSyncCommand, runWatchCommand } from "./command";
+import { syncOnce, fetchHeads, SyncConfigurationError, SyncNetworkError } from "./client";
 import { DEFAULT_SYNC_SERVER, isDefaultSyncServer, environmentTokenAllowed, serverProblem } from "./server-policy";
 import { runLogin, runGoogleLogin, runWhoami } from "./login";
 import { SyncWatcher, type WatchEvent } from "./watch";
@@ -51,7 +53,10 @@ it("既存の非localhost HTTP bindingもwatchが通信せず止める", async (
     const watch = new SyncWatcher({ server: state.binding.server, token: "test-token", fetch: request, onEvent: event => events.push(event) });
     await watch.tick();
     expect(request).not.toHaveBeenCalled();
-    expect(events.some(e => e.kind === "network" && e.message.includes("https"))).toBe(true);
+    expect(events.some(e => e.kind === "configuration" && e.message.includes("https"))).toBe(true);
+    for (let i = 0; i < 3; i++) await watch.tick();
+    expect(events).toHaveLength(1);
+    expect(request).not.toHaveBeenCalled();
   } finally { await local.stop(); }
 });
 it.each(["ja", "en"] as const)("Windowsのlogin/google/whoamiは専用送り先も案内 (%s)", async lang => {
@@ -85,4 +90,22 @@ it("同期と一覧はリダイレクトをたどらず認証情報を別のURL�
   } finally {
     await Promise.all([new Promise<void>(r => redirect.close(() => r())), new Promise<void>(r => destination.close(() => r()))]);
   }
+});
+
+it.each(["ja", "en"] as const)("D5: CLI/watch/GUIは通信障害ではなく設定エラーと移行方法を表示 (%s)", async lang => {
+  setLang(lang); const server = "http://myhost.invalid";
+  const file = join(root, "invalid.json"); writeFileSync(file, toJSON(createProject("configuration")));
+  for (const run of [runSyncCommand, runWatchCommand]) {
+    const lines: string[] = [];
+    expect(await run({ file, server, actor: "human" }, line => lines.push(line))).toBe(1);
+    const text = lines.join("\n"); expect(text).toContain(lang === "ja" ? "https" : "HTTPS");
+    expect(text).toContain("docs/SYNC_START.md");
+    expect(text).not.toMatch(/続きから|again to continue|秒後|retryInMs/);
+  }
+  const request = vi.fn<typeof fetch>();
+  const host = new SyncHost({ server, fetch: request }); host.openFile(file);
+  expect(host.status(file)).toMatchObject({ state: "problem", problem: { kind: "configuration", fix: "server-setting" } });
+  await host.stop(); expect(request).not.toHaveBeenCalled();
+  await expect(syncOnce({ file, server })).rejects.toBeInstanceOf(SyncConfigurationError);
+  try { await fetchHeads({ server }); } catch (e) { expect(e).not.toBeInstanceOf(SyncNetworkError); }
 });

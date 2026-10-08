@@ -1,3 +1,4 @@
+import { serverProblem } from "./server-policy";
 /**
  * 常時の同期 (boxglow sync --watch)
  * 1 つの処理が、この端末の「同じサーバーに結び付いた計画すべて」を受け持つ:
@@ -15,7 +16,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { FileBusy, lockFile } from "../file-store";
-import { fetchHeads, syncOnce, SyncAuthError, SyncNetworkError, type SyncResult } from "./client";
+import { fetchHeads, syncOnce, SyncConfigurationError, SyncAuthError, SyncNetworkError, type SyncResult } from "./client";
 import { bindingDir, configDir, hashOf, normalizeServer, StateStore, type Binding, type StoredState } from "./state-store";
 
 /** 手元の変更をまとめる時間 (ms): 最後の変更からこれだけ静かなら送る */
@@ -37,6 +38,7 @@ export type WatchEvent =
       /** 「そろった」と確かめたときの手元の中身のハッシュ (画面の裏方が、今のディスクと比べて「同期済み」かを決めるのに使う) */
     ; localHash: string | null; tag?: string }
   | { kind: "halted"; file: string; result: Extract<SyncResult, { status: "halted" }>; tag?: string }
+  | { kind: "configuration"; message: string }
   | { kind: "network"; message: string; retryInMs: number }
   /** サーバーが利用者を確かめられない (トークンが無い・無効)。全部の計画に効くので、直るまで待つ (1 回だけ知らせる) */
   | { kind: "auth"; tag?: string }
@@ -212,7 +214,15 @@ export class SyncWatcher {
    * その時点で行うべきことを 1 回分行う: 結び付けの一覧を取り直す → 手元の変更を調べる → (時点が来ていれば) サーバーを確かめる → 送る・受け取る
    * Output: なし (出来事は onEvent で知らせる)。例外は投げない (想定外の失敗も出来事として知らせ、次の tick でやり直す)
    */
+  private configurationStopped = false;
   async tick(): Promise<void> {
+    // 不正な送り先は時間経過で直らない。状態の読み取りもせず、一度だけ通知して止める。
+    if (this.configurationStopped) return;
+    if (serverProblem(this.options.server)) {
+      this.configurationStopped = true;
+      this.options.onEvent?.({ kind: "configuration", message: new SyncConfigurationError(this.options.server).message });
+      return;
+    }
     if (this.running) return;
     this.running = true;
     try {

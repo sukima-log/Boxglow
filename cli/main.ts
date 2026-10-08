@@ -1,3 +1,4 @@
+import { runLifecycle } from "./sync/lifecycle";
 import { selectSyncServer } from "./sync/server-config";
 import { findClaimBlock, claimCommand, prepareClaimSave, type ClaimCommand } from "./claims";
 import { covers, activeClaim, claimSummary, claimToken, claimsEnabled } from "../src/model/claims";
@@ -337,6 +338,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  --recover <印> --applied|--not-applied = 途中で終わった受け取りを続ける
                                                  --relink <印> [--prefer local|remote] = サーバーの履歴が変わって止まった後に、見比べて選んで結び直す
                                                  --account <利用者の ID> = 利用者の記録が無い結び付けを、表示された利用者のものとして続ける
+  sync --reconnect-restored <印> --actor human   削除記録の復元先へ結び直し、手元の未送信編集と比較する
+  remote trash | delete|restore <ID> [--server URL]  削除済み一覧 / 削除・復元の確認。確定は --confirm <印> --actor human
   login [--server <URL>] [--name <端末の名前>]   (試験中) 同期サーバーにサインインする (GitHub のアカウント。表示されたコードを、ブラウザで入力する)
   logout [--server <URL>] / whoami [--server <URL>]  サインアウトする (サーバー側のトークンも取り消す) / 今の利用者・端末・保存量を出す
   unlock [--remove --lock-token <印> --actor human]  残った保存ロックの状態 (持ち主・判定) を出す (読むだけ。AI も使える)。--remove は人が解除する:
@@ -435,6 +438,8 @@ Usage (npx boxglow <command> ...):
                                                  --recover <token> --applied|--not-applied = continue an interrupted pull
                                                  --relink <token> [--prefer local|remote] = after the server's history changed: compare, choose and bind again
                                                  --account <account id> = continue a binding that has no account recorded, as the account shown
+  sync --reconnect-restored <token> --actor human  Reconnect the original file to its restored plan and compare unsent edits
+  remote trash | delete|restore <ID> [--server URL]  List trash / preview delete or restore; confirm with --confirm <token> --actor human
   login [--server <URL>] [--name <device name>]  (experimental) Sign in to a sync server (GitHub account; enter the code shown in your browser)
   logout [--server <URL>] / whoami [--server <URL>]  Sign out (also revokes the token on the server) / show the current account, devices and storage
   unlock [--remove --lock-token <token> --actor human]  Show a leftover save lock (owner and verdict; read-only, agents may use it). --remove is for a person:
@@ -1283,6 +1288,16 @@ if (argv[0] === "mcp") {
     if (code === 1) throw new Error(lines.join("\n"));
     return lines.join("\n");
   }).catch((e) => { console.error(`[boxglow mcp] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });
+} else if (argv[0] === "remote") {
+  const {positional,options}=parseArgs(argv.slice(1));
+  (async()=>{
+    setLang(explicitLang(options) ?? "ja");
+    const known=new Set(["server","lang","actor","confirm","cursor"]);
+    if(Object.keys(options).some(k=>!known.has(k)) || positional.length > 2) throw new Error("boxglow remote trash | delete|restore <ID> [--server URL] [--confirm token --actor human]");
+    const {server}=selectSyncServer(undefined,str(options.server));
+    if(!server) throw new Error(t("サーバーが決まっていません。--server <URL> を指定してください"));
+    process.exitCode=await runLifecycle({server,command:positional[0],id:positional[1],actor:str(options.actor),confirm:str(options.confirm),cursor:str(options.cursor)},console.log);
+  })().catch(e=>{console.error(e.message);process.exitCode=1;});
 } else if (argv[0] === "login" || argv[0] === "logout" || argv[0] === "whoami") {
   // 同期サーバーへのサインイン (通信と、利用者の操作を待つので、ほかのコマンドとは別扱い)
   const { options } = parseArgs(argv.slice(1));
@@ -1315,7 +1330,7 @@ if (argv[0] === "mcp") {
     const file = locateFile(str(options.file));
     try { setLang(explicitLang(options) ?? load(file).lang ?? "ja"); } catch { /* 読めない計画でも、止まった理由は表示する */ }
     // 知らない指定 (まだ無い --watch など) を、黙って「1 回の同期」として実行しない
-    const known = new Set(["file", "lang", "actor", "watch", "server", "project", "adopt", "restore", "resolve", "link", "prefer", "recover", "applied", "not-applied", "account", "relink", "block", "settings", "choices-file"]);
+    const known = new Set(["file", "lang", "actor", "watch", "server", "project", "reconnect-restored", "adopt", "restore", "resolve", "link", "prefer", "recover", "applied", "not-applied", "account", "relink", "block", "settings", "choices-file"]);
     const unknown = Object.keys(options).filter((k) => !known.has(k));
     if (unknown.length > 0) { out(t("boxglow sync が知らない指定です: {list}", { list: unknown.map((k) => "--" + k).join(", ") })); process.exitCode = 1; return; }
     process.exitCode = await (options.watch ? runWatchCommand : runSyncCommand)({
@@ -1323,6 +1338,7 @@ if (argv[0] === "mcp") {
     , actor: str(options.actor)
     , rawArgs: argv.slice(1)
     , server: str(options.server)
+    , reconnectRestored: str(options["reconnect-restored"])
     , project: str(options.project)
     , adopt: str(options.adopt)
     , restore: str(options.restore)

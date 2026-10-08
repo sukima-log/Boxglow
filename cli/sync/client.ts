@@ -40,6 +40,7 @@ export type SyncResult =
     ; recovery?: { token: string; applied: RecoveryOutcome; notApplied: RecoveryOutcome }
       /** 結び直しの見比べ (サーバーの履歴が変わって止まったとき・結び直しの途中で選び直しになったとき) */
     ; relink?: RelinkPreview
+    ; reconnect?: { remoteId:string; token:string }
       /** 結び直しの控えを置いた場所 (この実行で結び直しを始めていた場合) */
     ; relinkBackup?: string
       /** 止まる前に、この実行で行ったこと (受け取って手元に書いた回数、送って受理された回数、手元だけを書き換えた回数) */
@@ -79,6 +80,12 @@ export type ClientHalt =
 
 /** サーバーとの通信の失敗 (やりかけの操作は残したまま。後でやり直せる) */
 export class SyncNetworkError extends Error {}
+/** 入力: 不正な同期先。通信や状態を変更せず、設定を直すまで再試行しない理由を返す。 */
+export class SyncConfigurationError extends Error {
+  constructor(server: string) {
+    super(t("同期先の設定が正しくありません。https の URL にしてください (localhost の http を除く): {server}", { server }) + "\n" + t("古い http の結び付けがある場合は、全端末の同期を止め、計画と同期状態を控えてから移行してください。手順: docs/SYNC_START.md「HTTPからHTTPSへの移行」。URLだけを変えて再試行しても移行できません。"));
+  }
+}
 /** サーバーが利用者を確かめられなかった (トークンが無い・無効・権限が無い)。待っても直らないので、通信の失敗とは分ける */
 export class SyncAuthError extends SyncNetworkError {
   constructor(readonly status: number) { super(`not authorized (${status})`); }
@@ -112,6 +119,8 @@ export interface SyncOptions {
   remoteId?: string;
   /** 一覧から開く操作は、存在しないIDへの新規送信へ変えない。 */
   requireRemote?: boolean;
+  /** 削除記録で確認した復元先へ、人が元ファイルを結び直す選択。 */
+  reconnectRestored?: string;
   /** アクセストークン (開発用のサーバーでは省ける) */
   token?: string;
   /** 人が承認した「保護する項目の削除」の印 */
@@ -222,7 +231,7 @@ async function settleOperation(o: { server: string; remoteId: string; token?: st
  */
 export async function fetchHeads(o: { server: string; token?: string; fetch?: typeof fetch }): Promise<{ epoch: string; account: string; heads: Map<string, { revision: string | null; deleted: boolean }> }> {
   const problem = serverProblem(o.server);
-  if (problem) throw new SyncNetworkError(problem);
+  if (problem) throw new SyncConfigurationError(o.server);
   let res: Response;
   try { res = await (o.fetch ?? fetch)(`${normalizeServer(o.server)}/v1/projects`, { headers: headers(o.token), redirect: "error" }); } catch (e) { throw new SyncNetworkError(String(e)); }
   rejectUnauthorized(res);
@@ -294,7 +303,7 @@ async function sendPush(o: { server: string; remoteId: string; token?: string; f
  */
 export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
   const problem = serverProblem(options.server);
-  if (problem) throw new SyncNetworkError(problem);
+  if (problem) throw new SyncConfigurationError(options.server);
   const now = options.now ?? (() => new Date());
   const doFetch = options.fetch ?? fetch;
   const server = normalizeServer(options.server);
@@ -308,7 +317,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
   let relinkBackup: string | undefined;
   // 送信・確定の応答で「履歴の世代が変わった」と分かって、読み直しに回ったか (1 回の実行で 1 度だけ読み直す)
   let historyRetried = false;
-  const halted = (halt: Halt | ClientHalt, extra: { recovery?: { token: string; applied: RecoveryOutcome; notApplied: RecoveryOutcome }; relink?: RelinkPreview } = {}): SyncResult =>
+  const halted = (halt: Halt | ClientHalt, extra: { recovery?: { token: string; applied: RecoveryOutcome; notApplied: RecoveryOutcome }; relink?: RelinkPreview; reconnect?: {remoteId:string;token:string} } = {}): SyncResult =>
     ({ status: "halted", halt, pulled, pushed, edited, target, localHash: lastLocal, ...(relinkBackup ? { relinkBackup } : {}), ...extra, ...generation() });
   // (ロックの中で最後に読んだ・書いた状態の世代番号。結果に付ける)
   const generation = (): { stateGeneration?: number } => (stored?.generation === undefined ? {} : { stateGeneration: stored.generation });
@@ -325,7 +334,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
     const elsewhere = known.bindings.find((b) => b.server !== server);
     if (elsewhere) return halted({ reason: "bound-elsewhere", server: elsewhere.server });
     if (options.humanActions === false && (
-      options.resolution || options.firstLink || options.relink || options.recover || options.approvedDeletion || options.restoreDeletion || options.confirmAccount
+      options.reconnectRestored || options.resolution || options.firstLink || options.relink || options.recover || options.approvedDeletion || options.restoreDeletion || options.confirmAccount
       || !known.bindings.some(b => b.server === server)
     )) throw new HumanSyncRequired();
     const store = new StateStore(bindingDir(file, server));
@@ -386,6 +395,27 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
         }
         if (stored.binding.account !== account) return halted({ reason: "account-mismatch", bound: stored.binding.account, actual: account });
       } else binding = { ...binding, account };
+      // 削除IDは再利用しない。削除記録から復元先を見つけ、明示選択時だけローカルの結び付けを替える。
+      if (remote.kind === "deleted" && stored) {
+        const restoredId = await restoredTarget(remoteOptions,account,remote.epoch);
+        const reconnect = restoredId ? {remoteId:restoredId,token:hashOf(JSON.stringify(["reconnect-restored",stored,lastLocal,account,remote.epoch,restoredId])).slice(0,32)} : undefined;
+        if (!reconnect || options.reconnectRestored !== reconnect.token || round !== 0) return halted({reason:"remote-deleted"},{reconnect});
+        const destination = await fetchRemote({...remoteOptions,remoteId:reconnect.remoteId});
+        if(destination.account !== account) return halted({reason:"account-mismatch",bound:account,actual:destination.account});
+        if(destination.remote.kind !== "present" || destination.remote.epoch !== remote.epoch) return halted({reason:"remote-deleted"});
+        // 未送信・未確定の操作を新IDへ流用しない。元の状態・手元・基準・操作の本文を先に退避する。
+        const files:Record<string,string>={"state.json":JSON.stringify(stored,null,2),"remote.json":destination.remote.content.text};
+        if(local) files["local.json"]=local.text;
+        if(state.base) {const text=store.getObject(state.base.hash);if(text!==null) files["base.json"]=text;}
+        if(state.pending) {const text=store.getObject(state.pending.hash);if(text!==null) files["pending-content.json"]=text;}
+        relinkBackup=store.putRelinkBackup(`${now().toISOString().replace(/[:.]/g,"-")}-${randomUUID()}`,files,{kind:"restored-target",server,file,account,from:binding.remoteId,to:reconnect.remoteId});
+        await options.onStep?.("reconnect:backup");
+        save({generation:state.generation+1,epoch:destination.remote.epoch,base:null,pending:null},{file,server,remoteId:reconnect.remoteId,account,planId:planId ?? ""});
+        await options.onStep?.("reconnect:started");
+        // 初回のlink比較をそのまま使う。差があれば選択待ち。同じなら基準だけ確定する。
+        continue;
+      }
+      if(options.reconnectRestored && round === 0) return halted({reason:"choice-not-applied",choice:"relink"});
       const bindingId = bindingIdOf(store.dir, binding.remoteId, account);
       // ---- 止まっている「受け取りの再開」に、人の選択が渡されたら進める ----
       // サーバーを取得してから照合する: 印は、表示したときの状態・手元・サーバーの位置に結び付いている。どれかが変わっていたら進めない
@@ -570,6 +600,28 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
     unlock?.();
     unlockFile();
   }
+}
+
+/** 本文や任意のID入力を使わず、同じアカウント・世代の削除記録だけから復元先を取得する。 */
+async function restoredTarget(o:{server:string;remoteId:string;token?:string;fetch:typeof fetch},account:string,epoch:string):Promise<string|null> {
+  let cursor="";const seen=new Set<string>();
+  for(let page=0;page<1000;page++) {
+    let res:Response;
+    try { res=await o.fetch(`${o.server}/v1/trash?limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,{headers:o.token ? {authorization:`Bearer ${o.token}`} : {},redirect:"error",signal:AbortSignal.timeout(30000)}); }
+    catch(e) { throw new SyncNetworkError(String(e)); }
+    rejectUnauthorized(res);
+    if([404,405,501].includes(res.status)) return null;
+    if(!res.ok) throw new SyncNetworkError(`trash lookup failed (${res.status})`);
+    if(accountOf(res)!==account || res.headers.get("x-boxglow-epoch")!==epoch) return null;
+    let data:{projects?:{id:string;restoredId?:string|null}[];nextCursor?:string|null};
+    try { data=await res.json(); } catch(e) { throw new SyncNetworkError(`could not read the response body: ${String(e)}`); }
+    if(!data || !Array.isArray(data.projects)) return null;
+    const entry=data.projects.find(p=>p && p.id===o.remoteId);
+    if(entry) return typeof entry.restoredId === "string" && entry.restoredId.length>0 && entry.restoredId.length<=256 && entry.restoredId!==o.remoteId ? entry.restoredId : null;
+    if(typeof data.nextCursor!=="string" || !data.nextCursor || seen.has(data.nextCursor)) return null;
+    cursor=data.nextCursor;seen.add(cursor);
+  }
+  return null;
 }
 
 /** 受け取りを書けたと確かめたときの結び付け: 仮の ID があれば、結び付けの ID として確定する */
