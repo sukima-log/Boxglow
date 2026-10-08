@@ -1120,7 +1120,6 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .bg-block.is-overview:not(.selected):not(.has-wrapped-title) .bg-block__title { font-size: 18px; line-height: 18px; }
 .bg-block.is-overview:not(.selected) .bg-block__meta > .meta-chip { font-size: 13px; }
 .bg-block.is-overview:not(.selected) .bg-block__meta > .status-icon { width: 16px; height: 16px; }
-.canvas-density-label { font-size: 11px; padding: 0 8px; color: var(--text-muted); }
 .summary-chip .summary-decision { padding: 4px 8px; background: var(--attention-bg); color: var(--attention-text); border-radius: 6px; }
 .wire-state { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .wire-state::before { content: ""; width: 28px; border-top: 2px dashed var(--wire); }

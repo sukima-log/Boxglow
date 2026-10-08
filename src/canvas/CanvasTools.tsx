@@ -73,7 +73,6 @@ export function CanvasTools({ snap, onSnap, showMap, onMap }: { snap: boolean; o
     </Panel>}
     <Panel position="bottom-left" className="canvas-tools">
       <div className="canvas-tools__buttons" role="group" aria-label={t("キャンバスの表示")}>
-        <span className="canvas-density-label">{zoom < 0.65 && !canEdit ? t("俯瞰表示") : t("通常表示")}</span>
         <button onClick={() => void rf.zoomOut()} title={t("縮小")} aria-label={t("縮小")}>−</button>
         <button onClick={() => void rf.zoomTo(1)} title={t("100% で文字を読む")} aria-label={t("100% で文字を読む")}>{Math.round(zoom * 100)}%</button>
         <button onClick={() => void rf.zoomIn()} title={t("拡大")} aria-label={t("拡大")}>＋</button>
