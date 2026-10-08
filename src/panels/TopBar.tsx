@@ -189,7 +189,12 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
         {!readonly && (
           <button className="mode-toggle" data-on={editMode} onClick={() => setEditMode(!editMode)} title={editMode ? t("Edit モード: ドラッグで移動・結線・階層移動ができます。押すと View (閲覧) に") : t("View モード: ドラッグでの編集は効きません。押すと Edit に")}>
             <span className="mode-toggle__knob" />
-            <span>{editMode ? "Edit" : "View"}</span>
+            {/* 2 つの語を同じ升目に重ね、今のモードでないほうを見えなくする (幅は長いほうに固定)。
+                押すたびに札の幅が変わると、帯が折り返したり戻ったりして表示が揺れるため */}
+            <span className="mode-toggle__label">
+              <span aria-hidden={!editMode} data-active={editMode}>Edit</span>
+              <span aria-hidden={editMode} data-active={!editMode}>View</span>
+            </span>
           </button>
         )}
         <div className="relative topbar-search">
@@ -214,9 +219,9 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
         </div>
         {!readonly && (
           <>
-            {/* よく使う編集の操作は帯に出す (通常の幅)。760px 以下では帯から外し、⋯ メニューの中に同じ操作を出す (index.css の .desktop-action / .menu-actions) */}
+            {/* よく使う編集の操作は帯に出す (通常の幅)。760px 以下では帯から外し、⋯ メニューの中に同じ操作を出す (index.css の .desktop-action / .menu-actions)。
+                Auto Layout は帯に置かず、いつも ⋯ メニューに入れる (モードで出し入れすると帯の幅が変わり、折り返しが切り替わって表示が揺れるため) */}
             <button className="btn btn-primary btn-sm desktop-action" onClick={addSibling} title={t("ブロックを追加 (N)。ボックスを選んでいればその中に、選んでいなければプロジェクトの中に")}>+ Block</button>
-            <button className="btn btn-sm desktop-action layout-action" onClick={autoLayout} title={t("Auto Layout: 依存関係で並べ直す (大項目は畳んだ前提)")}>Auto Layout</button>
             <button className="btn btn-ghost btn-sm desktop-action" onClick={undo} disabled={past === 0} title={t("元に戻す (Ctrl+Z)")} aria-label="Undo">↶</button>
             <button className="btn btn-ghost btn-sm desktop-action" onClick={redo} disabled={future === 0} title={t("やり直す (Ctrl+Y)")} aria-label="Redo">↷</button>
           </>
@@ -228,10 +233,13 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
               {/* 編集の操作: 帯に出せない狭い幅 (760px 以下) のときだけ、ここに出す (通常の幅では帯のボタンを使う) */}
               {!readonly && <div className="menu-actions">
                 <button className="btn btn-primary btn-sm" onClick={addSibling}>+ Block</button>
-                <button className="btn btn-sm layout-action" onClick={autoLayout}>Auto Layout</button>
                 <button className="btn btn-ghost btn-sm" onClick={undo} disabled={past === 0}>Undo</button>
                 <button className="btn btn-ghost btn-sm" onClick={redo} disabled={future === 0}>Redo</button>
               </div>}
+              {/* Auto Layout: 幅やモードに関係なく、いつもメニューのこの位置に出す */}
+              {!readonly && (
+                <button className="btn btn-ghost btn-sm justify-start layout-action" onClick={autoLayout} title={t("Auto Layout: 依存関係で並べ直す (大項目は畳んだ前提)")}>Auto Layout</button>
+              )}
               {!readonly && (
                 <button className="btn btn-ghost btn-sm justify-start" onClick={addProject} title={t("同じファイルにプロジェクトのボックスを足す")}>New Project</button>
               )}

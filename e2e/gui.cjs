@@ -1,6 +1,6 @@
 /**
  * 画面の部品の検査: 幅 320 / 390 / 768 / 1280px で上の帯の操作が画面内に収まること、
- * 通常の幅では Auto Layout と Undo / Redo が帯に出て、狭い幅では ⋯ メニューに入ること、質問が詳細パネルの先頭に出ること、
+ * 通常の幅では Undo / Redo が帯に出て (Auto Layout はいつも ⋯ メニュー)、Edit / View の切り替えで帯の形が変わらず、狭い幅では ⋯ メニューに入ること、質問が詳細パネルの先頭に出ること、
  * 別のボックスを選んでも詳細パネルのタブを保つこと、Activity の Resume タブ、保存の競合で左右を比べて選べること。
  * 使い方: e2e/run.sh から呼ばれる (PLAYWRIGHT と LD_LIBRARY_PATH は run.sh が設定。プレビューが 4173 番で動いていること)
  */
@@ -19,16 +19,29 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
         return controls.every(e=>{const r=e.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth+1;});
       }));
     }
-    // 閲覧では配置操作をメニューにまとめ、編集時には帯に戻す。
-    check('閲覧時: Auto Layout は帯に出さない',!await page.locator('.desktop-action.layout-action').isVisible());
+    // Auto Layout はモードに関係なく ⋯ メニューにある (帯に出し入れすると帯の幅が変わり、折り返しが切り替わって揺れるため)
+    const inBar=()=>page.evaluate(()=>[...document.querySelectorAll('.topbar-tools > button')].some(e=>e.textContent==='Auto Layout'&&e.getClientRects().length>0));
+    check('閲覧時: Auto Layout は帯に出さない',!await inBar());
     await page.locator('.topbar button[title="Menu"]').click();
-    check('閲覧時: メニューから Auto Layout に到達できる',await page.locator('.menu-actions .layout-action').isVisible());
+    check('閲覧時: メニューから Auto Layout に到達できる',await page.getByRole('button',{name:'Auto Layout',exact:true}).isVisible());
+    await page.locator('.topbar button[title="Menu"]').click(); // もう一度押してメニューを閉じる
+    // Edit / View を切り替えても、帯の高さ・モード札の幅・右端の要素の位置が変わらない (幅 1280 と、折り返しの境目に近い幅で確かめる)
+    const barBox=()=>page.evaluate(()=>{const r=(s)=>{const e=document.querySelector(s);if(!e)return null;const b=e.getBoundingClientRect();return [Math.round(b.left),Math.round(b.top),Math.round(b.width),Math.round(b.height)];};return JSON.stringify([r('.topbar'),r('.mode-toggle'),r('.topbar-search'),r('.topbar button[title="Menu"]')]);});
+    for (const width of [1280,1100,1000,900]) {
+      await page.setViewportSize({width,height:844});await page.waitForTimeout(150);
+      const before=await barBox();
+      await page.locator('.mode-toggle').click();await page.waitForTimeout(150);
+      const after=await barBox();
+      await page.locator('.mode-toggle').click();await page.waitForTimeout(150);
+      check(`上の帯 ${width}px: Edit / View を切り替えても帯の形が変わらない`,before===after,`${before} / ${after}`);
+    }
+    await page.setViewportSize({width:1280,height:844});
     await page.locator('.mode-toggle').click();
-    // 編集時の通常幅: よく使う編集の操作は帯に出ている
-    check('上の帯 1280px: Auto Layout と Undo / Redo が帯に出ている',await page.evaluate(()=>{
+    // 編集時の通常幅: よく使う編集の操作 (Undo / Redo) は帯に出ていて、Auto Layout は帯に出ない
+    check('上の帯 1280px: Undo / Redo が帯に出ていて、Auto Layout はメニューにある',await page.evaluate(()=>{
       const vis=(sel)=>[...document.querySelectorAll(sel)].some(e=>e.getClientRects().length>0);
-      return vis('.topbar-tools > button.desktop-action[aria-label="Undo"]') && vis('.topbar-tools > button.desktop-action[aria-label="Redo"]') && [...document.querySelectorAll('.topbar-tools > button.desktop-action')].some(e=>e.textContent==='Auto Layout'&&e.getClientRects().length>0);
-    }));
+      return vis('.topbar-tools > button.desktop-action[aria-label="Undo"]') && vis('.topbar-tools > button.desktop-action[aria-label="Redo"]');
+    }) && !await inBar());
     check('上の帯 1280px: プロジェクト名と保存先が出ている',await page.locator('.project-name').isVisible() && await page.locator('.save-chip').isVisible());
     await page.setViewportSize({width:390,height:844});
     await search.fill('B5'); await search.press('Enter');
@@ -56,7 +69,7 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.getByRole('button',{name:/^Resume/}).click();
     check('Resume タブ: AI 未確認の回答が残り、サンプルの引き継ぎメモ (バックエンド) が出る',await page.getByText(/ノートの一覧・作成・削除の API まで実装済み/).first().isVisible() && await page.getByText('静的ホスティング',{exact:true}).isVisible());
     await page.locator('.topbar button[title="Menu"]').click();
-    check('狭い幅 (390px): 追加・Auto Layout・Undo / Redo は ⋯ メニューの中にある',await page.locator('.menu-actions').getByRole('button',{name:'+ Block',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Auto Layout',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Undo',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Redo',exact:true}).isVisible());
+    check('狭い幅 (390px): 追加・Auto Layout・Undo / Redo は ⋯ メニューの中にある',await page.locator('.menu-actions').getByRole('button',{name:'+ Block',exact:true}).isVisible() && await page.getByRole('button',{name:'Auto Layout',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Undo',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Redo',exact:true}).isVisible());
     check('画面: 実行時のエラーが無い',errors.length===0,errors.join(';'));
     await page.context().close();
 

@@ -783,6 +783,10 @@ textarea.input { resize: vertical; min-height: 64px; }
 .mode-toggle__knob { width: 16px; height: 16px; border-radius: 999px; background: var(--line-soft); transition: background 0.15s ease; }
 .mode-toggle[data-on="true"] { background: var(--primary-soft); border-color: var(--primary); color: var(--primary-strong); }
 .mode-toggle[data-on="true"] .mode-toggle__knob { background: var(--primary); }
+/* Edit / View の札: 2 語を同じ升目に重ねて、長いほうの幅に固定する (切り替えても帯の幅が変わらない) */
+.mode-toggle__label { display: inline-grid; }
+.mode-toggle__label > span { grid-area: 1 / 1; }
+.mode-toggle__label > span[data-active="false"] { visibility: hidden; }
 /* ドラッグ中に落とせるボックス */
 .bg-block.drop-target { box-shadow: 0 0 0 4px var(--accent); }
 
@@ -1042,7 +1046,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .topbar-identity { flex: 1 1 360px; }
 .topbar-tools { flex: 0 1 auto; }
 .topbar-search { flex: 0 1 200px; }
-/* ⋯ メニューの中の編集の操作 (+ Block・Auto Layout・Undo・Redo): 帯に出せない狭い幅 (760px 以下) のときだけ出す。
+/* ⋯ メニューの中の編集の操作 (+ Block・Undo・Redo。Auto Layout は幅に関係なくいつもメニューにある): 帯に出せない狭い幅 (760px 以下) のときだけ出す。
    通常の幅では帯にボタンがあるので、メニューには出さない (同じ操作を 2 か所に置かない) */
 .menu-actions { display: none; flex-direction: column; gap: 4px; }
 .save-chip { border: none; background: var(--bg-paper); }
@@ -1125,11 +1129,6 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .wire-state::before { content: ""; width: 28px; border-top: 2px dashed var(--wire); }
 .wire-state[data-ready="true"]::before { border-top: 4px solid var(--wire-ready); }
 .wire-reason { font-size: 12px; color: var(--text-muted); padding: 8px 0; }
-@media (min-width: 761px) {
-  .topbar[data-editing="false"] .desktop-action.layout-action { display: none; }
-  .topbar[data-editing="false"] .menu-actions { display: flex; }
-  .topbar[data-editing="false"] .menu-actions > button:not(.layout-action) { display: none; }
-}
 @media (prefers-reduced-motion: reduce) { .bg-block.just-glowed { animation: none; } }
 
 /* ---- 画面からの同期の印と欄 (SyncPanel) ---- */

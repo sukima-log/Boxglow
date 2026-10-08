@@ -17,7 +17,7 @@ const settle=p=>p.waitForTimeout(500);
    const {page:p,errors}=await open(browser,{query:`?demo=1&lang=ja&theme=${theme}`});
    await p.setViewportSize({width:1120,height:720});
    await p.getByRole('tab',{name:'In Progress 実装する',exact:true}).click();await settle(p);
-   check(`${theme}: 最初の画面はミニマップを隠し、Auto Layout は閲覧時に帯から隠す`,!await p.getByRole('button',{name:'ミニマップ',exact:true}).isVisible() && await p.locator('.react-flow__minimap').count()===0 && !await p.locator('.topbar-tools > button.desktop-action').filter({hasText:/^Auto Layout$/}).isVisible());
+   check(`${theme}: 最初の画面はミニマップを隠し、Auto Layout は帯に出さない (いつも ⋯ メニュー)`,!await p.getByRole('button',{name:'ミニマップ',exact:true}).isVisible() && await p.locator('.react-flow__minimap').count()===0 && !await p.locator('.topbar-tools > button.desktop-action').filter({hasText:/^Auto Layout$/}).isVisible());
    // ボックスと線の見た目 (縮小しても状態と線の種類が見分けられる約束): 計算後のスタイルで確かめる
    const look=await p.evaluate(()=>{
      const css=(sel,prop,pseudo)=>{const e=document.querySelector(sel);return e?getComputedStyle(e,pseudo)[prop]:null;};
