@@ -155,9 +155,13 @@ export function buildSampleProject(): Project {
   , [be.blockId]: { note: "ノートの一覧・作成・削除の API まで実装済み。次は認証 (方式は「公開する」の判断の後で決める)。テストは test/api に追加している。", actor: "claude-code", at: new Date().toISOString() }
   };
 
-  // 最上位の入力のまとまり (入力グループ): 資料をまとめて扱う
-  const group = addInputGroup(p, "資料");
-  p = setInputGroup(group.project, rin.portId, group.groupId);
+  // 最上位の入力のまとまり (入力グループ): 企画の資料を、テストデータなどの入力とは別のノードに分ける。
+  // グループに入れられるのは最上位 (ROOT) の入力だけ。プロジェクトのボックスの入力 (rin) ではなく、
+  // それに線でつながっている最上位の「企画メモ」を入れる (入れ損ねると空のグループだけが浮いて見える)
+  const group = addInputGroup(p, "企画の資料");
+  p = group.project;
+  const planInput = portsOf(p, ROOT_ID, "in").find((x) => x.name === "企画メモ");
+  if (planInput) p = setInputGroup(p, planInput.id, group.groupId);
 
   // AI の受け持ち (計画ごとに有効にする): 並行して動く AI が、互いのボックスを書き換えないようにする
   // 同じ Claude Code でも、実行 ID (instanceId) が違えば別の書き手 (サブエージェント)。期限は開いた時刻から 30 分

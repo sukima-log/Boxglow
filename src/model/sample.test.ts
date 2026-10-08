@@ -14,6 +14,10 @@ describe("サンプルプロジェクト", () => {
     // 自動で引き上げられた入力 (テストデータ) が最上位の入力に現れる
     const rootIns = portsOf(p, ROOT_ID, "in");
     expect(rootIns.some((q) => q.name === "テストデータ" && q.promotedFrom)).toBe(true);
+    // 入力グループは中身があること (空のグループだけが浮いていると、壊れた表示に見える)
+    for (const g of p.inputGroups ?? []) {
+      expect(rootIns.some((q) => q.groupId === g.id)).toBe(true);
+    }
     const nodes = buildNodes(p, { selectedBlockId: null, readonly: false });
     const edges = buildEdges(p, { selectedEdgeId: null });
     // (ボックス - root + Inputs と Outputs + 入力のグループの箱)
