@@ -76,6 +76,8 @@ export class SyncHost {
   private readonly enabled = new Set<string>();
   /** 計画ごとの、最後の同期の結果 */
   private readonly results = new Map<string, { result: SyncResult | { status: "error"; error: unknown }; at: number; credentials: string }>();
+  /** 人の選択で実際に作った控え。後続の監視結果で消さず、このホストの同じ資格情報でだけ表示する。 */
+  private readonly localBackups = new Map<string, { path: string; credentials: string }>();
   private watcher: SyncWatcher | null = null;
   private unlockWatch: (() => void) | null = null;
   private owner: SyncStatus["owner"] = "none";
@@ -653,6 +655,7 @@ export class SyncHost {
       const token = this.resolveCredentials()?.token;
       const result = await syncOnce({ file, server: this.server, token, fetch: this.doFetch, now: () => new Date(this.wall()), ...extra });
       this.results.set(file, { result, at: this.wall(), credentials });
+      if ("localBackup" in result && result.localBackup) this.localBackups.set(file, { path: result.localBackup, credentials });
       this.rememberSuccessfulSync(file);
       // (この資格情報で同期できた: 同じ世代の認証の失敗は解ける。R40-05)
       if (this.authProblem === credentials) this.authProblem = null;
@@ -710,6 +713,7 @@ export class SyncHost {
     const status: SyncStatus = {
       session: this.session, seq: ++this.seq, support: this.support, credentials, owner: this.owner,
       server: this.server, isDefaultServer: isDefaultSyncServer(this.server), destinationPicker:this.options.destinationPicker,
+      ...(real && this.localBackups.get(real)?.credentials === this.credentialsGeneration() ? {localBackup:this.localBackups.get(real)!.path} : {}),
       ...(real && this.lifecycles.get(real)?.credentials === this.credentialsGeneration() ? {lifecycle:this.lifecycles.get(real)!.state} : {}),
       ...(real && this.startups.has(real) ? {startup:(( {credentials:_,...safe} ) => safe)(this.startups.get(real)!)} : {})
     , file: real ? { path: real, enabled, binding } : null

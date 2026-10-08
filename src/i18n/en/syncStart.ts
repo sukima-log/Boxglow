@@ -1,5 +1,6 @@
 /** 同期開始と計画一覧の文言。認可はホストに任せ、画面には公開情報だけを出す。 */
 export const syncStart: Record<string, string> = {
+  "置き換え前の手元の編集を保存しました。控え: {path}": "Saved your local edits before replacing the file. Backup: {path}",
   "復元した計画 {id} に結び直す": "Reconnect to restored plan {id}",
   "この操作は人の確認が必要です。対象と影響を要約し、人に画面またはCLIで確認を依頼してください。": "This operation requires a person to confirm. Summarize the target and impact, and ask them to confirm in the UI or CLI.",
   "削除した計画も30日間は保存量に含まれます。": "Deleted plans still count toward storage for 30 days.",

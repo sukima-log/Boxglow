@@ -28,6 +28,8 @@ export type SyncResult =
   | { status: "synced"; pulled: number; pushed: number; edited: number; revision: string | null
       /** この実行で結び直しをした場合の、控えを置いた場所 */
     ; relinkBackup?: string
+      /** この実行で実際に作成した、置き換え前のファイルの控え */
+    ; localBackup?: string
       /** ロックの中で最後に確かめた状態の世代番号 (SyncResultWithGeneration を参照) */
     ; stateGeneration?: number
       /** 「そろった」と確かめたときの、手元の中身のハッシュ (ファイルが無ければ null)。この後でファイルが変わっていたら、その変更はまだ送られていない */
@@ -43,6 +45,8 @@ export type SyncResult =
     ; reconnect?: { remoteId:string; token:string }
       /** 結び直しの控えを置いた場所 (この実行で結び直しを始めていた場合) */
     ; relinkBackup?: string
+      /** この実行で実際に作成した、置き換え前のファイルの控え */
+    ; localBackup?: string
       /** 止まる前に、この実行で行ったこと (受け取って手元に書いた回数、送って受理された回数、手元だけを書き換えた回数) */
     ; pulled: number; pushed: number; edited: number
       /** 表示するコマンドに付ける、同期の対象 (サーバー・サーバー側の計画の ID・ファイル) */
@@ -315,10 +319,11 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
   let lastLocal: string | null | undefined;
   // この実行で置いた、結び直しの控えの場所 (結果に入れて、表示する)
   let relinkBackup: string | undefined;
+  let localBackup: string | undefined;
   // 送信・確定の応答で「履歴の世代が変わった」と分かって、読み直しに回ったか (1 回の実行で 1 度だけ読み直す)
   let historyRetried = false;
   const halted = (halt: Halt | ClientHalt, extra: { recovery?: { token: string; applied: RecoveryOutcome; notApplied: RecoveryOutcome }; relink?: RelinkPreview; reconnect?: {remoteId:string;token:string} } = {}): SyncResult =>
-    ({ status: "halted", halt, pulled, pushed, edited, target, localHash: lastLocal, ...(relinkBackup ? { relinkBackup } : {}), ...extra, ...generation() });
+    ({ status: "halted", halt, pulled, pushed, edited, target, localHash: lastLocal, ...(relinkBackup ? { relinkBackup } : {}), ...(localBackup ? { localBackup } : {}), ...extra, ...generation() });
   // (ロックの中で最後に読んだ・書いた状態の世代番号。結果に付ける)
   const generation = (): { stateGeneration?: number } => (stored?.generation === undefined ? {} : { stateGeneration: stored.generation });
   // 同じファイルを扱う同期は、サーバーが違っても 1 つだけ (下の「別のサーバーに結び付いていないか」の確認と、結び付けの作成の間に割り込ませない)
@@ -451,7 +456,7 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
       }
       switch (decision.kind) {
         case "noop":
-          return { status: "synced", pulled, pushed, edited, revision: state.base?.revision ?? null, localHash: local?.hash ?? null, ...(relinkBackup ? { relinkBackup } : {}), ...generation() };
+          return { status: "synced", pulled, pushed, edited, revision: state.base?.revision ?? null, localHash: local?.hash ?? null, ...(relinkBackup ? { relinkBackup } : {}), ...(localBackup ? { localBackup } : {}), ...generation() };
         case "relink": {
           // ---- 結び直しを始める: 控えを取る → 状態を 1 回で置き換える。その先 (受け取り・送り) は、次の判断が、記録に従って決める ----
           // 控えに入れるのは、判断に使った中身そのもの (読み直さない。読み直すと、人が見比べたものと違う中身を「控え」にしてしまう)
@@ -524,7 +529,11 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
           for (const c of decision.keep) store.putObject(c.text);
           // 初めての結び付けでサーバーの側を採るときは、置き換える前に、今の手元の中身を退避する。
           // 退避は、操作を記録する前に行う (退避に失敗したら、何も記録せずにエラーで終わる。「書けたか分からない操作」を残さない)
-          if (decision.backup && local !== null) copyFileSync(file, `${file}.before-sync-${local.hash.slice(0, 8)}.json`);
+          if (decision.backup && local !== null) {
+            const backup = `${file}.before-sync-${local.hash.slice(0, 8)}.json`;
+            copyFileSync(file, backup);
+            localBackup = backup;
+          }
           // 初めての結び付けなら、これから手元に書く中身 (検査済み) の計画の ID を、仮の ID として操作と一緒に記録する。
           // 書けたと確かめたとき (この後すぐ、または次の実行で「書けていた」と分かったとき) に、結び付けの ID として確定する。
           // 書かなかったと分かったときは捨てる (結び付けの ID は、受け取りの前のまま)

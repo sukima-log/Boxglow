@@ -78,6 +78,8 @@ export interface SyncStatus {
     nextCursor?:string|null;
     preview?:{kind:"delete"|"restore";id:string;name:string;account:string;revision:string;expiresAt?:string;targetId?:string};
   };
+  /** このホストで作成した、置き換え前のローカルファイルの控え。 */
+  localBackup?: string;
   /** 1 行の補足 */
   message?: string;
 }

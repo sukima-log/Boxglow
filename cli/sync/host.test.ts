@@ -963,3 +963,28 @@ describe("段階Dレビューの回帰", () => {
     await host.stop();
   });
 });
+
+
+it("E3: サーバーを採った後も実際の控えを表示し、後続同期で消さず別ファイル・資格情報へ混ぜない", async () => {
+  signedIn();
+  const source = planFile("backup-remote");
+  await syncOnce({file:source.file,server:server.url,remoteId:"backup-plan",token:"test"});
+  const {file}=planFile("backup-local"),original=readFileSync(file,"utf8");
+  const {host}=make();host.openFile(file);
+  try {
+    const op=(await host.act(file,{kind:"beginSync"})).startup!;
+    await host.act(file,{kind:"continueStart",operationId:op.operationId,intent:"existing"});
+    let status=await host.act(file,{kind:"openProject",operationId:op.operationId,projectId:"backup-plan",destination:"current"});
+    expect(status.localBackup).toBeUndefined();
+    const choice=status.halt!.items.find(x=>x.kind==="choice" && x.action.kind==="link" && x.action.prefer==="remote");
+    if(!choice || choice.kind!=="choice") throw new Error("missing server choice");
+    status=await host.act(file,{kind:"choose",choiceId:status.halt!.choiceIds[choice.id]});
+    expect(status.state).toBe("synced");expect(status.localBackup).toContain(".before-sync-");
+    expect(readFileSync(status.localBackup!,"utf8")).toBe(original);
+    expect(read(file).name).toBe("backup-remote");
+    expect((await host.act(file,{kind:"syncNow"})).localBackup).toBe(status.localBackup);
+    await advance(host,40000);expect(host.status(file).localBackup).toBe(status.localBackup);
+    expect(host.status(source.file).localBackup).toBeUndefined();
+    signedIn("another-account");expect(host.status(file).localBackup).toBeUndefined();
+  } finally {await host.stop();}
+});

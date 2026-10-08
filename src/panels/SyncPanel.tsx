@@ -241,6 +241,11 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
             )}
         </div>
       )}
+      {status.localBackup && (
+        <div role="status" className="sync-panel__line break-all">
+          {t("置き換え前の手元の編集を保存しました。控え: {path}", { path: status.localBackup })}
+        </div>
+      )}
       {status.halt && (
         <div className="sync-panel__halt">
           {status.halt.review && status.halt.resolutionChoiceId ? (
