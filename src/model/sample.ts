@@ -144,8 +144,10 @@ export function buildSampleProject(): Project {
   // 外部の課題 (GitHub の issue など) へのリンク: ボックスに番号の札が出る
   p.blocks[be.blockId].issue = "https://github.com/example/notes/issues/12";
 
-  // 結合テストは、別のサブエージェントが準備中だが、テストデータが無くて詰まっている
-  p = setActivity(p, it.blockId, "claude-code", "blocked", "テストデータの置き場所が決まっていない");
+  // 結合テストは、別のサブエージェントが準備中だが、テスト環境が動かなくて詰まっている。
+  // 詰まりは「計画の外の障害」だけに使う。テストデータのような入力の不足は、詰まりにせず
+  // 入力の配線 (Inputs からの「待ち」の線) で表す。両方に書くと同じことを二重に示してしまう
+  p = setActivity(p, it.blockId, "claude-code", "blocked", "テスト用のデータベースに接続できない (接続先の設定が無い)");
 
   // 引き継ぎメモ (中断・交代のときに、次の担当が読む): 活動ログとは別に残る
   p.handoffs = {

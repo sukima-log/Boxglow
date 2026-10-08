@@ -25,7 +25,7 @@ Do not edit it directly; update it with `npx boxglow`.
 3. Split a large box with `npx boxglow split <block> --spec '<JSON>'` (see `npx boxglow help` for the format). Always decide the output of each box
 4. When the deliverable exists, run `npx boxglow done <block> --artifact "<name>=<URL or path>"` (with the guard on, add `--context-token <context token>`; if your previous command printed "New context token: <token>", use that one)
 5. When a human decision is needed, run `npx boxglow ask <block> "<question>" --options "A|B"` and move on to another box
-6. When you are stuck, run `npx boxglow blocked <block> --note "<what is in the way>"`
+6. When you are stuck: If the cause is a missing input (a deliverable of an earlier box, or material), do not mark the box as blocked. Check its input wires with `npx boxglow show <block>`; if no box produces what is missing, create one outside (upstream) with `npx boxglow add` and wire it to this box's input with `npx boxglow connect` (the wire stays in the waiting color, so the diagram shows what the box is waiting for). If a choice between options would let you continue, use `ask`. Record only obstacles outside the plan (an environment that does not work, missing permissions or keys, waiting for an outside reply, a failure with no known cause) with `npx boxglow blocked <block> --note "<what is in the way>"`
 7. Before an interruption, context compaction or a handoff, save a handoff note with `npx boxglow checkpoint <block> --note "Findings; next steps; unresolved questions"`
 8. At the end, summarize `npx boxglow status --brief` and report it
 

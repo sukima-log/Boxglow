@@ -25,7 +25,7 @@ description: Boxglow (boxglow.json) で計画と進捗を人間と共有する�
 3. 大きいボックスは `npx boxglow split <block> --spec '<JSON>'` で分解する (形式は `npx boxglow help`)。各ボックスの出力を必ず決める
 4. 成果物ができたら `npx boxglow done <block> --artifact "<名前>=<URL またはパス>"` (guard が有効なら `--context-token <確認トークン>` を付ける。直前の自分の操作の出力に「新しい確認トークン: <token>」が出ていれば、それを使う)
 5. 人間の判断が要るときは `npx boxglow ask <block> "<質問>" --options "A|B"` して他のボックスへ移る
-6. 詰まったら `npx boxglow blocked <block> --note "<困っていること>"`
+6. 詰まったら: 入力 (前のボックスの成果物・資料) が足りないことが原因なら、詰まりにしない。`npx boxglow show <block>` で入力の配線を確かめ、足りないものを作るボックスが無ければ `npx boxglow add` で外 (上流) に作り、`npx boxglow connect` でこのボックスの入力につなぐ (配線が「待ち」の色で残り、何を待っているかが図で見える)。選択肢から選んでもらえば進めるなら `ask`。それ以外の、計画の外にある障害 (環境が動かない、権限やキーが無い、外部の返事待ち、原因の分からない失敗) だけを `npx boxglow blocked <block> --note "<困っていること>"` で記録する
 7. 中断・コンテキストの圧縮・引き継ぎの前に `npx boxglow checkpoint <block> --note "分かったこと; 次にすること; 未解決のこと"` で引き継ぎメモを残す
 8. 最後に `npx boxglow status --brief` を要約して報告する
 

@@ -106,7 +106,7 @@ export const report: Record<string, string> = {
 , "完了にする。成果物 (名前=パスか URL) を付ける。Git のファイルなら commit+path+blob が記録される": "Mark as done. Attach deliverables (name=path or URL). For files in Git, commit+path+blob is recorded"
 , "名前=パス または 名前=URL": "name=path or name=URL"
 , "出力の名前を変えるとき": "To rename the output"
-, "詰まった (困っていることを書いて他のボックスへ移る)": "Boxed (write what is in the way and move on to another box)"
+, "詰まった (計画の外の障害。困っていることを書いて他のボックスへ移る。入力が足りないだけなら、作るボックスを add して connect する)": "Stuck on an obstacle outside the plan (write what is in the way and move on to another box. If only an input is missing, add a box that produces it and connect it instead)"
 , "人の判断が要る質問を残す (選択肢付き)。質問だけで判断できるように、前提・比較・影響を context に書く。AI が自分で選ぶときも ask して answer (by=claude-code) で記録する": "Leave a question that needs a human decision (with options). Put the premises, comparison and impact in context so the question can be decided on its own. When the AI chooses by itself, also ask and then record it with answer (by=claude-code)"
 , "判断に答える (人がチャットで答えたら by=human で記録)": "Answer a decision (if a human answered in chat, record it with by=human)"
 , "human / claude-code など": "human / claude-code etc."

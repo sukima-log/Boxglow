@@ -25,7 +25,7 @@ boxglow.json はリポジトリ直下に置く (`npx boxglow init --name "<プ�
    HEAD にコミット済みで内容が一致するファイルは「コミット + パス + 中身のハッシュ」で記録される (アップロードはしない)。未コミット・未追跡のファイルはローカル参照として残り、コミットした後の `npx boxglow check` で Git の参照に補完される。記録のためだけにコミットしない。全階層が必要なら `npx boxglow status` を読む。PR や外部資料は URL でもよい。
    成果物だけ先に付けるなら `npx boxglow artifact <block> <パス>`。進捗の途中経過は `npx boxglow set <block> --progress 60`
 5. **人間の判断が要る**: `npx boxglow ask <block> "<質問>" --options "A|B"`。回答があるまでそのボックスは進めず、他のボックスへ移る。人の回答は `status` の「回答あり」に出る。読んだら `npx boxglow ack <block>` で引き取る (そのボックスの `start` / `done` / `set` などでも自動で引き取られる)。引き取るまで人の画面には「AI 未確認」として残り、人が答えを直せる。回答の中に問い返しがあれば、`ask` と `answer --by <自分>` で自分の答えも記録する
-6. **詰まったら**: `npx boxglow blocked <block> --note "<困っていること>"`
+6. **詰まったら**: 入力 (前のボックスの成果物・資料) が足りないことが原因なら、詰まりにしない。`npx boxglow show <block>` で入力の配線を確かめ、足りないものを作るボックスが無ければ `npx boxglow add` で外 (上流) に作り、`npx boxglow connect` でこのボックスの入力につなぐ (配線が「待ち」の色で残り、何を待っているかが図で見える)。選択肢から選んでもらえば進めるなら `ask`。それ以外の、計画の外にある障害 (環境が動かない、権限やキーが無い、外部の返事待ち、原因の分からない失敗) だけを `npx boxglow blocked <block> --note "<困っていること>"` で記録する
 7. **成果物の確認**: ファイルを移動・改名したら `npx boxglow check` を実行する (移動を検出してパスを付け替える。見つからなければ印が付く)
 8. **中断・引き継ぎの前に**: セッションの終わり・コンテキストの圧縮・他の AI や人への引き継ぎの前に、`npx boxglow checkpoint <block> --note "分かったこと; 次にすること; 未解決のこと"` で引き継ぎメモを残す (guard が有効なら `--context-token <確認トークン>` を付ける)。会話の履歴が消えても計画の中に残り、次のセッションが `resume` と `context` で読む
 9. **報告**: 作業の最後に `npx boxglow status --brief` の内容を要約して報告する
