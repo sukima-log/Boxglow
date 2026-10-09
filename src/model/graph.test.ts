@@ -3,7 +3,8 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  addBlock
+  newId
+, addBlock
 , addPort
 , ancestorsOf
 , answerDecision
@@ -1012,5 +1013,12 @@ describe("normalizeInputNames: 古い食い違いをそろえる", () => {
     expect(r.renamed).toBe(1);
     expect(r.project.ports[bIn.id].name).toBe("CLI と手順");
     expect(normalizeInputNames(r.project).renamed).toBe(0);
+  });
+});
+
+// id の先頭が「-」にならないこと (「--」で始まる id は CLI でオプションと読み違えられ、指定できなくなるため)
+describe("newId", () => {
+  it("先頭が「-」の id を作らない (2 万個作って確かめる)", () => {
+    for (let i = 0; i < 20000; i++) expect(newId().startsWith("-")).toBe(false);
   });
 });

@@ -387,7 +387,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <題名>] [--note <説明>] [--category <カテゴリ>|none] [--repo <パス>|none] [--issue <URL>|none]
               [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <時間>|none] [--hours <実績時間>|none]
   find <文字>                                    ID や題名でボックスを探す
-  list --assignee <名前> | --unassigned [--all] [--json]   担当の一覧を表で出す (既定は未完了だけ。--all で完了済みも。並びは期日の近い順)
+  list --assignee <名前> | --unassigned | --everyone [--all] [--json]   担当の一覧を表で出す (既定は未完了だけ。--all で完了済みも。並びは期日の近い順)
   group <名前>                                   最上位の入力グループを作る (例: "PCIe 仕様書")
   group-set <入力名> <グループ名|none>            最上位の入力をグループに入れる / 外す
   group-export <グループ名> [--out <path>]        グループを JSON に書き出す (他のプロジェクトで group-import)
@@ -488,7 +488,7 @@ Usage (npx boxglow <command> ...):
   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <title>] [--note <description>] [--category <category>|none] [--repo <path>|none] [--issue <URL>|none]
               [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <hours>|none] [--hours <actual hours>|none]
   find <text>                                    Find boxes by ID or title
-  list --assignee <name> | --unassigned [--all] [--json]   List assigned boxes as a table (open ones by default; --all adds done ones; sorted by due date)
+  list --assignee <name> | --unassigned | --everyone [--all] [--json]   List assigned boxes as a table (open ones by default; --all adds done ones; sorted by due date)
   group <name>                                   Create a top-level input group (e.g. "PCIe spec")
   group-set <input name> <group name|none>       Put a top-level input into a group / take it out
   group-export <group name> [--out <path>]       Write a group out as JSON (group-import it in another project)
@@ -879,13 +879,14 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       return;
     }
     case "list": {
-      // 担当の一覧: --assignee <名前か id> のメンバーの担当、または --unassigned で担当のいないボックスを、Markdown の表で出す (--json で JSON)
+      // 担当の一覧: --assignee <名前か id> のメンバーの担当、--unassigned で担当のいないボックス、--everyone で全員分を、Markdown の表で出す (--json で JSON)
       // 画面の「表で見る」と同じ行 (src/model/assignments.ts)。既定は未完了だけ、--all で完了済みも
       let target: AssigneeTarget;
-      if (options.unassigned) target = { unassigned: true };
+      if (options.everyone) target = { everyone: true };
+      else if (options.unassigned) target = { unassigned: true };
       else {
         const who = str(options.assignee);
-        if (!who) throw new Error(t("--assignee <名前> か --unassigned を指定してください (メンバー: {names})", { names: p.members.map((m) => m.name).join(", ") || t("(なし)") }));
+        if (!who) throw new Error(t("--assignee <名前>、--unassigned、--everyone のどれかを指定してください (メンバー: {names})", { names: p.members.map((m) => m.name).join(", ") || t("(なし)") }));
         const m = p.members.find((x) => x.id === who) ?? p.members.find((x) => x.name === who);
         if (!m) throw new Error(t("メンバー「{name}」が見つかりません (メンバー: {names})", { name: who, names: p.members.map((x) => x.name).join(", ") || t("(なし)") }));
         target = { memberId: m.id };
@@ -895,10 +896,12 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       if (rows.length === 0) { out(options.all ? t("担当のボックスはありません") : t("未完了の担当のボックスはありません")); return; }
       // 表の中の | は区切りと紛れるので、全角に置き換える
       const cell = (v: string) => v.replace(/\|/g, "｜").replace(/\s*\n\s*/g, " ");
+      // 全員のときだけ、誰の担当かの列を足す
+      const who = "everyone" in target;
       const lines = [
-        `| ID | ${t("題名")} | ${t("場所")} | ${t("状態")} | ${t("進捗")} | ${t("期日")} | ${t("見積")} | ${t("入力")} | ${t("判断待ち")} |`
-      , "|---|---|---|---|---:|---|---:|---|---:|"
-      , ...rows.map((r) => `| ${r.key} | ${cell(r.title)} | ${cell(r.where)} | ${STATUS_LABEL[r.status]} | ${r.progress}% | ${r.dueDate ?? ""}${r.overdue ? ` (${t("期日切れ")})` : ""} | ${r.estimateHours !== undefined ? `${r.estimateHours}h` : ""} | ${r.status === "white" ? "" : r.missingInputs.length ? cell(t("待ち: {names}", { names: r.missingInputs.join(", ") })) : t("そろった")} | ${r.pendingDecisions || ""} |`)
+        `| ID | ${t("題名")} | ${t("場所")} | ${who ? `${t("担当")} | ` : ""}${t("状態")} | ${t("進捗")} | ${t("期日")} | ${t("見積")} | ${t("入力")} | ${t("判断待ち")} |`
+      , `|---|---|---|${who ? "---|" : ""}---|---:|---|---:|---|---:|`
+      , ...rows.map((r) => `| ${r.key} | ${cell(r.title)} | ${cell(r.where)} | ${who ? `${cell(r.assignees.join(", ") || t("未担当"))} | ` : ""}${STATUS_LABEL[r.status]} | ${r.progress}% | ${r.dueDate ?? ""}${r.overdue ? ` (${t("期日切れ")})` : ""} | ${r.estimateHours !== undefined ? `${r.estimateHours}h` : ""} | ${r.status === "white" ? "" : r.missingInputs.length ? cell(t("待ち: {names}", { names: r.missingInputs.join(", ") })) : t("そろった")} | ${r.pendingDecisions || ""} |`)
       ];
       out(lines.join("\n"));
       return;

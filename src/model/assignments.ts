@@ -5,8 +5,8 @@
 import { ancestorsOf, effectiveProgress, kindOf, missingRequiredInputs } from "./graph";
 import { ROOT_ID, type BlockStatus, type Project } from "./types";
 
-/** 誰の担当を出すか: メンバーの id / 未担当 */
-export type AssigneeTarget = { memberId: string } | { unassigned: true };
+/** 誰の担当を出すか: メンバーの id / 未担当 / 全員 (担当の有無を問わず、すべてのタスク) */
+export type AssigneeTarget = { memberId: string } | { unassigned: true } | { everyone: true };
 
 /** 表の 1 行 */
 export interface AssignmentRow {
@@ -29,11 +29,13 @@ export interface AssignmentRow {
   missingInputs: string[];
   /** 未回答の判断 (人への質問) の数 */
   pendingDecisions: number;
+  /** 担当のメンバーの名前 (登録の順。担当がいなければ空) */
+  assignees: string[];
 }
 
 /**
  * 担当のボックスを、表の行として取り出す
- * Input : p = 計画, target = 誰の担当か (メンバーの id、または未担当),
+ * Input : p = 計画, target = 誰の担当か (メンバーの id、未担当、または全員),
  *         opts.includeDone = true なら完了済み (Done) も含める (既定は含めない),
  *         opts.today = 今日 (YYYY-MM-DD。期日を過ぎたかの判定。省略時は実行環境の今日)
  * Output: 行の配列。並びは「期日の近い順 (期日の無いものは後ろ)」→「B 番号の順」。
@@ -45,8 +47,10 @@ export function assignmentRows(p: Project, target: AssigneeTarget, opts: { inclu
   for (const b of Object.values(p.blocks)) {
     // タスクだけ (最上位とプロジェクトのボックスは、担当を付けても一覧には出さない)
     if (b.id === ROOT_ID || kindOf(b) === "project") continue;
-    // 担当の判定: メンバーの担当か、担当がいないか
-    const mine = "memberId" in target ? b.assigneeIds.includes(target.memberId) : b.assigneeIds.length === 0;
+    // 担当の判定: メンバーの担当か、担当がいないか (全員なら判定しない)
+    const mine = "memberId" in target ? b.assigneeIds.includes(target.memberId)
+      : "unassigned" in target ? b.assigneeIds.length === 0
+      : true;
     if (!mine) continue;
     if (b.status === "white" && !opts.includeDone) continue;
     // 場所: 先祖の題名を外側から並べる (最上位とプロジェクトのボックスは除く)
@@ -65,6 +69,8 @@ export function assignmentRows(p: Project, target: AssigneeTarget, opts: { inclu
       // 入力の待ち: 完了済みは、もう材料を待たないので空にする
     , missingInputs: b.status === "white" ? [] : missingRequiredInputs(p, b.id).map((q) => q.name)
     , pendingDecisions: b.decisions.filter((d) => d.answer === undefined).length
+      // 担当の名前: 登録の順にそろえる (消えたメンバーの id は飛ばす)
+    , assignees: p.members.filter((m) => b.assigneeIds.includes(m.id)).map((m) => m.name)
     });
   }
   return rows.sort(compareRows);

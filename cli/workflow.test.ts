@@ -146,6 +146,11 @@ describe("担当の一覧 (list)",()=>{
     const json=JSON.parse(cli("list","--assignee","さとう","--json").stdout);
     expect(json).toHaveLength(1);
     expect(json[0]).toMatchObject({title:"対象",dueDate:"2026-10-20",missingInputs:["仕様書"]});
+    // 全員: 担当の列が足され、担当のいないボックスは「未担当」と出る
+    const all=cli("list","--everyone");
+    expect(all.status,all.stderr).toBe(0);
+    expect(all.stdout).toContain("| ID | 題名 | 場所 | 担当 | 状態 |");
+    expect(all.stdout).toMatch(/\| 対象 \|.*\| さとう \|/);
     const unknown=cli("list","--assignee","すずき");
     expect(unknown.status).not.toBe(0);
     expect(unknown.stderr).toContain("さとう");

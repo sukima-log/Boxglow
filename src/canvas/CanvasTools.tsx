@@ -128,7 +128,7 @@ export function CanvasTools({ snap, onSnap, showMap, onMap, fit, readFromTop }: 
  * 図の左下の操作欄と、表を出しているときの左下の両方に、同じ場所・同じ形で置く (表から図へも同じ場所で戻れる)
  * Input : なし (状態は store から読む) / Output: 3 つのボタンの組
  *   - 横・縦: 表を出していれば閉じて図に戻る。方向の切り替えは View のときだけ (Edit は保存した配置で編集するため)
- *   - 表: 出していなければ、自分 (Set as me) → 最初のメンバー → 未担当 の順で、最初の対象を決めて開く。出していれば閉じる
+ *   - 表: 出していなければ、自分 (Set as me) が決まっていれば自分、決まっていなければ全員で開く。出していれば閉じる
  */
 export function ViewSwitch() {
   useLang(); // 言語が変わったら描き直す
@@ -148,8 +148,8 @@ export function ViewSwitch() {
   const toggleTable = () => {
     if (table) { setTaskTable(null); return; }
     const { meId, project } = useProjectStore.getState();
-    const first = meId ?? project?.members[0]?.id;
-    setTaskTable(first ? { memberId: first } : { unassigned: true });
+    // 自分が決まっていて、まだ計画にいるなら自分。そうでなければ全員 (メンバーの登録が無い計画でも、すべてのタスクの一覧になる)
+    setTaskTable(meId && project?.members.some((m) => m.id === meId) ? { memberId: meId } : { everyone: true });
   };
   const directionTitle = (label: string) => (canEdit && !table ? t("フローの方向はViewで切り替えます") : label);
   return (

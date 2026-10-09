@@ -1675,6 +1675,8 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .task-table tbody tr:hover, .task-table tbody tr:focus-visible { background: var(--primary-soft); outline: none; }
 .task-table__title { font-weight: 700; min-width: 160px; }
 .task-table__where { color: var(--text-muted); min-width: 120px; }
+.task-table__assignees { min-width: 96px; }
+.task-table__none { color: var(--text-muted); }
 .task-table__status { white-space: nowrap; }
 .task-table__status.gray { color: var(--primary-strong); font-weight: 700; }
 .task-table__status.white { color: var(--text-muted); }

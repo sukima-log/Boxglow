@@ -74,10 +74,13 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('Claims タブ: 受け持ちが実行 ID・残り時間つきで期限の近い順に並ぶ',claimRows.length===3 && /release-worker/.test(claimRows[0]) && claimRows.every((x)=>/残り \d+ 分/.test(x)) && claimRows.some((x)=>/api-worker/.test(x)) && claimRows.some((x)=>/test-worker/.test(x)),JSON.stringify(claimRows));
     await page.locator('.claim-list .tree-row',{hasText:'api-worker'}).click();await page.waitForTimeout(300);
     check('Claims タブ: 行を押すとそのボックス (バックエンド) が選ばれる',await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title;})==='バックエンド');
-    // 担当の一覧 (表、In charge): 左下の表示の切り替えの表の記号 → さとう (自分を決めていないので最初のメンバー) の未完了 2 件 → 完了済みも表示で 4 件 → 行を押すと図に戻ってそのボックスを選ぶ
+    // 担当の一覧 (表、In charge): 左下の表示の切り替えの表の記号 → 自分を決めていないので「全員」(担当の列つき) → さとうに切り替えて未完了 2 件 → 完了済みも表示で 4 件 → 行を押すと図に戻ってそのボックスを選ぶ
     await page.evaluate(()=>window.boxglow.store.getState().select({}));
     await page.locator('.canvas-tools .view-switch__table').first().click();await page.waitForTimeout(300);
     check('担当の一覧: 表を出している間も、左下の同じ切り替えが表示され、表の記号が押された状態',await page.locator('.task-table-view__switch .view-switch__table').getAttribute('aria-pressed')==='true');
+    check('担当の一覧: 自分を決めていなければ「全員」で開き、担当の列が出る',await page.locator('.task-table-view select').inputValue()==='__everyone' && await page.locator('.task-table thead').getByRole('button',{name:/^担当/}).count()===1 && await page.locator('.task-table tbody tr').count()===4,String(await page.locator('.task-table tbody tr').count()));
+    await page.locator('.task-table-view select').selectOption({label:'さとう'});await page.waitForTimeout(300);
+    check('担当の一覧: 1 人を選ぶと担当の列は出ない',await page.locator('.task-table thead').getByRole('button',{name:/^担当/}).count()===0);
     const tableRows=(await page.locator('.task-table tbody tr').allInnerTexts()).map((x)=>x.replace(/\s+/g,' ').trim());
     check('担当の一覧: さとうの未完了の担当が期日の近い順に並ぶ (期日の無いものは後ろ)',tableRows.length===2 && /^B4 実装する/.test(tableRows[0]) && /^B7 バックエンド/.test(tableRows[1]),JSON.stringify(tableRows));
     await page.locator('.task-table-view__toggle input').check();
@@ -86,6 +89,7 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.locator('.task-table-view__switch button[aria-label="横フロー"]').click();await page.waitForTimeout(300);
     check('担当の一覧: 横の記号で図に戻る',await page.locator('.task-table-view').count()===0);
     await page.locator('.canvas-tools .view-switch__table').first().click();await page.waitForTimeout(300);
+    await page.locator('.task-table-view select').selectOption({label:'さとう'});
     await page.locator('.task-table-view__toggle input').check();
     await page.locator('.task-table tbody tr',{hasText:'バックエンド'}).click();await page.waitForTimeout(500);
     check('担当の一覧: 行を押すと図に戻り、そのボックスが選ばれる',await page.locator('.task-table-view').count()===0 && await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title;})==='バックエンド');

@@ -11,7 +11,7 @@ import { t, useLang } from "../i18n";
 import { ViewSwitch } from "../canvas/CanvasTools";
 
 /** 並べ替えに使う列 (既定は期日の近い順) */
-type SortKey = "due" | "key" | "title" | "where" | "status" | "progress" | "estimate" | "inputs" | "decisions";
+type SortKey = "due" | "key" | "title" | "where" | "assignees" | "status" | "progress" | "estimate" | "inputs" | "decisions";
 
 /** 状態の並び (New → In Progress → Done) */
 const STATUS_ORDER = { black: 0, gray: 1, white: 2 } as const;
@@ -27,6 +27,7 @@ function compareBy(key: SortKey, x: AssignmentRow, y: AssignmentRow): number {
       case "key": return 0;
       case "title": return x.title.localeCompare(y.title);
       case "where": return x.where.localeCompare(y.where);
+      case "assignees": return x.assignees.join(", ").localeCompare(y.assignees.join(", "));
       case "status": return STATUS_ORDER[x.status] - STATUS_ORDER[y.status];
       case "progress": return x.progress - y.progress;
       case "estimate": return (x.estimateHours ?? Infinity) - (y.estimateHours ?? Infinity);
@@ -48,19 +49,20 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
   const select = useProjectStore((s) => s.select);
   const focusBlock = useProjectStore((s) => s.focusBlock);
   const meId = useProjectStore((s) => s.meId);
-  // 対象: 選択肢の値は「メンバーの id」か「未担当」を表す "__unassigned"
-  const [target, setTarget] = useState<string>("memberId" in initial ? initial.memberId : "__unassigned");
+  // 対象: 選択肢の値は「メンバーの id」か、「全員」を表す "__everyone"、「未担当」を表す "__unassigned"
+  const [target, setTarget] = useState<string>("memberId" in initial ? initial.memberId : "everyone" in initial ? "__everyone" : "__unassigned");
   const [includeDone, setIncludeDone] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "due", desc: false });
-  // 対象のメンバーが計画から消えた (別の端末や AI の編集) ときは、未担当に切り替える
+  // 対象のメンバーが計画から消えた (別の端末や AI の編集) ときは、全員に切り替える
   const member = project.members.find((m) => m.id === target);
-  const effective: AssigneeTarget = member ? { memberId: member.id } : { unassigned: true };
+  const everyone = !member && target !== "__unassigned";
+  const effective: AssigneeTarget = member ? { memberId: member.id } : everyone ? { everyone: true } : { unassigned: true };
   const rows = useMemo(() => {
     const list = assignmentRows(project, effective, { includeDone });
     const sorted = [...list].sort((x, y) => compareBy(sort.key, x, y));
     return sort.desc ? sorted.reverse() : sorted;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project, member?.id, includeDone, sort]);
+  }, [project, member?.id, everyone, includeDone, sort]);
 
   // Esc で図に戻る (入力欄で使っているときは除く)
   useEffect(() => {
@@ -94,7 +96,8 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
       <header className="task-table-view__head">
         <h2>In charge</h2>
         {/* 対象: 自分 (Set as me) を先頭に、他のメンバー、未担当 */}
-        <select className="input" aria-label={t("誰の担当")} value={member ? member.id : "__unassigned"} onChange={(e) => setTarget(e.target.value)}>
+        <select className="input" aria-label={t("誰の担当")} value={member ? member.id : everyone ? "__everyone" : "__unassigned"} onChange={(e) => setTarget(e.target.value)}>
+          <option value="__everyone">{t("全員")}</option>
           {[...project.members].sort((a, b) => Number(b.id === meId) - Number(a.id === meId)).map((m) => (
             <option key={m.id} value={m.id}>{m.id === meId ? t("{name} (自分)", { name: m.name }) : m.name}</option>
           ))}
@@ -117,6 +120,8 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
                 {head("key", "ID")}
                 {head("title", t("題名"))}
                 {head("where", t("場所"))}
+                {/* 全員のときだけ、誰の担当かの列を出す (1 人を選んでいるときは全部その人なので出さない) */}
+                {everyone && head("assignees", t("担当"))}
                 {head("status", t("状態"))}
                 {head("progress", t("進捗"), "num")}
                 {head("due", t("期日"))}
@@ -131,6 +136,7 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
                   <td><span className="dec-key">{r.key}</span></td>
                   <td className="task-table__title">{r.title}</td>
                   <td className="task-table__where">{r.where}</td>
+                  {everyone && <td className="task-table__assignees">{r.assignees.length ? r.assignees.join(", ") : <span className="task-table__none">{t("未担当")}</span>}</td>}
                   <td><span className={`task-table__status ${r.status}`}>{STATUS_LABEL[r.status]}</span></td>
                   <td className="num">{r.progress}%</td>
                   {/* 期日を過ぎた未完了は、色と言葉で示す (色だけに頼らない) */}

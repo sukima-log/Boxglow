@@ -36,8 +36,17 @@ import {
 /** ログに残す上限 (古いものから落とす) */
 export const LOG_LIMIT = 500;
 
-/** id を作る (短い英数字) */
-export const newId = (): string => nanoid(10);
+/**
+ * id を作る (短い英数字と - _ の 10 文字)
+ * Input : なし / Output: 新しい id
+ * 先頭が「-」の id は作り直す。CLI は「--」で始まる引数をオプションとして読むため、
+ * 「--」で始まる id は CLI で指定できなくなる (約 4,000 個に 1 個起きていた)。既存のファイルの id は変えない
+ */
+export const newId = (): string => {
+  let id = nanoid(10);
+  while (id.startsWith("-")) id = nanoid(10);
+  return id;
+};
 
 /** 現在時刻の ISO 文字列 */
 const now = (): string => new Date().toISOString();

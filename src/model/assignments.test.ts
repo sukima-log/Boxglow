@@ -38,6 +38,13 @@ describe("担当の一覧", () => {
     expect(assignmentRows(p, { memberId: tanaka }, { today: "2026-10-09" })[0]).toMatchObject({ title: "D", overdue: true });
     expect(assignmentRows(p, { unassigned: true }, { today: "2026-10-09" }).map((r) => r.title)).toEqual(["E"]);
   });
+  it("全員では、担当の有無を問わずすべてのタスクを出し、担当の名前を添える", () => {
+    const { p } = fixture();
+    const rows = assignmentRows(p, { everyone: true }, { today: "2026-10-09" });
+    // 期日の近い順: D (10/05) → A (10/20) → 期日なし (B, E。B 番号の順)。C は完了済みなので出ない
+    expect(rows.map((r) => r.title)).toEqual(["D", "A", "B", "E"]);
+    expect(rows.map((r) => r.assignees)).toEqual([["たなか"], ["さとう"], ["さとう"], []]);
+  });
   it("場所・入力の待ち・判断待ちの数を出す", () => {
     let { p, ids, sato } = fixture();
     // A の中に子を作り、必須の入力 (供給元なし) と未回答の質問を付ける
