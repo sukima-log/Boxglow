@@ -22,6 +22,7 @@ import { applyRestore, editorCaughtUp, prepareRestore, readRecovery, type Recove
 import { buildSampleProject } from "../model/sample";
 import exampleText from "../../examples/logic-daw/boxglow.json?raw";
 import type { Project } from "../model/types";
+import type { AssigneeTarget } from "../model/assignments";
 import type { HostAction, SyncStatus } from "../sync/status";
 import { deleteProject, listProjects, loadProject, saveProject, type ProjectMeta } from "../lib/storage";
 import { t, useLang } from "../i18n"; // 画面に出す文言 (toast など) の言語切替
@@ -176,6 +177,12 @@ interface State {
   /** 「自分」として選んだメンバー id (ブラウザごとに記憶。プロジェクトごと) */
   meId: string | null;
   setMe: (memberId: string | null) => void;
+  /**
+   * 担当の一覧 (表) を図の代わりに出しているか。値は最初に出す対象 (メンバー / 未担当)。null なら図を出す。
+   * 画面だけの状態で、ファイルには書かない (開き直すと図に戻る)
+   */
+  taskTable: AssigneeTarget | null;
+  setTaskTable: (target: AssigneeTarget | null) => void;
   /** Edit モード (ドラッグでの移動・結線・階層移動と Del キーが効く)。View なら閲覧と選択だけ。プロジェクトごとに記憶 */
   editMode: boolean;
   setEditMode: (on: boolean) => void;
@@ -838,6 +845,8 @@ export const useProjectStore = create<State>((set, get) => {
   , future: []
   , toast: null
   , meId: null
+  , taskTable: null
+  , setTaskTable: (taskTable) => set({ taskTable })
   , editMode: false
   , setEditMode: (on) => set(on ? { editMode: true, viewCollapsed: {} } : { editMode: on }) // 記憶しない (開くたびに View から)。Edit に入るときは画面だけの畳みを捨てて共有の配置を見せる
   , setMe: (memberId) => {

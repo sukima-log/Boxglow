@@ -47,6 +47,7 @@ import { Drawer, isFilterEmpty, matchesFilter, type Filter, EMPTY_FILTER } from 
 import { RestoreNotice, SaveNotice } from "./panels/SaveNotice";
 import { VersionInfo } from "./panels/VersionInfo";
 import { TopBar } from "./panels/TopBar";
+import { TaskTable } from "./panels/TaskTable";
 import { TreePanel } from "./panels/TreePanel";
 import { TabBar } from "./panels/TabBar";
 
@@ -55,6 +56,8 @@ export function App() {
   const project = useProjectStore((s) => s.project);
   const shown = useShownProject(); // View モードの畳む / 展開を反映した描画用
   const embed = useProjectStore((s) => s.embed);
+  // 担当の一覧 (表) を図の代わりに出しているか (出しているなら、最初に出す対象)
+  const taskTable = useProjectStore((s) => s.taskTable);
   const readonly = useProjectStore((s) => s.readonly);
   const toast = useProjectStore((s) => s.toast);
   const setToast = useProjectStore((s) => s.setToast);
@@ -267,6 +270,8 @@ export function App() {
               <FlowCanvas project={shown ?? project} matcher={matcher} panelLayoutKey={`${treeOpen}:${drawerOpen}:${drawerW}:${hasSelection}:${rightW}:${embed}`} />
             </ReactFlowProvider>
           )}
+          {/* 担当の一覧 (表): 図の上に重ねて出す (図は残すので、戻ったときの倍率と位置は変わらない) */}
+          {project && taskTable && !embed && <TaskTable project={project} initial={taskTable} />}
           {project && drawerOpen && !embed && <Drawer project={shown ?? project} filter={filter} onFilter={setFilter} onClose={() => setDrawerOpen(false)} width={drawerW} />}
           {/* 引き出しの右辺のつまみ (引き出しは中が縦に伸びるので、外側 = 図の上に置く。left 8px + 幅) */}
           {project && drawerOpen && !embed && <ResizeHandle side="right" width={drawerW} min={DRAWER_W.min} max={DRAWER_W.max} onWidth={onDrawerW} style={{ left: 8 + drawerW - 5, top: 8, bottom: 8 }} />}

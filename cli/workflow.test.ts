@@ -129,3 +129,25 @@ it("MCPでも範囲・設定・理由・完了履歴を同じ規則で扱う",as
     expect(read().blocks[id].scope.goal).toBeUndefined();
   } finally {await client.close();}
 },15000);
+
+// 担当の一覧 (boxglow list): メンバーの名前で指定して Markdown の表で出す。存在しない名前はメンバーの一覧を添えて止める
+describe("担当の一覧 (list)",()=>{
+  it("--assignee の名前で担当を表にし、--json で同じ行を出し、知らない名前はメンバーを添えて失敗する",()=>{
+    const {cli,read,file}=fixture();
+    // メンバーを足して、対象のボックスの担当にする (CLI にメンバーの命令は無いので、ファイルを直接整える)
+    const p=read();p.members=[{id:"m1",name:"さとう",color:"#0d8080"}];
+    const target=Object.values(p.blocks as Record<string,{title:string;assigneeIds:string[];dueDate?:string}>).find(b=>b.title==="対象")!;
+    target.assigneeIds=["m1"];target.dueDate="2026-10-20";
+    writeFileSync(file,JSON.stringify(p,null,2));
+    const table=cli("list","--assignee","さとう");
+    expect(table.status,table.stderr).toBe(0);
+    expect(table.stdout).toContain("| ID | 題名 | 場所 | 状態 |");
+    expect(table.stdout).toMatch(/\| 対象 \|.*\| New \| 0% \| 2026-10-20 \|.*待ち: 仕様書/);
+    const json=JSON.parse(cli("list","--assignee","さとう","--json").stdout);
+    expect(json).toHaveLength(1);
+    expect(json[0]).toMatchObject({title:"対象",dueDate:"2026-10-20",missingInputs:["仕様書"]});
+    const unknown=cli("list","--assignee","すずき");
+    expect(unknown.status).not.toBe(0);
+    expect(unknown.stderr).toContain("さとう");
+  });
+});

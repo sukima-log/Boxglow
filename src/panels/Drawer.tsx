@@ -58,6 +58,7 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
   const focusBlock = useProjectStore((s) => s.focusBlock);
   const setToast = useProjectStore((s) => s.setToast);
   const meId = useProjectStore((s) => s.meId);
+  const setTaskTable = useProjectStore((s) => s.setTaskTable);
   const setMe = useProjectStore((s) => s.setMe);
   const [templates, setTemplates] = useState<BlockTemplate[]>([]);
   useEffect(() => {
@@ -139,6 +140,14 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
             {m.name}
           </button>
         ))}
+        {/* 担当の一覧を表で見る: 絞り込み中の担当 (無ければ自分、それも無ければ最初のメンバー) から始める。表を広く使うため引き出しは閉じる */}
+        {project.members.length > 0 && (
+          <button className="chip" onClick={() => {
+            const start = filter.unassigned ? { unassigned: true as const } : { memberId: filter.memberId ?? meId ?? project.members[0].id };
+            setTaskTable(start);
+            onClose();
+          }} title={t("担当のボックスを表で一覧にする")}>{t("表で見る")}</button>
+        )}
         <div className="label mt-3">Category</div>
         <div className="flex flex-wrap gap-1">
           {CATEGORIES.map((c) => (

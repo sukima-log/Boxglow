@@ -199,4 +199,7 @@ export const cli: Record<string, string> = {
 , "画面からの同期は、boxglow serve --sync で起動したときだけ使えます": "Sync from the UI is available only when started with boxglow serve --sync"
 , "要求が大きすぎます": "The request is too large"
 , "同期の操作として読めません": "Not a valid sync action"
+, "--assignee <名前> か --unassigned を指定してください (メンバー: {names})": "Specify --assignee <name> or --unassigned (members: {names})"
+, "メンバー「{name}」が見つかりません (メンバー: {names})": "Member \"{name}\" not found (members: {names})"
+, "待ち: {names}": "Waiting: {names}"
 };

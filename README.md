@@ -95,7 +95,7 @@ MCP provides `boxglow_context`, `boxglow_checkpoint`, and `contextToken` on guar
 | `export --out docs/ROADMAP.md` / `export --format json` | Write the whole plan as Markdown (or JSON) |
 | `check` / `artifact` | Re-find deliverables after renames; attach a deliverable without finishing |
 | `merge <base> <ours> <theirs>` / `git-setup` | Box-level 3-way merge for Git (see below) |
-| `blocked`, `review`, `leave`, `show`, `log`, `layout`, `validate`, `prompt`, `group*` | See `npx boxglow help` |
+| `blocked`, `review`, `leave`, `show`, `list`, `log`, `layout`, `validate`, `prompt`, `group*` | See `npx boxglow help` |
 
 ### Codex setup
 
@@ -201,7 +201,7 @@ Expanded boxes (containers) are drawn as frames: the shallower the level, the th
 - An input with no source is automatically promoted to the project's input (dashed line) until someone connects it.
 - Activity badges: CC (Claude Code) / CX (Codex) / human, states working / blocked / needs decision / waiting review. Decisions are answered in the UI and read back by the agent.
 - Ready inputs: a wire whose source already has a deliverable (or is done) is drawn thick and green, and the input name gets a dot, so you can see at a glance which inputs are available.
-- Me / unassigned: pick yourself in the drawer; your boxes get a teal stripe. Owners are not printed on boxes (open the box to see them); filter by owner or "unassigned" in the drawer.
+- Me / unassigned: pick yourself in the drawer; your boxes get a teal stripe. Owners are not printed on boxes (open the box to see them); filter by owner or "unassigned" in the drawer. "Table view" in the drawer lists one member's (or the unassigned) boxes as a sortable table with due dates, estimates, waiting inputs and open questions; `boxglow list --assignee <name>` prints the same table.
 - Decisions: `ask` records a question with candidates; the answer is kept together with the candidates that were not chosen, and `reopen` moves an answer to the history so you can change course later.
 - Issue link: a box can carry a JIRA / Redmine / GitHub issue URL (`--issue`, or the More tab); the key (PROJ-123, #45) is shown on the box and opens the issue.
 - Input groups: project inputs can be grouped (e.g. "PCIe specs", "DDR specs"); each group is its own input node, and a group can be exported / imported as `*.boxglow-inputs.json` to reuse in another project (`boxglow group`, `group-set`, `group-export`, `group-import`).

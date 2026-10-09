@@ -1,7 +1,7 @@
 /**
  * 画面の部品の検査: 幅 320 / 390 / 768 / 1280px で上の帯の操作が画面内に収まること、
  * 通常の幅では Undo / Redo が帯に出て (Auto Layout はいつも ⋯ メニュー)、Edit / View の切り替えで帯の形が変わらず、狭い幅では ⋯ メニューに入ること、質問が詳細パネルの先頭に出ること、
- * 別のボックスを選んでも詳細パネルのタブを保つこと、Activity の Resume タブと Claims タブ (受け持ちの一覧)、保存の競合で左右を比べて選べること。
+ * 別のボックスを選んでも詳細パネルのタブを保つこと、Activity の Resume タブと Claims タブ (受け持ちの一覧)、担当の一覧 (表)、保存の競合で左右を比べて選べること。
  * 使い方: e2e/run.sh から呼ばれる (PLAYWRIGHT と LD_LIBRARY_PATH は run.sh が設定。プレビューが 4173 番で動いていること)
  */
 const fs = require('fs');
@@ -74,6 +74,16 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('Claims タブ: 受け持ちが実行 ID・残り時間つきで期限の近い順に並ぶ',claimRows.length===3 && /release-worker/.test(claimRows[0]) && claimRows.every((x)=>/残り \d+ 分/.test(x)) && claimRows.some((x)=>/api-worker/.test(x)) && claimRows.some((x)=>/test-worker/.test(x)),JSON.stringify(claimRows));
     await page.locator('.claim-list .tree-row',{hasText:'api-worker'}).click();await page.waitForTimeout(300);
     check('Claims タブ: 行を押すとそのボックス (バックエンド) が選ばれる',await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title;})==='バックエンド');
+    // 担当の一覧 (表): 引き出しの「表で見る」→ さとう (自分を決めていないので最初のメンバー) の未完了 2 件 → 完了済みも表示で 4 件 → 行を押すと図に戻ってそのボックスを選ぶ
+    await page.evaluate(()=>window.boxglow.store.getState().select({}));
+    await page.locator('.topbar button',{hasText:'☰'}).click();
+    await page.getByRole('button',{name:'表で見る',exact:true}).click();await page.waitForTimeout(300);
+    const tableRows=(await page.locator('.task-table tbody tr').allInnerTexts()).map((x)=>x.replace(/\s+/g,' ').trim());
+    check('担当の一覧: さとうの未完了の担当が期日の近い順に並ぶ (期日の無いものは後ろ)',tableRows.length===2 && /^B4 実装する/.test(tableRows[0]) && /^B7 バックエンド/.test(tableRows[1]),JSON.stringify(tableRows));
+    await page.locator('.task-table-view__toggle input').check();
+    check('担当の一覧: 完了済みも表示すると、完了済みの担当も出る',await page.locator('.task-table tbody tr').count()===4);
+    await page.locator('.task-table tbody tr',{hasText:'バックエンド'}).click();await page.waitForTimeout(500);
+    check('担当の一覧: 行を押すと図に戻り、そのボックスが選ばれる',await page.locator('.task-table-view').count()===0 && await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title;})==='バックエンド');
     await page.locator('.topbar button[title="Menu"]').click();
     check('狭い幅 (390px): 追加・Auto Layout・Undo / Redo は ⋯ メニューの中にある',await page.locator('.menu-actions').getByRole('button',{name:'+ Block',exact:true}).isVisible() && await page.getByRole('button',{name:'Auto Layout',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Undo',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Redo',exact:true}).isVisible());
     check('画面: 実行時のエラーが無い',errors.length===0,errors.join(';'));
