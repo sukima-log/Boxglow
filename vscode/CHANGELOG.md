@@ -12,6 +12,8 @@
 - **Branches for undecided forks**: "+ Branch" in the ⋯ menu adds a box with a question and one path per option. Boxes on the paths wait for the answer; after it, the paths not chosen are skipped (faded, left out of progress and lists). Inputs where paths come together can be a merge (any one is enough).
 - **In charge (assigned boxes as a table)**: the table icon next to the horizontal / vertical switch at the bottom left lists the boxes assigned to you (or another member, everyone, or unassigned) with status, progress, due date, estimate, waiting inputs and open questions. Click a row to open its details on the right while the table stays.
 - On narrow editor widths, panels close with a large "× Close" button instead of a small ×.
+- Selecting a wire shows a bar at the top of the diagram (where it runs, whether it is ready, and Disconnect in Edit mode) instead of opening the side panel. Double-click the Inputs or Outputs node inside a tab to go back to Top.
+- Fixed: after switching tabs, Fit could stay at 100%.
 - Saving moves only what changed: adding, moving or growing a box pushes only the boxes it now overlaps.
 - Switching between Edit and View no longer changes the width of the top bar; Auto Layout is in the ⋯ menu.
 

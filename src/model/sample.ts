@@ -4,6 +4,7 @@
  */
 import { ackDecisions, addBlock, addInputGroup, addMember, addPort, answerDecision, askDecision, connect, createArtifact, createProject, portsOf, setActivity, setCategory, setInputGroup, setProgress, setSchedule, updateBlock, updatePort } from "./graph";
 import { acquireClaim } from "./claims";
+import { addBranch, setInputAnyOf } from "./branch";
 import { ROOT_ID, type Project } from "./types";
 import { normalizeCollapsed, projectBlocks } from "./graph";
 import { layoutAll } from "./autolayout";
@@ -89,7 +90,7 @@ export function buildSampleProject(): Project {
   p = beIn.project;
   const beOut = portsOf(p, be.blockId, "out")[0];
   p = updatePort(p, beOut.id, { name: "API の実装" });
-  p = updateBlock(p, be.blockId, { status: "gray", assigneeIds: [m1.memberId], description: "OpenAPI 定義どおりに API を作る。認証はまだ未定。" });
+  p = updateBlock(p, be.blockId, { status: "gray", assigneeIds: [m1.memberId], description: "OpenAPI 定義どおりに API を作る。認証は GitHub OAuth に決まった (中の分岐)。" });
   p = connect(p, { portId: implIn1.portId, side: "inner" }, { portId: beIn.portId, side: "outer" }).project;
 
   const itIn1 = addPort(p, { blockId: it.blockId, direction: "in", name: "画面の実装" });
@@ -152,7 +153,7 @@ export function buildSampleProject(): Project {
   // 引き継ぎメモ (中断・交代のときに、次の担当が読む): 活動ログとは別に残る
   p.handoffs = {
     ...(p.handoffs ?? {})
-  , [be.blockId]: { note: "ノートの一覧・作成・削除の API まで実装済み。次は認証 (方式は「公開する」の判断の後で決める)。テストは test/api に追加している。", actor: "claude-code", at: new Date().toISOString() }
+  , [be.blockId]: { note: "ノートの一覧・作成・削除の API まで実装済み。次は認証: GitHub OAuth に決まったので、コールバックの次にトークンの保存を作る。テストは test/api に追加している。", actor: "claude-code", at: new Date().toISOString() }
   };
 
   // 最上位の入力のまとまり (入力グループ): 企画の資料を、テストデータなどの入力とは別のノードに分ける。
@@ -163,6 +164,68 @@ export function buildSampleProject(): Project {
   const planInput = portsOf(p, ROOT_ID, "in").find((x) => x.name === "企画メモ");
   if (planInput) p = setInputGroup(p, planInput.id, group.groupId);
 
+  // ---- 階層・分かれ道・合流を見せる例 (上の 7 つのボックスの中に足す。B 番号は B9 から) ----
+  // 箱を親の中に足す小さな道具。入力は親の入力 (内側) か、指定した出力からつなぎ、出力は名前を付ける
+  // 入力: parentId = 親, title = 題名, opts = { out: 出力名, from: [つなぐ元の端], status, assignee, category, description }
+  // 出力: { id: 箱の id, out: 出力ポートの id }
+  type End = { portId: string; side: "outer" | "inner" };
+  const child = (parentId: string, title: string, opts: { out: string; from?: { end: End; name: string }[]; status?: "black" | "gray" | "white"; assignee?: string; category?: string; description?: string }) => {
+    const made = addBlock(p, { parentId, title, outputName: opts.out });
+    p = made.project;
+    for (const f of opts.from ?? []) {
+      const inp = addPort(p, { blockId: made.blockId, direction: "in", name: f.name });
+      p = connect(inp.project, f.end, { portId: inp.portId, side: "outer" }).project;
+    }
+    p = updateBlock(p, made.blockId, { status: opts.status ?? "black", ...(opts.assignee ? { assigneeIds: [opts.assignee] } : {}), ...(opts.description ? { description: opts.description } : {}) });
+    if (opts.category) p = setCategory(p, made.blockId, opts.category);
+    return { id: made.blockId, out: portsOf(p, made.blockId, "out")[0].id };
+  };
+  const outer = (portId: string): End => ({ portId, side: "outer" });
+  const inner = (portId: string): End => ({ portId, side: "inner" });
+
+  // フロントエンド (完了): 中で「一覧画面」と「編集画面」に分かれ、フロントエンドの出力にまとまる
+  const listView = child(fe.blockId, "一覧画面", { out: "一覧画面", from: [{ end: inner(feIn.portId), name: "設計書" }], status: "white", assignee: m2.memberId, category: "ui" });
+  const editView = child(fe.blockId, "編集画面", { out: "編集画面", from: [{ end: inner(feIn.portId), name: "設計書" }], status: "white", assignee: m2.memberId, category: "ui" });
+  p = connect(p, outer(listView.out), inner(feOut.id)).project;
+  p = connect(p, outer(editView.out), inner(feOut.id)).project;
+
+  // バックエンド (作業中): ノートの API と、認証の分岐 (答え済み)。選ばなかった道は見送り、2 つの道は「API をまとめる」で合流する
+  const notesApi = child(be.blockId, "ノートの API", { out: "ノートの API", from: [{ end: inner(beIn.portId), name: "設計書" }], status: "white", category: "build", description: "一覧・作成・削除の API" });
+  const auth = addBranch(p, { parentId: be.blockId, title: "認証方式を決める", question: "ログインの方式はどれにしますか?", options: ["メールのリンク", "GitHub OAuth"], actor: "claude-code"
+  , context: "利用者は開発者が中心です。\nメールのリンク: パスワード不要で誰でも使えますが、メールの配信の仕組みが要ります。\nGitHub OAuth: 開発者には手軽で、実装も小さく済みます。" });
+  p = auth.project;
+  const authIn = addPort(p, { blockId: auth.blockId, direction: "in", name: "設計書" });
+  p = connect(authIn.project, inner(beIn.portId), outer(authIn.portId)).project;
+  const [byMail, byGithub] = portsOf(p, auth.blockId, "out");
+  const mail = child(be.blockId, "メールのリンクで実装する", { out: "認証", from: [{ end: outer(byMail.id), name: "メールのリンク" }], category: "build" });
+  const github = child(be.blockId, "GitHub OAuth で実装する", { out: "認証", from: [{ end: outer(byGithub.id), name: "GitHub OAuth" }], status: "gray", assignee: m1.memberId, category: "build" });
+  // GitHub OAuth の道は、さらに中に 2 つの手順を持つ (プロジェクトから数えて 4 段の深さ)
+  const githubIn = portsOf(p, github.id, "in")[0].id;
+  const callback = child(github.id, "コールバックを受ける", { out: "ログインの受け口", from: [{ end: inner(githubIn), name: "GitHub OAuth" }], status: "white", assignee: m1.memberId, category: "build" });
+  const token = child(github.id, "トークンを保存する", { out: "ログイン状態", from: [{ end: outer(callback.out), name: "ログインの受け口" }], status: "gray", assignee: m1.memberId, category: "build" });
+  p = connect(p, outer(token.out), inner(github.out)).project;
+  // 合流: どちらの認証の道からでも、届けば API をまとめられる
+  const bundle = child(be.blockId, "API をまとめる", { out: "API の実装", from: [{ end: outer(notesApi.out), name: "ノートの API" }, { end: outer(mail.out), name: "認証 (メール)" }, { end: outer(github.out), name: "認証 (GitHub)" }], category: "build" });
+  for (const q of portsOf(p, bundle.id, "in")) if (q.name !== "ノートの API") p = setInputAnyOf(p, q.id, true);
+  p = connect(p, outer(bundle.out), inner(beOut.id)).project;
+  // 認証の分岐は、人が GitHub OAuth と答え、AI も読み終えた (分岐は答えで完了になる)
+  p = ackDecisions(answerDecision(p, auth.blockId, auth.decisionId, "GitHub OAuth", "さとう"), auth.blockId, "claude-code", auth.decisionId);
+
+  // 公開する (未着手): 中に、まだ答えていない分岐 (監視の方法)。答えるまで、その先は「分岐待ち」
+  const relInPort = relIn.portId;
+  const deploy = child(release.blockId, "ビルドを置く", { out: "置いたビルド", from: [{ end: inner(relInPort), name: "動くアプリ一式" }], category: "ops" });
+  const watch = addBranch(p, { parentId: release.blockId, title: "監視の方法を決める", question: "公開後の監視はどうしますか?", options: ["外部の監視サービス", "自前で監視する"], actor: "codex"
+  , context: "最初の利用者は少数です。\n外部の監視サービス: すぐ始められ、無料の枠で足ります。\n自前で監視する: 細かく調べられますが、仕組みの用意と保守が要ります。" });
+  p = watch.project;
+  const watchIn = addPort(p, { blockId: watch.blockId, direction: "in", name: "置いたビルド" });
+  p = connect(watchIn.project, outer(deploy.out), outer(watchIn.portId)).project;
+  const [bySaas, bySelf] = portsOf(p, watch.blockId, "out");
+  const saas = child(release.blockId, "監視サービスを設定する", { out: "監視の設定", from: [{ end: outer(bySaas.id), name: "外部の監視サービス" }], category: "ops" });
+  const self = child(release.blockId, "監視の仕組みを作る", { out: "監視の設定", from: [{ end: outer(bySelf.id), name: "自前で監視する" }], category: "ops" });
+  const runbook = child(release.blockId, "公開の手順書を書く", { out: "公開 URL", from: [{ end: outer(saas.out), name: "監視 (外部)" }, { end: outer(self.out), name: "監視 (自前)" }], category: "docs" });
+  for (const q of portsOf(p, runbook.id, "in")) p = setInputAnyOf(p, q.id, true);
+  p = connect(p, outer(runbook.out), inner(relOut.id)).project;
+
   // AI の受け持ち (計画ごとに有効にする): 並行して動く AI が、互いのボックスを書き換えないようにする
   // 同じ Claude Code でも、実行 ID (instanceId) が違えば別の書き手 (サブエージェント)。期限は開いた時刻から 30 分
   p.claimPolicy = { mode: "reject", leaseMinutes: 30 };
@@ -171,6 +234,8 @@ export function buildSampleProject(): Project {
   p = acquireClaim(p, it.blockId, "block", { actor: "claude-code", instanceId: "test-worker", tokens: [] }, now - 2 * 60_000, "sample-claim-test");
   p = acquireClaim(p, release.blockId, "block", { actor: "codex", instanceId: "release-worker", tokens: [] }, now - 10 * 60_000, "sample-claim-release");
 
+  // 完了済みのフロントエンドの中 (一覧画面・編集画面) は、最初は畳んでおく (実装するのタブを読める大きさに保つ。▸ で開ける)
+  p.blocks[fe.blockId].collapsed = true;
   // 依存関係で並べ直す (線が読みやすい配置にする)
   return layoutAll(normalizeCollapsed(p)); // 大項目は畳んだ前提で並べる (Top は大項目までしか出さない)
 }

@@ -21,7 +21,8 @@ async function drag(page, from, to) {
    await p.getByRole('tab',{name:'In Progress 実装する',exact:true}).click(); await pause(p);
    const output=p.locator('.react-flow__handle[title="出力: 画面の実装 (クリックまたはドラッグで接続)"]');
    const backend=await idOf(p,'バックエンド');
-   const backendIn=p.getByTestId('rf__node-'+backend).locator('.react-flow__handle.target');
+   // (バックエンドは中に箱を持つので、入力の丸は外側と内側の 2 つある。外側の丸を使う)
+   const backendIn=p.getByTestId('rf__node-'+backend).locator('.react-flow__handle.target').first();
    const beforeView=await snapshot(p);
    await output.click({force:true});await backendIn.click({force:true});
    check(`${theme}: View では結線できない`,beforeView===await snapshot(p) && await p.locator('.canvas-connect-hint').count()===0);

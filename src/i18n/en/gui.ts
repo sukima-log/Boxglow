@@ -111,4 +111,6 @@ export const gui: Record<string, string> = {
   "例: API の方式を決める": "e.g. Decide the API style",
   "まだ決まっていない分かれ道を、問いと選択肢で足す": "Add an undecided fork as a question with options",
   "{names} のどれか": "any of {names}",
+  "ダブルクリックで Top に戻る": "Double-click to go back to Top",
+  "選択を外す (Esc)": "Clear the selection (Esc)",
 };

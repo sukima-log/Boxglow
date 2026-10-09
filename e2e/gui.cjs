@@ -78,20 +78,21 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.evaluate(()=>window.boxglow.store.getState().select({}));
     await page.locator('.canvas-tools .view-switch__table').first().click();await page.waitForTimeout(300);
     check('担当の一覧: 表を出している間も、左下の同じ切り替えが表示され、表の記号が押された状態',await page.locator('.task-table-view__switch .view-switch__table').getAttribute('aria-pressed')==='true');
-    check('担当の一覧: 自分を決めていなければ「全員」で開き、担当の列が出る',await page.locator('.task-table-view select').inputValue()==='__everyone' && await page.locator('.task-table thead').getByRole('button',{name:/^担当/}).count()===1 && await page.locator('.task-table tbody tr').count()===4,String(await page.locator('.task-table tbody tr').count()));
+    check('担当の一覧: 自分を決めていなければ「全員」で開き、担当の列が出る',await page.locator('.task-table-view select').inputValue()==='__everyone' && await page.locator('.task-table thead').getByRole('button',{name:/^担当/}).count()===1 && await page.locator('.task-table tbody tr').count()===12,String(await page.locator('.task-table tbody tr').count()));
     await page.locator('.task-table-view select').selectOption({label:'さとう'});await page.waitForTimeout(300);
     check('担当の一覧: 1 人を選ぶと担当の列は出ない',await page.locator('.task-table thead').getByRole('button',{name:/^担当/}).count()===0);
     const tableRows=(await page.locator('.task-table tbody tr').allInnerTexts()).map((x)=>x.replace(/\s+/g,' ').trim());
-    check('担当の一覧: さとうの未完了の担当が期日の近い順に並ぶ (期日の無いものは後ろ)',tableRows.length===2 && /^B4 実装する/.test(tableRows[0]) && /^B7 バックエンド/.test(tableRows[1]),JSON.stringify(tableRows));
+    // さとうの担当: 実装する (期日あり) が先頭、期日の無いものは B 番号の順。中の深い階層の箱 (GitHub OAuth の道) も出る
+    check('担当の一覧: さとうの未完了の担当が期日の近い順に並ぶ (期日の無いものは後ろ)',tableRows.length===4 && /^B4 実装する/.test(tableRows[0]) && /^B7 バックエンド/.test(tableRows[1]) && /^B14 GitHub OAuth/.test(tableRows[2]) && /^B16 トークンを保存する .*実装する › バックエンド › GitHub OAuth で実装する/.test(tableRows[3]),JSON.stringify(tableRows));
     await page.locator('.task-table-view__toggle input').check();
-    check('担当の一覧: 完了済みも表示すると、完了済みの担当も出る',await page.locator('.task-table tbody tr').count()===4);
+    check('担当の一覧: 完了済みも表示すると、完了済みの担当も出る',await page.locator('.task-table tbody tr').count()===7);
     // 横の記号を押すと図に戻り、もう一度表の記号で開き直せる
     await page.locator('.task-table-view__switch button[aria-label="横フロー"]').click();await page.waitForTimeout(300);
     check('担当の一覧: 横の記号で図に戻る',await page.locator('.task-table-view').count()===0);
     await page.locator('.canvas-tools .view-switch__table').first().click();await page.waitForTimeout(300);
     await page.locator('.task-table-view select').selectOption({label:'さとう'});
     await page.locator('.task-table-view__toggle input').check();
-    await page.locator('.task-table tbody tr',{hasText:'バックエンド'}).click();await page.waitForTimeout(500);
+    await page.locator('.task-table tbody tr').filter({has:page.locator('.dec-key',{hasText:/^B7$/})}).click();await page.waitForTimeout(500);
     check('担当の一覧: 行を押すと、表のまま右に詳細が開き、その行に印が付く',await page.locator('.task-table-view').count()===1 && await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title;})==='バックエンド' && await page.locator('.task-table tbody tr[data-selected="true"]').innerText().then((x)=>x.includes('バックエンド')));
     // Esc: 1 回目は詳細だけを閉じ (表は残る)、2 回目で図に戻る
     await page.keyboard.press('Escape');await page.waitForTimeout(300);
@@ -104,6 +105,14 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('狭い幅 (390px): 詳細パネルの閉じるボタンは「閉じる」と書かれ、44px 以上の大きさ',await page.locator('.panel.right .panel-close__label').first().isVisible() && (await page.locator('.panel.right .panel-close').first().innerText()).includes('閉じる') && closeBox.height>=44 && closeBox.width>=44,JSON.stringify(closeBox));
     await page.locator('.panel.right .panel-close').first().click();await page.waitForTimeout(300);
     check('狭い幅 (390px): 「閉じる」で詳細パネルが閉じる',await page.evaluate(()=>window.boxglow.store.getState().selection.blockId)===null);
+    // 大項目のタブの入出力ノードをダブルクリックすると、Top に戻る (通常の幅で確かめる。狭い幅では 1 回目のクリックで開く詳細パネルが図を覆うため)
+    await page.setViewportSize({width:1280,height:844});
+    await page.evaluate(()=>window.boxglow.store.getState().select({}));
+    await page.locator('.canvas-tab',{hasText:'実装する'}).first().click();await page.waitForTimeout(1500);
+    await page.getByRole('button',{name:'Fit',exact:true}).click();await page.waitForTimeout(800);
+    await page.locator('.react-flow__node-terminal').first().dblclick();await page.waitForTimeout(500);
+    check('タブの入出力ノード: ダブルクリックで Top に戻る',await page.evaluate(()=>window.boxglow.store.getState().viewScope)===null);
+    await page.setViewportSize({width:390,height:844});await page.waitForTimeout(300);
     await page.locator('.topbar button[title="Menu"]').click();
     check('狭い幅 (390px): 追加・Auto Layout・Undo / Redo は ⋯ メニューの中にある',await page.locator('.menu-actions').getByRole('button',{name:'+ Block',exact:true}).isVisible() && await page.getByRole('button',{name:'Auto Layout',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Undo',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Redo',exact:true}).isVisible());
     check('画面: 実行時のエラーが無い',errors.length===0,errors.join(';'));

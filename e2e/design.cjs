@@ -37,7 +37,7 @@ const geometry=p=>p.evaluate(()=>window.boxglow.rf.getNodes().map(n=>[n.id,n.pos
     await p.emulateMedia({reducedMotion:'reduce'});
     check(`${theme} ${ready?'確定':'未確定'}: 動きを減らす設定では色を保って停止`,(await core(p,id)).stroke===accent&&(await core(p,id)).animation==='none');
     await p.emulateMedia({reducedMotion:'no-preference'});
-    check(`${theme} ${ready?'確定':'未確定'}: 状態と根拠が詳細欄に出る`,await p.locator('.wire-state').textContent()===(ready?'確定済み':'入力待ち')&&(await p.locator('.wire-reason').textContent()).length>10);
+    check(`${theme} ${ready?'確定':'未確定'}: 状態が図の上部の帯に出て、右の詳細パネルは開かない`,await p.locator('.edge-bar .wire-state').textContent()===(ready?'確定済み':'入力待ち')&&(await p.locator('.edge-bar .wire-state').getAttribute('title')).length>10&&await p.locator('aside.panel.right.hidden-panel').count()===1);
     check(`${theme} ${ready?'確定':'未確定'}: 選択輪郭が接続元から接続先まで続く`,await p.locator(`.react-flow__edge[data-id="${id}"]`).evaluate(e=>{
       const halo=e.querySelector('.react-flow__edge-halo'),hit=e.querySelector('.react-flow__edge-interaction');
       return !!halo&&halo.getTotalLength()>hit.getTotalLength()&&getComputedStyle(halo).stroke===getComputedStyle(e.querySelector('.react-flow__edge-path')).stroke;

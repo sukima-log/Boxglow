@@ -8,9 +8,9 @@ import { ClaimSettings, ClaimDetails } from "./Claims";
 import { CloseButton } from "./CloseButton";
 import { WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
-import { isEdgeReady, isAcked as decisionIsAcked } from "../model/graph";
-import { useEffect, useMemo, useState } from "react";
-import { addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, disconnect, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, removeBlock, setCategory, setProgress, setSchedule, updateBlock, waitingFor, wireNetTabs } from "../model/graph";
+import { isAcked as decisionIsAcked } from "../model/graph";
+import { useEffect, useState } from "react";
+import { addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, removeBlock, setCategory, setProgress, setSchedule, updateBlock, waitingFor } from "../model/graph";
 import { saveTemplate } from "../lib/templates";
 import { actorLabel, ACTIVITY_LABEL, agoText } from "../model/report";
 import { DecisionCard, Timeline } from "./Timeline";
@@ -41,7 +41,6 @@ function PanelHead({ title, children }: { title: string; children?: React.ReactN
 
 export function Inspector({ project, onOpenDrawer }: { project: Project; onOpenDrawer: () => void }) {
   const selection = useProjectStore((s) => s.selection);
-  if (selection.edgeId && project.edges[selection.edgeId]) return <EdgeInspector project={project} edgeId={selection.edgeId} />;
   if (selection.blockId && project.blocks[selection.blockId]) return <BlockInspector project={project} blockId={selection.blockId} onOpenDrawer={onOpenDrawer} />;
   if (selection.terminal) return <TerminalInspector project={project} which={selection.terminal} groupId={selection.terminalGroup} />;
   if (selection.project) return <ProjectInspector project={project} />;
@@ -489,58 +488,4 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   );
 }
 
-/** 線が通るタブ (境界を越えた先の続きも含む)。押すとそのタブへ移る (線は選んだまま) */
-function WireTabs({ project, edgeId }: { project: Project; edgeId: string }) {
-  useLang(); // 言語が変わったら描き直す
-  const viewScope = useProjectStore((s) => s.viewScope);
-  const setViewScope = useProjectStore((s) => s.setViewScope);
-  const tabs = useMemo(() => wireNetTabs(project, edgeId), [project, edgeId]);
-  if (tabs.length < 2) return null; // 1 つのタブに収まる線には出さない
-  return (
-    <div className="flex flex-col gap-1">
-      <div className="text-[11px] font-bold" style={{ color: "var(--text-muted)" }}>Tabs</div>
-      <div className="flex flex-wrap gap-1">
-        {/* ループ変数は翻訳関数 t と名前が衝突しないよう tabId にしている */}
-        {tabs.map((tabId) => (
-          <button key={tabId ?? "all"} className="chip" data-on={viewScope === tabId} onClick={() => setViewScope(tabId)} title={tabId ? t("{title} のタブでこの線の続きを見る", { title: project.blocks[tabId]?.title ?? "" }) : t("Top でこの線を見る")}>
-            {tabId ? project.blocks[tabId]?.title ?? "?" : "Top"}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
-/** 線 */
-function EdgeInspector({ project, edgeId }: { project: Project; edgeId: string }) {
-  useLang(); // 言語が変わったら描き直す
-  const readonly = useProjectStore((s) => s.readonly);
-  const apply = useProjectStore((s) => s.apply);
-  const select = useProjectStore((s) => s.select);
-  const e = project.edges[edgeId];
-  const fp = project.ports[e.from.portId];
-  const tp = project.ports[e.to.portId];
-  // ルートは「プロジェクト」(訳は common.ts)
-  const name = (blockId: string) => (blockId === ROOT_ID ? t("プロジェクト") : project.blocks[blockId]?.title ?? "?");
-  return (
-    <div className="flex flex-col gap-3 p-3">
-      <PanelHead title={t("配線")} />
-      <div className="wire-state" data-ready={isEdgeReady(project, e)}>{isEdgeReady(project, e) ? t("確定済み") : t("入力待ち")}</div>
-      <p className="wire-reason">{isEdgeReady(project, e)
-        ? t("供給元の完了・成果物、または上流の入力を確認できています。")
-        : t("供給元が未完了で成果物がない、または上流の入力がまだ確定していません。")}</p>
-      <div className="text-[13px]">
-        {/* 入出力の名前を囲む「」は英語では引用符にする */}
-        <div><b>{name(fp.blockId)}</b>{t("「{name}」", { name: fp.name })}</div>
-        <div className="my-1" style={{ color: "var(--text-muted)" }}>↓</div>
-        <div><b>{name(tp.blockId)}</b>{t("「{name}」", { name: tp.name })}</div>
-      </div>
-      <WireTabs project={project} edgeId={edgeId} />
-      {e.auto ? (
-        <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("自動の線。手動でつなぐと置き換わります。")}</div>
-      ) : (
-        !readonly && <button className="btn btn-sm self-start" onClick={() => { select({}); apply((p) => disconnect(p, edgeId)); }}>{t("接続を外す")}</button>
-      )}
-    </div>
-  );
-}

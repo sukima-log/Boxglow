@@ -19,6 +19,7 @@ export const TerminalNode = memo(function TerminalNode({ id, data, selected, hei
   const groupId = data.groupId ?? null;
   const scopeId = data.scopeId ?? null; // タブで開いた大項目のボックスの入出力を表すとき
   const canEdit = useProjectStore((s) => !s.readonly && s.editMode);
+  const setViewScope = useProjectStore((s) => s.setViewScope);
   // プロジェクト本体だけを取り、表示用の配列は useMemo で導く (セレクタで新しい配列を返すと無限ループになる)
   const project = useProjectStore((s) => s.project)!;
   const ports = useMemo(
@@ -30,7 +31,10 @@ export const TerminalNode = memo(function TerminalNode({ id, data, selected, hei
   // onClick: 丸 (ハンドル) を押したクリックはノードの選択に伝えない (丸を押すだけで詳細パネルが開いて図がずれるのを防ぐ。BlockNode と同じ)。
   // 丸は Edit モードのときだけ結線できる (isConnectable = canEdit)
   return (
-    <div className={`bg-terminal ${selected ? "selected" : ""} ${vertical ? "vertical-terminal" : ""}`} style={{ height, ...(vertical ? {width} : {}) }} onClick={(ev) => { if ((ev.target as HTMLElement).closest(".react-flow__handle")) ev.stopPropagation(); }}>
+    <div className={`bg-terminal ${selected ? "selected" : ""} ${vertical ? "vertical-terminal" : ""}`} style={{ height, ...(vertical ? {width} : {}) }} onClick={(ev) => { if ((ev.target as HTMLElement).closest(".react-flow__handle")) ev.stopPropagation(); }}
+      // 大項目のタブの入出力ノード: ダブルクリックで、上の階層 (Top) のタブへ戻る (ボックスのダブルクリックで中へ入るのと対になる)
+      onDoubleClick={scopeId ? (ev) => { ev.stopPropagation(); setViewScope(null); } : undefined}
+      title={scopeId ? t("ダブルクリックで Top に戻る") : undefined}>
       <div className="bg-terminal__head">
         <span className="truncate" title={groupName ?? undefined}>{which === "in" ? (groupName ?? "Inputs") : "Outputs"}</span>
       </div>

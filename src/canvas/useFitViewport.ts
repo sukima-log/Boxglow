@@ -58,6 +58,9 @@ export function constrainVertical(view: Viewport, bounds: Area, region: Area, fi
 export function useFitViewport(geometry: string, panelLayoutKey: string, dragging: boolean, vertical = false) {
   const rf = useReactFlow();
   const [minZoom, setMinZoom] = useState(MIN_ZOOM);
+  // 今の縮小の下限 (fit の中から最新の値を読むため。state は描画まで古い値のまま)
+  const minZoomNow = useRef(MIN_ZOOM);
+  minZoomNow.current = minZoom;
   const area = useRef<Area | null>(null);
   const fitted = useRef<Viewport | null>(null);
   const draggingNow = useRef(dragging);
@@ -96,11 +99,23 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
     return { x: v.x + region.x, y: v.y + region.y, zoom: v.zoom };
   }, [rf]);
 
-  /** Input: 対象 ID。Output: 明示的な全体表示を実行 */
+  /**
+   * Input: 対象 ID。Output: 明示的な全体表示を実行
+   * 全体表示の倍率が今の縮小の下限より小さいときは、先に下限を下げてから表示を合わせる。
+   * (タブの切り替えの途中、ボックスを一部しか測れていない瞬間に下限が高く決まると、
+   *  そのままでは全体表示が下限に押し戻され、Fit を押しても 100% から動かなくなるため)
+   */
   const fit = useCallback((ids?: string[]) => {
     const v = target(ids);
-    if (v)
-      void rf.setViewport(v, { duration: 150 });
+    if (!v) return;
+    if (!ids) { fitted.current = v; }
+    if (v.zoom < minZoomNow.current) {
+      setMinZoom(v.zoom);
+      // 下限の変更が図に届いてから (次の描画の後に) 表示を合わせる
+      requestAnimationFrame(() => requestAnimationFrame(() => void rf.setViewport(v, { duration: 150 })));
+      return;
+    }
+    void rf.setViewport(v, { duration: 150 });
   }, [rf, target]);
   /**
   * 図と利用可能領域を計測して縮小下限を更新する。

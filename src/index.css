@@ -1722,3 +1722,8 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .branch-dialog__field { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-weight: 700; }
 .branch-dialog__field .input { font-weight: 400; }
 
+/* ---- 線を選んだときの図の上部の帯 (EdgeBar) ---- */
+.edge-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: min(720px, calc(100% - 32px)); padding: 8px 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--bg-card); box-shadow: var(--shadow-card); font-size: 13px; }
+.edge-bar__path { min-width: 0; }
+.edge-bar .wire-state { font-size: 12px; }
+

@@ -14,6 +14,7 @@ import { nextFreePosition } from "../model/autolayout";
 import type { Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
 import { CanvasTools } from "./CanvasTools";
+import { EdgeBar } from "./EdgeBar";
 import { BlockNode } from "./BlockNode";
 import { TerminalNode } from "./TerminalNode";
 import { RoutedEdge } from "./RoutedEdge";
@@ -425,6 +426,8 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
       proOptions={{ hideAttribution: false }}
     >
       <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--bg-grid)" />
+      {/* 線を選んだときは、右の詳細パネルではなく図の上部の帯で、線の向きと状態を出す */}
+      <EdgeBar />
       <CanvasTools readFromTop={readFromTop} fit={fit} snap={snap} onSnap={() => setSnap((v) => !v)} showMap={showMap} onMap={() => setShowMap((v) => !v)} />
       {showMap && <MiniMap
         position="bottom-right"

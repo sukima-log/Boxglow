@@ -19,6 +19,8 @@ const {chromium,open,check,result}=require('./lib.cjs');
           delete p.claims;delete p.claimPolicy;for(const x of boxes) if(x.activity?.state==='blocked') x.activity=null;
           p.focusBlockId=b('B4').id;
           b('B6').status='black';
+          // (着手できる候補の例: 入力のそろった末端の箱。サンプルのフロントエンドは中に箱を持つので、GitHub OAuth の道のトークンの保存を未着手にする)
+          b('B16').status='black';
           b('B5').activity=null;b('B5').decisions=[];
           b('B8').scope={goal:'APIを接続する',nonGoals:'課金は扱わない',acceptance:'結合テスト成功',consult:'API仕様の変更'};
           b('B2').description='未コミット。レビュー待ち';

@@ -4,7 +4,8 @@
 import { describe, expect, it } from "vitest";
 import { buildSampleProject } from "./sample";
 import { ROOT_ID } from "./types";
-import { portsOf } from "./graph";
+import { ancestorsOf, portsOf } from "./graph";
+import { branchState } from "./branch";
 import { buildEdges, buildNodes } from "../canvas/layout";
 
 describe("サンプルプロジェクト", () => {
@@ -23,6 +24,13 @@ describe("サンプルプロジェクト", () => {
     // (ボックス - root + Inputs と Outputs + 入力のグループの箱)
     expect(nodes.length).toBe(Object.keys(p.blocks).length - 1 + 2 + (p.inputGroups?.length ?? 0));
     expect(edges.length).toBe(Object.keys(p.edges).length);
+    // 表示の形と効果が分かるよう、深い階層・答え済みの分岐 (見送りの道)・未回答の分岐 (分岐待ち)・合流を含む
+    const depth = Math.max(...Object.keys(p.blocks).map((id) => ancestorsOf(p, id).length));
+    expect(depth).toBeGreaterThanOrEqual(4);
+    const branches = branchState(p);
+    expect(branches.skipped.size).toBeGreaterThan(0);
+    expect(branches.pending.size).toBeGreaterThan(0);
+    expect(Object.values(p.ports).some((q) => q.anyOf)).toBe(true);
     // 線の両端のノードが存在する
     const ids = new Set(nodes.map((n) => n.id));
     for (const e of edges) {
