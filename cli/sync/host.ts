@@ -283,17 +283,31 @@ export class SyncHost {
     if (this.signingIn || this.support !== "ok") { this.emit(); return; }
     const entry: SignIn = { ...(file ? { owner: { file, operationId: this.startups.get(file)?.operationId } } : {}), provider, cancelled: false, done: Promise.resolve(1) };
     this.signingIn = entry;
+    this.notInvited = undefined; // 前回の「招待されていない」は、新しいサインインを始めたら消す
+    // 開始の手順の中の、前回のサインインの失敗の表示も消す (新しいサインインの結果で書き直す)
+    for (const op of this.startups.values()) if (op.stage === "signin") delete op.error;
     const lines: string[] = [];
-    const common = { server: this.server, allowEnvironmentToken: this.options.allowEnvironmentToken, out: (line: string) => lines.push(line), fetch: this.doFetch, sleep: this.options.sleep, deviceName: this.options.deviceName, cancelled: () => entry.cancelled };
+    // サーバーが「招待されていない」と答えたときの知らせ (順番待ちの URL は https のものだけ画面に渡す)
+    let refused: SyncStatus["notInvited"];
+    const onNotInvited = (info: { provider: "github" | "google"; waitlist?: string }) => {
+      refused = { provider: info.provider, ...(info.waitlist && /^https:\/\//.test(info.waitlist) ? { waitlist: info.waitlist } : {}) };
+    };
+    const common = { server: this.server, allowEnvironmentToken: this.options.allowEnvironmentToken, out: (line: string) => lines.push(line), fetch: this.doFetch, sleep: this.options.sleep, deviceName: this.options.deviceName, cancelled: () => entry.cancelled, onNotInvited };
     entry.done = (provider === "google"
       ? runGoogleLogin({ ...common, onUrl: (info) => { entry.code = { provider: "google", ...info }; this.emit(); } })
       : runLogin({ ...common, onCode: (code) => { entry.code = { provider: "github", ...code }; this.emit(); } })
     ).then((code) => {
-      if (this.signingIn === entry) { this.signingIn = null; if (code !== 0 && !entry.cancelled) this.message = lines.filter((l) => !l.startsWith("  ")).at(-1); else this.message = undefined; }
+      // 招待されていない: やり直しても同じ結果なので、やり直しは促さず、理由と順番待ちを画面に出す
+      const notInvited = code !== 0 && !entry.cancelled ? refused : undefined;
+      if (this.signingIn === entry) {
+        this.signingIn = null;
+        this.notInvited = notInvited;
+        if (code !== 0 && !entry.cancelled && !notInvited) this.message = lines.filter((l) => !l.startsWith("  ")).at(-1); else this.message = undefined;
+      }
       this.account = null;
       if (code !== 0 && !entry.cancelled) {
         for (const op of this.startups.values()) {
-          if (op.stage === "signin") op.error = t("サインインできませんでした。もう一度サインインするか、中止してください。");
+          if (op.stage === "signin") op.error = notInvited ? t("同期は招待制の試験中です。このアカウントはまだ招待されていません。") : t("サインインできませんでした。もう一度サインインするか、中止してください。");
         }
       }
       this.emit();
@@ -345,6 +359,8 @@ export class SyncHost {
     }
   }
   private message: string | undefined;
+  /** 直前のサインインで「招待されていない」と言われたこと (画面に理由と順番待ちを出す。次のサインインで消す) */
+  private notInvited: SyncStatus["notInvited"];
 
   /** 確かめた利用者を読み直す (資格情報の世代が変わっていたら、/v1/me で確かめる) */
   private async refreshAccount(): Promise<void> {
@@ -720,6 +736,7 @@ export class SyncHost {
     , state: "off", revision: null
     , ...(this.signingIn?.code ? { signIn: this.signingIn.code } : {})
     , ...(this.message ? { message: this.message } : {})
+    , ...(this.notInvited ? { notInvited: this.notInvited } : {})
     };
     if (serverProblem(this.server)) {
       status.state = "problem";

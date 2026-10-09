@@ -82,6 +82,11 @@ export interface SyncStatus {
   localBackup?: string;
   /** 1 行の補足 */
   message?: string;
+  /**
+   * 直前のサインインで、サーバーが「招待されていない」と答えた (同期は招待制の試験中)。
+   * 画面はやり直しを促さず、理由と順番待ちのページ (waitlist。サーバーが https で教えたときだけ) を出す。次のサインインを始めると消える
+   */
+  notInvited?: { provider: "github" | "google"; waitlist?: string };
 }
 
 /** 画面からの操作 */

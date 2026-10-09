@@ -199,6 +199,13 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
       {/* R49: エディタの未保存編集がある受信待ちは、自動統合・自動の開き直しへ進めず、先に退避を案内する。 */}
       <EditorBehind />
       {status.server && file && ((!file.binding && !status.halt) || status.startup) && status.support === "ok" && <SyncStartup key={status.startup?.operationId ?? "entry"} status={status} act={act} unsaved={unsaved}/>}
+      {/* 招待されていない (開始の手順の外でサインインしたとき。手順の中では SyncStartup が出す) */}
+      {status.notInvited && !status.startup && !status.signIn && (
+        <div className="sync-panel__line" role="alert">
+          {t("同期は招待制の試験中です。このアカウントはまだ招待されていません。")}
+          {status.notInvited.waitlist && <> <a href={status.notInvited.waitlist} target="_blank" rel="noreferrer">{t("順番待ちに登録する")}</a></>}
+        </div>
+      )}
       {status.signIn ? (
         <SignInCode code={status.signIn} onCancel={() => void act({ kind: "cancelSignIn" })} />
       ) : (

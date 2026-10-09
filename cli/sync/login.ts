@@ -28,6 +28,12 @@ export interface LoginOptions {
   onCode?: (code: { userCode: string; verificationUrl: string; expiresAt: string }) => void;
   /** 中止の合図 (true を返したら、待つのをやめて失敗として終える。発行済みのトークンは無い) */
   cancelled?: () => boolean;
+  /**
+   * サーバーが「招待されていない」と答えたときに呼ぶ (画面の裏方が、理由と順番待ちのページを画面に出すために使う)。
+   * Input : info = { provider: どの手段でサインインしたか, waitlist: 順番待ちのページの URL (サーバーが教えたときだけ) }
+   * Output: なし。表示の文言は従来どおり out にも出る (CLI の表示は変えない)
+   */
+  onNotInvited?: (info: { provider: "github" | "google"; waitlist?: string }) => void;
 }
 
 /**
@@ -81,7 +87,12 @@ export async function runGoogleLogin(o: Omit<LoginOptions, "onCode"> & { onUrl?:
           issued = { token: body.token, account: body.account };
           break;
         }
-        if (res.status === 403 && body.code === "not-invited") { out(t("この Google のアカウントは招待されていません (招待は Gmail か Google Workspace のメールアドレスに限ります)")); return 1; }
+        if (res.status === 403 && body.code === "not-invited") {
+          out(t("この Google のアカウントは招待されていません (招待は Gmail か Google Workspace のメールアドレスに限ります)"));
+          // 画面の裏方へ「招待されていない」ことを知らせる (やり直しを促さず、順番待ちを案内するため)
+          o.onNotInvited?.({ provider: "google", ...(typeof body.waitlist === "string" ? { waitlist: body.waitlist } : {}) });
+          return 1;
+        }
         if (res.status === 410) { out(t("サインインの結果を受け取れませんでした。もう一度実行してください")); return 1; }
         out(t("サインインできませんでした (サーバーの応答: {status} {code})", { status: res.status, code: String(body.code ?? "") }));
         return 1;
@@ -177,6 +188,8 @@ export async function runLogin(o: LoginOptions): Promise<number> {
         if (res.status === 403 && body.code === "not-invited") {
           out(t("この GitHub のアカウント ({login}) は、まだ招待されていません。同期は、招待した利用者だけが使えます", { login: String(body.login ?? "?") }));
           if (typeof body.waitlist === "string") out(t("順番待ちの登録: {url}", { url: body.waitlist }));
+          // 画面の裏方へ「招待されていない」ことを知らせる (やり直しを促さず、順番待ちを案内するため)
+          o.onNotInvited?.({ provider: "github", ...(typeof body.waitlist === "string" ? { waitlist: body.waitlist } : {}) });
           return 1;
         }
         if (res.status === 403 && body.code === "suspended") { out(t("このアカウントは、止められています")); return 1; }

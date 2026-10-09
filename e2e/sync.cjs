@@ -72,6 +72,16 @@ const ROOT = path.resolve(__dirname, '..');
     await page.getByRole('button',{name:'コードをコピーして許可のページを開く',exact:true}).click();
     await page.getByText('コピーできませんでした。下のコードを入力してください。',{exact:true}).waitFor();
     check('同期D: コピー不可でもコードが残り、認可ページを開く操作を保つ',await code.isVisible()&&await page.evaluate(()=>window.__authOpen[0]==='https://github.com/login/device'));
+    // 招待されていない (招待制の試験中): やり直しを促さず、理由と順番待ちのリンクを出す。その後、もう一度サインインして続ける
+    server.deviceCodes.set([...server.deviceCodes.keys()].at(-1), 'not-invited');
+    const refused = await page.getByText('同期は招待制の試験中です。このアカウントはまだ招待されていません。', { exact: true }).waitFor({ timeout: 20000 }).then(() => true).catch(() => false);
+    check('同期: 招待されていないときは、理由と順番待ちのリンクを出し、やり直しは促さない', refused
+      && await page.getByRole('link', { name: '順番待ちに登録する', exact: true }).getAttribute('href') === 'https://example.test/waitlist'
+      && !(await page.locator('.sync-startup').textContent()).includes('もう一度サインイン'));
+    if (process.env.BOXGLOW_E2E_SHOTS) await page.screenshot({ path: path.join(process.env.BOXGLOW_E2E_SHOTS, 'serve-not-invited.png') });
+    await page.getByRole('button', { name: 'GitHub でサインイン', exact: true }).click();
+    await code.waitFor({ timeout: 10000 });
+    check('同期: もう一度サインインを始めると、招待されていない案内は消える', !(await page.getByText('同期は招待制の試験中です。このアカウントはまだ招待されていません。', { exact: true }).isVisible()));
     const deviceCode = [...server.deviceCodes.keys()].at(-1);
     server.deviceCodes.set(deviceCode, { account: 'acc-e2e', login: 'e2e-user' });
     check('同期D: 許可後は選んだ新規配置まで続き、同期済みになる', await chipText('同期済み'));

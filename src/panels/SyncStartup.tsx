@@ -13,13 +13,19 @@ export function SyncStartup({ status, act, unsaved }: {
   const [name, setName] = useState("remote.boxglow.json");
   const op = status.startup;
   if (!op)
-    return <button className="btn btn-primary btn-sm" disabled={unsaved} onClick={() => void act({ kind: "beginSync" })}>{t("同期を始める")}</button>;
+    return <>
+      <button className="btn btn-primary btn-sm" disabled={unsaved} onClick={() => void act({ kind: "beginSync" })}>{t("同期を始める")}</button>
+      {/* Boxglow の同期サーバーは招待制の試験中: 押す前に分かるよう 1 行だけ添える (自分のサーバーでは出さない) */}
+      {status.isDefaultServer && <p className="muted">{t("Boxglow の同期サーバーは招待制の試験中です")}</p>}
+    </>;
   const filename = status.file?.path.split(/[\\/]/).pop();
   const busy = op.stage === "working";
   return <section className="sync-startup" aria-label={t("同期を始める")}>
   <p>{t("送り先")}: <span className="break-all">{status.isDefaultServer ? t("Boxglow の同期サーバー") : status.server}</span></p>
   {op.stage !== "list" && op.stage !== "opened" && <p>{t("今開いているファイル")}: <span className="break-all">{filename}</span></p>}
   {op.error && <p role="alert">{op.error}</p>}
+  {/* 招待されていないときは、やり直しではなく順番待ちを案内する */}
+  {status.notInvited?.waitlist && <a className="btn btn-sm" href={status.notInvited.waitlist} target="_blank" rel="noreferrer">{t("順番待ちに登録する")}</a>}
   {op.stage === "choose" && <div className="sync-panel__choices">
    <button className="btn btn-primary btn-sm" disabled={unsaved} onClick={() => void act({ kind: "continueStart", operationId: op.operationId, intent: "new" })}>{t("この計画を新しくサーバーに置く")}</button>
    <button className="btn btn-sm" disabled={unsaved} onClick={() => void act({ kind: "continueStart", operationId: op.operationId, intent: "existing" })}>{t("サーバーの計画を開く")}</button>

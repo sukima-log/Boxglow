@@ -279,6 +279,36 @@ describe("boxglow serve --sync (HTTP の口)", () => {
   });
 });
 
+// 招待制の試験中: 招待されていないアカウントでは、やり直しを促さず、理由と順番待ちのページを画面に出す
+describe("招待されていないアカウント", () => {
+  for (const provider of ["github", "google"] as const) it(`${provider}: 開始の手順の中で、理由と順番待ちを出し、やり直しは促さない。次のサインインで消える`, async () => {
+    const { file } = planFile("invite-" + provider);
+    const { host } = make({ sleep: async () => new Promise(r => setTimeout(r, 20)) });
+    host.openFile(file);
+    const op = (await host.act(file, { kind: "beginSync" })).startup!;
+    await host.act(file, { kind: "continueStart", operationId: op.operationId, intent: "existing" });
+    await host.act(file, { kind: "signIn", provider });
+    await settle();
+    // サーバー側で「招待されていない」と答える
+    if (provider === "github") server.deviceCodes.set([...server.deviceCodes.keys()].at(-1)!, "not-invited");
+    else server.googleTx.get([...server.googleTx.keys()].at(-1)!)!.status = "denied";
+    for (let i = 0; i < 200 && host.status(file).signIn; i++) await settle();
+    const s = host.status(file);
+    expect(s.startup?.error).toBe("同期は招待制の試験中です。このアカウントはまだ招待されていません。");
+    expect(s.notInvited?.provider).toBe(provider);
+    // 順番待ちの URL は、サーバーが https で教えたときだけ渡す (試験用サーバーは GitHub のときだけ返す)
+    expect(s.notInvited?.waitlist).toBe(provider === "github" ? "https://example.test/waitlist" : undefined);
+    // 畳んだ欄の 1 行 (message) には、欠けた理由を出さない
+    expect(s.message).toBeUndefined();
+    // 次のサインインを始めると消える
+    await host.act(file, { kind: "signIn", provider: "github" });
+    await settle();
+    expect(host.status(file).notInvited).toBeUndefined();
+    expect(host.status(file).startup?.error).toBeUndefined();
+    await host.stop();
+  });
+});
+
 describe("Google でのサインイン (裏方)", () => {
   it("認可の URL が状態に出る。許可されると資格情報が保存される。中止すると発行されたトークンは取り消される", async () => {
     const { file } = planFile("p1");
