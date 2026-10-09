@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { spawn, spawnSync } from "node:child_process";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -32,10 +33,14 @@ import { HumanSyncRequired, syncOnce } from "./client";
 import { TestSyncServer } from "./test-server";
 
 let root: string, entry: string, server: TestSyncServer, caseDir: string;
+/** CLI を実行するフォルダ。リポジトリの外 (OS の一時フォルダ) に置く。
+ * root はリポジトリの中 (node_modules/.cache) なので、そこから上へ探すと開発者の boxglow.json が見つかってしまう */
+let outside: string;
 beforeAll(async () => {
   mkdirSync(resolve("node_modules/.cache"), { recursive: true });
   root = mkdtempSync(resolve("node_modules/.cache/resolution-"));
   entry = join(root, "cli.mjs");
+  outside = mkdtempSync(join(tmpdir(), "boxglow-cli-cwd-"));
   await build({
     entryPoints: ["cli/main.ts"],
     bundle: true,
@@ -46,7 +51,10 @@ beforeAll(async () => {
     outfile: entry,
   });
 });
-afterAll(() => rmSync(root, { recursive: true, force: true }));
+afterAll(() => {
+  rmSync(root, { recursive: true, force: true });
+  rmSync(outside, { recursive: true, force: true });
+});
 beforeEach(async () => {
   caseDir = mkdtempSync(join(root, "case-"));
   server = new TestSyncServer();
@@ -115,8 +123,13 @@ function cli(
 ): Promise<{ code: number | null; output: string }> {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [entry, ...args], {
+      // リポジトリの外の一時フォルダで実行する。リポジトリの中で実行すると、開発者の手元にある boxglow.json
+      // (git の対象外) を CLI が上へ探して見つけてしまい、CI (そのファイルが無い) と結果が変わるため
+      cwd: outside,
       env: {
         ...process.env,
+        // 手元の環境変数で計画ファイルが決まらないようにする (空 = 指定なし)
+        BOXGLOW_FILE: "",
         BOXGLOW_CONFIG_DIR: config,
         BOXGLOW_TOKEN: "",
         BOXGLOW_SERVER: server.url,

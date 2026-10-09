@@ -576,6 +576,47 @@ function main(argv: string[]): void {
     return;
   }
 
+  // merge (Git のマージドライバ) は、渡された 3 つのファイルだけで動く。作業中の boxglow.json は探さない。
+  // (探すと、計画ファイルを別の名前・場所に置いたリポジトリや、boxglow.json の無いフォルダでは、
+  //  「boxglow.json が見つかりません」で止まり、自動のマージが効かなくなるため)
+  if (cmd === "merge") {
+    // Git のマージドライバ: %O (base) %A (ours) %B (theirs)。結果は ours に書く。終了コード 0 = 自動で合わせた
+    const [basePath, oursPath, theirsPath] = rest;
+    if (!basePath || !oursPath || !theirsPath) throw new Error(t("merge <base> <ours> <theirs> の 3 つを指定してください"));
+    const read = (f: string): Project | null => { const text = readFileSync(f, "utf8"); readRevisions.set(resolve(f), revisionOf(text)); return text.trim() ? fromJSON(text) : null; };
+    const base = read(basePath);
+    const ours = read(oursPath);
+    const theirs = read(theirsPath);
+    if (!ours || !theirs) throw new Error(t("ours / theirs が読めません"));
+    // 文言とログの言語は、自分の側の計画に書かれた言語にそろえる (指定があればそちら)
+    setLang(explicitLang(options) ?? ours.lang ?? "ja");
+    const r = mergeProjects(base, ours, theirs, {}, new Date().toISOString());
+    let q = r.project;
+    // 競合が 0 件でも、合わせた結果が壊れた計画になることがある (互いを相手の中へ移した、など)。
+    // 壊れた計画は書かずに、自分の側のファイルをそのまま残して失敗にする (Git は競合として扱う)
+    const problem = projectProblem(q);
+    if (problem) throw new Error(t("マージした結果が計画として正しくないため、書き込みませんでした (自分の側のファイルはそのままです): {problem}", { problem }));
+    // 両側で同じ項目を変えていた箇所は、相手の値をログに残す (後から見直せるように)
+    // 片方が削除・片方が変更の箇所は、変更された側を残したことを記録する (ボックスの中身を丸ごとログに書くと長いので、場所だけ)
+    const kept = r.conflicts.filter((c) => !c.automatic && (c.ours === undefined || c.theirs === undefined));
+    for (const c of r.conflicts) {
+      const message = kept.includes(c)
+        ? t("マージで片方が削除・片方が変更: {path} (変更された側を残しました。削除した側: {side})", { path: c.path, side: c.ours === undefined ? t("自分") : t("相手") })
+        : t("マージで両側が変更: {path} (採用: {ours} / 相手: {theirs})", { path: c.path, ours: JSON.stringify(c.ours), theirs: JSON.stringify(c.theirs) });
+      q = { ...q, log: [...q.log, { id: `m${Math.random().toString(36).slice(2, 10)}`, at: new Date().toISOString(), actor: "merge", kind: "note", message }] };
+    }
+    // Gitは保存済みの両側を統合する。作業の取得検証はせず、claimsも3方向マージの結果を保存する。
+    commitFile(oursPath, toJSON(q) + "\n", readRevisions.get(resolve(oursPath))!);
+    const both = r.conflicts.length - kept.length;
+    out(
+      t("マージ: 相手の変更 {count} 件を取り込み", { count: r.merged })
+      + (both ? t("、両側で変更が {count} 件 (自分の値を採用し、相手の値はログに記録)", { count: both }) : "")
+      + (kept.length ? t("、削除と変更の競合が {count} 件 (変更された側を残し、ログに記録)", { count: kept.length }) : "")
+    );
+    if (r.conflicts.length && options.strict) process.exitCode = 1;
+    return;
+  }
+
   const path = locateFile(str(options.file));
   let p = load(path);
   // 計画に書かれた言語で CLI の文言・ログを出す (同じ計画を触る AI と人が同じ言語になる)。指定があればそちらを優先
@@ -847,41 +888,6 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     case "prompt": {
       const ask = (str(options.ask) ?? "plan") as "plan" | "decompose" | "review";
       out(blockToPrompt(p, mustFind(p, rest[0]).id, ask));
-      return;
-    }
-    case "merge": {
-      // Git のマージドライバ: %O (base) %A (ours) %B (theirs)。結果は ours に書く。終了コード 0 = 自動で合わせた
-      const [basePath, oursPath, theirsPath] = rest;
-      if (!basePath || !oursPath || !theirsPath) throw new Error(t("merge <base> <ours> <theirs> の 3 つを指定してください"));
-      const read = (f: string): Project | null => { const text = readFileSync(f, "utf8"); readRevisions.set(resolve(f), revisionOf(text)); return text.trim() ? fromJSON(text) : null; };
-      const base = read(basePath);
-      const ours = read(oursPath);
-      const theirs = read(theirsPath);
-      if (!ours || !theirs) throw new Error(t("ours / theirs が読めません"));
-      const r = mergeProjects(base, ours, theirs, {}, new Date().toISOString());
-      let q = r.project;
-      // 競合が 0 件でも、合わせた結果が壊れた計画になることがある (互いを相手の中へ移した、など)。
-      // 壊れた計画は書かずに、自分の側のファイルをそのまま残して失敗にする (Git は競合として扱う)
-      const problem = projectProblem(q);
-      if (problem) throw new Error(t("マージした結果が計画として正しくないため、書き込みませんでした (自分の側のファイルはそのままです): {problem}", { problem }));
-      // 両側で同じ項目を変えていた箇所は、相手の値をログに残す (後から見直せるように)
-      // 片方が削除・片方が変更の箇所は、変更された側を残したことを記録する (ボックスの中身を丸ごとログに書くと長いので、場所だけ)
-      const kept = r.conflicts.filter((c) => !c.automatic && (c.ours === undefined || c.theirs === undefined));
-      for (const c of r.conflicts) {
-        const message = kept.includes(c)
-          ? t("マージで片方が削除・片方が変更: {path} (変更された側を残しました。削除した側: {side})", { path: c.path, side: c.ours === undefined ? t("自分") : t("相手") })
-          : t("マージで両側が変更: {path} (採用: {ours} / 相手: {theirs})", { path: c.path, ours: JSON.stringify(c.ours), theirs: JSON.stringify(c.theirs) });
-        q = { ...q, log: [...q.log, { id: `m${Math.random().toString(36).slice(2, 10)}`, at: new Date().toISOString(), actor: "merge", kind: "note", message }] };
-      }
-      // Gitは保存済みの両側を統合する。作業の取得検証はせず、claimsも3方向マージの結果を保存する。
-      commitFile(oursPath, toJSON(q) + "\n", readRevisions.get(resolve(oursPath))!);
-      const both = r.conflicts.length - kept.length;
-      out(
-        t("マージ: 相手の変更 {count} 件を取り込み", { count: r.merged })
-        + (both ? t("、両側で変更が {count} 件 (自分の値を採用し、相手の値はログに記録)", { count: both }) : "")
-        + (kept.length ? t("、削除と変更の競合が {count} 件 (変更された側を残し、ログに記録)", { count: kept.length }) : "")
-      );
-      if (r.conflicts.length && options.strict) process.exitCode = 1;
       return;
     }
     case "git-setup": {
