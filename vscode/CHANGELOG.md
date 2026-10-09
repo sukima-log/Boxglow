@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0
+
+- Follows boxglow 0.6.0. Update together with the CLI and `serve`.
+- **A diagram you can read at a glance**: boxes are cards (category, title, state, then inputs on the left and outputs on the right) with a header colored by state. In View mode boxes are laid out in dependency order as numbered stages; the zoom panel switches to a vertical, top-to-bottom view (Ctrl + wheel, or Cmd + wheel on a Mac, zooms). The layout saved in the file is untouched and is used in Edit mode.
+- **Block tree**: a sidebar with the whole hierarchy. Jump to a box, or add, rename, move, change the status of and delete boxes from the tree.
+- **Zoom and panels**: you cannot zoom out further than the whole diagram. Selecting a box, opening a panel, or resizing the editor (for example opening the terminal) keeps your zoom and position; the Fit button fits the diagram in the area not covered by panels.
+- **Edits do not collide**: when the file changes while you have unsaved edits, changes to different boxes are merged automatically. Only a box that both sides changed asks you to choose, box by box.
+- **Claims (optional, per plan)**: an agent that starts a box holds it for a while, so other agents and sub-agents leave it alone. The Owner tab of the side panel shows who holds a box.
+- **Start syncing (experimental, off by default)**: put this plan on the sync server or open one of your plans there, sign in, and keep machines in step. Nothing is sent until you start. Plans can be deleted from the server and restored for 30 days.
+- Saving moves only what changed: adding, moving or growing a box pushes only the boxes it now overlaps.
+- Switching between Edit and View no longer changes the width of the top bar; Auto Layout is in the ⋯ menu.
+
 ## 0.4.1
 
 - Follows boxglow 0.5.2 (0.5.1 is the same content). Update together with the CLI.
