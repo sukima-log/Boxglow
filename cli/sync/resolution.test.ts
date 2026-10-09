@@ -2,7 +2,9 @@ import { commitFile, revisionOf } from "../file-store";
 import { bindingsOf } from "./state-store";
 import { setLang } from "../../src/i18n/core";
 /** CLIとMCPの実際の入口で共通要求を渡す。通信先はループバックの試験サーバーだけ。 */
-import { afterAll, afterEach, beforeAll, beforeEach, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from "vitest";
+// この試験は 1 件ごとに CLI を何度も起動する。CI の遅い機械では既定の 5 秒を超えることがあるので、制限時間を延ばす (workflow.test.ts と同じ)
+vi.setConfig({ testTimeout: 30_000 });
 import { build } from "esbuild";
 import {
   mkdirSync,
