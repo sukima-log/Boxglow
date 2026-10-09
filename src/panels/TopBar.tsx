@@ -10,6 +10,7 @@ import { layoutAll } from "../model/autolayout";
 import { projectToMarkdown, scopeToMermaid } from "../model/export";
 import { ROOT_ID, type Project } from "../model/types";
 import { parentForNewBlock, useProjectStore } from "../store/useProjectStore";
+import { BranchDialog } from "./BranchDialog";
 import { applyTheme, currentTheme, type Theme } from "../lib/theme";
 import { copyText, downloadText, pickTextFile, safeFilename } from "../lib/download";
 import { setLang, t, useLang } from "../i18n";
@@ -123,6 +124,8 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
     }
   };
 
+  // 分岐を足すダイアログを開いているか
+  const [branchOpen, setBranchOpen] = useState(false);
   const fileName = useProjectStore((s) => s.fileName);
   const editMode = useProjectStore((s) => s.editMode);
   const setEditMode = useProjectStore((s) => s.setEditMode);
@@ -243,6 +246,10 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
               {!readonly && (
                 <button className="btn btn-ghost btn-sm justify-start" onClick={addProject} title={t("同じファイルにプロジェクトのボックスを足す")}>New Project</button>
               )}
+              {/* 分岐: まだ決まっていない分かれ道 (問いと選択肢。答えで進む道が決まる) */}
+              {!readonly && (
+                <button className="btn btn-ghost btn-sm justify-start" onClick={() => setBranchOpen(true)} title={t("まだ決まっていない分かれ道を、問いと選択肢で足す")}>+ Branch</button>
+              )}
               {!readonly && <div style={{ borderTop: "1px solid var(--line-soft)", margin: "4px 0" }} />}
               <button className="btn btn-ghost btn-sm justify-start" onClick={exportJSON}>Export JSON</button>
               <button className="btn btn-ghost btn-sm justify-start" onClick={exportMd}>Export Markdown</button>
@@ -260,6 +267,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
         </div>
         <button className="btn btn-ghost btn-sm" onClick={toggleTheme} title={theme === "dark" ? "Light mode" : "Dark mode"}>{theme === "dark" ? "☀" : "☾"}</button>
       </div>
+      {branchOpen && <BranchDialog onClose={() => setBranchOpen(false)} />}
     </header>
   );
 }

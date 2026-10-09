@@ -1,11 +1,12 @@
 import { ClaimMark, useClaimClock, visibleClaim } from "../panels/Claims";
+import { chosenOption, isSkipped, waitingBranches } from "../model/branch";
 /**
  * ブロック (ボックス) のノード
  * 分類・題名・状態・入力・出力を縦に読むカード。親は子を包む領域として描く。
  */
 import { Handle, Position, useStore, useUpdateNodeInternals, type NodeProps } from "@xyflow/react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { ancestorsOf, childrenOf, computeProgress, daysToDue, effectiveProgress, isInputReady, isSourceReady, isOverdue, issueKeyOf, missingRequiredInputs, portsOf } from "../model/graph";
+import { ancestorsOf, childrenOf, computeProgress, daysToDue, effectiveProgress, isInputReady, isSourceReady, isOverdue, issueKeyOf, portsOf, waitingFor } from "../model/graph";
 import type { BlockStatus } from "../model/types";
 import { useProjectStore, useShownProject } from "../store/useProjectStore";
 import { handleId, isExpanded, type BlockRFNode } from "./layout";
@@ -79,15 +80,24 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     , kids
     , progressRatio: prog.ratio
     , progressText: `${prog.white}/${prog.total}`
-    , ins: ins.map((q) => ({ id: q.id, name: q.name, required: q.required, promoted: !!q.promotedFrom, ready: isInputReady(p, q.id) }))
-    , outs: outs.map((q) => ({ id: q.id, name: q.name, ready: isSourceReady(p, { portId: q.id, side: "outer" }) }))
+    , ins: ins.map((q) => ({ id: q.id, name: q.name, required: q.required, promoted: !!q.promotedFrom, ready: isInputReady(p, q.id), anyOf: !!q.anyOf }))
+      // 出力: 分岐のボックスなら、その出力が選んだ道 (chosen) か、見送りの道 (rejected) か、まだ未定 (open) か
+    , outs: outs.map((q) => {
+        const chosen = b?.branch ? chosenOption(b) : undefined;
+        const branchState = q.branchOption === undefined ? null : chosen === undefined ? "open" : q.branchOption === chosen ? "chosen" : "rejected";
+        return { id: q.id, name: q.name, ready: isSourceReady(p, { portId: q.id, side: "outer" }), branchState };
+      })
+      // 分岐: このボックスが分岐か / 選ばなかった道の先 (見送り) か / まだ答えていない分岐の先 (分岐待ち) か
+    , branch: !!b?.branch
+    , skipped: isSkipped(p, blockId)
+    , waitingBranch: waitingBranches(p, blockId).length > 0
     , pending: b?.decisions.filter((d) => d.answer === undefined).length ?? 0
     , activity: b?.activity ?? null
     , percent: effectiveProgress(p, blockId)
     , isProject: b?.kind === "project"
     , fromTemplate: b?.template?.name ?? null
     , category: categoryOf(b?.category) ?? null // 詳細の札 (未分類なら null)
-    , startable: !!b && b.status === "black" && b.kind !== "project" && ins.length > 0 && missingRequiredInputs(p, blockId).length === 0 // 必須の入力がそろった New
+    , startable: !!b && b.status === "black" && b.kind !== "project" && ins.length > 0 && waitingFor(p, blockId).length === 0 && !isSkipped(p, blockId) // 必須の入力がそろい、分岐待ちでも見送りでもない New
     , issue: b?.issue ? { url: b.issue, key: issueKeyOf(b.issue) } : null // 外部の課題 (JIRA / Redmine など)
     , depth: Math.min(4, Math.max(1, ancestorsOf(p, blockId).length)) // 階層の深さ (プロジェクトのボックス = 1)。枠線の太さと地色に使う
     , key: b?.key ?? ""
@@ -152,6 +162,9 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   , data.mine ? "mine" : ""
   , data.dropTarget ? "drop-target" : ""
   , view.category ? "has-cat" : ""
+  , view.branch ? "kind-branch" : ""
+  , view.skipped ? "is-skipped" : ""
+  , view.waitingBranch && !view.skipped ? "branch-waiting" : ""
   ].filter(Boolean).join(" ");
 
   // ボックスの onClick: 丸 (ハンドル) を押したクリックはボックスの選択に伝えない。
@@ -175,6 +188,8 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
       <div className="bg-block__head" style={{ height: headerH - (view.expanded ? 24 : card.metaH), ...(vertical && !view.expanded ? { marginTop: vertical.inputH } : {}) }}>
         {view.category && <span className={`bg-block__cat${view.category.neutral ? " neutral" : ""}`} data-category={view.category.key} title={t("カテゴリ: {label}", { label: t(view.category.label) })}>{!view.expanded && <CategoryIcon category={view.category.key} />}{t(view.category.label)}</span>}
         {view.isProject && <span className="bg-block__tag">Project</span>}
+        {/* 分岐のボックス: ひし形の印 (判断の答えで、どの出力の道へ進むかが決まる) */}
+        {view.branch && <span className="bg-block__tag branch" title={t("分岐: 判断の答えで、進む道 (出力) が決まります")}><span aria-hidden="true">◇</span> {t("分岐")}</span>}
         <span className="bg-block__title" title={view.fromTemplate ? t("{title} (部品: {name})", { title: view.title, name: view.fromTemplate }) : view.title}>{view.title}</span>
         {(view.kids > 0 || data.major) && viewScope !== blockId && (
           <button className="bg-block__toggle nodrag" onClick={toggle} onDoubleClick={ev => ev.stopPropagation()} title={data.major ? t("この大項目のタブを開く (中のボックス {n} 個)", { n: view.kids }) : view.collapsed ? t("下の階層を展開する") : t("下の階層を畳む")}>
@@ -202,6 +217,9 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         )}
         <ClaimMark project={project} blockId={blockId} />
         {view.pending > 0 && <span className="meta-chip needs_decision">{t("判断待ち {n}", { n: view.pending })}</span>}
+        {/* 見送り: 選ばなかった分岐の道 (進捗・次の候補・担当の一覧から外れる) / 分岐待ち: まだ答えていない分岐の先 */}
+        {view.skipped && <span className="meta-chip skipped" title={t("選ばなかった分岐の道です。進捗や次の候補には数えません")}>{t("見送り")}</span>}
+        {view.waitingBranch && !view.skipped && <span className="meta-chip branch-waiting" title={t("まだ答えていない分岐の先です。答えると、この道へ進むかが決まります")}>{t("分岐待ち")}</span>}
         {view.dueDate && view.status !== "white" && (
           <span className={`meta-chip ${view.overdue ? "overdue" : "bg-block__secondary"}`} title={view.daysLeft === null ? t("期日 {date}", { date: view.dueDate }) : view.daysLeft < 0 ? t("期日 {date} ({d} 日超過)", { date: view.dueDate, d: -view.daysLeft }) : t("期日 {date} (あと {d} 日)", { date: view.dueDate, d: view.daysLeft })}>
             {t("期日 {date}", { date: view.dueDate.slice(5).replace("-", "/") })}
@@ -220,12 +238,15 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
             <div key={q.id} data-port-id={q.id} style={{ height: card.inputs[i].height }} className={`bg-block__port in ${q.required ? "" : "optional"} ${q.promoted ? "promoted" : ""} ${q.ready ? "ready" : ""}`} title={t("入力: {name}", { name: q.name })}>
               <span className="bg-block__direction">{t("入力")}</span>
               <span className="bg-block__port-name">{q.name}</span>
-              {!q.required ? <span className="opt">{t("(任意)")}</span> : !q.ready && <span className="bg-block__waiting">{t("待ち")}</span>}
+              {q.anyOf ? <span className="opt merge" title={t("合流: どれか 1 つが届けばよい入力")}>{t("合流")}</span> : !q.required ? <span className="opt">{t("(任意)")}</span> : !q.ready && <span className="bg-block__waiting">{t("待ち")}</span>}
             </div>
           ))}
           {view.outs.map((q, i) => (
-            <div key={q.id} data-port-id={q.id} style={{ height: card.outputs[i].height }} className={`bg-block__port out ${q.ready ? "ready" : ""}`} title={q.name}>
-              <span className="bg-block__direction">{t("出力")}</span><span className="bg-block__port-name">{q.name}</span>
+            <div key={q.id} data-port-id={q.id} style={{ height: card.outputs[i].height }} className={`bg-block__port out ${q.ready ? "ready" : ""} ${q.branchState ? `branch-${q.branchState}` : ""}`} title={q.name}>
+              {/* 分岐の出力: 選んだ道は ✓、見送りの道は取り消し線 (文字でも分かるよう、見送りには「見送り」と添える) */}
+              <span className="bg-block__direction">{q.branchState ? t("道") : t("出力")}</span>
+              <span className="bg-block__port-name">{q.branchState === "chosen" ? "✓ " : ""}{q.name}</span>
+              {q.branchState === "rejected" && <span className="opt">{t("見送り")}</span>}
             </div>
           ))}
         </div>

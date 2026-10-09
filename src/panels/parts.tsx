@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { addPort, createArtifact, inputGroupsOf, isInputNameLocked, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort } from "../model/graph";
 import type { Artifact, Project } from "../model/types";
+import { setInputAnyOf } from "../model/branch";
 import { ROOT_ID } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
 // 言語切り替え: 日本語の文は t() で包み、英語の辞書 (src/i18n/en/parts.ts) で引く
@@ -149,6 +150,13 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                     </div>
                     <span style={{ color: "var(--text-muted)" }}>{q.required ? t("そろうまで着手できない") : t("無くても着手できる")}</span>
                   </div>
+                )}
+                {/* 合流: 分かれた道が 1 つにまとまるところの入力。合流の入力どうしは、どれか 1 つが届けばよい */}
+                {direction === "in" && !q.promotedFrom && (
+                  <label className="flex items-center gap-2 text-[12px]" title={t("分かれた道 (分岐) が 1 つにまとまるところ。合流にした入力どうしは、どれか 1 つが届けば着手できます")}>
+                    <input type="checkbox" checked={!!q.anyOf} disabled={readonly} onChange={(e) => apply((p) => setInputAnyOf(p, q.id, e.target.checked))} />
+                    {t("合流 (どれか 1 つが届けばよい)")}
+                  </label>
                 )}
               </div>
             )}

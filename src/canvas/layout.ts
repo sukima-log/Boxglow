@@ -10,6 +10,7 @@ import { ROOT_ID, type Block, type Edge, type Endpoint, type Project } from "../
 import { wireNet, inputGroupsOf, isEdgeReady, isSourceReady, isHiddenByCollapse, majorBlocks, portsOf, rootInputsOf } from "../model/graph";
 
 export { BLOCK_W, HEADER_H, ROW_H, PAD_BOTTOM, EXPANDED_MIN_W, EXPANDED_PAD, TERMINAL_W, isExpanded, blockSize, terminalHeight, type Size } from "../model/size";
+import { branchState } from "../model/branch";
 import { blockSize, isExpanded, terminalHeight, TERMINAL_W, HEADER_H, ROW_H, PAD_BOTTOM } from "../model/size";
 
 /** 閲覧時の親ボックスと外部入出力の間隔 */
@@ -290,6 +291,8 @@ export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; se
   const scope = opts.scope && p.blocks[opts.scope] ? opts.scope : null;
   // 線を選んだときは、親の縁を越えてつながる線 (同じ信号) をまとめて強調する
   const net = opts.selectedEdgeId ? wireNet(p, opts.selectedEdgeId) : new Set<string>();
+  // 分岐の状態 (見送り・未定の線)。計画ごとに 1 回だけ求めて使い回す
+  const branches = branchState(p);
   for (const e of Object.values(p.edges)) {
     const fp = p.ports[e.from.portId];
     const tp = p.ports[e.to.portId];
@@ -336,6 +339,8 @@ export function buildEdges(p: Project, opts: { selectedEdgeId: string | null; se
     , className: [
         e.auto ? "edge-auto" : ""
       , ready ? "edge-ready" : ""
+        // 分岐: 選ばなかった道の線 (見送り) は薄く、まだ答えていない分岐の線 (未定) は未定と分かる線で描く
+      , branches.rejectedEdges.has(e.id) ? "edge-branch-rejected" : branches.pendingEdges.has(e.id) ? "edge-branch-pending" : ""
       , opts.selectedBlockId ? (touches(p, e, opts.selectedBlockId) ? "edge-hot" : "edge-dim") : opts.selectedEdgeId ? (net.has(e.id) ? "edge-net" : "edge-dim") : ""
       ].filter(Boolean).join(" ") || undefined
       // ラベルは、選んだ線と、選んだボックスにつながる線だけに出す (全部に出すと重なって読めない)

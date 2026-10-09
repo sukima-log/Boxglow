@@ -10,7 +10,7 @@ import { WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
 import { isEdgeReady, isAcked as decisionIsAcked } from "../model/graph";
 import { useEffect, useMemo, useState } from "react";
-import { addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, disconnect, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, missingRequiredInputs, removeBlock, setCategory, setProgress, setSchedule, updateBlock, wireNetTabs } from "../model/graph";
+import { addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, disconnect, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, removeBlock, setCategory, setProgress, setSchedule, updateBlock, waitingFor, wireNetTabs } from "../model/graph";
 import { saveTemplate } from "../lib/templates";
 import { actorLabel, ACTIVITY_LABEL, agoText } from "../model/report";
 import { DecisionCard, Timeline } from "./Timeline";
@@ -299,10 +299,11 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         )}
         {/* 必須の入力の状況 (I/O タブの 必須 / 任意 がこことボックスの Ready に効く) */}
         {b.status !== "white" && kindOf(b) !== "project" && portsOf(project, blockId, "in").length > 0 && (() => {
-          const missing = missingRequiredInputs(project, blockId);
+          // 必須の入力と、まだ答えていない分岐 (分岐待ち)
+          const missing = waitingFor(project, blockId);
           return missing.length === 0
             ? <div className="text-[12px]" style={{ color: "var(--primary-strong)" }}>{t("必須の入力はそろっています (着手できます)")}</div>
-            : <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("必須の入力待ち: {names}", { names: missing.map((q) => q.name).join(", ") })}</div>;
+            : <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("必須の入力待ち: {names}", { names: missing.join(", ") })}</div>;
         })()}
         {/* プロジェクトのボックス: 対応するリポジトリ (複数リポジトリを 1 つのファイルで管理するときの目印) */}
         {isProject && (

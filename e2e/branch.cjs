@@ -1,0 +1,61 @@
+/**
+ * 分岐と合流の画面の検査:
+ *   - 答える前: 分岐のボックスに「分岐」の札、その先のボックスは「分岐待ち」(点線の枠)
+ *   - 詳細パネルで選択肢を押して答えると: 分岐のボックスは完了、選んだ道は ✓、選ばなかった道の先は「見送り」(薄く・取り消し線)、
+ *     見送りは完了数の分母から外れ、合流の入力を持つ結合テストは見送りにならない
+ *   - ⋯ メニューの「+ Branch」から、問いと選択肢で分岐を足せる (選択肢ごとに道ができる)
+ * 計画は e2e/fixtures/branch.boxglow.json (設計 → 分岐 (REST / GraphQL) → 各実装 → 結合テスト (合流))
+ * 使い方: e2e/run.sh から呼ばれる (PLAYWRIGHT と LD_LIBRARY_PATH は run.sh が設定。プレビューが 4173 番で動いていること)
+ */
+const path = require('path');
+const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
+
+(async () => {
+  const browser = await chromium.launch();
+  try {
+    const { page, errors } = await open(browser, { query: '?lang=ja' });
+    await load(page, path.join(ROOT, 'e2e/fixtures/branch.boxglow.json'));
+    // ボックスの要素を題名で引く
+    const box = (title) => page.locator('.react-flow__node-block', { has: page.locator('.bg-block__title', { hasText: new RegExp(`^${title}$`) }) }).first().locator('.bg-block');
+
+    // ---- 答える前 ----
+    check('分岐: 分岐のボックスに「分岐」の札が付く', await box('API の方式を決める').locator('.bg-block__tag.branch').isVisible());
+    check('分岐: 答える前は、各道と合流先が「分岐待ち」', (await box('REST で実装する').getAttribute('class')).includes('branch-waiting')
+      && (await box('GraphQL で実装する').getAttribute('class')).includes('branch-waiting')
+      && (await box('結合テスト').getAttribute('class')).includes('branch-waiting'));
+    const totalBefore = await page.evaluate(() => document.body.innerText.match(/Done \d+ \/ (\d+)/)?.[1]);
+
+    // ---- 詳細パネルで REST を選んで答える ----
+    await box('API の方式を決める').click(); await page.waitForTimeout(400);
+    await page.locator('.panel.right button', { hasText: /^REST$/ }).first().click(); await page.waitForTimeout(600);
+    const st = await page.evaluate(() => { const s = window.boxglow.store.getState(); const b = Object.values(s.project.blocks).find((x) => x.title === 'API の方式を決める'); return b.status; });
+    check('分岐: 選択肢で答えると、分岐のボックスは完了になる', st === 'white', st);
+    check('分岐: 選んだ道は ✓、選ばなかった道は見送りの印', await box('API の方式を決める').locator('.bg-block__port.out.branch-chosen').innerText().then((x) => x.includes('REST'))
+      && await box('API の方式を決める').locator('.bg-block__port.out.branch-rejected').innerText().then((x) => x.includes('GraphQL')));
+    check('分岐: 選ばなかった道の先のボックスは「見送り」', (await box('GraphQL で実装する').getAttribute('class')).includes('is-skipped')
+      && await box('GraphQL で実装する').locator('.meta-chip.skipped').isVisible());
+    check('分岐: 選んだ道と合流先は、見送りでも分岐待ちでもない', !/is-skipped|branch-waiting/.test(await box('REST で実装する').getAttribute('class'))
+      && !/is-skipped|branch-waiting/.test(await box('結合テスト').getAttribute('class')));
+    const totalAfter = await page.evaluate(() => document.body.innerText.match(/Done \d+ \/ (\d+)/)?.[1]);
+    check('分岐: 見送りのボックスは完了数の分母から外れる', Number(totalAfter) === Number(totalBefore) - 1, `${totalBefore} -> ${totalAfter}`);
+
+    // ---- ⋯ メニューから分岐を足す ----
+    await page.locator('.react-flow__pane').click({ position: { x: 20, y: 20 } }); await page.waitForTimeout(200);
+    await page.locator('.topbar button[title="Menu"]').click();
+    await page.getByRole('button', { name: '+ Branch', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '分岐を足す' });
+    check('分岐: 選択肢が 2 つそろうまで「分岐を足す」は押せない', await dialog.getByRole('button', { name: '分岐を足す', exact: true }).isDisabled());
+    await dialog.getByPlaceholder('例: API の方式はどれにしますか?').fill('公開先はどれにしますか?');
+    await dialog.locator('textarea').fill('静的ホスティング\n自前のサーバー');
+    await dialog.getByRole('button', { name: '分岐を足す', exact: true }).click(); await page.waitForTimeout(600);
+    const made = await page.evaluate(() => { const s = window.boxglow.store.getState(); const b = Object.values(s.project.blocks).find((x) => x.title === '公開先はどれにしますか?'); if (!b) return null; return { branch: !!b.branch, outs: Object.values(s.project.ports).filter((q) => q.blockId === b.id && q.direction === 'out').map((q) => q.branchOption), selected: s.selection.blockId === b.id }; });
+    check('分岐: ダイアログから足した分岐は、選択肢ごとの道を持ち、選ばれた状態になる', !!made && made.branch && made.outs.join('|') === '静的ホスティング|自前のサーバー' && made.selected, JSON.stringify(made));
+
+    check('分岐: 実行時のエラーが無い', errors.length === 0, errors.join(' | '));
+  } finally {
+    await browser.close();
+  }
+  const r = result();
+  console.log(`${r.passed}/${r.passed + r.failed} passed`);
+  process.exit(r.failed ? 1 : 0);
+})().catch((e) => { console.error(e); process.exit(1); });

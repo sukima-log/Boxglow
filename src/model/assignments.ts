@@ -2,7 +2,8 @@
  * 担当の一覧 (表): あるメンバーが担当するボックスを、表の行として取り出す
  * 画面の「表で見る」と CLI の `boxglow list` が同じ行を使う (表示の違いだけを各側で持つ)
  */
-import { ancestorsOf, effectiveProgress, kindOf, missingRequiredInputs } from "./graph";
+import { ancestorsOf, effectiveProgress, kindOf, waitingFor } from "./graph";
+import { isSkipped } from "./branch";
 import { ROOT_ID, type BlockStatus, type Project } from "./types";
 
 /** 誰の担当を出すか: メンバーの id / 未担当 / 全員 (担当の有無を問わず、すべてのタスク) */
@@ -25,7 +26,7 @@ export interface AssignmentRow {
   overdue: boolean;
   /** 見積もり (時間) */
   estimateHours?: number;
-  /** まだ届いていない必須の入力の名前 (空なら、そろっている) */
+  /** まだ届いていない必須の入力の名前と、まだ答えていない分岐 (空なら、そろっている) */
   missingInputs: string[];
   /** 未回答の判断 (人への質問) の数 */
   pendingDecisions: number;
@@ -47,6 +48,8 @@ export function assignmentRows(p: Project, target: AssigneeTarget, opts: { inclu
   for (const b of Object.values(p.blocks)) {
     // タスクだけ (最上位とプロジェクトのボックスは、担当を付けても一覧には出さない)
     if (b.id === ROOT_ID || kindOf(b) === "project") continue;
+    // 見送りのボックス (選ばなかった分岐の道) は、やらない仕事なので出さない
+    if (isSkipped(p, b.id)) continue;
     // 担当の判定: メンバーの担当か、担当がいないか (全員なら判定しない)
     const mine = "memberId" in target ? b.assigneeIds.includes(target.memberId)
       : "unassigned" in target ? b.assigneeIds.length === 0
@@ -66,8 +69,8 @@ export function assignmentRows(p: Project, target: AssigneeTarget, opts: { inclu
       // 期日を過ぎたか: 完了済みは対象外 (終わった仕事を赤く出さない)
     , overdue: !!b.dueDate && b.status !== "white" && b.dueDate < today
     , ...(typeof b.estimateHours === "number" ? { estimateHours: b.estimateHours } : {})
-      // 入力の待ち: 完了済みは、もう材料を待たないので空にする
-    , missingInputs: b.status === "white" ? [] : missingRequiredInputs(p, b.id).map((q) => q.name)
+      // 入力の待ち (と、まだ答えていない分岐): 完了済みは、もう材料を待たないので空にする
+    , missingInputs: b.status === "white" ? [] : waitingFor(p, b.id)
     , pendingDecisions: b.decisions.filter((d) => d.answer === undefined).length
       // 担当の名前: 登録の順にそろえる (消えたメンバーの id は飛ばす)
     , assignees: p.members.filter((m) => b.assigneeIds.includes(m.id)).map((m) => m.name)

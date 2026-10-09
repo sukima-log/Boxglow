@@ -3,7 +3,8 @@
  * 判定と表示だけを行い、本文や計画はここでは書き換えない。
  */
 import type { Block, Project, WorkScope } from "./types";
-import { isHumanActor, missingRequiredInputs, portsOf } from "./graph";
+import { isHumanActor, portsOf, waitingFor } from "./graph";
+import { isSkipped } from "./branch";
 import { t } from "../i18n/core";
 
 /** Input: なし / Output: 作業範囲の項目と表示名 (翻訳は表示時)。 */
@@ -35,7 +36,8 @@ export function inFocus(p: Project, id: string): boolean {
 /** Input: 計画、未着手候補 / Output: 今回の対象を先に、各範囲内を着手可能・入力待ちに分けた一覧。 */
 export function candidateGroups(p: Project, blocks: Block[]) {
   const focused = !!p.focusBlockId && !!p.blocks[p.focusBlockId];
-  const candidates = blocks.map(b => ({ blockId: b.id, key: b.key, title: b.title, inFocus: inFocus(p, b.id), missingInputs: missingRequiredInputs(p, b.id).map(x => x.name) }));
+  // 待ちの理由: 必須の入力と、まだ答えていない分岐 (分岐待ちは「入力待ち」の組に入る)
+  const candidates = blocks.map(b => ({ blockId: b.id, key: b.key, title: b.title, inFocus: inFocus(p, b.id), missingInputs: waitingFor(p, b.id) }));
   return (focused ? [true, false] : [false]).flatMap(scope =>
     [true, false].map(ready => ({
       inFocus: scope, ready,
@@ -46,7 +48,10 @@ export function candidateGroups(p: Project, blocks: Block[]) {
 
 /** Input: 計画、ボックス、操作者、例外理由 / Output: 保存前の警告・拒否理由。理由があれば入力待ちでも開始可。 */
 export function checkStart(p: Project, id: string, actor: string, reason = "") {
-  const names = missingRequiredInputs(p, id).map(x => x.name);
+  // 見送りのボックス (選ばなかった分岐の道) は、やらない仕事。理由が無ければ警告する (拒否はしない。判断をやり直す前の下調べなどがあるため)
+  if (isSkipped(p, id) && !reason.trim()) return { warning: t("選ばなかった分岐の道 (見送り) のボックスです。進める理由があれば --reason で記録してください"), error: "" };
+  // 必須の入力と、まだ答えていない分岐 (分岐待ちのボックスに着手すると、選ばれない道の仕事になるかもしれない)
+  const names = waitingFor(p, id);
   if (!names.length || reason.trim()) return { warning: "", error: "" };
   const warning = t("必須の入力待ち: {names}", { names: names.join(", ") });
   return { warning, error: p.workflowPolicy?.startWithoutInputs === "reject" && !isHumanActor(actor)

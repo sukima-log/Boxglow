@@ -156,3 +156,56 @@ describe("担当の一覧 (list)",()=>{
     expect(unknown.stderr).toContain("さとう");
   });
 });
+
+// 分岐 (branch) と合流 (port --any-of): 選択肢ごとの道を作り、答えると選ばなかった道の先は見送り (次の候補と担当の一覧から外れる)
+describe("分岐 (branch)",()=>{
+  it("branch で選択肢ごとの道を作り、答える前は分岐待ち、答えると選ばなかった道は見送りになる",()=>{
+    const {cli,read}=fixture();
+    // 分岐を足し、2 つの道の先にボックスを作ってつなぐ (CLI は --actor codex で動く)
+    const made=cli("branch","方式を決める","--options","REST|GraphQL","--question","API の方式は?");
+    expect(made.status,made.stderr).toBe(0);
+    expect(made.stdout).toContain("REST, GraphQL");
+    for(const [title,from] of [["REST 実装","方式を決める.REST"],["GraphQL 実装","方式を決める.GraphQL"]]){
+      expect(cli("add",title,"--out","API").status).toBe(0);
+      const c=cli("connect",from,title);expect(c.status,c.stderr).toBe(0);
+    }
+    // 合流先: 2 つの API を受けて、合流にする (つなぐと入力の名前は供給元に合わせて、どちらも「API」になる)
+    expect(cli("add","結合テスト","--out","結果").status).toBe(0);
+    expect(cli("port","結合テスト","--in","API (REST)","--in","API (GraphQL)").status).toBe(0);
+    expect(cli("connect","REST 実装.API","結合テスト.API (REST)").status).toBe(0);
+    expect(cli("connect","GraphQL 実装.API","結合テスト.API (GraphQL)").status).toBe(0);
+    const merged=cli("port","結合テスト","--any-of","API");
+    expect(merged.status,merged.stderr).toBe(0);
+    // 答える前: 道の先は分岐待ちとして「入力待ち」の候補に並び、着手すると警告される
+    const before=cli("resume");
+    expect(before.stdout).toMatch(/GraphQL 実装 — .*分岐「方式を決める」の判断/);
+    const started=cli("start","GraphQL 実装");expect(started.stdout+started.stderr).toContain("分岐「方式を決める」の判断");
+    expect(cli("leave","GraphQL 実装").status).toBe(0);
+    // 人が REST と答える → 分岐は完了、GraphQL の道は見送り (次の候補と担当の一覧から外れる)、結合テストは見送りにならない
+    expect(cli("answer","方式を決める","REST","--by","human").status).toBe(0);
+    const p=read();
+    const branch=Object.values(p.blocks as Record<string,{title:string;status:string}>).find(b=>b.title==="方式を決める")!;
+    expect(branch.status).toBe("white");
+    const after=cli("resume").stdout;
+    expect(after).not.toContain("GraphQL 実装");
+    expect(after).toContain("REST 実装");
+    const table=cli("list","--everyone").stdout;
+    expect(table).not.toContain("GraphQL 実装");
+    expect(table).toContain("結合テスト");
+    // 見送りのボックスに着手すると、見送りだと警告される
+    const skipped=cli("start","GraphQL 実装");expect(skipped.stdout+skipped.stderr).toContain("見送り");
+  });
+  it("--option を繰り返すと、「|」を含む選択肢も 1 つの道になる",()=>{
+    const {cli,read}=fixture();
+    const made=cli("branch","比較","--option","A|B 案","--option","C 案");
+    expect(made.status,made.stderr).toBe(0);
+    const p=read();
+    const outs=Object.values(p.ports as Record<string,{direction:string;branchOption?:string}>).filter(q=>q.branchOption!==undefined).map(q=>q.branchOption);
+    expect(outs).toEqual(["A|B 案","C 案"]);
+  });
+  it("選択肢が 1 つしか無い branch は止める",()=>{
+    const {cli}=fixture();
+    const r=cli("branch","方式","--options","REST");
+    expect(r.status).not.toBe(0);
+  });
+});

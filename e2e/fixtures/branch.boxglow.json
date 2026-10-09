@@ -1,0 +1,389 @@
+{
+  "schemaVersion": 5,
+  "id": "VWLYNIH_u4",
+  "name": "分岐の確認",
+  "description": "",
+  "createdAt": "2026-10-09T16:36:11.933Z",
+  "visibility": "private",
+  "members": [],
+  "blocks": {
+    "root": {
+      "id": "root",
+      "parentId": null,
+      "title": "分岐の確認",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "MQjy1-4Ldn": {
+      "id": "MQjy1-4Ldn",
+      "key": "B1",
+      "kind": "project",
+      "parentId": "root",
+      "title": "分岐の確認",
+      "description": "",
+      "status": "gray",
+      "assigneeIds": [],
+      "position": {
+        "x": 344,
+        "y": 40
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": [],
+      "statusChangedAt": "2026-10-09T16:36:11.936Z"
+    },
+    "Voq9K-uXro": {
+      "id": "Voq9K-uXro",
+      "key": "B2",
+      "parentId": "MQjy1-4Ldn",
+      "title": "設計する",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 120,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "EJJC8e448e": {
+      "id": "EJJC8e448e",
+      "key": "B3",
+      "parentId": "MQjy1-4Ldn",
+      "title": "API の方式を決める",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 520,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": {
+        "actor": "codex",
+        "state": "needs_decision",
+        "note": "API の方式はどれにしますか?",
+        "since": "2026-10-09T16:36:11.936Z"
+      },
+      "decisions": [
+        {
+          "id": "HHhziPwY1H",
+          "question": "API の方式はどれにしますか?",
+          "options": [
+            "REST",
+            "GraphQL"
+          ],
+          "askedBy": "codex",
+          "askedAt": "2026-10-09T16:36:11.936Z",
+          "context": "REST は実績が多い。GraphQL は画面の取得が柔軟。"
+        }
+      ],
+      "branch": {
+        "decisionId": "HHhziPwY1H"
+      }
+    },
+    "hFoN4QqnKM": {
+      "id": "hFoN4QqnKM",
+      "key": "B4",
+      "parentId": "MQjy1-4Ldn",
+      "title": "REST で実装する",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 942.5,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "RNnnTvfA4H": {
+      "id": "RNnnTvfA4H",
+      "key": "B5",
+      "parentId": "MQjy1-4Ldn",
+      "title": "GraphQL で実装する",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 942.5,
+        "y": 444
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    },
+    "sSsVgQeuBH": {
+      "id": "sSsVgQeuBH",
+      "key": "B6",
+      "parentId": "MQjy1-4Ldn",
+      "title": "結合テスト",
+      "description": "",
+      "status": "black",
+      "assigneeIds": [],
+      "position": {
+        "x": 1371.6,
+        "y": 76
+      },
+      "collapsed": false,
+      "artifacts": [],
+      "activity": null,
+      "decisions": []
+    }
+  },
+  "ports": {
+    "E_Me8VDe6R": {
+      "id": "E_Me8VDe6R",
+      "blockId": "root",
+      "direction": "out",
+      "name": "最終成果物",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "wyoI8epSdz": {
+      "id": "wyoI8epSdz",
+      "blockId": "MQjy1-4Ldn",
+      "direction": "out",
+      "name": "最終成果物",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "3o0aDlrwqv": {
+      "id": "3o0aDlrwqv",
+      "blockId": "Voq9K-uXro",
+      "direction": "out",
+      "name": "設計書",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "ym7GSTfZgg": {
+      "id": "ym7GSTfZgg",
+      "blockId": "EJJC8e448e",
+      "direction": "out",
+      "name": "REST",
+      "description": "",
+      "required": true,
+      "artifacts": [],
+      "branchOption": "REST"
+    },
+    "3i0YDcSe2E": {
+      "id": "3i0YDcSe2E",
+      "blockId": "EJJC8e448e",
+      "direction": "out",
+      "name": "GraphQL",
+      "description": "",
+      "required": true,
+      "artifacts": [],
+      "branchOption": "GraphQL"
+    },
+    "tDfgFkj5PB": {
+      "id": "tDfgFkj5PB",
+      "blockId": "EJJC8e448e",
+      "direction": "in",
+      "name": "設計書",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "mtomGVIEly": {
+      "id": "mtomGVIEly",
+      "blockId": "hFoN4QqnKM",
+      "direction": "out",
+      "name": "API",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "Ho597ghcqx": {
+      "id": "Ho597ghcqx",
+      "blockId": "RNnnTvfA4H",
+      "direction": "out",
+      "name": "API",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "yj6cm0gVUQ": {
+      "id": "yj6cm0gVUQ",
+      "blockId": "hFoN4QqnKM",
+      "direction": "in",
+      "name": "REST",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "T1BPnPcITG": {
+      "id": "T1BPnPcITG",
+      "blockId": "RNnnTvfA4H",
+      "direction": "in",
+      "name": "GraphQL",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "rfS70_fGES": {
+      "id": "rfS70_fGES",
+      "blockId": "sSsVgQeuBH",
+      "direction": "out",
+      "name": "テスト済み",
+      "description": "",
+      "required": true,
+      "artifacts": []
+    },
+    "ZbezT8lyJ-": {
+      "id": "ZbezT8lyJ-",
+      "blockId": "sSsVgQeuBH",
+      "direction": "in",
+      "name": "API",
+      "description": "",
+      "required": true,
+      "artifacts": [],
+      "anyOf": true
+    },
+    "EKuT4Ug1sS": {
+      "id": "EKuT4Ug1sS",
+      "blockId": "sSsVgQeuBH",
+      "direction": "in",
+      "name": "API",
+      "description": "",
+      "required": true,
+      "artifacts": [],
+      "anyOf": true
+    }
+  },
+  "edges": {
+    "CwElcDgLVU": {
+      "id": "CwElcDgLVU",
+      "from": {
+        "portId": "wyoI8epSdz",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "E_Me8VDe6R",
+        "side": "inner"
+      },
+      "kind": "up",
+      "auto": false
+    },
+    "hx9NFjy3bK": {
+      "id": "hx9NFjy3bK",
+      "from": {
+        "portId": "3o0aDlrwqv",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "tDfgFkj5PB",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "IWtNSdHmTR": {
+      "id": "IWtNSdHmTR",
+      "from": {
+        "portId": "ym7GSTfZgg",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "yj6cm0gVUQ",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "Qx2HUzLFNf": {
+      "id": "Qx2HUzLFNf",
+      "from": {
+        "portId": "3i0YDcSe2E",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "T1BPnPcITG",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "nTFiPGMopj": {
+      "id": "nTFiPGMopj",
+      "from": {
+        "portId": "mtomGVIEly",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "ZbezT8lyJ-",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    },
+    "Fg3AUWWAqV": {
+      "id": "Fg3AUWWAqV",
+      "from": {
+        "portId": "Ho597ghcqx",
+        "side": "outer"
+      },
+      "to": {
+        "portId": "EKuT4Ug1sS",
+        "side": "outer"
+      },
+      "kind": "sibling",
+      "auto": false
+    }
+  },
+  "terminals": {
+    "in": {
+      "x": 0,
+      "y": 421
+    },
+    "out": {
+      "x": 2211.6,
+      "y": 421
+    }
+  },
+  "log": [
+    {
+      "id": "3FbkkLB38v",
+      "at": "2026-10-09T16:36:11.936Z",
+      "actor": "codex",
+      "kind": "added",
+      "blockId": "EJJC8e448e",
+      "message": "「API の方式を決める」を追加"
+    },
+    {
+      "id": "fvjgVpTBQ4",
+      "at": "2026-10-09T16:36:11.936Z",
+      "actor": "codex",
+      "kind": "asked",
+      "blockId": "EJJC8e448e",
+      "message": "「API の方式を決める」で判断待ち: API の方式はどれにしますか?"
+    }
+  ],
+  "agents": {
+    "codex": {
+      "lastSeen": "2026-10-09T16:36:11.936Z"
+    }
+  },
+  "nextKey": 7,
+  "lang": "ja"
+}

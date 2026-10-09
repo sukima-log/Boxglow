@@ -1698,3 +1698,27 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
   .inspector-body { gap: 12px; padding-top: 8px; }
 }
 
+/* ---- 分岐と合流 ---- */
+/* 分岐のボックスの札 (ひし形)。カテゴリの札と並ぶので、輪郭だけの控えめな札にする */
+.bg-block__tag.branch { background: transparent; color: var(--primary-strong); border: 1px solid currentColor; }
+/* 見送り (選ばなかった道の先): 薄く残す。題名に取り消し線を引き、色だけに頼らない */
+.bg-block.is-skipped { opacity: .45; }
+.bg-block.is-skipped .bg-block__title { text-decoration: line-through; }
+.meta-chip.skipped { background: transparent; border: 1px dashed var(--line); color: var(--text-muted); }
+/* 分岐待ち (まだ答えていない分岐の先): 点線の枠で「まだ決まっていない」ことを示す */
+.bg-block.branch-waiting { outline: 2px dashed var(--line); outline-offset: 2px; }
+.meta-chip.branch-waiting { background: transparent; border: 1px dashed var(--primary); color: var(--primary-strong); }
+/* 分岐の出力: 選んだ道は太字、見送りの道は取り消し線 */
+.bg-block__port.out.branch-chosen .bg-block__port-name { font-weight: 800; color: var(--primary-strong); }
+.bg-block__port.out.branch-rejected .bg-block__port-name { text-decoration: line-through; color: var(--text-muted); }
+/* 合流の入力の札 */
+.bg-block__port .opt.merge { color: var(--primary-strong); font-weight: 700; }
+/* 線: 見送りの道は薄く細い点線、未定の道は点線 */
+.react-flow__edge.edge-branch-rejected .react-flow__edge-path { opacity: .3; stroke-dasharray: 2 6; }
+.react-flow__edge.edge-branch-pending .react-flow__edge-path { stroke-dasharray: 8 6; }
+/* 分岐を足すダイアログ */
+.branch-dialog { width: min(480px, 100%); display: flex; flex-direction: column; gap: 16px; padding: 24px; }
+.branch-dialog h2 { font-size: 18px; font-weight: 800; margin: 0; }
+.branch-dialog__field { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-weight: 700; }
+.branch-dialog__field .input { font-weight: 400; }
+

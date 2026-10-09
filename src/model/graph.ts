@@ -8,6 +8,7 @@ import { validateClaims } from "./claims";
 import { inFocus } from "./workflow";
 
 import { categoryOf } from "./categories";
+import { branchState, chosenOption, isSkipped, waitingBranches } from "./branch";
 // 文言の言語切り替え (React に依存しない core を使う。CLI の束に React を入れないため)
 import { t } from "../i18n/core";
 import { nanoid } from "nanoid";
@@ -642,6 +643,7 @@ function mirroredRootOutput(p: Project, portId: string): Port | null {
 /** 出力を増やせるか: 最上位、下の階層を持つボックス、または出力がまだ無いボックス */
 export function canAddOutput(p: Project, blockId: string): boolean {
   if (kindOf(p.blocks[blockId]) === "project") return true; // プロジェクトのボックスは包みなので出力をいくつでも持てる
+  if (p.blocks[blockId]?.branch) return true; // 分岐のボックスは、選択肢ごとに 1 本ずつ出力を持つ
   if (blockId === ROOT_ID) return true;
   if (portsOf(p, blockId, "out").length === 0) return true;
   return childrenOf(p, blockId).length > 0;
@@ -915,7 +917,8 @@ export function effectiveProgress(p: Project, blockId: string): number {
   if (!b) return 0;
   if (b.status === "white") return 100;
   if (typeof b.progress === "number") return Math.max(0, Math.min(100, b.progress));
-  const kids = childrenOf(p, blockId);
+  // 見送りの子 (選ばなかった分岐の道) は平均に入れない (やらない仕事なので、進捗を下げない)
+  const kids = childrenOf(p, blockId).filter((k) => !isSkipped(p, k.id));
   if (kids.length === 0) return 0;
   return Math.round(kids.reduce((acc, k) => acc + effectiveProgress(p, k.id), 0) / kids.length);
 }
@@ -926,7 +929,8 @@ export function effectiveProgress(p: Project, blockId: string): number {
  * Output: Progress
  */
 export function computeProgress(p: Project, blockId: string): Progress {
-  const targets = descendantsOf(p, blockId).filter((b) => kindOf(b) !== "project");
+  // 見送りのボックス (選ばなかった分岐の道) は数えない
+  const targets = descendantsOf(p, blockId).filter((b) => kindOf(b) !== "project" && !isSkipped(p, b.id));
   const list = targets.length > 0 ? targets : blockId === ROOT_ID ? [] : [p.blocks[blockId]].filter((b) => b && kindOf(b) !== "project");
   const count = (s: BlockStatus) => list.filter((b) => b.status === s).length;
   const white = count("white");
@@ -978,6 +982,9 @@ export function isSourceReady(p: Project, ep: Endpoint, seen: Set<string> = new 
   const upstream = incomingEdges(p, { portId: port.id, side: backSide });
   if (upstream.length > 0) return upstream.every((e) => isSourceReady(p, e.from, nextSeen));
   if (port.direction === "in") return hasExternalInputArtifact(p, port.id);
+  // 分岐の出力 (道): 判断の答えそのものが成果物。選んだ道は答えた時点で届き、選ばなかった道は届かない
+  const owner = p.blocks[port.blockId];
+  if (port.branchOption !== undefined && owner?.branch) return chosenOption(owner) === port.branchOption;
   if (port.artifacts.length > 0) return true;
   return port.direction === "out" && p.blocks[port.blockId]?.status === "white";
 }
@@ -1000,7 +1007,28 @@ export function isInputReady(p: Project, portId: string): boolean {
  *   空なら「着手できる」。任意 (required = false) の入力は無くても着手できる
  */
 export function missingRequiredInputs(p: Project, blockId: string): Port[] {
-  return portsOf(p, blockId, "in").filter((q) => q.required && !isInputReady(p, q.id));
+  const missing = portsOf(p, blockId, "in").filter((q) => q.required && !isInputReady(p, q.id));
+  // 合流の入力 (anyOf) は、どれか 1 つがそろえば待たない。そろっていなければ、見送りの道から来るもの (もう届かない) は待ちに数えない
+  const merge = portsOf(p, blockId, "in").filter((q) => q.required && q.anyOf);
+  if (merge.length === 0) return missing;
+  if (merge.some((q) => isInputReady(p, q.id))) return missing.filter((q) => !q.anyOf);
+  const gone = branchState(p).rejectedInputs;
+  return missing.filter((q) => !q.anyOf || !gone.has(q.id));
+}
+
+/**
+ * 着手を待たせている理由 (必須の入力の名前と、まだ答えていない分岐)。空なら着手できる
+ * Input : p, blockId / Output: 理由の文の一覧 (入力の名前、または「分岐「…」の判断」)
+ */
+export function waitingFor(p: Project, blockId: string): string[] {
+  const missing = missingRequiredInputs(p, blockId);
+  // 合流の入力は、どれか 1 つが届けばよいので「A / B のどれか」と 1 つにまとめる (同じ名前は 1 回だけ)
+  const merge = [...new Set(missing.filter((q) => q.anyOf).map((q) => q.name))];
+  return [
+    ...missing.filter((q) => !q.anyOf).map((q) => q.name)
+  , ...(merge.length === 0 ? [] : merge.length === 1 ? [merge[0]] : [t("{names} のどれか", { names: merge.join(" / ") })])
+  , ...waitingBranches(p, blockId).map((title) => t("分岐「{title}」の判断", { title }))
+  ];
 }
 
 /**
@@ -1310,6 +1338,9 @@ export function answerDecision(p: Project, blockId: string, decisionId: string, 
   if (isHumanActor(by)) { delete qd.ackedBy; delete qd.ackedAt; } else { qd.ackedBy = by; qd.ackedAt = qd.answeredAt; }
   if (q.blocks[blockId].activity?.state === "needs_decision") q.blocks[blockId].activity = null;
   appendLog(q, { actor: by, kind: "answered", blockId, message: t("「{title}」の判断: {question} → {answer}", { title: b.title, question: d.question, answer }) });
+  // 分岐のボックスは「決めること」が仕事: 選択肢のどれかで答えたら完了にする (選んだ道へ進める)
+  const qb = q.blocks[blockId];
+  if (qb.branch?.decisionId === decisionId && d.options.includes(answer) && qb.status !== "white") { qb.status = "white"; qb.statusChangedAt = now(); }
   return q;
 }
 
@@ -1330,6 +1361,12 @@ export function editDecisionAnswer(p: Project, blockId: string, decisionId: stri
   qd.answeredBy = by;
   qd.answeredAt = now();
   appendLog(q, { actor: by, kind: "answered", blockId, message: t("「{title}」の判断の答えを直した: {question} → {answer}", { title: b.title, question: d.question, answer: answer.trim() }) });
+  // 分岐のボックスは、直した答えに合わせる: 選択肢のどれかなら完了、選択肢でない (自由記述) なら未着手 (どの道へ進むかは未定)
+  const eb = q.blocks[blockId];
+  if (eb.branch?.decisionId === decisionId) {
+    const next = d.options.includes(answer.trim()) ? "white" : "black";
+    if (eb.status !== next && (next === "white" || eb.status === "white")) { eb.status = next; eb.statusChangedAt = now(); }
+  }
   return q;
 }
 
@@ -1364,6 +1401,9 @@ export function reopenDecision(p: Project, blockId: string, decisionId: string, 
   appendLog(q, { actor: by, kind: "asked", blockId, message: note
     ? t("「{title}」の判断をやり直し: {question} (前の答え: {answer}。理由: {note})", { title: b.title, question: d.question, answer: d.answer ?? "", note })
     : t("「{title}」の判断をやり直し: {question} (前の答え: {answer})", { title: b.title, question: d.question, answer: d.answer ?? "" }) });
+  // 分岐のボックスは、答えが無くなったら未着手に戻す (どの道へ進むかが、また未定になる)
+  const rb = q.blocks[blockId];
+  if (rb.branch?.decisionId === decisionId && rb.status === "white") { rb.status = "black"; rb.statusChangedAt = now(); }
   return q;
 }
 
@@ -1447,12 +1487,13 @@ export interface Summary {
 
 /** 全体の要約 (上の帯・CLI の status 用) */
 export function summarize(p: Project): Summary {
-  const blocks = Object.values(p.blocks).filter((b) => b.id !== ROOT_ID && kindOf(b) !== "project");
+  // 見送りのボックス (選ばなかった分岐の道) は、数にも次の候補にも入れない
+  const blocks = Object.values(p.blocks).filter((b) => b.id !== ROOT_ID && kindOf(b) !== "project" && !isSkipped(p, b.id));
   const working = blocks.filter((b) => b.activity?.state === "working").map((b) => ({ block: b, actor: b.activity!.actor, note: b.activity!.note, since: b.activity!.since }));
   const blocked = blocks.filter((b) => b.activity?.state === "blocked" || b.activity?.state === "waiting_review").map((b) => ({ block: b, actor: b.activity!.actor, note: b.activity!.note }));
   const leafBlack = blocks
     .filter((b) => b.status === "black" && !b.activity && childrenOf(p, b.id).length === 0)
-    .sort((a, b) => Number(inFocus(p, b.id)) - Number(inFocus(p, a.id)) || Number(missingRequiredInputs(p, a.id).length > 0) - Number(missingRequiredInputs(p, b.id).length > 0)); // 着手できるものを先に
+    .sort((a, b) => Number(inFocus(p, b.id)) - Number(inFocus(p, a.id)) || Number(waitingFor(p, a.id).length > 0) - Number(waitingFor(p, b.id).length > 0)); // 着手できるものを先に
   return {
     total: blocks.length
   , white: blocks.filter((b) => b.status === "white").length

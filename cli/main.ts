@@ -51,6 +51,7 @@ import type { Artifact } from "../src/model/types";
 import { blockToPrompt } from "../src/model/export";
 import { blockReport, logReport, statusReport } from "../src/model/report";
 import { assignmentRows, type AssigneeTarget } from "../src/model/assignments";
+import { addBranch, setInputAnyOf } from "../src/model/branch";
 import { STATUS_LABEL } from "../src/model/status";
 import { checkGitRef, findGitRef, gitRefFor } from "./git";
 import { layoutAll, layoutScope, nextFreePosition } from "../src/model/autolayout";
@@ -363,8 +364,9 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   export-block <block> [--out <path>] [--tags "a,b"]   ボックスを下の階層ごとテンプレート (*.boxglow-block.json) に書き出す
   import-block <path> [--parent <block>]         テンプレートを挿入 (親を省略すると最初のプロジェクトのボックスの中)
   split <block> --spec '<JSON>' | --spec-file <path>   下の階層にまとめて分解 (形式は docs/AGENTS_SNIPPET.md)
+  branch <題名> --options "A|B" | --option <A> --option <B> [--question <問い>] [--context <判断材料>] [--in <入力名>]... [--parent <block>]   まだ決まっていない分かれ道 (分岐) を足す。選択肢ごとに道 (出力) ができ、answer で答えると選ばなかった道は見送り
   move <block> --parent <block|project>            ボックスを別の親の中へ移す (線は間のボックスのポートを経由してつながったまま)
-  port <block|project> [--in <名前>]... [--out <名前>]... [--rename <旧名>=<新名>]   既存のボックスに入力 / 出力を足す、名前を変える (project = 最初のプロジェクトのボックス)
+  port <block|project> [--in <名前>]... [--out <名前>]... [--rename <旧名>=<新名>] [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス)
   disconnect <題名.出力名> <題名.入力名>          線を外す
   tidy                                              ファイルを規則にそろえて保存し直す (つないだ入力の名前を供給元に合わせる、大項目を畳む、重なりを解く)
   remove <block> [--force]                          ボックスを消す (中にボックスがあるときは --force。線も外れる。元に戻せないので Git で管理していること)
@@ -464,8 +466,9 @@ Usage (npx boxglow <command> ...):
   export-block <block> [--out <path>] [--tags "a,b"]   Write a box and everything under it out as a template (*.boxglow-block.json)
   import-block <path> [--parent <block>]         Insert a template (without a parent, goes inside the first project box)
   split <block> --spec '<JSON>' | --spec-file <path>   Break a box down into child boxes in one go (format: docs/AGENTS_SNIPPET.en.md)
+  branch <title> --options "A|B" | --option <A> --option <B> [--question <question>] [--context <background>] [--in <input name>]... [--parent <block>]   Add an undecided fork (branch). Each option gets a path (output); answering it with answer skips the paths not chosen
   move <block> --parent <block|project>            Move a box into another parent (wires stay connected through the ports of the boxes in between)
-  port <block|project> [--in <name>]... [--out <name>]... [--rename <old>=<new>]   Add inputs / outputs to an existing box, or rename them (project = the first project box)
+  port <block|project> [--in <name>]... [--out <name>]... [--rename <old>=<new>] [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, or rename them. --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
   disconnect <title.output> <title.input>          Remove a wire
   tidy                                              Normalize the file and save it again (match connected input names to their source, collapse top-level items, resolve overlaps)
   remove <block> [--force]                          Delete a box (--force if it contains boxes. Its wires are removed too. This cannot be undone, so keep the file in Git)
@@ -975,6 +978,22 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       out(t("追加: 「{title}」(id: {id})", { title, id: r.blockId }));
       return;
     }
+    case "branch": {
+      // 分岐のボックスを足す: まだ決まっていない分かれ道。選択肢ごとに出力 (道) ができ、判断に答えると選ばなかった道の先は「見送り」になる
+      // 例: branch "API の方式を決める" --question "API の方式はどれにしますか?" --options "REST|GraphQL" --in 設計書 --context "比較: ..."
+      const title = rest[0];
+      if (!title) throw new Error(t("<題名> を指定してください"));
+      // 選択肢: --option を繰り返す (選択肢に「|」を含められる) か、--options "A|B" (「|」で区切る)
+      const choices = [...list(options.option), ...(str(options.options) ?? "").split("|")].map((x) => x.trim()).filter(Boolean);
+      if (new Set(choices).size < 2) throw new Error(t("--options \"A|B\" (または --option を繰り返して) 選択肢を 2 つ以上指定してください"));
+      const parentId = str(options.parent) ? mustFind(p, str(options.parent)).id : defaultTaskParent(p);
+      const r = addBranch(p, { parentId, title, question: str(options.question) ?? title, options: choices, context: str(options.context) ?? "", actor, position: nextFreePosition(p, parentId) });
+      p = r.project;
+      for (const name of list(options.in)) p = addPort(p, { blockId: r.blockId, direction: "in", name }).project;
+      save(path, p);
+      out(t("分岐を追加: 「{title}」(id: {id})。道 (出力): {options}。判断に答えると、選ばなかった道の先は見送りになります", { title, id: r.blockId, options: choices.join(", ") }));
+      return;
+    }
     case "split": {
       const b = mustFind(p, rest[0]);
       p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
@@ -1004,6 +1023,16 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const added: string[] = [];
       for (const name of list(options.in)) { p = addPort(p, { blockId, direction: "in", name }).project; added.push(t("入力 {name}", { name })); }
       for (const name of list(options.out)) { p = addPort(p, { blockId, direction: "out", name }).project; added.push(t("出力 {name}", { name })); }
+      // 合流の入力にする (どれか 1 つが届けばよい) / 通常の入力に戻す
+      for (const [flag, on] of [["any-of", true], ["all-of", false]] as const) {
+        for (const name of list(options[flag])) {
+          // 同じ名前の入力はすべて対象にする (つないだ入力の名前は供給元の出力名に合わせて付くので、合流の入力は同じ名前になりやすい)
+          const ports = portsOf(p, blockId, "in").filter((x) => x.name === name);
+          if (ports.length === 0) throw new Error(t("ポート「{name}」が見つかりません", { name }));
+          for (const port of ports) p = setInputAnyOf(p, port.id, on);
+          added.push(on ? t("合流 {name}", { name }) : t("通常 {name}", { name }));
+        }
+      }
       for (const spec of list(options.rename)) {
         const eq = spec.indexOf("=");
         if (eq < 0) throw new Error(t("--rename は <旧名>=<新名> の形で指定してください: {spec}", { spec }));
@@ -1015,7 +1044,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
         p = updatePort(p, port.id, { name: to });
         added.push(`${from} -> ${to}`);
       }
-      if (added.length === 0) throw new Error(t("--in <名前> / --out <名前> / --rename <旧名>=<新名> のいずれかを指定してください"));
+      if (added.length === 0) throw new Error(t("--in <名前> / --out <名前> / --rename <旧名>=<新名> / --any-of <入力名> / --all-of <入力名> のいずれかを指定してください"));
       save(path, p);
       out(t("ポート: {title}: {list}", { title: p.blocks[blockId]?.title ?? "project", list: added.join(", ") }));
       return;

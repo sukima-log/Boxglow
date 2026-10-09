@@ -73,6 +73,16 @@ export interface Port {
   promotedFrom?: string;
   /** 最上位の入力を分けるグループ (Project.inputGroups の id)。無ければ既定の入力ノード */
   groupId?: string;
+  /**
+   * 分岐のボックスの出力: どの選択肢の道か (選択肢の文字そのもの)。判断の答えがこれと同じなら選んだ道、違えば見送り。
+   * 分岐でないボックスの出力には付けない
+   */
+  branchOption?: string;
+  /**
+   * 合流の入力: true の入力どうしは「どれか 1 つが届けばよい」(分かれた道の合流先で使う)。
+   * 無ければ従来どおり、必須の入力はすべて要る
+   */
+  anyOf?: boolean;
 }
 
 /** 最上位の入力のグループ (例: PCIe 仕様書、DDR 仕様書)。それぞれ別の入力ノードとして描く */
@@ -201,6 +211,11 @@ export interface Block {
   activity: Activity | null;
   /** 人間への質問と回答 (古い順) */
   decisions: Decision[];
+  /**
+   * 分岐のボックスの印 (ロードマップの時点で決まっていない分かれ道)。decisionId の判断の答えで、どの出力の道へ進むかが決まる。
+   * 種類 (kind) は増やさない: 古い版は知らない種類のボックスを読めないため。古い版では、判断と出力を持つ普通のボックスとして見える
+   */
+  branch?: { decisionId: string };
 }
 
 /** 結線の端点 (ポート + 面) */

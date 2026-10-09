@@ -32,6 +32,7 @@ Status: BlackBox (only the output is decided) → GrayBox (being broken down or 
 
 ### Structural rules
 
+- **Show an undecided fork as a branch**: when, at planning time, later work (a path) depends on a decision that has not been made, create a branch box with `npx boxglow branch "<title>" --options "A|B" --question "<question>" --context "<background>"`. Each option becomes a path (output); `connect` each one to the first box of that path. Where the paths come together again, make those inputs a merge (any one of them is enough) with `npx boxglow port <block> --any-of <input name>`. Once a person answers, the boxes on the paths not chosen are skipped and drop out of progress and next candidates. Before the answer, boxes on the paths wait for the branch and starting them warns (record a reason with `--reason`, e.g. for early research)
 - The top level contains only the "input node", the "final deliverable node" and "project boxes". Tasks go inside a project box (the default parent of `add` is the first project box)
 - There is no limit on depth. `split` can be used at any level
 - A box that could be reused in another project (e.g. converting input images to monochrome) can be turned into a template with `npx boxglow export-block <block> --out <name>.boxglow-block.json` and

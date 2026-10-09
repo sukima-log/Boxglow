@@ -50,6 +50,7 @@ node e2e/viewport-stability.cjs
 node e2e/viewport-review.cjs
 node e2e/tree-sync-ui.cjs
 node e2e/category.cjs
+node e2e/branch.cjs
 
 # 画面からの同期 (serve --sync + 試験用の同期サーバー: サインイン・サーバーに置く・受け取り・競合の選択・サインアウト)
 node e2e/sync.cjs
