@@ -13,8 +13,10 @@ import { t, useLang } from "../i18n";
 export function CloseButton({ onClick, title, label }: { onClick: () => void; title?: string; label?: string }) {
   useLang(); // 言語が変わったら描き直す
   const text = label ?? t("閉じる");
+  // 読み上げの名前は、画面の中の他の「閉じる」(ダイアログなど) と区別できるよう「パネルを閉じる」にする (表は「図に戻る」)
+  const name = label ?? t("パネルを閉じる");
   return (
-    <button className="btn btn-ghost btn-sm panel-close" onClick={onClick} title={title ?? t("閉じる (Esc)")} aria-label={text}>
+    <button className="btn btn-ghost btn-sm panel-close" onClick={onClick} title={title ?? t("閉じる (Esc)")} aria-label={name}>
       <span aria-hidden="true">×</span>
       <span className="panel-close__label" aria-hidden="true">{text}</span>
     </button>

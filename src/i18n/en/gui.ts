@@ -88,4 +88,5 @@ export const gui: Record<string, string> = {
   "In charge: 担当のボックスを表で見る": "In charge: your boxes as a table",
   "表示の切り替え": "View",
   "全員": "Everyone",
+  "パネルを閉じる": "Close the panel",
 };
