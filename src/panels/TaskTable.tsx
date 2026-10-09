@@ -1,6 +1,7 @@
 /**
  * 担当の一覧 (表): 図の代わりに、あるメンバーの担当のボックスを表で出す
- * 入口は図の左下の表示の切り替え (横・縦・表) の表の記号。表を出している間も、同じ場所に同じ切り替えを出す。行を押すと図に戻って、そのボックスへ移る
+ * 入口は図の左下の表示の切り替え (横・縦・表) の表の記号。表を出している間も、同じ場所に同じ切り替えを出す。
+ * 行を押すと、表を出したまま、右にそのボックスの詳細を開く (図へは横・縦の記号か、閉じるボタンで戻る)
  */
 import { CloseButton } from "./CloseButton";
 import { useEffect, useMemo, useState } from "react";
@@ -50,6 +51,8 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
   const select = useProjectStore((s) => s.select);
   const focusBlock = useProjectStore((s) => s.focusBlock);
   const meId = useProjectStore((s) => s.meId);
+  // 今選んでいるボックス (右に詳細を出している行を、表の上でも示す)
+  const selectedId = useProjectStore((s) => s.selection.blockId);
   // 対象: 選択肢の値は「メンバーの id」か、「全員」を表す "__everyone"、「未担当」を表す "__unassigned"
   const [target, setTarget] = useState<string>("memberId" in initial ? initial.memberId : "everyone" in initial ? "__everyone" : "__unassigned");
   const [includeDone, setIncludeDone] = useState(false);
@@ -65,21 +68,25 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project, member?.id, everyone, includeDone, sort]);
 
-  // Esc で図に戻る (入力欄で使っているときは除く)
+  // Esc で図に戻る (入力欄で使っているときは除く)。
+  // 右に詳細を開いているときは、先に詳細だけを閉じる (画面全体の Esc の処理に任せる)。
+  // 画面全体の処理が選択を先に消してしまわないよう、捕捉の段階 (capture) で、選択の有無を先に見る
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       const tag = (e.target as HTMLElement | null)?.tagName;
       if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+      const sel = useProjectStore.getState().selection;
+      if (sel.blockId || sel.edgeId || sel.project || sel.timeline) return;
       setTaskTable(null);
     };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [setTaskTable]);
 
-  // 行を押す: 図に戻り、そのボックスを選んで見えるところへ移す (別の大項目の中なら、そのタブを開く)
-  const jump = (id: string) => {
-    setTaskTable(null);
+  // 行を押す: 表を出したまま、そのボックスを選んで右に詳細を開く。
+  // 図の側でも見える位置へ寄せておく (後で図に戻ったとき、そのボックスが見えるように。別の大項目の中なら、そのタブを開く)
+  const open = (id: string) => {
     select({ blockId: id });
     focusBlock(id);
   };
@@ -133,7 +140,7 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} onClick={() => jump(r.id)} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") jump(r.id); }} title={t("図でこのボックスを開く")}>
+                <tr key={r.id} onClick={() => open(r.id)} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") open(r.id); }} title={t("右に詳細を開く")} aria-selected={r.id === selectedId} data-selected={r.id === selectedId}>
                   <td><span className="dec-key">{r.key}</span></td>
                   <td className="task-table__title">{r.title}</td>
                   <td className="task-table__where">{r.where}</td>

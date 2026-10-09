@@ -74,7 +74,7 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('Claims タブ: 受け持ちが実行 ID・残り時間つきで期限の近い順に並ぶ',claimRows.length===3 && /release-worker/.test(claimRows[0]) && claimRows.every((x)=>/残り \d+ 分/.test(x)) && claimRows.some((x)=>/api-worker/.test(x)) && claimRows.some((x)=>/test-worker/.test(x)),JSON.stringify(claimRows));
     await page.locator('.claim-list .tree-row',{hasText:'api-worker'}).click();await page.waitForTimeout(300);
     check('Claims タブ: 行を押すとそのボックス (バックエンド) が選ばれる',await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title;})==='バックエンド');
-    // 担当の一覧 (表、In charge): 左下の表示の切り替えの表の記号 → 自分を決めていないので「全員」(担当の列つき) → さとうに切り替えて未完了 2 件 → 完了済みも表示で 4 件 → 行を押すと図に戻ってそのボックスを選ぶ
+    // 担当の一覧 (表、In charge): 左下の表示の切り替えの表の記号 → 自分を決めていないので「全員」(担当の列つき) → さとうに切り替えて未完了 2 件 → 完了済みも表示で 4 件 → 行を押すと表のまま右に詳細が開く → Esc で詳細、もう一度で表を閉じる
     await page.evaluate(()=>window.boxglow.store.getState().select({}));
     await page.locator('.canvas-tools .view-switch__table').first().click();await page.waitForTimeout(300);
     check('担当の一覧: 表を出している間も、左下の同じ切り替えが表示され、表の記号が押された状態',await page.locator('.task-table-view__switch .view-switch__table').getAttribute('aria-pressed')==='true');
@@ -92,7 +92,12 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.locator('.task-table-view select').selectOption({label:'さとう'});
     await page.locator('.task-table-view__toggle input').check();
     await page.locator('.task-table tbody tr',{hasText:'バックエンド'}).click();await page.waitForTimeout(500);
-    check('担当の一覧: 行を押すと図に戻り、そのボックスが選ばれる',await page.locator('.task-table-view').count()===0 && await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title;})==='バックエンド');
+    check('担当の一覧: 行を押すと、表のまま右に詳細が開き、その行に印が付く',await page.locator('.task-table-view').count()===1 && await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title;})==='バックエンド' && await page.locator('.task-table tbody tr[data-selected="true"]').innerText().then((x)=>x.includes('バックエンド')));
+    // Esc: 1 回目は詳細だけを閉じ (表は残る)、2 回目で図に戻る
+    await page.keyboard.press('Escape');await page.waitForTimeout(300);
+    check('担当の一覧: 1 回目の Esc は詳細だけを閉じ、表は残る',await page.locator('.task-table-view').count()===1 && await page.evaluate(()=>window.boxglow.store.getState().selection.blockId)===null);
+    await page.keyboard.press('Escape');await page.waitForTimeout(300);
+    check('担当の一覧: 2 回目の Esc で図に戻る',await page.locator('.task-table-view').count()===0);
     // 狭い幅: ボックスを選んで開いた詳細パネルは、枠付きの大きな「× 閉じる」で閉じられる (指で押せる 44px 以上)
     await page.evaluate(()=>{const s=window.boxglow.store.getState();const b=Object.values(s.project.blocks).find((x)=>x.title==='設計する');s.select({blockId:b.id});});await page.waitForTimeout(400);
     const closeBox=await page.locator('.panel.right .panel-close').first().boundingBox();

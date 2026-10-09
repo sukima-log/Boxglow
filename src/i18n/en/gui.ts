@@ -81,7 +81,6 @@ export const gui: Record<string, string> = {
   "担当のボックスはありません": "No assigned boxes",
   "未完了の担当のボックスはありません": "No open assigned boxes",
   "場所": "Where",
-  "図でこのボックスを開く": "Open this box in the diagram",
   "期日切れ": "overdue",
   "待ち {n}": "{n} waiting",
   "そろった": "Ready",
@@ -89,4 +88,5 @@ export const gui: Record<string, string> = {
   "表示の切り替え": "View",
   "全員": "Everyone",
   "パネルを閉じる": "Close the panel",
+  "右に詳細を開く": "Open the details on the right",
 };
