@@ -11,8 +11,9 @@ import type { ConflictChoices, MergeResult } from "../model/merge";
  * 保存は変更から少し遅らせて IndexedDB に書く。
  */
 import { useMemo } from "react";
+import { readingLayout } from "../model/readingLayout";
 import { create } from "zustand";
-import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeCollapsed, normalizeInputNames, resolveAllOverlaps, scopeFor, toJSON, wireNetTabs, withIndex } from "../model/graph";
+import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeCollapsed, normalizeInputNames, resolveChangedOverlaps, resolveAllOverlaps, scopeFor, toJSON, wireNetTabs, withIndex } from "../model/graph";
 export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile } from "../lib/localfile";
@@ -23,7 +24,7 @@ import exampleText from "../../examples/logic-daw/boxglow.json?raw";
 import type { Project } from "../model/types";
 import type { HostAction, SyncStatus } from "../sync/status";
 import { deleteProject, listProjects, loadProject, saveProject, type ProjectMeta } from "../lib/storage";
-import { t } from "../i18n"; // 画面に出す文言 (toast など) の言語切替
+import { t, useLang } from "../i18n"; // 画面に出す文言 (toast など) の言語切替
 
 /** 履歴に積む上限 */
 const HISTORY_LIMIT = 100;
@@ -58,6 +59,15 @@ interface State {
   readonly: boolean;
   /** View モードで畳んだ / 展開したボックス (画面だけの状態。ファイルには書かない)。id -> collapsed */
   viewCollapsed: Record<string, boolean>;
+  /** 縦表示の並行タスクを複数行に折り返すか。画面専用で、既定は無効 */
+  verticalWrap: boolean;
+  setVerticalWrap: (wrap: boolean) => void;
+  /** View の流れる方向。Edit の保存座標やポート方向には反映しない */
+  flowDirection: "horizontal" | "vertical";
+  setFlowDirection: (direction: "horizontal" | "vertical") => void;
+  /** View を依存関係に沿う工程順で表示するか。保存した位置は変えない */
+  readingView: boolean;
+  setReadingView: (enabled: boolean) => void;
   /** ボックスを畳む / 展開する。Top で大項目なら、そのタブを開く。Edit なら共有の配置として保存、View なら画面だけ */
   toggleCollapsed: (blockId: string) => void;
   /** 開いているタブ (大項目のボックスの id)。null なら Top (大項目の一覧)。画面だけの状態で、プロジェクトごとにブラウザに記憶 */
@@ -591,6 +601,12 @@ export const useProjectStore = create<State>((set, get) => {
   , fileName: null
   , readonly: false
   , viewCollapsed: {}
+  , verticalWrap: false
+  , setVerticalWrap: (verticalWrap) => set({ verticalWrap })
+  , flowDirection: "horizontal"
+  , setFlowDirection: (flowDirection) => set({ flowDirection })
+  , readingView: true
+  , setReadingView: (readingView) => set({ readingView })
   , viewScope: null
   , setViewScope: (blockId) => {
       const { project, selection } = get();
@@ -854,9 +870,9 @@ export const useProjectStore = create<State>((set, get) => {
       if (!project || readonly) return;
       let next = fn(project);
       if (next === project) return;
-      // 大項目は畳んだ状態でそろえる (Top は大項目までしか出さない)。ボックスは重ねない: 変更のたびに同じ階層の重なりを押し出す (ドラッグ中は呼び出し側が history=false で呼ぶので除く)
+      // 大項目は畳んだ状態でそろえる。保存時は追加・移動・拡大した箱だけ補正し、既存の兄弟を動かさない (ドラッグ中は除く)
       next = normalizeCollapsed(normalizeInputNames(next).project);
-      if (opts?.history !== false) next = resolveAllOverlaps(next, blockSize);
+      if (opts?.history !== false) next = resolveChangedOverlaps(normalizeCollapsed(project), next, blockSize);
       const history = opts?.history ?? true;
       set({
         project: next
@@ -1228,21 +1244,28 @@ export function withViewCollapsed(project: Project, viewCollapsed: Record<string
 }
 
 /** 描画用のプロジェクト (Top では大項目を畳み、開いているタブの大項目だけ展開。View の畳みも重ねる。画面だけで、ファイルは変えない) を返すフック */
+const shownCache = new WeakMap<Project, { collapsed: Record<string, boolean>; scope: string | null; reading: boolean; lang: string; shown: Project }>();
 export function useShownProject(): Project | null {
+  const lang = useLang();
+  const reading = useProjectStore((s) => (s.readingView || s.flowDirection === "vertical") && (s.readonly || !s.editMode));
   const project = useProjectStore((s) => s.project);
   const viewCollapsed = useProjectStore((s) => s.viewCollapsed);
   const viewScope = useProjectStore((s) => s.viewScope);
   return useMemo(() => {
     if (!project) return null;
+    const cached = shownCache.get(project);
+    if (cached && cached.collapsed === viewCollapsed && cached.scope === viewScope && cached.reading === reading && cached.lang === lang) return cached.shown;
     let shown = normalizeCollapsed(withViewCollapsed(project, viewCollapsed));
     if (viewScope && shown.blocks[viewScope]?.collapsed) {
       shown = { ...shown, blocks: { ...shown.blocks, [viewScope]: { ...shown.blocks[viewScope], collapsed: false } } };
     }
     // ボックスの間隔は画面で保証する: ファイルの配置が詰まっていても (間隔を広げる前に保存した計画、外のツールが書いた位置など)、
     // 線の通路 (ボックスから 36px x 2) が無いと線がボックスを貫くしかなくなる。表示の時点で重なり・間隔を解消しておく (ファイルは変えない。
-    // 編集すれば apply が同じ解消を保存する)。畳んだボックスは畳んだ大きさで、開いたボックスは開いた大きさで計算する
+    // 編集時の保存は変更対象だけを補正する)。畳んだボックスは畳んだ大きさで、開いたボックスは開いた大きさで計算する
     // 索引は ports だけ (ボックスは押し出しで差し替わるので childrenOf の索引は使わない)
     const base = shown;
-    return withIndex(base, () => resolveAllOverlaps(base, blockSize), { children: false });
-  }, [project, viewCollapsed, viewScope]);
+    const result = reading ? readingLayout(base, viewScope) : withIndex(base, () => resolveAllOverlaps(base, blockSize), { children: false });
+    shownCache.set(project, { collapsed: viewCollapsed, scope: viewScope, reading, lang, shown: result });
+    return result;
+  }, [project, viewCollapsed, viewScope, reading, lang]);
 }

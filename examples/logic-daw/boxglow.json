@@ -68,7 +68,7 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 617.6999999999999,
+        "x": 581.6,
         "y": 76
       },
       "collapsed": true,
@@ -88,7 +88,7 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 1183.0499999999997,
+        "x": 1085.6,
         "y": 76
       },
       "collapsed": true,
@@ -108,7 +108,7 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 1759.9499999999996,
+        "x": 1589.6,
         "y": 76
       },
       "collapsed": true,
@@ -145,7 +145,7 @@
       "assigneeIds": [],
       "position": {
         "x": 120,
-        "y": 574
+        "y": 764
       },
       "collapsed": false,
       "artifacts": [],
@@ -178,7 +178,7 @@
       "status": "white",
       "assigneeIds": [],
       "position": {
-        "x": 634.1999999999999,
+        "x": 605.5999999999999,
         "y": 76
       },
       "collapsed": false,
@@ -195,7 +195,7 @@
       "status": "white",
       "assigneeIds": [],
       "position": {
-        "x": 1166.5499999999997,
+        "x": 1093.6,
         "y": 76
       },
       "collapsed": false,
@@ -244,7 +244,7 @@
       "status": "white",
       "assigneeIds": [],
       "position": {
-        "x": 766.1999999999998,
+        "x": 624,
         "y": 76
       },
       "collapsed": false,
@@ -261,7 +261,7 @@
       "status": "white",
       "assigneeIds": [],
       "position": {
-        "x": 1488.2999999999997,
+        "x": 1128,
         "y": 76
       },
       "collapsed": false,
@@ -278,7 +278,7 @@
       "status": "white",
       "assigneeIds": [],
       "position": {
-        "x": 2141.0999999999995,
+        "x": 1632,
         "y": 76
       },
       "collapsed": false,
@@ -313,7 +313,7 @@
       "assigneeIds": [],
       "position": {
         "x": 120,
-        "y": 574
+        "y": 780
       },
       "collapsed": false,
       "artifacts": [],
@@ -331,7 +331,7 @@
       "assigneeIds": [],
       "position": {
         "x": 120,
-        "y": 1072
+        "y": 1512
       },
       "collapsed": false,
       "artifacts": [],
@@ -347,8 +347,8 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 120,
-        "y": 1596
+        "x": 1848,
+        "y": 1512
       },
       "collapsed": false,
       "artifacts": [],
@@ -381,7 +381,7 @@
       "status": "white",
       "assigneeIds": [],
       "position": {
-        "x": 662.2499999999998,
+        "x": 624,
         "y": 76
       },
       "collapsed": false,
@@ -398,7 +398,7 @@
       "status": "white",
       "assigneeIds": [],
       "position": {
-        "x": 1250.6999999999996,
+        "x": 1128,
         "y": 76
       },
       "collapsed": false,
@@ -432,7 +432,7 @@
       "status": "white",
       "assigneeIds": [],
       "position": {
-        "x": 790.9499999999997,
+        "x": 624,
         "y": 76
       },
       "collapsed": false,
@@ -449,7 +449,7 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 1447.0499999999993,
+        "x": 1128,
         "y": 76
       },
       "collapsed": false,
@@ -471,7 +471,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 2119.6499999999987,
+        "x": 1632,
         "y": 76
       },
       "collapsed": false,
@@ -505,7 +505,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 733.1999999999998,
+        "x": 624,
         "y": 76
       },
       "collapsed": false,
@@ -538,7 +538,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 1410.7499999999995,
+        "x": 1128,
         "y": 76
       },
       "collapsed": false,
@@ -572,7 +572,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 804.1499999999997,
+        "x": 624,
         "y": 76
       },
       "collapsed": false,
@@ -606,8 +606,8 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 120,
-        "y": 574
+        "x": 1848,
+        "y": 76
       },
       "collapsed": false,
       "artifacts": [],
@@ -624,7 +624,7 @@
       "assigneeIds": [],
       "position": {
         "x": 120,
-        "y": 1072
+        "y": 780
       },
       "collapsed": false,
       "artifacts": [],
@@ -657,7 +657,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 733.1999999999998,
+        "x": 624,
         "y": 76
       },
       "collapsed": false,
@@ -674,7 +674,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 1273.7999999999997,
+        "x": 1128,
         "y": 76
       },
       "collapsed": false,
@@ -708,7 +708,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 665.5499999999998,
+        "x": 624,
         "y": 76
       },
       "collapsed": false,
@@ -742,7 +742,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 766.1999999999997,
+        "x": 624,
         "y": 76
       },
       "collapsed": false,
@@ -759,7 +759,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 1395.8999999999994,
+        "x": 1128,
         "y": 76
       },
       "collapsed": false,
@@ -794,7 +794,7 @@
       "assigneeIds": [],
       "position": {
         "x": 120,
-        "y": 574
+        "y": 764
       },
       "collapsed": false,
       "artifacts": [],
@@ -827,7 +827,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 647.3999999999999,
+        "x": 607.9999999999999,
         "y": 76
       },
       "collapsed": false,
@@ -844,7 +844,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 1176.4499999999998,
+        "x": 1095.9999999999998,
         "y": 76
       },
       "collapsed": false,
@@ -878,7 +878,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 576.4499999999998,
+        "x": 624,
         "y": 76
       },
       "collapsed": false,
@@ -895,7 +895,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 966.8999999999997,
+        "x": 1071.1999999999998,
         "y": 76
       },
       "collapsed": false,
@@ -3013,11 +3013,11 @@
   "terminals": {
     "in": {
       "x": 0,
-      "y": 139
+      "y": 243
     },
     "out": {
-      "x": 2725.6999999999994,
-      "y": 165
+      "x": 2515.2,
+      "y": 269
     }
   },
   "log": [

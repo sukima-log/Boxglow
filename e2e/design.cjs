@@ -48,12 +48,14 @@ const geometry=p=>p.evaluate(()=>window.boxglow.rf.getNodes().map(n=>[n.id,n.pos
     check(`${theme} ${ready?'確定':'未確定'}: 選択解除で元の状態色と線種に戻る`,restored.stroke===before.stroke&&restored.dash===before.dash&&restored.animation==='none');
    }
    await p.evaluate(async()=>{window.boxglow.store.getState().select({});await window.boxglow.rf.zoomTo(1);});await settle(p);
+   // Fit以下への縮小を使わず、狭い表示領域で俯瞰倍率を検査する。
+   await p.setViewportSize({width:1000,height:650});await settle(p);
    const normal=await geometry(p);
    await p.evaluate(()=>window.boxglow.rf.zoomTo(.5));await settle(p);
    check(`${theme}: 俯瞰でもノードの寸法と位置は同じ`,JSON.stringify(normal)===JSON.stringify(await geometry(p)));
-   check(`${theme}: 俯瞰は入出力文字を抑え、接続点は残す`,await p.evaluate(()=>{
+   check(`${theme}: 俯瞰でも入出力名と接続点を残す`,await p.evaluate(()=>{
      const b=document.querySelector('.bg-block.is-overview:not(.expanded)');
-     return getComputedStyle(b.querySelector('.bg-block__ports')).visibility==='hidden'&&getComputedStyle(b.querySelector('.react-flow__handle')).visibility==='visible';
+     return getComputedStyle(b.querySelector('.bg-block__ports')).visibility==='visible'&&getComputedStyle(b.querySelector('.react-flow__handle')).visibility==='visible';
    }));
    await p.screenshot({path:path.join(out,`design-overview-${theme}.png`)});
    const block=await p.locator('.react-flow__node-block').filter({has:p.locator('.bg-block:not(.expanded)')}).first().getAttribute('data-id');

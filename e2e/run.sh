@@ -43,6 +43,11 @@ node e2e/claims.cjs
 
 # 状態と選択の分離・俯瞰表示
 node e2e/design.cjs
+node e2e/overview.cjs
+node e2e/zoom-fit.cjs
+node e2e/vertical.cjs
+node e2e/viewport-stability.cjs
+node e2e/viewport-review.cjs
 node e2e/tree-sync-ui.cjs
 node e2e/category.cjs
 

@@ -94,19 +94,28 @@ async function drag(page, from, to) {
      });
    })());
    check(`${theme}: 線の当たり判定は縮小しても細くならない`,await p.locator('.react-flow__edge-interaction').first().getAttribute('vector-effect')==='non-scaling-stroke');
-   check(`${theme}: Done のボックスの確定した入力名はコントラスト 4.5:1 以上`,await p.evaluate(()=>{
-     const n=document.querySelector('.bg-block.status-white:not(.expanded)'), e=n.querySelector('.bg-block__port.ready');
+   const textContrast=await p.evaluate(()=>{
      const lum=s=>{const v=s.match(/[\d.]+/g).slice(0,3).map(Number).map(v=>v/255).map(v=>v<=.04045?v/12.92:((v+.055)/1.055)**2.4);return .2126*v[0]+.7152*v[1]+.0722*v[2];};
-     const a=lum(getComputedStyle(n).backgroundColor),b=lum(getComputedStyle(e).color);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05)>=4.5;
-   }));
+     const rows=[];
+     for(const card of document.querySelectorAll('.bg-block:not(.expanded)')) {
+       for(const e of card.querySelectorAll('.bg-block__title, .meta-chip[class*="status-"], .bg-block__direction, .bg-block__port-name, .bg-block__waiting')) {
+         let back=e;
+         while(back&&getComputedStyle(back).backgroundColor==='rgba(0, 0, 0, 0)')back=back.parentElement;
+         const a=lum(getComputedStyle(back).backgroundColor),b=lum(getComputedStyle(e).color);
+         rows.push({state:card.className,text:e.textContent,ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)});
+       }
+     }
+     return {count:rows.length,failures:rows.filter(r=>r.ratio<4.5)};
+   });
+   check(`${theme}: 全状態の題名・状態・入出力・待ちの文字はコントラスト 4.5:1 以上`,textContrast.count>0&&textContrast.failures.length===0,JSON.stringify(textContrast));
    await p.evaluate(id=>window.boxglow.store.getState().apply(p=>{
      const q=structuredClone(p);q.blocks[id].title='AI エージェントとの連携で前の判断を読み返しながら長いタスクを進めるための確認';q.blocks[id].category='fix';return q;
    }),newId);await pause(p);
    await p.evaluate(id=>window.boxglow.store.getState().select({blockId:id}),newId);await pause(p);
    check(`${theme}: 長い題名と常時表示のカテゴリが重ならず見出しに収まる`,await title.evaluate(e=>{
      const r=e.getBoundingClientRect(),h=e.closest('.bg-block__head').getBoundingClientRect(),c=e.closest('.bg-block').querySelector('.bg-block__head .bg-block__cat').getBoundingClientRect();
-     // 題名が切れていない (中身の高さ・幅が表示の枠を超えていない) ことも確かめる
-     return r.top>=h.top&&r.bottom<=h.bottom+1&&r.left>=c.right&&r.right<=h.right&&c.width>0&&e.scrollHeight<=e.clientHeight+1&&e.scrollWidth<=e.clientWidth+1;
+     // 分類は題名の上。題名が切れず、状態行へはみ出さないことも確かめる
+     return r.top>=h.top&&r.bottom<=h.bottom+1&&r.top>=c.bottom&&r.right<=h.right&&c.width>0&&e.scrollHeight<=e.clientHeight+1&&e.scrollWidth<=e.clientWidth+1;
    }));
    const toggle=p.locator(`.topbar button[title="${theme==='dark'?'Light':'Dark'} mode"]`);
    await toggle.click();

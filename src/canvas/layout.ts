@@ -4,12 +4,16 @@
  * ブロックの大きさはここで決める (React Flow に幅・高さを渡し、線の付け根がずれないようにする)。
  * ハンドル (ポートの丸) の id は "<in|out>:<ポート id>:<outer|inner>"。
  */
+import type { VerticalCard } from "./verticalLayout";
 import { type Edge as RFEdge, type Node as RFNode } from "@xyflow/react";
 import { ROOT_ID, type Block, type Edge, type Endpoint, type Project } from "../model/types";
 import { wireNet, inputGroupsOf, isEdgeReady, isSourceReady, isHiddenByCollapse, majorBlocks, portsOf, rootInputsOf } from "../model/graph";
 
 export { BLOCK_W, HEADER_H, ROW_H, PAD_BOTTOM, EXPANDED_MIN_W, EXPANDED_PAD, TERMINAL_W, isExpanded, blockSize, terminalHeight, type Size } from "../model/size";
 import { blockSize, isExpanded, terminalHeight, TERMINAL_W, HEADER_H, ROW_H, PAD_BOTTOM } from "../model/size";
+
+/** 閲覧時の親ボックスと外部入出力の間隔 */
+const READING_TERMINAL_GAP = 96;
 
 /** 既定の入力ノードの高さ (グループに入っていない入力だけ) */
 function terminalHeightDefault(p: Project): number {
@@ -73,9 +77,9 @@ function depthOf(p: Project, blockId: string): number {
   return d;
 }
 
-export type BlockNodeData = { blockId: string; dimmed: boolean; mine: boolean; headerH: number; dropTarget?: boolean; major?: boolean };
+export type BlockNodeData = { vertical?: VerticalCard; blockId: string; dimmed: boolean; mine: boolean; headerH: number; dropTarget?: boolean; major?: boolean };
 /** 入力/出力ノード。scopeId があれば最上位ではなく、タブで開いた大項目のボックスの入力/出力を表す */
-export type TerminalNodeData = { which: "in" | "out"; groupId?: string; scopeId?: string };
+export type TerminalNodeData = { vertical?: VerticalCard; which: "in" | "out"; groupId?: string; scopeId?: string };
 export type BlockRFNode = RFNode<BlockNodeData, "block">;
 export type TerminalRFNode = RFNode<TerminalNodeData, "terminal">;
 export type AnyRFNode = BlockRFNode | TerminalRFNode;
@@ -143,7 +147,7 @@ function absolutePosition(p: Project, blockId: string): { x: number; y: number }
  */
 export function buildNodes(
   p: Project
-, opts: { selectedBlockId: string | null; readonly: boolean; matcher?: (blockId: string) => boolean; meId?: string | null; scope?: string | null }
+, opts: { selectedBlockId: string | null; readonly: boolean; matcher?: (blockId: string) => boolean; meId?: string | null; scope?: string | null; presentation?: boolean }
 ): AnyRFNode[] {
   const nodes: AnyRFNode[] = [];
   const scope = opts.scope && p.blocks[opts.scope] ? opts.scope : null;
@@ -176,7 +180,7 @@ export function buildNodes(
       id: SCOPE_IN
     , type: "terminal"
       // ボックスの左に間隔ぶん離して置く (最上位のノード。ボックスの中ではない)
-    , position: { x: scopeAbs.x - SCOPE_TERMINAL_GAP - TERMINAL_W, y: scopeAbs.y + terminalTop }
+    , position: { x: scopeAbs.x - (opts.presentation ? READING_TERMINAL_GAP : SCOPE_TERMINAL_GAP) - TERMINAL_W, y: scopeAbs.y + terminalTop }
     , data: { which: "in", scopeId: scope }
     , width: TERMINAL_W
     , height: HEADER_H + Math.max(nIn, 1) * ROW_H + PAD_BOTTOM
@@ -187,7 +191,7 @@ export function buildNodes(
     nodes.push({
       id: SCOPE_OUT
     , type: "terminal"
-    , position: { x: scopeAbs.x + scopeSize.width + SCOPE_TERMINAL_GAP, y: scopeAbs.y + terminalTop }
+    , position: { x: scopeAbs.x + scopeSize.width + (opts.presentation ? READING_TERMINAL_GAP : SCOPE_TERMINAL_GAP), y: scopeAbs.y + terminalTop }
     , data: { which: "out", scopeId: scope }
     , width: TERMINAL_W
     , height: HEADER_H + Math.max(nOut, 1) * ROW_H + PAD_BOTTOM

@@ -1,16 +1,19 @@
 import { ClaimMark, useClaimClock, visibleClaim } from "../panels/Claims";
 /**
  * ブロック (ボックス) のノード
- * 状態はボックスの見た目で表す: black = 濃い塗り、gray = 細い斜線帯 + 進捗バー、white = 明るい塗り + チェック (完了時だけ光る)
+ * 分類・題名・状態・入力・出力を縦に読むカード。親は子を包む領域として描く。
  */
-import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
+import { Handle, Position, useStore, useUpdateNodeInternals, type NodeProps } from "@xyflow/react";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { ancestorsOf, childrenOf, computeProgress, daysToDue, effectiveProgress, isInputReady, isOverdue, issueKeyOf, missingRequiredInputs, portsOf } from "../model/graph";
+import { ancestorsOf, childrenOf, computeProgress, daysToDue, effectiveProgress, isInputReady, isSourceReady, isOverdue, issueKeyOf, missingRequiredInputs, portsOf } from "../model/graph";
 import type { BlockStatus } from "../model/types";
 import { useProjectStore, useShownProject } from "../store/useProjectStore";
 import { handleId, isExpanded, type BlockRFNode } from "./layout";
 import { actorName, ACTIVITY_LABEL } from "../model/report";
 import { categoryOf } from "../model/categories";
+import { taskCardLayout, taskCardPorts } from "../model/size";
+import { readingColumns } from "../model/readingLayout";
+import { CategoryIcon } from "./CategoryIcon";
 import { STATUS_LABEL } from "../model/status";
 import { t, useLang } from "../i18n";
 
@@ -51,9 +54,9 @@ export function StatusIcon({ status }: { status: BlockStatus }) {
 export const BlockNode = memo(function BlockNode({ data, selected, width, height }: NodeProps<BlockRFNode>) {
   useLang(); // 言語が変わったら文言を描き直す
   const { blockId } = data;
+  const vertical = data.vertical;
   const headerH = data.headerH ?? 44;
-  /** ポート i 行目のハンドルの縦位置 (見出しの高さに追従) */
-  const rowAt = (i: number) => headerH + i * 26 + 13;
+  const viewScope = useProjectStore((s) => s.viewScope);
   const overviewZoom = useStore((s) => s.transform[2] < 0.65);
   const canEdit = useProjectStore((s) => !s.readonly && s.editMode);
   // ストアからはプロジェクト本体だけを取り (参照が変わるのは変更時だけ)、表示用の値は useMemo で導く。
@@ -64,8 +67,8 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   const view = useMemo(() => {
     const p = project;
     const b = p.blocks[blockId];
-    const ins = portsOf(p, blockId, "in");
-    const outs = portsOf(p, blockId, "out");
+    const ins = isExpanded(p, blockId) ? portsOf(p, blockId, "in") : taskCardPorts(p, blockId, "in");
+    const outs = isExpanded(p, blockId) ? portsOf(p, blockId, "out") : taskCardPorts(p, blockId, "out");
     const kids = childrenOf(p, blockId).length;
     const prog = computeProgress(p, blockId);
     return {
@@ -77,7 +80,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     , progressRatio: prog.ratio
     , progressText: `${prog.white}/${prog.total}`
     , ins: ins.map((q) => ({ id: q.id, name: q.name, required: q.required, promoted: !!q.promotedFrom, ready: isInputReady(p, q.id) }))
-    , outs: outs.map((q) => ({ id: q.id, name: q.name }))
+    , outs: outs.map((q) => ({ id: q.id, name: q.name, ready: isSourceReady(p, { portId: q.id, side: "outer" }) }))
     , pending: b?.decisions.filter((d) => d.answer === undefined).length ?? 0
     , activity: b?.activity ?? null
     , percent: effectiveProgress(p, blockId)
@@ -93,6 +96,20 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     , daysLeft: b ? daysToDue(b) : null
     };
   }, [project, blockId]);
+
+  const card = useMemo(() => taskCardLayout(project, blockId), [project, blockId]);
+  const rowAt = (i: number, direction: "in" | "out") => view.expanded
+    ? headerH + i * 26 + 13
+    : (direction === "in" ? card.inputs : card.outputs)[i].center;
+  const updateNodeInternals = useUpdateNodeInternals();
+  const portLayout = `${JSON.stringify(vertical)}|${width}|${height}|${headerH}|${view.expanded}|${card.inputs.map(q => `${q.id}:${q.center}`)}|${card.outputs.map(q => `${q.id}:${q.center}`)}`;
+  const previousPortLayout = useRef(portLayout);
+  useEffect(() => {
+    if (previousPortLayout.current !== portLayout) {
+      previousPortLayout.current = portLayout;
+      updateNodeInternals(blockId);
+    }
+  }, [blockId, portLayout, updateNodeInternals]);
 
   // white になった瞬間だけ光るアニメーションを付ける
   const prevStatus = useRef(view.status);
@@ -121,12 +138,13 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
 
   const cls = [
     "bg-block"
+  , vertical ? "vertical-card" : ""
   , `status-${view.status}`
   , `depth-${view.depth}`
   , view.expanded ? "expanded" : ""
   , selected ? "selected" : ""
   , overviewZoom && !canEdit ? "is-overview" : ""
-  , headerH > 60 ? "has-wrapped-title" : ""
+  , (view.expanded ? headerH > 60 : headerH > 88 + card.metaH) ? "has-wrapped-title" : ""
   , data.dimmed ? "dimmed" : ""
   , glow ? "just-glowed" : ""
   , view.activity ? `activity-${view.activity.state}` : ""
@@ -138,22 +156,37 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
 
   // ボックスの onClick: 丸 (ハンドル) を押したクリックはボックスの選択に伝えない。
   // 丸を押すだけで詳細パネルが開くと図の幅が変わり、クリックでの結線 (出力の丸 → 入力の丸) の途中で接続先がずれるため
+  const verticalBand = (direction: "in" | "out") => {
+    if (!vertical) return null;
+    const ports = direction === "in" ? view.ins : view.outs;
+    if (!ports.length) return null;
+    return <div className={`vertical-ports ${direction}`} style={{height: direction === "in" ? vertical.inputH : vertical.outputH, left: direction === "in" && view.expanded ? vertical.inputStart : 0}}>
+      {ports.map(q => <div key={q.id} className={`vertical-port ${q.ready ? "ready" : "waiting"}`} data-port-id={q.id} title={q.name}>
+        <span className="vertical-port__direction">{t(direction === "in" ? "入力" : "出力")}{!q.ready && (direction === "out" || !("required" in q) || !!q.required) && <span className="vertical-port__waiting">{t("待ち")}</span>}</span>
+        <span className="vertical-port__name">{q.name}</span>
+      </div>)}
+    </div>;
+  };
   return (
     <div className={cls} style={{ width, height, ...(view.category ? ({ "--cat": view.category.color } as React.CSSProperties) : {}) }} onDoubleClick={onDoubleClick} onClick={(ev) => { if ((ev.target as HTMLElement).closest(".react-flow__handle")) ev.stopPropagation(); }}>
       {/* 題名の行: カテゴリ、題名、プロジェクトの札、畳むボタン。
           カテゴリを選択時だけの補助行から外し、未選択・俯瞰でも仕事の種類を読める位置に固定する。 */}
-      <div className="bg-block__head" style={{ height: headerH - 24 }}>
-        {view.category && <span className={`bg-block__cat${view.category.neutral ? " neutral" : ""}`} title={t("カテゴリ: {label}", { label: t(view.category.label) })}>{t(view.category.label)}</span>}
+      {verticalBand("in")}
+      <div className="bg-block__head" style={{ height: headerH - (view.expanded ? 24 : card.metaH), ...(vertical && !view.expanded ? { marginTop: vertical.inputH } : {}) }}>
+        {view.category && <span className={`bg-block__cat${view.category.neutral ? " neutral" : ""}`} data-category={view.category.key} title={t("カテゴリ: {label}", { label: t(view.category.label) })}>{!view.expanded && <CategoryIcon category={view.category.key} />}{t(view.category.label)}</span>}
         {view.isProject && <span className="bg-block__tag">Project</span>}
         <span className="bg-block__title" title={view.fromTemplate ? t("{title} (部品: {name})", { title: view.title, name: view.fromTemplate }) : view.title}>{view.title}</span>
-        {(view.kids > 0 || data.major) && (
-          <button className="bg-block__toggle nodrag" onClick={toggle} title={data.major ? t("この大項目のタブを開く (中のボックス {n} 個)", { n: view.kids }) : view.collapsed ? t("下の階層を展開する") : t("下の階層を畳む")}>
+        {(view.kids > 0 || data.major) && viewScope !== blockId && (
+          <button className="bg-block__toggle nodrag" onClick={toggle} onDoubleClick={ev => ev.stopPropagation()} title={data.major ? t("この大項目のタブを開く (中のボックス {n} 個)", { n: view.kids }) : view.collapsed ? t("下の階層を展開する") : t("下の階層を畳む")}>
             {data.major || view.collapsed ? "▸" : "▾"}
           </button>
         )}
       </div>
+      {!vertical && view.expanded && readingColumns(project, blockId).map(column => (
+        <div key={`${column.x}:${column.y}`} className="bg-stage" style={{ left: column.x, top: column.y, width: column.width }}>{t("工程 {n}", { n: column.index + 1 })}</div>
+      ))}
       {/* 情報の行: 状態は記号と文字。細かな情報は選択時に表示 */}
-      <div className="bg-block__meta">
+      <div className="bg-block__meta" style={{ height: view.expanded ? 24 : card.metaH }}>
         {!view.isProject && <StatusIcon status={view.status} />}
         {!view.isProject && (
           <span className={`meta-chip status-${view.status}`} title={t("状態")}>{STATUS_LABEL[view.status]}</span>
@@ -174,24 +207,27 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
             {t("期日 {date}", { date: view.dueDate.slice(5).replace("-", "/") })}
           </span>
         )}
-        {view.startable && <span className="meta-chip ready" title={t("必須の入力がそろっています (着手できます)")}>Ready</span>}
+        {view.startable && !view.activity && !claimed && <span className="meta-chip ready" title={t("必須の入力がそろっています (着手できます)")}>Ready</span>}
         {view.issue && <a className="meta-chip issue nodrag" href={view.issue.url} target="_blank" rel="noreferrer" title={t("外部の課題: {url}", { url: view.issue.url })} onClick={(e) => e.stopPropagation()}>{view.issue.key}</a>}
         {view.fromTemplate && <span className="meta-chip muted" title={t("部品: {name}", { name: view.fromTemplate })}>{t("部品")}</span>}
         <span className="bg-block__key bg-block__secondary" title={t("ID (検索や CLI で使えます)")}>{view.key}</span>
       </div>
 
-      {!view.expanded && (
-        <div className="bg-block__ports">
-          <div>
-            {view.ins.map((q) => (
-              <div key={q.id} className={`bg-block__port in ${q.required ? "" : "optional"} ${q.promoted ? "promoted" : ""} ${q.ready ? "ready" : ""}`} title={q.ready ? t("{name} (用意できています)", { name: q.name }) : q.required ? q.name : t("{name} (任意: 無くても着手できます)", { name: q.name })}>{q.ready ? "● " : ""}{q.name}{!q.required && <span className="opt">{t("(任意)")}</span>}</div>
-            ))}
-          </div>
-          <div>
-            {view.outs.map((q) => (
-              <div key={q.id} className="bg-block__port out" title={q.name}>{q.name}</div>
-            ))}
-          </div>
+      {verticalBand("out")}
+      {!vertical && !view.expanded && (
+        <div className="bg-block__ports" style={{ top: headerH }}>
+          {view.ins.map((q, i) => (
+            <div key={q.id} data-port-id={q.id} style={{ height: card.inputs[i].height }} className={`bg-block__port in ${q.required ? "" : "optional"} ${q.promoted ? "promoted" : ""} ${q.ready ? "ready" : ""}`} title={t("入力: {name}", { name: q.name })}>
+              <span className="bg-block__direction">{t("入力")}</span>
+              <span className="bg-block__port-name">{q.name}</span>
+              {!q.required ? <span className="opt">{t("(任意)")}</span> : !q.ready && <span className="bg-block__waiting">{t("待ち")}</span>}
+            </div>
+          ))}
+          {view.outs.map((q, i) => (
+            <div key={q.id} data-port-id={q.id} style={{ height: card.outputs[i].height }} className={`bg-block__port out ${q.ready ? "ready" : ""}`} title={q.name}>
+              <span className="bg-block__direction">{t("出力")}</span><span className="bg-block__port-name">{q.name}</span>
+            </div>
+          ))}
         </div>
       )}
 
@@ -204,6 +240,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
       {/* ハンドル: 入力は左、出力は右。展開中は内側用のハンドルも出す。
           結線できるのは Edit モードだけ (isConnectable = canEdit。View では丸を押しても線は変わらない)。
           onMouseDown の preventDefault は、丸を押したときに文字の選択やフォーカスの移動が起きないようにするため */}
+      {!vertical && <>
       {view.ins.map((q, i) => (
         <Handle
           key={`${q.id}-outer`}
@@ -211,8 +248,8 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           position={Position.Left}
           id={handleId("in", q.id, "outer")}
           title={t("入力: {name}", { name: q.name })}
-          className={q.promoted ? "port-promoted" : ""}
-          style={{ top: rowAt(i) }}
+          className={`${q.promoted ? "port-promoted" : ""} ${q.ready ? "port-ready" : "port-waiting"}`}
+          style={{ top: rowAt(i, "in") }}
           isConnectable={canEdit}
           onMouseDown={(ev) => ev.preventDefault()}
         />
@@ -226,7 +263,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           id={handleId("in", q.id, "inner")}
           className="port-inner"
           title={t("{name} を中のブロックへ (ここから中のボックスの入力へドラッグ)", { name: q.name })}
-          style={{ top: rowAt(i), zIndex: 2, left: -7, right: "auto", transform: "translate(-50%, -50%)" }}
+          style={{ top: rowAt(i, "in"), zIndex: 2, left: -7, right: "auto", transform: "translate(-50%, -50%)" }}
           isConnectable={canEdit}
           onMouseDown={(ev) => ev.preventDefault()}
         />
@@ -238,8 +275,8 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           position={Position.Right}
           id={handleId("out", q.id, "outer")}
           title={t("出力: {name} (クリックまたはドラッグで接続)", { name: q.name })}
-          className="port-out"
-          style={{ top: rowAt(i), zIndex: 1 }}
+          className={`port-out ${q.ready ? "port-ready" : "port-waiting"}`}
+          style={{ top: rowAt(i, "out"), zIndex: 1 }}
           isConnectable={canEdit}
           onMouseDown={(ev) => ev.preventDefault()}
         />
@@ -253,11 +290,26 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           id={handleId("out", q.id, "inner")}
           className="port-inner"
           title={t("中のブロックの出力を {name} へ", { name: q.name })}
-          style={{ top: rowAt(i), zIndex: 0, right: -7, left: "auto", transform: "translate(50%, -50%)" }}
+          style={{ top: rowAt(i, "out"), zIndex: 0, right: -7, left: "auto", transform: "translate(50%, -50%)" }}
           isConnectable={canEdit}
           onMouseDown={(ev) => ev.preventDefault()}
         />
       ))}
+      </>}
+      {vertical && (["in", "out"] as const).flatMap(direction => {
+        const qs = direction === "in" ? view.ins : view.outs;
+        const layout = direction === "in" ? vertical.inputs : vertical.outputs;
+        return qs.flatMap(q => (["outer", ...(view.expanded ? ["inner"] as const : [])] as const).map(side => {
+          const input = direction === "in", inner = side === "inner";
+          return <Handle key={`${q.id}-${side}`} id={handleId(direction,q.id,side)}
+            type={input !== inner ? "target" : "source"}
+            position={input !== inner ? Position.Top : Position.Bottom}
+            title={t(input ? "入力: {name}" : "出力: {name} (クリックまたはドラッグで接続)",{name:q.name})}
+            className={`${inner ? "port-inner" : ""} ${q.ready ? "port-ready" : "port-waiting"}`}
+            style={{left:layout.find(p=>p.id===q.id)?.x, top:input ? (inner ? vertical.inputH+8 : 0) : Number(height)-(inner ? vertical.outputH+8 : 0), bottom:"auto", right:"auto", transform:"translate(-50%, -50%)"}}
+            isConnectable={false} />;
+        }));
+      })}
     </div>
   );
 });

@@ -1,8 +1,11 @@
 /**
  * キャンバス: React Flow にプロジェクトを描き、ドラッグ・結線・選択を store に反映する
  */
+import { verticalNodes, routeVertical } from "./verticalLayout";
+import { useFitViewport } from "./useFitViewport";
+import { readingColumns } from "../model/readingLayout";
 import { sharedWires } from "./sharedWires";
-import { Background, BackgroundVariant, MiniMap, ReactFlow, useNodesState, useReactFlow, useStore, type ReactFlowState, type Connection, type Edge as RFEdge, type NodeChange, type OnConnectEnd, type OnNodeDrag } from "@xyflow/react";
+import { Background, BackgroundVariant, PanOnScrollMode, MiniMap, ReactFlow, useNodesState, useReactFlow, useStore, type ReactFlowState, type Connection, type Edge as RFEdge, type NodeChange, type OnConnectEnd, type OnNodeDrag } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { connect, connectToBlock, isHiddenByCollapse, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, validateConnection, withIndex } from "../model/graph";
 import { blockSize, isExpanded } from "../model/size";
@@ -18,8 +21,6 @@ import { buildEdges, buildNodes, parseHandle, SCOPE_IN, SCOPE_OUT, type AnyRFNod
 import { routeAll, type EdgeSpec, type NodeRect } from "./routeAll";
 import { useLang } from "../i18n";
 
-/** 全体表示の設定: 大きな計画でも収まるよう最小ズームを下げる (fitView の既定は 0.5 で、大きい図は左右が切れる) */
-const FIT_OPTIONS = { padding: 0.15, minZoom: 0.05, maxZoom: 1 };
 
 const nodeTypes = { block: BlockNode, terminal: TerminalNode };
 
@@ -57,14 +58,18 @@ const edgeTypes = { routed: RoutedEdge };
 
 interface Props {
   project: Project;
+  panelLayoutKey: string;
   /** フィルタ (false を返したブロックは薄く描く)。null なら全部そのまま */
   matcher: ((blockId: string) => boolean) | null;
 }
 
-export function FlowCanvas({ project, matcher }: Props) {
+export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
   const readonly = useProjectStore((s) => s.readonly);
   const editMode = useProjectStore((s) => s.editMode);
   const canEdit = !readonly && editMode;
+  const vertical = useProjectStore(s => s.flowDirection === "vertical") && !canEdit;
+  const verticalWrap = useProjectStore(s => s.verticalWrap);
+  const reading = (useProjectStore(s => s.readingView) || vertical) && !canEdit;
   const [snap, setSnap] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const selection = useProjectStore((s) => s.selection);
@@ -73,7 +78,6 @@ export function FlowCanvas({ project, matcher }: Props) {
   const setToast = useProjectStore((s) => s.setToast);
   const focus = useProjectStore((s) => s.focus);
   const meId = useProjectStore((s) => s.meId);
-  const focusBlock = useProjectStore((s) => s.focusBlock);
   const viewScope = useProjectStore((s) => s.viewScope);
   const rf = useReactFlow();
   // ボックスの幅の見積もり (size.ts) は文言の言語に依存するので、言語が変わったらノードを作り直す
@@ -105,41 +109,69 @@ export function FlowCanvas({ project, matcher }: Props) {
   // ノードはドラッグ中の見た目のために React Flow 側の状態を持ち、project (と言語) が変わるたびに作り直す
   const [nodes, setNodes, onNodesChangeRaw] = useNodesState<AnyRFNode>([]);
   useEffect(() => {
-    setNodes(withIndex(project, () => buildNodes(project, { selectedBlockId: selection.blockId, readonly: !canEdit, matcher: matcher ?? undefined, meId, scope: viewScope })));
-  }, [project, selection.blockId, canEdit, matcher, meId, viewScope, setNodes, lang]);
+    const base = withIndex(project, () => buildNodes(project, { selectedBlockId: selection.blockId, readonly: !canEdit, matcher: matcher ?? undefined, meId, scope: viewScope, presentation: reading }));
+    setNodes(vertical ? verticalNodes(base, project, viewScope, verticalWrap) : base);
+  }, [project, selection.blockId, canEdit, matcher, meId, viewScope, setNodes, lang, reading, vertical, verticalWrap]);
   useEffect(() => {
     setNodes((ns) => ns.map((n) => (n.type === "block" ? { ...n, data: { ...n.data, dropTarget: n.id === dropTarget } } : n)));
   }, [dropTarget, setNodes]);
+
+  const geometrySig = useStore(selectGeometry);
+  const dragging = useStore((s) => s.nodes.some(n => n.dragging));
+  const { minZoom, fit, readFromTop, onMoveStart, onMoveEnd } = useFitViewport(geometrySig, panelLayoutKey, dragging, vertical);
 
   // タブ (表示範囲) を切り替えたら、その範囲が収まるように全体表示する。
   // ノードが作り直されて大きさが測られる (nodesInitialized) のを待ってから fitView する (早すぎると古い大きさで計算して外れる)
   const scopeMounted = useRef(false);
   const pendingFit = useRef(false);
   useEffect(() => {
-    if (!scopeMounted.current) { scopeMounted.current = true; return; } // 最初は fitView 属性に任せる
+    if (!scopeMounted.current) { scopeMounted.current = true; return; } // 初回は表示領域の計測後にFitする
     pendingFit.current = true;
-  }, [viewScope]);
+    // CSS の最小寸法などで厳密一致しなくても、測れた実寸を使って表示を完了する。
+    const fallback = setTimeout(() => {
+      if (!pendingFit.current) return;
+      pendingFit.current = false;
+      vertical ? readFromTop() : fit();
+    }, 600);
+    return () => clearTimeout(fallback);
+  }, [viewScope, reading, vertical, verticalWrap, fit, readFromTop]);
   useEffect(() => {
     if (!pendingFit.current) return;
     // 見えているノードが全部測られてから (大きさの変化も nodes の更新として届くので、この効果が再び走る)
-    const ready = rf.getNodes().every((n) => n.hidden || (n.measured?.width ?? 0) > 0);
+    const ready = rf.getNodes().every((n) => n.hidden || ((n.measured?.width ?? 0) > 0 && !!n.data.vertical === vertical && Math.abs((n.measured?.width ?? 0)-(n.width ?? 0)) < 1 && Math.abs((n.measured?.height ?? 0)-(n.height ?? 0)) < 1));
     if (!ready) return;
-    pendingFit.current = false;
-    const t = setTimeout(() => void rf.fitView({ ...FIT_OPTIONS, duration: 150 }), 30); // 動きは短め (タブの行き来を軽快に)
+    const t = setTimeout(() => { pendingFit.current = false; vertical ? readFromTop() : fit(); }, 30); // 動きは短め (タブの行き来を軽快に)
     return () => clearTimeout(t);
-  }, [nodes, rf]);
+  }, [nodes, rf, fit, readFromTop, vertical]);
 
   // ボックスにマウスを乗せたら、つながる線を強調する
   const [hovered, setHovered] = useState<string | null>(null);
   const baseEdges = useMemo(() => withIndex(project, () => buildEdges(project, { selectedEdgeId: selection.edgeId, selectedBlockId: selection.blockId, scope: viewScope })), [project, selection.edgeId, selection.blockId, viewScope]);
 
   // ノードの絶対位置・大きさ・ハンドルの位置 (変わったときだけ経路を計算し直すため、文字列にして比べる)
-  const geometrySig = useStore(selectGeometry);
   // 線の「つながり」だけの署名 (どの端からどの端へ、見えているか)。名前・選択・ホバー・ラベルが変わっても経路は同じなので、
   // 経路計算 (交差を減らす 2 回通しは重い) はこの署名と位置が変わったときだけ行う
   const topoSig = useMemo(() => baseEdges.filter((e) => !e.hidden).map((e) => `${e.id}\t${e.source}\t${e.sourceHandle ?? ""}\t${e.target}\t${e.targetHandle ?? ""}`).join("\n"), [baseEdges]);
+  const routeCache = useRef(new Map<string, ReturnType<typeof routeAll>>());
   const paths = useMemo(() => {
     const { nodeRects, handles } = parseGeometry(geometrySig);
+    // 同じ行の工程見出しは一つの帯として避ける。列ごとに障害物を増やさず、大きな計画でも探索を抑える。
+    if (reading && !vertical) for (const node of [...nodeRects]) {
+      const rows = new Map<number, {left:number; right:number}>();
+      for (const c of readingColumns(project,node.id)) {
+        const row=rows.get(c.y);
+        rows.set(c.y,{left:Math.min(row?.left??c.x,c.x),right:Math.max(row?.right??0,c.x+c.width)});
+      }
+      for (const [y,row] of rows) nodeRects.push({id:`stage:${node.id}:${y}`,parentId:node.id,
+        rect:{x:node.rect.x+row.left,y:node.rect.y+y,width:row.right-row.left,height:28}});
+    }
+    if (vertical) for (const node of [...nodeRects]) {
+      const rendered = rf.getNode(node.id);
+      if (rendered?.type === "block" && isExpanded(project,node.id)) nodeRects.push({
+        id:`caption:${node.id}`, parentId:node.id,
+        rect:{x:node.rect.x,y:node.rect.y,width:320,height:Number(rendered.data.headerH)}
+      });
+    }
     const specs: EdgeSpec[] = [];
     for (const line of topoSig.split("\n")) {
       if (!line) continue;
@@ -149,8 +181,18 @@ export function FlowCanvas({ project, matcher }: Props) {
       if (!s || !t) continue;
       specs.push({ id, source, target, s, t });
     }
-    return routeAll(nodeRects, specs);
-  }, [topoSig, geometrySig]);
+    // タブに戻ったとき・状態だけが変わったときは同じ幾何の経路を再利用する。
+    // 見出しの帯もキーに含め、編集や言語変更による寸法差を取り違えない。
+    const key=vertical+"\n"+geometrySig+"\n"+topoSig+"\n"+JSON.stringify(nodeRects.filter(n=>n.id.startsWith("stage:")));
+    const cached=routeCache.current.get(key);
+    if(cached){routeCache.current.delete(key);routeCache.current.set(key,cached);return cached;}
+    const result=vertical ? routeVertical(nodeRects,specs) : routeAll(nodeRects,specs);
+    if(specs.length){
+      routeCache.current.set(key,result);
+      if(routeCache.current.size>8)routeCache.current.delete(routeCache.current.keys().next().value!);
+    }
+    return result;
+  }, [topoSig, geometrySig, reading, project, vertical]);
   // 同じ出力から分岐する線の描き分け (幹は 1 本だけが描き、分岐点に丸を置く)。経路 (paths) は変えず、描く区間だけを決める。
   // 選択中・ホバー中の線を優先して幹を描かせる (強調した線が出力の丸から途切れずに見えるように)
   const shared = useMemo(() => {
@@ -185,12 +227,12 @@ export function FlowCanvas({ project, matcher }: Props) {
           // 大項目の入力/出力ノードを選んだら、その大項目のボックスを選ぶ (右のパネルで入出力を直せる)
           else if (ch.id === SCOPE_IN || ch.id === SCOPE_OUT) { const sc = useProjectStore.getState().viewScope; if (sc) select({ blockId: sc }); }
           else select({ blockId: ch.id });
-          // 右の詳細パネルが開いてキャンバスが狭まり、選んだノードが隠れることがあるので、見えなければ寄せる (画面 = 開いているボックスは変えない)
-          focusBlock(ch.id, { scope: false });
+          // キャンバスでの選択は表示位置を動かさない。
+          // Tree や検索から「移動する」操作は、それぞれの focusBlock に任せる。
         }
       }
     }
-  , [onNodesChangeRaw, select, focusBlock]
+  , [onNodesChangeRaw, select]
   );
 
   /**
@@ -346,6 +388,7 @@ export function FlowCanvas({ project, matcher }: Props) {
 
   return (
     <ReactFlow
+      className={vertical ? "flow-vertical" : "flow-horizontal"}
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
@@ -370,15 +413,19 @@ export function FlowCanvas({ project, matcher }: Props) {
       deleteKeyCode={null}
       selectionKeyCode={null}
       multiSelectionKeyCode={null}
-      zoomOnDoubleClick={false} // ダブルクリックはボックスの畳む / 展開 (大項目ならタブを開く) に使う。拡大に取られると View で届かない
-      fitView
-      fitViewOptions={FIT_OPTIONS}
-      minZoom={0.05} // 大きな計画 (横 1 万 px など) も全体表示できるように
+      zoomOnDoubleClick={false} // ダブルクリックは階層の移動・開閉に使う
+      zoomOnScroll={!vertical}
+      panOnScroll={vertical}
+      panOnScrollMode={PanOnScrollMode.Vertical}
+      zoomActivationKeyCode={["Control", "Meta"]}
+      onMoveStart={onMoveStart}
+      onMoveEnd={onMoveEnd}
+      minZoom={minZoom}
       maxZoom={2}
       proOptions={{ hideAttribution: false }}
     >
       <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--bg-grid)" />
-      <CanvasTools snap={snap} onSnap={() => setSnap((v) => !v)} showMap={showMap} onMap={() => setShowMap((v) => !v)} />
+      <CanvasTools readFromTop={readFromTop} fit={fit} snap={snap} onSnap={() => setSnap((v) => !v)} showMap={showMap} onMap={() => setShowMap((v) => !v)} />
       {showMap && <MiniMap
         position="bottom-right"
         pannable

@@ -9,7 +9,7 @@
  */
 const fs = require("fs");
 const path = require("path");
-const { chromium, ROOT, check, result, open, load, majorsOf, switchTab, crossings } = require("./lib.cjs");
+const { chromium, ROOT, check, result, open, load, majorsOf, switchTab, crossings, penetrations } = require("./lib.cjs");
 
 /** 交差の合計の上限 (修正後の実測は 170 前後。配置を少し変えても通り、後退 (数百) は落とす値) */
 const MAX_CROSSINGS = 220;
@@ -37,13 +37,17 @@ const MAX_SWITCH_MS = 1200;
     // 交差: Top と全部の大項目のタブを順に開いて数える
     let total = 0;
     const per = [];
+    const hits = [];
     for (const m of [{ id: null, title: "Top" }, ...majors]) {
       await switchTab(page, m.id);
+      hits.push(...(await penetrations(page)).map(hit => ({ view: m.title, ...hit })));
       const n = await crossings(page);
       total += n;
       if (n > 0) per.push(`${m.title} ${n}`);
     }
     check(`自分の計画: 線どうしの交差の合計が ${MAX_CROSSINGS} 以下`, total <= MAX_CROSSINGS, `合計 ${total} (${per.join(", ")})`);
+
+    check("自分の計画: どのタブでもボックスを貫く配線がない", hits.length === 0, JSON.stringify(hits));
 
     // 速さ: Top → 一番大きいタブ を 3 回測り、真ん中の値で判定する (1 回だけの引っかかりで落とさない)
     const times = [];

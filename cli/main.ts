@@ -44,7 +44,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, isInputNameLocked, normalizeInputNames, ackDecisions, isHumanActor } from "../src/model/graph";
+import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, isInputNameLocked, normalizeInputNames, ackDecisions, isHumanActor } from "../src/model/graph";
 import { checkStart, checkDone, descriptionReminder, scopeEntries } from "../src/model/workflow";
 import type { WorkScope, WorkflowPolicy } from "../src/model/types";
 import type { Artifact } from "../src/model/types";
@@ -161,14 +161,22 @@ function load(path: string): Project {
  * Output: なし。読んだ後に他が書き換えていたら FileConflict、他が書き込み中なら FileBusy の例外 (どちらも書き込まない)
  */
 function save(path: string, p: Project): void {
-  // 画面と同じく、保存のたびにボックスの重なりを解く (子が増えて親が大きくなったときに、下のボックスを押し出す)
+  // 画面と同じく、今回寸法や位置を変えたボックスだけ重なりを解く。
   // 大項目は常に畳んだ状態 (All の図は大項目までしか出さず、中はタブで見る。大きさもこの前提で計算する)
   // つないだ入力の名前は供給元にそろえる (古いファイルの食い違いもここで直る)
   // 読んでいないパス (新規作成) は「ファイルが無い」ことを前提にする
   const expected = readRevisions.has(resolve(path)) ? readRevisions.get(resolve(path))! : null;
-  let text = toJSON(resolveAllOverlaps(normalizeCollapsed(normalizeInputNames(p).project), (q, id) => blockSize(q, id))) + "\n";
+  const normalized = normalizeCollapsed(normalizeInputNames(p).project);
+  let text = toJSON(normalized) + "\n";
   const warnings:string[]=[];
-  const revision = commitFile(path, text, expected, {prepare:(current,proposed) => text=prepareClaimSave(current,proposed,claimRequest,s=>warnings.push(s))});
+  const revision = commitFile(path, text, expected, { prepare: (current) => {
+    // ロック取得・リビジョン照合後の原本と比較する。受け持ち検証には補正後の差分を渡す。
+    const next = current
+      ? resolveChangedOverlaps(normalizeCollapsed(fromJSON(current)), normalized, blockSize)
+      : resolveAllOverlaps(normalized, blockSize);
+    text = prepareClaimSave(current, toJSON(next) + "\n", claimRequest, warning => warnings.push(warning));
+    return text;
+  } });
   for(const warning of warnings) out(warning);
   // 同じ実行の中で続けて書く場合に備えて、書いた後の版を覚え直す
   readRevisions.set(resolve(path), revision);

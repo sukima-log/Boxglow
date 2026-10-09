@@ -68,7 +68,7 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 667.1999999999998,
+        "x": 624,
         "y": 76
       },
       "collapsed": true,
@@ -86,7 +86,7 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 1201.1999999999996,
+        "x": 1128,
         "y": 76
       },
       "collapsed": true,
@@ -104,7 +104,7 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 1741.7999999999993,
+        "x": 1632,
         "y": 76
       },
       "collapsed": true,
@@ -139,7 +139,7 @@
       "status": "white",
       "assigneeIds": [],
       "position": {
-        "x": 719.9999999999998,
+        "x": 624,
         "y": 76
       },
       "collapsed": false,
@@ -156,8 +156,8 @@
       "status": "white",
       "assigneeIds": [],
       "position": {
-        "x": 719.9999999999998,
-        "y": 270
+        "x": 624,
+        "y": 460
       },
       "collapsed": false,
       "artifacts": [],
@@ -173,7 +173,7 @@
       "status": "white",
       "assigneeIds": [],
       "position": {
-        "x": 1372.7999999999995,
+        "x": 1128,
         "y": 76
       },
       "collapsed": false,
@@ -207,7 +207,7 @@
       "status": "white",
       "assigneeIds": [],
       "position": {
-        "x": 713.3999999999997,
+        "x": 624,
         "y": 76
       },
       "collapsed": false,
@@ -224,7 +224,7 @@
       "status": "gray",
       "assigneeIds": [],
       "position": {
-        "x": 1306.7999999999995,
+        "x": 1128,
         "y": 76
       },
       "collapsed": false,
@@ -246,8 +246,8 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 713.3999999999997,
-        "y": 270
+        "x": 624,
+        "y": 476
       },
       "collapsed": false,
       "artifacts": [],
@@ -281,7 +281,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 1886.9999999999993,
+        "x": 1632,
         "y": 76
       },
       "collapsed": false,
@@ -317,7 +317,7 @@
       "assigneeIds": [],
       "position": {
         "x": 120,
-        "y": 296
+        "y": 524
       },
       "collapsed": false,
       "artifacts": [],
@@ -334,7 +334,7 @@
       "assigneeIds": [],
       "position": {
         "x": 120,
-        "y": 516
+        "y": 956
       },
       "collapsed": false,
       "artifacts": [],
@@ -350,7 +350,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 680.3999999999999,
+        "x": 624,
         "y": 76
       },
       "collapsed": false,
@@ -385,7 +385,7 @@
       "assigneeIds": [],
       "position": {
         "x": 120,
-        "y": 296
+        "y": 508
       },
       "collapsed": false,
       "artifacts": [],
@@ -401,7 +401,7 @@
       "status": "black",
       "assigneeIds": [],
       "position": {
-        "x": 673.7999999999998,
+        "x": 624,
         "y": 76
       },
       "collapsed": false,
@@ -1517,11 +1517,11 @@
   "terminals": {
     "in": {
       "x": 0,
-      "y": 165
+      "y": 280
     },
     "out": {
-      "x": 2728.999999999999,
-      "y": 178
+      "x": 2576,
+      "y": 293
     }
   },
   "log": [

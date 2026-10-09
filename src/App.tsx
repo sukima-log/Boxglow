@@ -264,7 +264,7 @@ export function App() {
         <div className="canvas-wrap">
           {project && (
             <ReactFlowProvider>
-              <FlowCanvas project={shown ?? project} matcher={matcher} />
+              <FlowCanvas project={shown ?? project} matcher={matcher} panelLayoutKey={`${treeOpen}:${drawerOpen}:${drawerW}:${hasSelection}:${rightW}:${embed}`} />
             </ReactFlowProvider>
           )}
           {project && drawerOpen && !embed && <Drawer project={shown ?? project} filter={filter} onFilter={setFilter} onClose={() => setDrawerOpen(false)} width={drawerW} />}

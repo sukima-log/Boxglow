@@ -2,8 +2,8 @@
  * ブロックの大きさ (画面と自動整列で共用。React Flow に依存しない)
  */
 import { categoryOf } from "./categories";
-import type { Project } from "./types";
-import { missingRequiredInputs, childrenOf, portsOf } from "./graph";
+import type { Project, Port } from "./types";
+import { missingRequiredInputs, childrenOf, portsOf, incomingEdges, outgoingEdges } from "./graph";
 import { ROOT_ID } from "./types";
 import { t } from "../i18n/core";
 
@@ -68,6 +68,62 @@ export function metaRowWidth(opts: { assigneeText: string; unassigned: boolean; 
   return w;
 }
 
+/** 入出力の行を接続相手の上下順にそろえる (保存されたポートや接続は変更しない)。
+ * 名前順では上のタスクへの線が下の行から出て交差するため、相手の位置の平均を使う。
+ * 同じ位置・未接続の場合は元の順序を保つ。親の内側端点は従来の並びを維持する。
+ * Input: 計画、箱 ID、入出力方向。Output: 表示順に並べたポート (原本は変更しない)
+ */
+export function taskCardPorts(p: Project, blockId: string, direction: Port["direction"]): Port[] {
+  const ports = portsOf(p, blockId, direction);
+  if (ports.length < 2) return ports;
+  const absoluteY = (id: string): number => {
+    let y = 0, current: string | null = id;
+    while (current && current !== ROOT_ID) {
+      const b: Project["blocks"][string] | undefined = p.blocks[current];
+      if (!b) break;
+      y += b.position.y;
+      current = b.parentId;
+    }
+    return y;
+  };
+  const rows = ports.map((port, index) => {
+    const edges = direction === "in" ? incomingEdges(p, { portId: port.id, side: "outer" }) : outgoingEdges(p, { portId: port.id, side: "outer" });
+    const ys = edges.map(e => p.ports[direction === "in" ? e.from.portId : e.to.portId]?.blockId).filter((id): id is string => !!id).map(absoluteY);
+    return { port, index, y: ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : Infinity };
+  });
+  return rows.sort((a, b) => (a.y === b.y ? 0 : a.y - b.y) || a.index - b.index).map(row => row.port);
+}
+
+/**
+ * 表示名の折り返しと接続点を同じ寸法から求める。
+ * Input: 計画と箱 ID。Output: カード全体・見出し・情報行の寸法と各ポート行の位置
+ * 状態・活動・期日が変わっても、情報行の予約領域は維持する。
+ */
+export function taskCardLayout(p: Project, blockId: string) {
+  const b = p.blocks[blockId];
+  const ins = taskCardPorts(p, blockId, "in");
+  const outs = taskCardPorts(p, blockId, "out");
+  const titleWidth = textWidth(b?.title ?? "", 22);
+  const portWidth = Math.max(0, ...[...ins, ...outs].map(q => textWidth(q.name, 16) + 104));
+  const width = Math.min(360, Math.max(BLOCK_W, titleWidth + 64, portWidth));
+  const titleLines = Math.max(1, Math.ceil(titleWidth / (width - 64)));
+  // 受け持ち・活動・判断の更新で寸法を変えない。開始時に隣のタスクが押し出されると、
+  // CLI の受け持ち範囲外への配置変更になってしまうため、情報行の場所を先に確保する。
+  const metaH = 80; // 期日・課題・テンプレートの有無でも高さを変えない
+  const headerH = 88 + (titleLines - 1) * 28 + metaH;
+  let cursor = headerH;
+  const rows = (ports: typeof ins) => ports.map(q => {
+    const lines = Math.max(1, Math.ceil(textWidth(q.name, 16) / (width - 104)));
+    const height = Math.max(48, lines * 24 + 16);
+    const row = { id: q.id, top: cursor, height, center: cursor + height / 2 };
+    cursor += height;
+    return row;
+  });
+  const inputs = rows(ins);
+  const outputs = rows(outs);
+  return { width, height: cursor + 8, headerH, metaH, inputs, outputs };
+}
+
 /** ブロックが「展開中 (子を中に描く)」か */
 export function isExpanded(p: Project, blockId: string): boolean {
   const b = p.blocks[blockId];
@@ -80,6 +136,7 @@ export function isExpanded(p: Project, blockId: string): boolean {
  * Output: { width, height }
  */
 export function blockSize(p: Project, blockId: string): Size {
+  if (!isExpanded(p, blockId)) return taskCardLayout(p, blockId);
   const b = p.blocks[blockId];
   const insP = portsOf(p, blockId, "in");
   const outsP = portsOf(p, blockId, "out");
@@ -117,7 +174,6 @@ export function blockSize(p: Project, blockId: string): Size {
   const titleLines = Math.max(1, Math.ceil(titleW / Math.max(80, width - titleExtras)));
   const headerH = TITLE_H + (titleLines - 1) * TITLE_LINE_H + META_H;
   const baseH = headerH + rows * ROW_H + PAD_BOTTOM;
-  if (!isExpanded(p, blockId)) return { width, height: baseH, headerH };
   let right = 0;
   let bottom = 0;
   for (const c of kids) {

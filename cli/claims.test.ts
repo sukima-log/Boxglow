@@ -113,3 +113,52 @@ it("C3: 全体取得だけに日英の停止案内を出し、通常取得では
   expect(other.status).toBe(1);expect(other.stderr).toContain(lang==="ja"?"自分の再起動前の実行とは限りません":"not necessarily your own instance");expect(other.stdout).not.toContain(notice);
  }
 });
+
+// 旧寸法で配置された隣接タスクを模す。新寸法で重なるが、内容だけの保存では動かさない。
+it("overview: 旧配置の内容更新は他者の受け持ち・位置へ波及しない", () => {
+  const f = fixture();
+  const boxes = Object.values(f.p.blocks).filter(b => ["alpha", "beta"].includes(b.title));
+  boxes[0].position = { x: 120, y: 96 };
+  boxes[1].position = { x: 120, y: 288 };
+  writeFileSync(f.file, toJSON(f.p));
+  const positions = Object.fromEntries(Object.values(f.p.blocks).map(b => [b.id, b.position]));
+  const owned = f.cli("start", "alpha", ...actor);
+  expect(owned.status, owned.stderr).toBe(0);
+  const foreign = f.cli("start", "beta", "--actor", "claude-code", "--instance", "other");
+  expect(foreign.status, foreign.stderr).toBe(0);
+  const claim = receipt(owned.stdout);
+  const saved = f.cli("set", "alpha", "--title", "alpha2", ...actor, "--claim-token", claim.token);
+  expect(saved.status, saved.stderr).toBe(0);
+  expect(Object.fromEntries(Object.values(f.read().blocks).map((b: any) => [b.id, b.position]))).toEqual(positions);
+});
+
+it("overview: 受け持ち無効の旧配置も CLI の 1 回の保存で移動しない", () => {
+  const f = fixture(false);
+  const boxes = Object.values(f.p.blocks).filter(b => ["alpha", "beta"].includes(b.title));
+  boxes[0].position = { x: 120, y: 96 };
+  boxes[1].position = { x: 120, y: 288 };
+  writeFileSync(f.file, toJSON(f.p));
+  const saved = f.cli("set", "alpha", "--note", "updated", "--actor", "codex");
+  expect(saved.status, saved.stderr).toBe(0);
+  expect(Object.fromEntries(Object.values(f.read().blocks).map((b: any) => [b.id, b.position])))
+    .toEqual(Object.fromEntries(Object.values(f.p.blocks).map(b => [b.id, b.position])));
+});
+
+it("overview: 拡大の押し出しも受け持ち判定に含み、範囲外なら保存全体を拒否する", () => {
+  const f = fixture();
+  const alpha = Object.values(f.p.blocks).find(b => b.title === "alpha")!;
+  const beta = Object.values(f.p.blocks).find(b => b.title === "beta")!;
+  alpha.position = { x: 120, y: 96 };
+  beta.position = { x: 120, y: 96 + blockSize(f.p, alpha.id).height + 96 };
+  writeFileSync(f.file, toJSON(f.p));
+  const own = f.cli("start", "alpha", ...actor);
+  expect(own.status, own.stderr).toBe(0);
+  const other = f.cli("start", "beta", "--actor", "claude-code", "--instance", "other");
+  expect(other.status, other.stderr).toBe(0);
+  const before = readFileSync(f.file, "utf8");
+  const changed = f.cli("set", "alpha", "--title", "long title ".repeat(16), ...actor, "--claim-token", receipt(own.stdout).token);
+  expect(changed.status).toBe(1);
+  expect(changed.stderr).toContain("Another instance holds this claim:");
+  expect(changed.stderr).toContain("(claude-code)");
+  expect(readFileSync(f.file, "utf8")).toBe(before);
+});

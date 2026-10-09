@@ -1,5 +1,6 @@
 /**
  * 実際の VS Code (Linux。WSLg の画面) で、同期サーバーを設定していないときにも、退避と退避したファイルの取り込みが使えることを確かめる (R49-03)
+ * ターミナル開閉によるwebviewのリサイズ時、手動調整と全体表示を区別することも確かめる。
  * 退避は保存の衝突の帯から使う (同期を使わない人にも出る)。取り込みは ⋯ メニューから
  * 前提・使い方は e2e/vscode-sync.cjs と同じ (node e2e/vscode-recovery.cjs。先に env -u VITE_BASE npm run build:vscode)
  */
@@ -67,6 +68,33 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     await win.waitForTimeout(3000);
     watching = false; await dismiss;
     check('VS Code (同期なし): 同期の印は出ない', (await frame.locator('.sync-chip').count()) === 0);
+    // webviewのサイズが変わる実操作でも、手で合わせた表示を保持する。
+    const viewport = () => frame.evaluate(() => window.boxglow.rf.getViewport());
+    const sameView = (a, b) => Math.abs(a.x-b.x)<.1 && Math.abs(a.y-b.y)<.1 && Math.abs(a.zoom-b.zoom)<.00001;
+    const windowSize = () => frame.evaluate(() => ({width:innerWidth,height:innerHeight}));
+    await frame.evaluate(async () => { await window.boxglow.rf.setViewport({x:-120,y:-80,zoom:1.5}); });
+    const manual = await viewport(), beforePanel = await windowSize();
+    await win.keyboard.press('Control+j');
+    await win.waitForTimeout(1500);
+    const withPanel = await windowSize();
+    check('VS Code: ターミナルを開くとwebviewが縮んでも手動の位置・倍率を維持', withPanel.height < beforePanel.height && sameView(manual,await viewport()), JSON.stringify({beforePanel,withPanel,manual,after:await viewport()}));
+    await win.keyboard.press('Control+j');
+    await win.waitForTimeout(1000);
+    check('VS Code: ターミナルを閉じても手動の位置・倍率を維持', (await windowSize()).height > withPanel.height && sameView(manual,await viewport()));
+    await frame.getByRole('button',{name:'Fit',exact:true}).click();
+    await win.waitForTimeout(400);
+    await win.keyboard.press('Control+j');
+    await win.waitForTimeout(1000);
+    const fittedPanel = await viewport();
+    await frame.getByRole('button',{name:'Fit',exact:true}).click();
+    await win.waitForTimeout(400);
+    check('VS Code: 全体表示中にターミナルを開くと新しいFitに追従', (await windowSize()).height < beforePanel.height && sameView(fittedPanel,await viewport()));
+    await win.keyboard.press('Control+j');
+    await win.waitForTimeout(1000);
+    const fittedFull = await viewport();
+    await frame.getByRole('button',{name:'Fit',exact:true}).click();
+    await win.waitForTimeout(400);
+    check('VS Code: 全体表示中にターミナルを閉じると新しいFitに追従', (await windowSize()).height > withPanel.height && sameView(fittedFull,await viewport()));
     // 退避: 拡張が保存先を聞き、書けたら応答する (同期の設定が無くても。以前は応答が無く 120 秒待った)
     await frame.evaluate(() => { window.__evac = window.boxglow.store.getState().evacuate(); });
     await win.locator('.quick-input-widget input').waitFor({ timeout: 10000 });

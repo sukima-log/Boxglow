@@ -13,13 +13,35 @@ const GAP_Y = 96; // 縦に積んだボックスの間 (線が縁から 36px 離
 /** 1 行の幅の上限。直列の長い鎖はこれを超えたら次の行に折り返す (横 1 列の細長い帯になるのを防ぐ) */
 const MAX_ROW_W = 3000;
 
+/** 閲覧配置で使う通路幅・箱の間隔・親内余白・工程見出しの予約高さ */
+const READING_GAP_X = 96;
+const READING_GAP_Y = 64;
+const READING_INSET_X = 88;
+const READING_HEADER_SPACE = 56;
+const READING_CHANNEL_REDUCTION = 48;
+const COLUMN_LABEL_SPACE = 40;
+
+export interface LayoutColumn {
+  x: number;
+  y: number;
+  width: number;
+  ids: string[];
+  index: number;
+}
+
 /**
  * 1 つの階層を整列する (子の階層は先に整列して大きさを確定させる)
  * Input : scopeId = 階層のブロック id (ROOT_ID なら最上位),
  *         options.recursive = false なら子の階層の中は並べ直さない (画面の「この階層を整列」用。既定は下の階層も整列する)
+ *         options.presentation = 閲覧用の直列配置 (横へ折り返さず依存順を維持)
+ *         options.columns = 各工程の位置を受け取る配列 (指定時だけ追記)
  * Output: 位置を更新した Project (元は変更しない)
  */
-export function layoutScope(p: Project, scopeId: string, options: { recursive?: boolean } = {}): Project {
+export function layoutScope(p: Project, scopeId: string, options: {
+  recursive?: boolean;
+  presentation?: boolean;
+  columns?: LayoutColumn[];
+} = {}): Project {
   let q = structuredClone(p);
   const kids = childrenOf(q, scopeId);
   if (kids.length === 0) return q;
@@ -95,30 +117,43 @@ export function layoutScope(p: Project, scopeId: string, options: { recursive?: 
   }
   // 通路の幅: 縁から 36px x 2 + 線の間隔 16px x (本数 - 1) + 余裕 16px。最低は GAP_X
   const gapAfter = (L: number): number => Math.max(GAP_X, 72 + 16 * Math.max(0, (crossing[L] ?? 0) - 1) + 16);
-  const startX = scopeId === ROOT_ID ? TERMINAL_W + GAP_X : CHILD_PADDING.left;
-  const startY = scopeId === ROOT_ID ? 40 : childTop(q, scopeId);
+  const compact = !!options.presentation;
+  const horizontalGap = compact ? READING_GAP_X : GAP_X;
+  const verticalGap = compact ? READING_GAP_Y : GAP_Y;
+  const startX = scopeId === ROOT_ID ? TERMINAL_W + horizontalGap : compact ? READING_INSET_X : CHILD_PADDING.left;
+  const startY = scopeId === ROOT_ID ? 40 : childTop(q, scopeId) + (compact ? READING_HEADER_SPACE : 0);
   let x = startX;
-  let rowTop = startY; // 今の行の上端
-  let maxBottom = startY; // 全体の下端
-  let rowBottom = startY; // 今の行の下端
-  for (let L = 0; L <= maxLayer; L++) {
-    const members = kids.filter((k) => layer.get(k.id) === L).sort((a, b) => order.get(a.id)! - order.get(b.id)!);
-    const colW = Math.max(0, ...members.map((m) => blockSize(q, m.id).width));
-    // 行の幅が上限を超えるなら、次の行の左端から続ける (直列の長い鎖が横 1 列の帯にならないように)
-    if (L > 0 && x + colW > startX + MAX_ROW_W) {
-      x = startX;
-      rowTop = rowBottom + GAP_Y * 2;
+  let rowTop = startY;
+  let maxBottom = startY;
+  const columns = Array.from({ length: maxLayer + 1 }, (_, L) => {
+    const members = kids.filter(k => layer.get(k.id) === L).sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+    const sizes = members.map(m => blockSize(q, m.id));
+    return { L, members, sizes, width: Math.max(0, ...sizes.map(s => s.width)), height: sizes.reduce((h, s) => h + s.height, 0) + verticalGap * Math.max(0, members.length - 1) };
+  });
+  // 閲覧時は接続の前後関係を必ず左→右に保つ。長い鎖でも左端へ折り返さない。
+  const rowLimit = compact ? Infinity : MAX_ROW_W;
+  for (let from = 0; from < columns.length;) {
+    let to = from, rowWidth = 0;
+    while (to < columns.length) {
+      const col = columns[to];
+      const gap = to === from ? 0 : (compact ? Math.max(horizontalGap, gapAfter(to - 1) - READING_CHANNEL_REDUCTION) : gapAfter(to - 1));
+      if (to > from && rowWidth + gap + col.width > rowLimit)
+        break;
+      rowWidth += gap + col.width;
+      to++;
     }
-    // 層の中は縦に 1 列に積む (折り返すと折り返した列が線の障害物になり、重なりが増える)
-    let y = rowTop;
-    for (const m of members) {
-      const s = blockSize(q, m.id);
-      q.blocks[m.id].position = { x, y };
-      y += s.height + GAP_Y;
+    const rowHeight = Math.max(...columns.slice(from, to).map(c => c.height));
+    x = startX;
+    for (let j = from; j < to; j++) {
+      const col = columns[j];
+      let y = rowTop + (compact ? Math.round((rowHeight - col.height) / 16) * 8 : 0);
+      options.columns?.push({ x, y: rowTop - COLUMN_LABEL_SPACE, width: col.width, ids: col.members.map(m => m.id), index: col.L });
+      col.members.forEach((m, i) => { q.blocks[m.id].position = { x, y }; y += col.sizes[i].height + verticalGap; });
+      x += col.width + (compact ? Math.max(horizontalGap, gapAfter(col.L) - READING_CHANNEL_REDUCTION) : gapAfter(col.L));
     }
-    rowBottom = Math.max(rowBottom, y - GAP_Y);
-    maxBottom = Math.max(maxBottom, rowBottom);
-    x += colW + gapAfter(L);
+    maxBottom = Math.max(maxBottom, rowTop + rowHeight);
+    rowTop = maxBottom + verticalGap * 2 + (compact ? COLUMN_LABEL_SPACE : 0);
+    from = to;
   }
   // 最上位なら入力/出力ノードも両端に置く
   if (scopeId === ROOT_ID) {

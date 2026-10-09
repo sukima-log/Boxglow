@@ -1,5 +1,9 @@
 /** 英語の辞書 (canvas)。キー = ソースの日本語の文 */
 export const canvas: Record<string, string> = {
+  "待ち": "Waiting",
+  "工程 {n}": "Stage {n}",
+  "工程順": "Flow layout",
+  "工程順に並べて表示。オフにすると保存した配置を表示します。": "Arrange by dependency for reading. Turn off to see the saved layout.",
   "判断待ち {n}": "Decisions {n}",
 
   // ボックス (BlockNode): 題名の行
@@ -33,4 +37,14 @@ export const canvas: Record<string, string> = {
 , "下の階層の未接続の入力 (自動)": "Unconnected input from a child (auto)"
   // ボックスの幅の見積もり (size.ts) だけで使う文言
 , "未担当": "Unassigned"
+, "折り返し": "Wrap"
+, "並行するボックスを段に折り返す": "Wrap parallel boxes into rows"
+, "横フロー": "Horizontal flow"
+, "縦フロー": "Vertical flow"
+, "フローの方向": "Flow direction"
+, "フローの方向はViewで切り替えます": "Switch flow direction in View mode"
+, "横幅に合わせて、先頭から読む": "Fit width and read from the top"
+, "幅に合わせる": "Fit width"
+, "Shift＋ホイールで上下へ、Ctrl＋Shift＋ホイールで左右へ移動できます。": "Shift + scroll to pan vertically; Ctrl + Shift + scroll to pan horizontally."
+, "ホイールで上下へ · Ctrl＋ホイールで拡大縮小": "Scroll to read · Ctrl + scroll to zoom"
 };

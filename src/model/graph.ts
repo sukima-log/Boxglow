@@ -1998,7 +1998,9 @@ function pushOut(q: Project, blockId: string, sizeOf: SizeOf, against?: Set<stri
   // 「下へ押す ↔ 上へ戻す」の往復になり、重なったまま終わる。右・下だけなら単調に進むので必ず終わる (回数の上限も大きく取る)
   const forwardOnly = !!against;
   let moved = false;
-  for (let iter = 0; iter < (forwardOnly ? 64 : 8); iter++) {
+  // 右・下だけなら、一度避けた兄弟には戻らない。兄弟数ぶん走査すれば終わる。
+  // 固定の64回では密集した65個以上を避けきれないため、件数に応じた上限にする。
+  for (let iter = 0; iter < (forwardOnly ? sibIds.length : 8); iter++) {
     const cur = q.blocks[blockId];
     let sib: Block | undefined;
     for (const id of sibIds) {
@@ -2038,6 +2040,85 @@ function pushOut(q: Project, blockId: string, sizeOf: SizeOf, against?: Set<stri
 export function resolveOverlap(p: Project, blockId: string, sizeOf: SizeOf, against?: Set<string>): Project {
   const q: Project = { ...p, blocks: { ...p.blocks } };
   return pushOut(q, blockId, sizeOf, against) ? q : p;
+}
+
+/**
+ * 拡大した箱を固定し、広がった範囲にかかった兄弟を順に押し出す。
+ * 既存の重なりのうち拡大・移動した範囲と無関係なものは、そのまま残す。
+ * Input : p = 操作後の計画, blockId = 拡大した箱, oldSize = 操作前の寸法
+ * Output: 拡大した箱の位置を維持し、影響を受けた兄弟だけを動かした計画
+ */
+function pushGrowth(p: Project, blockId: string, oldSize: ReturnType<SizeOf>, sizeOf: SizeOf): Project {
+  const q: Project = { ...p, blocks: { ...p.blocks } };
+  const siblings = childrenOf(q, q.blocks[blockId].parentId!).map(b => b.id);
+  const rect = (id: string) => ({ ...q.blocks[id].position, ...sizeOf(q, id) });
+  type Rect = ReturnType<typeof rect>;
+  const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.width && a.x + a.width > b.x
+    && a.y < b.y + b.height && a.y + a.height > b.y;
+  // 右/下へ増えた帯だけを見る。余白96pxも通路として確保する。
+  const newlyCovered = (old: Rect, next: Rect, other: Rect) => {
+    const right = next.x + next.width + GAP, bottom = next.y + next.height + GAP;
+    const oldRight = old.x + old.width + GAP, oldBottom = old.y + old.height + GAP;
+    return (right > oldRight && overlaps({ x: oldRight, y: next.y - GAP, width: right - oldRight, height: bottom - next.y + GAP }, other))
+      || (bottom > oldBottom && overlaps({ x: next.x - GAP, y: oldBottom, width: right - next.x + GAP, height: bottom - oldBottom }, other));
+  };
+  const settled = new Set([blockId]);
+  const pending = new Set<string>();
+  const collect = (old: Rect, next: Rect) => {
+    for (const id of siblings) {
+      if (!settled.has(id) && newlyCovered(old, next, rect(id))) pending.add(id);
+    }
+  };
+  collect({ ...q.blocks[blockId].position, ...oldSize }, rect(blockId));
+  let moved = false;
+  // 各兄弟は一度だけ確定する。玉突きでも兄弟数を超える反復は発生しない。
+  while (pending.size) {
+    const id = [...pending].sort((a, b) => q.blocks[a].position.y - q.blocks[b].position.y
+      || q.blocks[a].position.x - q.blocks[b].position.x)[0];
+    pending.delete(id);
+    const old = rect(id);
+    if (pushOut(q, id, sizeOf, settled, siblings)) moved = true;
+    settled.add(id);
+    collect(old, rect(id));
+  }
+  return moved ? q : p;
+}
+
+/**
+ * 追加・移動・親変更はその箱が避け、寸法の拡大は箱を固定して兄弟を押し出す。
+ * 無関係な旧配置は保存時に修復しない。子から親へ処理し、親の拡大も判定する。
+ * Input : before = 操作前, after = 操作後, sizeOf = 現在の寸法の計算関数
+ * Output: 今回の操作と、その押し出しに必要な位置だけを補正した計画
+ */
+export function resolveChangedOverlaps(before: Project, after: Project, sizeOf: SizeOf): Project {
+  let result = after;
+  const depth = (id: string): number => {
+    let value = 0;
+    let parent = after.blocks[id]?.parentId;
+    while (parent) {
+      value++;
+      parent = after.blocks[parent]?.parentId;
+    }
+    return value;
+  };
+  const ids = Object.keys(after.blocks).filter(id => id !== ROOT_ID);
+  ids.sort((a, b) => depth(b) - depth(a));
+  for (const id of ids) {
+    const previous = before.blocks[id];
+    const edited = after.blocks[id];
+    const oldSize = previous ? sizeOf(before, id) : null;
+    const newSize = sizeOf(result, id);
+    // 玉突きによる位置変更を、利用者による移動として再処理しない。
+    const relocated = !previous || previous.parentId !== edited.parentId
+      || previous.position.x !== edited.position.x || previous.position.y !== edited.position.y;
+    if (relocated) {
+      const siblings = new Set(childrenOf(result, edited.parentId!).map(b => b.id));
+      result = resolveOverlap(result, id, sizeOf, siblings);
+    } else if (oldSize && (newSize.width > oldSize.width || newSize.height > oldSize.height)) {
+      result = pushGrowth(result, id, oldSize, sizeOf);
+    }
+  }
+  return result;
 }
 
 /**
