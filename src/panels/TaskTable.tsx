@@ -1,6 +1,6 @@
 /**
  * 担当の一覧 (表): 図の代わりに、あるメンバーの担当のボックスを表で出す
- * 入口は引き出しの Filter の「表で見る」。行を押すと図に戻って、そのボックスへ移る
+ * 入口は図の左下の表示の切り替え (横・縦・表) の表の記号。表を出している間も、同じ場所に同じ切り替えを出す。行を押すと図に戻って、そのボックスへ移る
  */
 import { useEffect, useMemo, useState } from "react";
 import { assignmentRows, compareRows, type AssigneeTarget, type AssignmentRow } from "../model/assignments";
@@ -8,6 +8,7 @@ import { STATUS_LABEL } from "../model/status";
 import type { Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
 import { t, useLang } from "../i18n";
+import { ViewSwitch } from "../canvas/CanvasTools";
 
 /** 並べ替えに使う列 (既定は期日の近い順) */
 type SortKey = "due" | "key" | "title" | "where" | "status" | "progress" | "estimate" | "inputs" | "decisions";
@@ -89,9 +90,9 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
   );
 
   return (
-    <section className="task-table-view" aria-label={t("担当の一覧")}>
+    <section className="task-table-view" aria-label="In charge">
       <header className="task-table-view__head">
-        <h2>{t("担当の一覧")}</h2>
+        <h2>In charge</h2>
         {/* 対象: 自分 (Set as me) を先頭に、他のメンバー、未担当 */}
         <select className="input" aria-label={t("誰の担当")} value={member ? member.id : "__unassigned"} onChange={(e) => setTarget(e.target.value)}>
           {[...project.members].sort((a, b) => Number(b.id === meId) - Number(a.id === meId)).map((m) => (
@@ -104,7 +105,7 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
           {t("完了済みも表示")}
         </label>
         <span className="task-table-view__count">{t("{n} 件", { n: rows.length })}</span>
-        <button className="btn btn-sm ml-auto" onClick={() => setTaskTable(null)} title={t("図に戻る (Esc)")}>{t("図に戻る")}</button>
+        <button className="btn btn-ghost btn-sm ml-auto" onClick={() => setTaskTable(null)} title={t("図に戻る (Esc)")} aria-label={t("図に戻る")}>×</button>
       </header>
       {rows.length === 0 ? (
         <p className="task-table-view__empty">{includeDone ? t("担当のボックスはありません") : t("未完了の担当のボックスはありません")}</p>
@@ -143,6 +144,10 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
           </table>
         </div>
       )}
+      {/* 図の左下と同じ場所に、同じ表示の切り替えを出す (横・縦を押すと図に戻る) */}
+      <div className="canvas-tools task-table-view__switch">
+        <div className="canvas-tools__buttons"><ViewSwitch /></div>
+      </div>
     </section>
   );
 }

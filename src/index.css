@@ -1654,7 +1654,10 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .canvas-tools__buttons > .canvas-tools__wrap, .canvas-tools__buttons > .canvas-tools__fit-all, .canvas-tools__buttons > .canvas-tools__fit-width { display:inline-flex; align-items:center; justify-content:center; width:32px; padding:0; }
 
 /* ---- 担当の一覧 (表): 図の上に重ねて出す (図は残す)。引き出し (z-index 15) より下、図とパス表示より上 ---- */
-.task-table-view { position: absolute; inset: 0; z-index: 12; display: flex; flex-direction: column; gap: 8px; padding: 16px; background: var(--bg-paper); overflow: hidden; }
+.task-table-view { position: absolute; inset: 0; z-index: 12; display: flex; flex-direction: column; gap: 8px; padding: 16px 16px 88px; background: var(--bg-paper); overflow: hidden; }
+.task-table-view__switch { position: absolute; left: 15px; bottom: 15px; }
+/* 表のときは切り替えだけなので、倍率のボタンとの区切り線は要らない */
+.task-table-view__switch .flow-direction { padding-left: 0; margin-left: 0; border-left: 0; }
 .task-table-view__head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
 .task-table-view__head h2 { font-size: 16px; font-weight: 800; margin: 0; }
 .task-table-view__head select { width: auto; min-width: 160px; }
@@ -1676,4 +1679,4 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .task-table__status.gray { color: var(--primary-strong); font-weight: 700; }
 .task-table__status.white { color: var(--text-muted); }
 .task-table td[data-overdue="true"] { color: var(--attention-text); font-weight: 700; white-space: nowrap; }
-@media (max-width: 600px) { .task-table-view { padding: 8px; } }
+@media (max-width: 600px) { .task-table-view { padding: 8px 8px 80px; } }
