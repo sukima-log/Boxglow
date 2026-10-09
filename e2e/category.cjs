@@ -67,7 +67,7 @@ const path = require("path");
           `${theme}/${lang}: カテゴリの絞り込みがツリーにも効く`,
           (await page.locator('.tree-kind[data-category="research"]').count()) === 1,
         );
-        await page.locator('.drawer button[title="Close"]').first().click();
+        await page.locator('.drawer .panel-close').first().click();
         await page.locator(".tree-toggle").click();
         // 空の選択はカテゴリ解除。札が消え、戻した後は readonly の制約が効くことも確認する。
         await field.selectOption("");

@@ -2,6 +2,7 @@
  * タイムライン: 判断待ち・作業中・ログを時系列で見る (上の帯の要約チップから開く)
  * 「再開」タブは、作業を再開するときに読み直すもの (AI 未確認の回答・引き継ぎメモ・次の候補) を 1 か所にまとめる
  */
+import { CloseButton } from "./CloseButton";
 import { candidateGroups } from "../model/workflow";
 import { resumeSummary } from "../model/resume";
 import { useState } from "react";
@@ -164,7 +165,7 @@ export function Timeline({ project }: { project: Project }) {
     <div className="flex flex-col gap-3 p-3">
       <div className="flex items-center gap-1 mb-0">
         <span className="label flex-1">Activity</span>
-        <button className="btn btn-ghost btn-sm" onClick={() => select({})} title={t("閉じる (Esc)")}>×</button>
+        <CloseButton onClick={() => select({})} />
       </div>
       <div className="text-[13px]">Done {s.white} / {s.total}</div>
 

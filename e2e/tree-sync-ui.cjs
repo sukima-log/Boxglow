@@ -159,7 +159,7 @@ const { chromium, open, check, result } = require("./lib.cjs");
       (await page.locator(".tree-row").count()) < beforeFilter && (await row(parent.id).count()) === 1,
     );
     await page.locator(".drawer .chip").filter({ hasText: "Done" }).click();
-    await page.locator('.drawer button[title="Close"]').first().click();
+    await page.locator('.drawer .panel-close').first().click();
     // 大きな計画はモデルの形を保った表示用データを渡し、一覧を開く時間を測る。
     await page.locator(".tree-toggle").click();
     await page.evaluate(() => {

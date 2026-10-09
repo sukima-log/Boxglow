@@ -5,6 +5,7 @@ import { ClaimSettings, ClaimDetails } from "./Claims";
  * 何も選んでいなければ何も出さない (App 側でパネルごと隠す)
  * 文言は日本語で書き t() で包む (英語は src/i18n/en/inspector.ts の辞書で引く)
  */
+import { CloseButton } from "./CloseButton";
 import { WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
 import { isEdgeReady, isAcked as decisionIsAcked } from "../model/graph";
@@ -33,7 +34,7 @@ function PanelHead({ title, children }: { title: string; children?: React.ReactN
     <div className="flex items-center gap-1 mb-2">
       <span className="label truncate flex-1" title={title}>{title}</span>
       {children}
-      <button className="btn btn-ghost btn-sm" onClick={() => select({})} title={t("閉じる (Esc)")}>×</button>
+      <CloseButton onClick={() => select({})} />
     </div>
   );
 }
@@ -209,7 +210,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   };
 
   return (
-    <div className="flex flex-col gap-4 p-3">
+    <div className="flex flex-col gap-4 p-3 inspector-body">
       <div className="flex items-center gap-1">
         <span className="label truncate flex-1" title={chain.map((a) => (a.id === ROOT_ID ? "" : a.title)).filter(Boolean).join(" › ")}>
           {isProject ? "Project" : chain.map((a) => (a.id === ROOT_ID ? "" : a.title)).filter(Boolean).join(" › ") || "Top"}
@@ -230,7 +231,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
             )}
           </div>
         )}
-        <button className="btn btn-ghost btn-sm" onClick={() => select({})} title={t("閉じる (Esc)")}>×</button>
+        <CloseButton onClick={() => select({})} />
       </div>
 
       <DebouncedText className="input font-head text-[16px]" value={b.title} disabled={readonly} placeholder={t("Title (何を作るか)")}

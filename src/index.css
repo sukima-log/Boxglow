@@ -1682,3 +1682,17 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .task-table__status.white { color: var(--text-muted); }
 .task-table td[data-overdue="true"] { color: var(--attention-text); font-weight: 700; white-space: nowrap; }
 @media (max-width: 600px) { .task-table-view { padding: 8px 8px 80px; } }
+
+/* ---- パネルを閉じるボタン (CloseButton): 狭い画面では、図に重なるパネルの閉じ方が分かるよう、枠付きの大きなボタンに「閉じる」を添える ---- */
+.panel-close { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.panel-close__label { display: none; }
+@media (max-width: 900px) {
+  .panel-close { min-width: 44px; min-height: 44px; padding: 0 16px; border: 2px solid var(--line); border-radius: 999px; background: var(--bg-card); font-size: 14px; font-weight: 700; }
+  .panel-close > span:first-child { font-size: 18px; line-height: 1; }
+  .panel-close__label { display: inline; }
+}
+/* スマホ幅: 閉じるボタンが大きくなった分、ボックスの詳細の上と項目の間を少し詰める (質問の欄を最初の画面に収めるため) */
+@media (max-width: 600px) {
+  .inspector-body { gap: 12px; padding-top: 8px; }
+}
+

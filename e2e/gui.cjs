@@ -93,6 +93,12 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.locator('.task-table-view__toggle input').check();
     await page.locator('.task-table tbody tr',{hasText:'バックエンド'}).click();await page.waitForTimeout(500);
     check('担当の一覧: 行を押すと図に戻り、そのボックスが選ばれる',await page.locator('.task-table-view').count()===0 && await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title;})==='バックエンド');
+    // 狭い幅: ボックスを選んで開いた詳細パネルは、枠付きの大きな「× 閉じる」で閉じられる (指で押せる 44px 以上)
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();const b=Object.values(s.project.blocks).find((x)=>x.title==='設計する');s.select({blockId:b.id});});await page.waitForTimeout(400);
+    const closeBox=await page.locator('.panel.right .panel-close').first().boundingBox();
+    check('狭い幅 (390px): 詳細パネルの閉じるボタンは「閉じる」と書かれ、44px 以上の大きさ',await page.locator('.panel.right .panel-close__label').first().isVisible() && (await page.locator('.panel.right .panel-close').first().innerText()).includes('閉じる') && closeBox.height>=44 && closeBox.width>=44,JSON.stringify(closeBox));
+    await page.locator('.panel.right .panel-close').first().click();await page.waitForTimeout(300);
+    check('狭い幅 (390px): 「閉じる」で詳細パネルが閉じる',await page.evaluate(()=>window.boxglow.store.getState().selection.blockId)===null);
     await page.locator('.topbar button[title="Menu"]').click();
     check('狭い幅 (390px): 追加・Auto Layout・Undo / Redo は ⋯ メニューの中にある',await page.locator('.menu-actions').getByRole('button',{name:'+ Block',exact:true}).isVisible() && await page.getByRole('button',{name:'Auto Layout',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Undo',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Redo',exact:true}).isVisible());
     check('画面: 実行時のエラーが無い',errors.length===0,errors.join(';'));

@@ -3,6 +3,7 @@
  * 階層の一覧と管理は TreePanel に分離する。フィルタ判定は図とツリーで共有し、結果が食い違わないようにする。
  * 既定は閉じていて、キャンバスの左に重ねて出す。
  */
+import { CloseButton } from "./CloseButton";
 import { useEffect, useState } from "react";
 import { addMember, instantiateTemplate, kindOf, parseTemplate, removeMember } from "../model/graph";
 import type { BlockTemplate } from "../model/types";
@@ -117,7 +118,7 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
             <button key={x.id} className="seg__btn" data-on={tab === x.id} onClick={() => setTab(x.id)} title={x.hint} style={{ padding: "6px 2px", fontSize: 12 }}>{x.label}</button>
           ))}
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={onClose} title="Close">×</button>
+        <CloseButton onClick={onClose} title={t("閉じる")} />
       </div>
       <div className="text-[11px] mb-2" style={{ color: "var(--text-muted)" }}>{tabs.find((x) => x.id === tab)?.hint}</div>
 

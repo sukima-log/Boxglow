@@ -2,6 +2,7 @@
  * 担当の一覧 (表): 図の代わりに、あるメンバーの担当のボックスを表で出す
  * 入口は図の左下の表示の切り替え (横・縦・表) の表の記号。表を出している間も、同じ場所に同じ切り替えを出す。行を押すと図に戻って、そのボックスへ移る
  */
+import { CloseButton } from "./CloseButton";
 import { useEffect, useMemo, useState } from "react";
 import { assignmentRows, compareRows, type AssigneeTarget, type AssignmentRow } from "../model/assignments";
 import { STATUS_LABEL } from "../model/status";
@@ -108,7 +109,7 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
           {t("完了済みも表示")}
         </label>
         <span className="task-table-view__count">{t("{n} 件", { n: rows.length })}</span>
-        <button className="btn btn-ghost btn-sm ml-auto" onClick={() => setTaskTable(null)} title={t("図に戻る (Esc)")} aria-label={t("図に戻る")}>×</button>
+        <span className="ml-auto"><CloseButton onClick={() => setTaskTable(null)} title={t("図に戻る (Esc)")} label={t("図に戻る")} /></span>
       </header>
       {rows.length === 0 ? (
         <p className="task-table-view__empty">{includeDone ? t("担当のボックスはありません") : t("未完了の担当のボックスはありません")}</p>
