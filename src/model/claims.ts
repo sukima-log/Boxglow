@@ -222,3 +222,37 @@ export function onlyClaimsChanged(before:Project|null,after:Project):boolean {
   const keys=new Set([...Object.keys(before),...Object.keys(after)]);
   return [...keys].every(key=>key==="claims" || same((before as unknown as Record<string,unknown>)[key],(after as unknown as Record<string,unknown>)[key]));
 }
+
+/** 受け持ちの一覧の 1 行 */
+export type ClaimRow = { rootId: string; key: string; title: string; actor: string; instanceId: string; subtree: boolean; active: boolean; minutesLeft: number; note: string };
+
+/**
+ * 受け持ちの一覧を作る (Activity の Claims タブ)
+ * Input : project = 計画, now = 今の時刻 (ミリ秒。受け持ちの共通の時計)
+ * Output: 解除されていない受け持ちの行の配列。受け持ちを使わない計画では空。
+ *         並びは「有効なもの (期限の近い順)」→「期限切れ」。期限切れも残すのは、止まった AI の受け持ちに人が気づけるようにするため
+ */
+export function claimListOf(project: Project, now: number): ClaimRow[] {
+  if (!claimsEnabled(project)) return [];
+  const rows: ClaimRow[] = [];
+  for (const [rootId, c] of Object.entries(project.claims ?? {})) {
+    if (c.releasedAt) continue; // 解除済みは出さない (記録はログにある)
+    const b = project.blocks[rootId];
+    if (!b) continue; // 消えたボックスの受け持ちは出さない
+    const active = activeClaim(c, now);
+    rows.push({
+      rootId
+    , key: b.key ?? ""
+    , title: b.title
+    , actor: c.actor
+    , instanceId: c.instanceId ?? ""
+    , subtree: c.scope === "subtree"
+    , active
+      // 残り時間は切り上げ (残り 30 秒を「0 分」と出さない)
+    , minutesLeft: Math.max(0, Math.ceil((Date.parse(c.expiresAt) - now) / 60000))
+      // 何をしているか: そのボックスの活動のメモ (受け持ちと同じ AI のものだけ)
+    , note: b.activity && b.activity.actor === c.actor ? b.activity.note ?? "" : ""
+    });
+  }
+  return rows.sort((x, y) => Number(y.active) - Number(x.active) || x.minutesLeft - y.minutesLeft);
+}

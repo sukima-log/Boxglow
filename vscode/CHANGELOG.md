@@ -7,7 +7,7 @@
 - **Block tree**: a sidebar with the whole hierarchy. Jump to a box, or add, rename, move, change the status of and delete boxes from the tree.
 - **Zoom and panels**: you cannot zoom out further than the whole diagram. Selecting a box, opening a panel, or resizing the editor (for example opening the terminal) keeps your zoom and position; the Fit button fits the diagram in the area not covered by panels.
 - **Edits do not collide**: when the file changes while you have unsaved edits, changes to different boxes are merged automatically. Only a box that both sides changed asks you to choose, box by box.
-- **Claims (optional, per plan)**: an agent that starts a box holds it for a while, so other agents and sub-agents leave it alone. The Owner tab of the side panel shows who holds a box.
+- **Claims (optional, per plan)**: an agent that starts a box holds it for a while, so other agents and sub-agents leave it alone. The Owner tab of the side panel shows who holds a box, and the Activity panel's Claims tab lists every claim with the agent, its instance ID and the time left.
 - **Start syncing (experimental, off by default)**: put this plan on the sync server or open one of your plans there, sign in, and keep machines in step. Nothing is sent until you start. Plans can be deleted from the server and restored for 30 days.
 - Saving moves only what changed: adding, moving or growing a box pushes only the boxes it now overlaps.
 - Switching between Edit and View no longer changes the width of the top bar; Auto Layout is in the ⋯ menu.

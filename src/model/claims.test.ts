@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createProject, addBlock, addPort, toJSON, fromJSON } from "./graph";
-import { preserveClaimHistory, acquireClaim, claimToken, checkClaimWrite, claimFootprint, releaseClaim, renewClaims, validateClaims, claimSummary, type ClaimIdentity } from "./claims";
+import { preserveClaimHistory, acquireClaim, claimToken, checkClaimWrite, claimFootprint, releaseClaim, renewClaims, validateClaims, claimSummary, claimListOf, type ClaimIdentity } from "./claims";
 import { mergeProjects } from "./merge";
 const now=Date.parse("2026-10-08T01:00:00Z");
 function fixture() {
@@ -37,4 +37,30 @@ it("C2 L-1: 受け持ちログだけUndo先へ持ち越し、重複させない"
  const p=fixture(),nowText=new Date(now).toISOString();
  const q={...p,log:[...p.log,{id:"policy",at:nowText,actor:"human",kind:"note" as const,claimEvent:"policy" as const,message:"control"},{id:"release-old",at:nowText,actor:"human",kind:"note" as const,message:"Claim released: stop"},{id:"ordinary",at:nowText,actor:"human",kind:"note" as const,message:"normal"}]};
  const kept=preserveClaimHistory(p,q);expect(kept.log.some(e=>e.id==="policy")).toBe(true);expect(kept.log.some(e=>e.id==="release-old")).toBe(false);expect(kept.log.some(e=>e.id==="ordinary")).toBe(false);expect(preserveClaimHistory(kept,q).log).toEqual(kept.log);
+});
+
+// Activity の Claims タブに出す一覧 (claimListOf) の確認
+describe("受け持ちの一覧 (画面の Claims タブ)",()=>{
+  it("受け持ちを使わない計画では空",()=>{
+    // 受け持ちがあっても、制御が無効なら一覧に出さない (タブ自体を出さないため)
+    const {p}=held();
+    expect(claimListOf({...p,claimPolicy:{mode:"off",leaseMinutes:30}},now)).toEqual([]);
+  });
+  it("有効なものを期限の近い順に並べ、期限切れは後ろに残し、解除済みは出さない",()=>{
+    // a: 0 分前に取得 (残り 30 分)、b: 20 分前に取得 (残り 10 分)、child: 40 分前に取得 (期限切れ)
+    let p=acquireClaim(fixture(),"a","block",who("one"),now,"c1");
+    p=acquireClaim(p,"b","block",who("two"),now-20*60000,"c2");
+    p=acquireClaim(p,"child","block",who("three"),now-40*60000,"c3");
+    const rows=claimListOf(p,now);
+    expect(rows.map(r=>[r.rootId,r.active,r.minutesLeft,r.instanceId])).toEqual([["b",true,10,"two"],["a",true,30,"one"],["child",false,0,"three"]]);
+    // 解除すると一覧から消える
+    expect(claimListOf(releaseClaim(p,"b","done",now),now).map(r=>r.rootId)).toEqual(["a","child"]);
+  });
+  it("残り時間は切り上げ、配下を含む受け持ちはそう示す",()=>{
+    // 残り 29 分 30 秒 → 30 分 (「0 分」や 1 分少ない表示にしない)
+    const p=acquireClaim(fixture(),"a","subtree",who(),now-30000,"c1");
+    const [row]=claimListOf(p,now);
+    expect(row.minutesLeft).toBe(30);
+    expect(row.subtree).toBe(true);
+  });
 });

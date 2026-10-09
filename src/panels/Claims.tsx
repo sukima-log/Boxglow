@@ -20,7 +20,9 @@ export function ClaimMark({project,blockId,compact=false}:{project:Project;block
   useLang();const now=useClaimClock(), found=visibleClaim(project,blockId,now);
   if(!found)return null;
   const [root,c]=found, active=activeClaim(c,now), activity=project.blocks[blockId]?.activity;
-  const title=[active?t("受け持ち中: {actor}",{actor:c.actor}):t("受け持ち期限切れ: {actor}",{actor:c.actor}),
+  // 錠のツールチップ (Tree・箱の上で、誰が持っているかを確かめる場所)。同じ AI のサブエージェントは実行 ID で見分けるので、名前に添える
+  const holder=c.instanceId?`${c.actor} (${c.instanceId})`:c.actor;
+  const title=[active?t("受け持ち中: {actor}",{actor:holder}):t("受け持ち期限切れ: {actor}",{actor:holder}),
     t("範囲: {scope}",{scope:c.scope==="subtree"?t("配下を含む"):t("このボックス")}),project.blocks[root]?.title,
     t("期限: {date}",{date:new Date(c.expiresAt).toLocaleString()}),activity?`${activity.actor}: ${t(ACTIVITY_LABEL[activity.state])} ${activity.note}`:""].filter(Boolean).join("\n");
   return <span className={compact?"claim-mark":"meta-chip claim-mark"} data-expired={!active} role="img" aria-label={title} title={title}>

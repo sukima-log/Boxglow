@@ -10,6 +10,8 @@ import { actorLabel, ACTIVITY_LABEL, agoText, shortTime } from "../model/report"
 import { ROOT_ID, type Project } from "../model/types";
 import { STATUS_LABEL } from "../model/status";
 import { useProjectStore } from "../store/useProjectStore";
+import { claimListOf } from "../model/claims";
+import { useClaimClock } from "./Claims";
 // 言語切り替え: 日本語の文は t() で包み、英語の辞書 (src/i18n/en/parts.ts) で引く
 import { t, useLang } from "../i18n";
 
@@ -122,7 +124,7 @@ function BlockRef({ project, blockId, onJump }: { project: Project; blockId: str
 }
 
 /** Activity のタブ (一度に 1 項目だけ見せる。混ざって見えると、どれが判断待ちでどれが作業中か分かりにくい) */
-type ActivityTab = "resume" | "decisions" | "answered" | "working" | "next" | "log";
+type ActivityTab = "resume" | "decisions" | "answered" | "working" | "claims" | "next" | "log";
 
 export function Timeline({ project }: { project: Project }) {
   useLang(); // 言語が変わったら描き直す
@@ -137,12 +139,17 @@ export function Timeline({ project }: { project: Project }) {
   };
   const log = [...project.log].reverse().slice(0, 100);
   const active = [...s.working, ...s.blocked.map((b) => ({ ...b, since: project.blocks[b.block.id].activity?.since ?? "" }))];
+  // 受け持ちの一覧 (Claims タブ)。時刻は受け持ちの共通の時計 (15 秒ごと) で、期限切れを判定する
+  const claimNow = useClaimClock();
+  const claimRows = claimListOf(project, claimNow);
   // タブと件数。最初に開くのは「人の対応が要る順」で中身のある最初のタブ (判断待ち → 回答済み → 作業中 → 次の候補 → ログ)
   const tabs: { id: ActivityTab; label: string; count: number | null; help: string }[] = [
     { id: "resume", label: "Resume", count: resume.handoffs.length, help: t("引き継ぎ・未確認の回答・次の候補") },
     { id: "decisions", label: "Decisions", count: s.decisions.length, help: t("判断待ち: あなたの回答で AI が進めます") }
   , { id: "answered", label: "Answered", count: s.answered.length, help: t("回答済み: AI がまだ読んでいない回答 (読まれるまで残り、編集できます)") }
   , { id: "working", label: "Working", count: active.length, help: t("作業中・詰まり・確認待ちのボックス") }
+  // 受け持ち: 受け持ちを使う計画で、解除されていない受け持ちがあるときだけタブを出す (使わない計画では見せない)
+  , ...(claimRows.length > 0 ? [{ id: "claims" as const, label: "Claims", count: claimRows.filter((r) => r.active).length, help: t("受け持ち: どの AI (実行 ID) がどのボックスを持っているか") }] : [])
   , { id: "next", label: "Next", count: s.next.length, help: t("未着手のボックス: 着手できる / 入力待ち") }
   , { id: "log", label: "Log", count: null, help: t("最近の記録 (新しい順)") }
   ];
@@ -162,7 +169,7 @@ export function Timeline({ project }: { project: Project }) {
       <div className="text-[13px]">Done {s.white} / {s.total}</div>
 
       {/* タブ: 項目ごとに開く。件数を添えて、どこに何件あるかを切り替える前に分かるようにする */}
-      <div className="seg" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+      <div className="seg" style={{ gridTemplateColumns: `repeat(${tabs.length > 6 ? 4 : 3}, minmax(0, 1fr))` }}>
         {tabs.map((x) => (
           <button key={x.id} className="seg__btn" data-on={tab === x.id} onClick={() => setPicked(x.id)} style={{ padding: "6px 2px", fontSize: 12 }} title={x.help}>
             {x.label}
@@ -237,6 +244,30 @@ export function Timeline({ project }: { project: Project }) {
               </button>
             );
           })}
+        </section>
+      )}
+
+      {tab === "claims" && (
+        <section className="flex flex-col gap-1 claim-list">
+          <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("ほかの AI は、受け持ち中のボックスを書き換えません。解除はボックスの「担当」タブから")}</span>
+          {claimRows.length === 0 && empty(t("受け持ちはありません"))}
+          {claimRows.map((r) => (
+            <button key={r.rootId} className="tree-row text-left flex-wrap" data-expired={!r.active} onClick={() => jump(r.rootId)}>
+              {/* 誰が: AI の名前と実行 ID (同じ AI のサブエージェントを見分ける) */}
+              <span className="tl-actor">{actorLabel(r.actor)}</span>
+              {r.instanceId && <code className="text-[11px]">{r.instanceId}</code>}
+              {/* 残り時間 (期限切れは、それとわかる言葉で) */}
+              <span className="ml-auto text-[11px] flex-none" style={{ color: r.active ? "var(--text-muted)" : "var(--attention-text)" }}>
+                {r.active ? t("残り {min} 分", { min: r.minutesLeft }) : t("期限切れ")}
+              </span>
+              {/* 何を: B 番号と題名 (配下を含む受け持ちは、そう書く) */}
+              <span className="basis-full" style={{ whiteSpace: "normal" }}>
+                <span className="dec-key">{r.key}</span> <span className="font-bold">{r.title}</span>
+                {r.subtree && <span className="text-[11px]" style={{ color: "var(--text-muted)" }}> · {t("配下を含む")}</span>}
+              </span>
+              {r.note && <span className="basis-full text-[12px]" style={{ whiteSpace: "normal" }}>{r.note}</span>}
+            </button>
+          ))}
         </section>
       )}
 

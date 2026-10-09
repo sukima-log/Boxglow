@@ -1,7 +1,7 @@
 /**
  * 画面の部品の検査: 幅 320 / 390 / 768 / 1280px で上の帯の操作が画面内に収まること、
  * 通常の幅では Undo / Redo が帯に出て (Auto Layout はいつも ⋯ メニュー)、Edit / View の切り替えで帯の形が変わらず、狭い幅では ⋯ メニューに入ること、質問が詳細パネルの先頭に出ること、
- * 別のボックスを選んでも詳細パネルのタブを保つこと、Activity の Resume タブ、保存の競合で左右を比べて選べること。
+ * 別のボックスを選んでも詳細パネルのタブを保つこと、Activity の Resume タブと Claims タブ (受け持ちの一覧)、保存の競合で左右を比べて選べること。
  * 使い方: e2e/run.sh から呼ばれる (PLAYWRIGHT と LD_LIBRARY_PATH は run.sh が設定。プレビューが 4173 番で動いていること)
  */
 const fs = require('fs');
@@ -68,6 +68,12 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.locator('.summary-chip').click();
     await page.getByRole('button',{name:/^Resume/}).click();
     check('Resume タブ: AI 未確認の回答が残り、サンプルの引き継ぎメモ (バックエンド) が出る',await page.getByText(/ノートの一覧・作成・削除の API まで実装済み/).first().isVisible() && await page.getByText('静的ホスティング',{exact:true}).isVisible());
+    // Claims タブ: サンプルの受け持ち 3 件 (2 つのサブエージェントと codex) が、実行 ID と残り時間つきで並ぶ
+    await page.getByRole('button',{name:/^Claims/}).click();
+    const claimRows=(await page.locator('.claim-list .tree-row').allInnerTexts()).map((x)=>x.replace(/\s+/g,' '));
+    check('Claims タブ: 受け持ちが実行 ID・残り時間つきで期限の近い順に並ぶ',claimRows.length===3 && /release-worker/.test(claimRows[0]) && claimRows.every((x)=>/残り \d+ 分/.test(x)) && claimRows.some((x)=>/api-worker/.test(x)) && claimRows.some((x)=>/test-worker/.test(x)),JSON.stringify(claimRows));
+    await page.locator('.claim-list .tree-row',{hasText:'api-worker'}).click();await page.waitForTimeout(300);
+    check('Claims タブ: 行を押すとそのボックス (バックエンド) が選ばれる',await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title;})==='バックエンド');
     await page.locator('.topbar button[title="Menu"]').click();
     check('狭い幅 (390px): 追加・Auto Layout・Undo / Redo は ⋯ メニューの中にある',await page.locator('.menu-actions').getByRole('button',{name:'+ Block',exact:true}).isVisible() && await page.getByRole('button',{name:'Auto Layout',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Undo',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Redo',exact:true}).isVisible());
     check('画面: 実行時のエラーが無い',errors.length===0,errors.join(';'));
