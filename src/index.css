@@ -1865,10 +1865,10 @@ button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent)
 /* その他タブの操作の一覧 */
 .more-actions { display: flex; flex-direction: column; gap: 6px; }
 .more-actions .btn { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-card); color: var(--text); font-size: 13px; font-weight: 600; text-align: left; box-shadow: 0 1px 2px #0000000f; }
-.more-actions .btn::after { content: "\203A"; color: var(--text-muted); font-size: 16px; line-height: 1; margin-left: 12px; }
+.more-actions .btn::after { content: "\203A" / ""; color: var(--text-muted); font-size: 16px; line-height: 1; margin-left: 12px; }
 .more-actions .btn:hover:not(:disabled) { background: var(--primary-soft); border-color: var(--primary); }
 .more-actions .btn[data-on="true"] { background: var(--primary-soft); border-color: var(--primary); }
-.more-actions .btn[data-on="true"]::after { content: "\2713"; color: var(--primary-strong); }
+.more-actions .btn[data-on="true"]::after { content: "\2713" / ""; color: var(--primary-strong); }
 .more-actions .btn:disabled { opacity: .5; }
 
 /* ツリーの今ここ: NOW の札と、配下にあることを示す印 */
