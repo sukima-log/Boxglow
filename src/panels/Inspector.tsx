@@ -477,10 +477,11 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       <section className="sec">
         <div className="sec__head"><span className="label">{t("操作")}</span></div>
         <div className="more-actions">
-          <button className="btn btn-sm" onClick={() => setScopeEditing(true)} title={t("今回達成すること・扱わないこと・完了条件・相談する条件")}>{t("作業範囲を編集")}</button>
+          {/* 開いている間はもう一度押すと閉じる (✓ が付く) */}
+          <button className="btn btn-sm" data-on={scopeEditing} onClick={() => setScopeEditing(!scopeEditing)} title={t("今回達成すること・扱わないこと・完了条件・相談する条件")}>{t("作業範囲を編集")}</button>
           <button className="btn btn-sm" data-on={project.focusBlockId === blockId} onClick={() => apply(p => ({ ...p, focusBlockId: p.focusBlockId === blockId ? undefined : blockId }))} title={t("このボックスと配下を、次の候補の先頭にする")}>{project.focusBlockId === blockId ? t("今回の範囲を解除") : t("今回の範囲にする")}</button>
           {!isProject && <button className="btn btn-sm" onClick={saveAsTemplate} title={t("ほかの計画でも使い回せる部品として保存する")}>Save as Part</button>}
-          <button className="btn btn-sm" onClick={() => setShowPrompt("plan")} title={t("このボックスの入出力と位置づけを Markdown にしてコピーして AI に渡す")}>Show AI text</button>
+          <button className="btn btn-sm" data-on={showPrompt !== null} onClick={() => setShowPrompt(showPrompt ? null : "plan")} title={t("このボックスの入出力と位置づけを Markdown にしてコピーして AI に渡す")}>Show AI text</button>
           {!isProject && !b.branch && (() => {
             const can = canConvertToBranch(project, blockId);
             return <button className="btn btn-sm" disabled={!can.ok} onClick={() => setBranching(true)}

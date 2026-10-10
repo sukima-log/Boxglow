@@ -48,6 +48,10 @@ const {chromium,open,check,result}=require('./lib.cjs');
       const goal=page.getByLabel('今回達成すること',{exact:true});await goal.fill('APIと画面の接続');await goal.blur();
       await page.waitForFunction(()=>Object.values(window.boxglow.store.getState().project.blocks).find(b=>b.key==='B8').scope.goal==='APIと画面の接続');
       check(theme+' 範囲: 人が詳細パネルで編集し保存できる',true);
+      // 同じボタンをもう一度押しても閉じる。閉じるボタンでも閉じる
+      await page.locator('.panel.right .more-actions').getByRole('button',{name:'作業範囲を編集',exact:true}).click();await page.waitForTimeout(200);
+      check(theme+' 範囲: 「作業範囲を編集」をもう一度押すと閉じる',await page.locator('.work-scope__editor').count()===0);
+      await page.locator('.panel.right .more-actions').getByRole('button',{name:'作業範囲を編集',exact:true}).click();await page.waitForTimeout(200);
       await page.locator('.work-scope__done').click(); // 編集の下の「閉じる」(上の × も同じ)
       await page.locator('.panel.right .seg__btn',{hasText:'状態'}).click();await page.waitForTimeout(200); // Done のボタンは状態タブ
       await page.locator('.panel.right button[title^="Done:"]').click();
