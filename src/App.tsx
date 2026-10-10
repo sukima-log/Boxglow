@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { FlowCanvas } from "./canvas/FlowCanvas";
-import { addBlock, computeProgress, disconnect, removeBlock } from "./model/graph";
+import { addBlock, computeProgress, disconnect, pendingDecisions, portsOf, removeBlock } from "./model/graph";
 import { ROOT_ID } from "./model/types";
 import { majorBlocks, parentForNewBlock, useProjectStore, useShownProject } from "./store/useProjectStore";
 import { scopePath, wireNetTabs } from "./model/graph";
@@ -276,6 +276,22 @@ export function App() {
           {project && drawerOpen && !embed && <Drawer project={shown ?? project} filter={filter} onFilter={setFilter} onClose={() => setDrawerOpen(false)} width={drawerW} />}
           {/* 引き出しの右辺のつまみ (引き出しは中が縦に伸びるので、外側 = 図の上に置く。left 8px + 幅) */}
           {project && drawerOpen && !embed && <ResizeHandle side="right" width={drawerW} min={DRAWER_W.min} max={DRAWER_W.max} onWidth={onDrawerW} style={{ left: 8 + drawerW - 5, top: 8, bottom: 8 }} />}
+          {/* Top の見出し行: 最終成果物と、判断待ちの最初の問い (図の中のノードや札は倍率で消えるので、固定の大きさで出す。B158) */}
+          {project && path.length === 0 && !embed && (() => {
+            const outs = portsOf(project, ROOT_ID, "out").map((q) => q.name).filter(Boolean);
+            const pend = pendingDecisions(project);
+            if (!outs.length && !pend.length) return null;
+            return (
+              <div className="goal-strip" style={{ left: drawerOpen ? 8 + drawerW + 8 : 8 }}>
+                {outs.length > 0 && <span className="goal-strip__item" title={t("最終成果物: {names}", { names: outs.join(", ") })}><span className="goal-strip__label">{t("最終成果物")}</span><span className="goal-strip__text">{outs.join(", ")}</span></span>}
+                {pend.length > 0 && (
+                  <button type="button" className="goal-strip__item goal-strip__decision" onClick={() => select({ timeline: true })} title={pend.map((x) => `${x.block.key ?? ""} ${x.decision.question}`).join("\n")}>
+                    <span className="goal-strip__label">{t("判断待ち {n}", { n: pend.length })}</span><span className="goal-strip__text">{pend[0].decision.question}</span>
+                  </button>
+                )}
+              </div>
+            );
+          })()}
           {project && (path.length > 0 || (!embed && !isFilterEmpty(filter))) && (
             <div className="scope-path" style={{ left: drawerOpen && !embed ? 8 + drawerW + 8 : 8 }}>
               {path.length > 0 && (

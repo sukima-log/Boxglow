@@ -4,6 +4,7 @@
 
 _Fixes and small improvements found after 0.6.0 go here._
 
+- Top now has a heading strip with the final deliverables and the first pending decision (click it to open Activity); it stays readable at any zoom. When a plan first opens and the whole diagram would be too small to read, the view starts at a readable zoom from the top-left instead (Fit still shows everything). Below 900 px wide the vertical flow is the default.
 - The block tree can be resized by dragging its right edge (180 to 560 px; remembered in the browser; double-click the edge to reset).
 
 ## 0.6.0 (2026-10-11)

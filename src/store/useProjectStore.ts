@@ -614,7 +614,8 @@ export const useProjectStore = create<State>((set, get) => {
   , viewCollapsed: {}
   , verticalWrap: false
   , setVerticalWrap: (verticalWrap) => set({ verticalWrap })
-  , flowDirection: "horizontal"
+    // 幅の狭い画面 (900px 未満: スマホ、VS Code の狭いパネル) では縦の流れを既定にする (横に長い Top は幅に合わせると読めない。B158)
+  , flowDirection: (typeof window !== "undefined" && window.innerWidth < 900) ? "vertical" : "horizontal"
   , setFlowDirection: (flowDirection) => set({ flowDirection })
   , readingView: true
   , setReadingView: (readingView) => set({ readingView })

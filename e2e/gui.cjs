@@ -53,7 +53,7 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
       const panel=document.querySelector('.panel.right').getBoundingClientRect();
       return question.bottom<innerHeight-36 && category.top<question.top && category.bottom<innerHeight-36 && panel.top>=top.bottom;
     }));
-    check('詳細パネル: 答えていない質問は 1 回だけ出る',await page.getByText('公開先はどれにしますか?',{exact:true}).count()===1);
+    check('詳細パネル: 答えていない質問は 1 回だけ出る',await page.locator('.panel.right').getByText('公開先はどれにしますか?',{exact:true}).count()===1);
     await page.getByRole('button',{name:'静的ホスティング',exact:true}).click();
     await page.getByText('AI 未読',{exact:true}).waitFor();
     check('詳細パネル: 回答は AI が確認するまで残る',await page.getByText('静的ホスティング',{exact:true}).isVisible());
@@ -74,6 +74,15 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('Claims タブ: 受け持ちが実行 ID・残り時間つきで期限の近い順に並ぶ',claimRows.length===3 && /release-worker/.test(claimRows[0]) && claimRows.every((x)=>/残り \d+ 分/.test(x)) && claimRows.some((x)=>/api-worker/.test(x)) && claimRows.some((x)=>/test-worker/.test(x)),JSON.stringify(claimRows));
     await page.locator('.claim-list .tree-row',{hasText:'api-worker'}).click();await page.waitForTimeout(300);
     check('Claims タブ: 行を押すとそのボックス (バックエンド) が選ばれる',await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title;})==='バックエンド');
+    // Top の見出し行: 最終成果物と判断待ちの最初の問いが、倍率に関係なく固定の大きさで出る。問いを押すと Activity が開く
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.select({});s.setViewScope(null);});await page.waitForTimeout(600); // Top へ
+    const strip=await page.locator('.goal-strip').innerText();
+    const expectStrip=await page.evaluate(()=>{const s=window.boxglow.store.getState();const p=s.project;const outs=Object.values(p.ports).filter(q=>q.blockId==='root'&&q.direction==='out').map(q=>q.name);const pend=Object.values(p.blocks).flatMap(b=>b.decisions.filter(d=>d.answer===undefined).map(d=>d.question));return {outs,pend};});
+    check('Top の見出し行: 最終成果物 (と、あれば判断待ちの問い) が出る',expectStrip.outs.every(o=>strip.includes(o)) && (expectStrip.pend.length===0 || strip.includes(expectStrip.pend[0])),strip+' / '+JSON.stringify(expectStrip));
+    if(expectStrip.pend.length){await page.locator('.goal-strip__decision').click();await page.waitForTimeout(300);
+    check('Top の見出し行: 問いを押すと Activity が開く',await page.evaluate(()=>window.boxglow.store.getState().selection.timeline===true));}
+    await page.evaluate(()=>window.boxglow.store.getState().select({}));await page.waitForTimeout(200);
+
     // Activity の検査 (lint) のタブ: 3 組に分かれ、行を押すとボックスが選ばれる。タブの数字は必ず直すの件数
     await page.evaluate(()=>window.boxglow.store.getState().select({timeline:true}));await page.waitForTimeout(300);
     await page.locator('.panel.right .seg__btn',{hasText:'Lint'}).click();await page.waitForTimeout(300);

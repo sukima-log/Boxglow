@@ -481,6 +481,15 @@ textarea.input { resize: vertical; min-height: 64px; }
 .canvas-tab .status-icon { width: 14px; height: 14px; }
 .canvas-tab[data-on="true"] { background: var(--bg-card); color: var(--text); border-color: var(--line); margin-top: -2px; padding-top: 8px; }
 /* パンくず (開いているボックスまでの道。図の左上に重ねる) */
+/* Top の見出し行 (最終成果物・判断待ちの最初の問い)。パンくずと同じ場所に、固定の大きさで。長い文は省略 */
+.goal-strip { position: absolute; top: 8px; z-index: 10; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 16px); padding: 4px 8px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--bg-card); font-size: 12px; pointer-events: none; }
+.goal-strip__decision { pointer-events: auto; }
+.goal-strip__item { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 48vw; }
+.goal-strip__label { flex: none; font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: .04em; }
+.goal-strip__text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.goal-strip__decision { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
+.goal-strip__decision .goal-strip__label { color: var(--accent); }
+.goal-strip__decision:hover .goal-strip__text { text-decoration: underline; }
 .scope-path { position: absolute; top: 8px; z-index: 10; display: flex; align-items: center; gap: 4px; max-width: calc(100% - 16px); padding: 4px 6px; border: 2px solid var(--line); border-radius: 10px; background: var(--bg-card); box-shadow: var(--shadow-card); font-size: 12px; }
 .scope-crumb { padding: 2px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--primary-strong); font-weight: 700; cursor: pointer; white-space: nowrap; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .scope-crumb:hover { background: var(--bg-paper); }

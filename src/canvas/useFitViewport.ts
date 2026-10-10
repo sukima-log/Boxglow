@@ -32,6 +32,8 @@ export function availableCanvas(canvas: Area, panels: Area[]): Area | null {
     ? { x: left - canvas.x, y: 0, width: right - left, height: canvas.height } : null;
 }
 const MIN_ZOOM = 0.001;
+/** 題名が読める倍率の下限 (題名 20px × 0.45 = 9px)。最初に開いたときの表示は、これより縮めず左上 (始まり) から見せる (B158 の検証: 横に長い Top は幅に合わせると読めない)。Fit を押せば従来どおり全体 */
+const READABLE_ZOOM = 0.45;
 const different = (a: Viewport, b: Viewport) => Math.abs(a.x - b.x) > .5 || Math.abs(a.y - b.y) > .5 || Math.abs(a.zoom - b.zoom) > .00001;
 /**
  * 移動の候補を先に制限し、限界を越えたフレームを描かせない。
@@ -141,7 +143,12 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
     // 倍率だけでなく位置も比較し、Fit倍率でパンした状態を全体表示と混同しない。
     const wasFitted = previousFit && !different(current, previousFit);
     if (first || (resized && wasFitted)) {
-      const next = first && vertical ? readingTarget() ?? nextFit : nextFit;
+      // 初回の表示: 縦なら幅に合わせて先頭から、横なら全体 (ただし読めない倍率になるなら、読める倍率で左上から)
+      let next = first && vertical ? readingTarget() ?? nextFit : nextFit;
+      if (first && !vertical && next.zoom < READABLE_ZOOM) {
+        const b = boundsNow();
+        if (b) next = { x: nextArea.x + 24 - b.x * READABLE_ZOOM, y: nextArea.y + 24 - b.y * READABLE_ZOOM, zoom: READABLE_ZOOM };
+      }
       if (different(current, next))
         void rf.setViewport(next);
     }

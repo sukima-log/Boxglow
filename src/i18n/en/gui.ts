@@ -157,4 +157,6 @@ export const gui: Record<string, string> = {
   "着手の前に、出力の予定成果物 (expect) と完了条件を決めます (押すと状態タブ)": "Before starting, set the output's planned deliverable (expect) and the acceptance criteria (click to open Status)",
   "ツリーの幅": "Tree width",
   "ドラッグで幅を変える (ダブルクリックで元に戻す)": "Drag to resize (double-click to reset)",
+  "最終成果物: {names}": "Final deliverables: {names}",
+  "最終成果物": "Deliverable",
 };
