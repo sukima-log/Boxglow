@@ -43,12 +43,13 @@ const {chromium,open,check,result}=require('./lib.cjs');
       await scope.locator('summary').click();
       check(theme+' 範囲: 4項目の内容を読める',(await scope.innerText()).includes('課金は扱わない')&&(await scope.innerText()).includes('API仕様の変更'));
       await page.screenshot({path:'/tmp/boxglow-scope-'+theme+'.png'});
-      await page.locator('.panel.right button[title="その他"]').click();
-      await page.getByRole('button',{name:'作業範囲を編集',exact:true}).click();
+      await page.locator('.panel.right .seg__btn',{hasText:'その他'}).click();await page.waitForTimeout(200);
+      await page.locator('.panel.right .more-actions').getByRole('button',{name:'作業範囲を編集',exact:true}).click();
       const goal=page.getByLabel('今回達成すること',{exact:true});await goal.fill('APIと画面の接続');await goal.blur();
       await page.waitForFunction(()=>Object.values(window.boxglow.store.getState().project.blocks).find(b=>b.key==='B8').scope.goal==='APIと画面の接続');
       check(theme+' 範囲: 人が詳細パネルで編集し保存できる',true);
       await page.getByRole('button',{name:'閉じる',exact:true}).click();
+      await page.locator('.panel.right .seg__btn',{hasText:'状態'}).click();await page.waitForTimeout(200); // Done のボタンは状態タブ
       await page.locator('.panel.right button[title^="Done:"]').click();
       check(theme+' 人の操作: rejectでも成果物なしのDoneを拒否しない',await page.evaluate(()=>Object.values(window.boxglow.store.getState().project.blocks).find(b=>b.key==='B8').status==='white'));
       const search=page.getByRole('textbox',{name:'ブロックを検索'});

@@ -5,7 +5,7 @@ import { ClaimMark } from "./Claims";
  * 編集は既存モデル API をストアの apply に渡す。検証・履歴・Undo を図の編集と共有する。
  */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { addBlock, kindOf, moveBlockToParent, removeBlock, setStatus, updateBlock } from "../model/graph";
+import { addBlock, kindOf, moveBlockToParent, removeBlock, setStatus, updateBlock, workingNow } from "../model/graph";
 import { ROOT_ID, type Block, type BlockStatus, type Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
 import { t, useLang } from "../i18n";
@@ -420,6 +420,9 @@ export function TreePanel({ project, filter, onClose }: { project: Project; filt
                   <span className="tree-row__title">{b.title}</span>
                 </span>
               )}
+              {/* 今ここ: その行に NOW。配下に今ここがある行には小さな印 (畳んでいても見つけられる) */}
+              {workingNow(project).working.has(b.id) && <span className="tree-now" title={t("今ここ (いま作業しているボックス)")}>NOW</span>}
+              {!workingNow(project).working.has(b.id) && (workingNow(project).below.get(b.id)?.length ?? 0) > 0 && <span className="tree-now tree-now--below" title={t("今ここ: {title}", { title: workingNow(project).below.get(b.id)![0].title })}>▸</span>}
               <ClaimMark project={project} blockId={b.id} compact />
               {alert && (
                 <span className="tree-alert" role="img" aria-label={alert} title={alert}>

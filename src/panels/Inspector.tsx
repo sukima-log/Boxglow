@@ -232,20 +232,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
             <button className="btn btn-ghost btn-sm" onClick={() => setMenu(!menu)} title={t("その他")}>⋯</button>
             {menu && (
               <div className="card absolute right-0 mt-1 p-1 flex flex-col z-30" style={{ minWidth: 200 }}>
-                {/* 今ここ: 本当にいま作業しているボックス (1 つ)。人はここで切り替える (AI は start か now で) */}
-                {!isProject && <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); apply((p) => setNow(p, project.now?.blockId === blockId ? null : blockId, "human")); }}
-                  title={t("太い枠と「作業中」の札で、今どこを作業しているかを示します。1 つだけ")}>{project.now?.blockId === blockId ? t("今ここを解除") : t("今ここにする")}</button>}
-                <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); setScopeEditing(true); }}>{t("作業範囲を編集")}</button>
-                <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); apply(p => ({ ...p, focusBlockId: p.focusBlockId === blockId ? undefined : blockId })); }}>{project.focusBlockId === blockId ? t("今回の範囲を解除") : t("今回の範囲にする")}</button>
-                {!isProject && <button className="btn btn-ghost btn-sm justify-start" onClick={saveAsTemplate}>Save as Part</button>}
-                <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); setShowPrompt("plan"); setTab("more"); }}>Show AI text</button>
-                {/* 分岐にする: 作った後で「決まっていない分かれ道だった」と分かったとき。中に箱を持つものは変えられない (理由をツールチップに出す) */}
-                {!isProject && !b.branch && (() => {
-                  const can = canConvertToBranch(project, blockId);
-                  return <button className="btn btn-ghost btn-sm justify-start" disabled={!can.ok} onClick={() => { setMenu(false); setBranching(true); }}
-                    title={can.ok ? t("問いと選択肢を持つ分岐に変える (今の出力は 1 つ目の選択肢の道になる)") : t("中にボックスを持つボックスは、分岐にできません")}><span aria-hidden="true">◇</span> {t("分岐にする")}</button>;
-                })()}
-                <div style={{ borderTop: "1px solid var(--line-soft)", margin: "4px 0" }} />
+                {/* ほかの操作 (作業範囲・今回の範囲・部品・AI 向けの文・分岐にする) は「その他」タブに置く (ここは見つけにくいため)。ここは削除だけ */}
                 <button className="btn btn-ghost btn-sm justify-start btn-danger" onClick={remove}>Delete</button>
               </div>
             )}
@@ -314,7 +301,13 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           <h3 className="label">{t("AI 未読")}</h3>
           {unread.map((d) => <DecisionCard key={d.id} project={project} blockId={blockId} decisionId={d.id} />)}
         </div>}
-        <div className="sec__head"><span className="label">Status</span></div>
+        <div className="sec__head"><span className="label">Status</span>
+          {/* 今ここ (本当にいま作業しているボックス、1 つ) の切り替え。図では NOW の札と太い枠 */}
+          {!isProject && !readonly && (
+            <button className="now-toggle" data-on={project.now?.blockId === blockId} onClick={() => apply((p) => setNow(p, project.now?.blockId === blockId ? null : blockId, "human"))}
+              title={project.now?.blockId === blockId ? t("今ここを解除") : t("今ここにする (いま作業しているボックスとして、図に NOW の札と太い枠を付ける。1 つだけ)")}>NOW</button>
+          )}
+        </div>
         <div className="seg">
           {(["black", "gray", "white"] as BlockStatus[]).map((s) => (
             <button key={s} className="seg__btn" data-on={b.status === s} disabled={readonly} onClick={() => setStatus(s)} title={t(STATUS_HELP[s])}>
@@ -479,6 +472,23 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
 
       {/* AI */}
       {tab === "more" && (<>
+      {/* 操作: 以前は ⋯ メニューにあったもの。見つけやすいようにタブの先頭に並べる */}
+      {!readonly && (
+      <section className="sec">
+        <div className="sec__head"><span className="label">{t("操作")}</span></div>
+        <div className="more-actions">
+          <button className="btn btn-sm" onClick={() => setScopeEditing(true)} title={t("今回達成すること・扱わないこと・完了条件・相談する条件")}>{t("作業範囲を編集")}</button>
+          <button className="btn btn-sm" data-on={project.focusBlockId === blockId} onClick={() => apply(p => ({ ...p, focusBlockId: p.focusBlockId === blockId ? undefined : blockId }))} title={t("このボックスと配下を、次の候補の先頭にする")}>{project.focusBlockId === blockId ? t("今回の範囲を解除") : t("今回の範囲にする")}</button>
+          {!isProject && <button className="btn btn-sm" onClick={saveAsTemplate} title={t("ほかの計画でも使い回せる部品として保存する")}>Save as Part</button>}
+          <button className="btn btn-sm" onClick={() => setShowPrompt("plan")} title={t("このボックスの入出力と位置づけを Markdown にしてコピーして AI に渡す")}>Show AI text</button>
+          {!isProject && !b.branch && (() => {
+            const can = canConvertToBranch(project, blockId);
+            return <button className="btn btn-sm" disabled={!can.ok} onClick={() => setBranching(true)}
+              title={can.ok ? t("問いと選択肢を持つ分岐に変える (今の出力は 1 つ目の選択肢の道になる)") : t("中にボックスを持つボックスは、分岐にできません")}><span aria-hidden="true">◇</span> {t("分岐にする")}</button>;
+          })()}
+        </div>
+      </section>
+      )}
       <section className="sec">
         <div className="sec__head"><span className="label">Issue</span></div>
         {/* 外部の課題 (JIRA / Redmine / GitHub Issue) の URL。ボックスにはキー (PROJ-123, #45) の札が出て、押すと開く */}

@@ -4,7 +4,7 @@
  *   - 詳細パネルで選択肢を押して答えると: 分岐のボックスは完了、選んだ道は ✓、選ばなかった道の先は「見送り」(薄く・取り消し線)、
  *     見送りは完了数の分母から外れ、合流の入力を持つ結合テストは見送りにならない
  *   - 上部の「+ Block」のメニューの「Branch」から、問いと選択肢で分岐を足せる (選択肢ごとに道ができる)
- *   - 詳細パネルの ⋯ の「分岐にする」で、今あるボックスを分岐に変えられる (今の出力は 1 つ目の道、線は残る)
+ *   - 詳細パネルの「その他」タブの「分岐にする」で、今あるボックスを分岐に変えられる (今の出力は 1 つ目の道、線は残る)
  * 計画は e2e/fixtures/branch.boxglow.json (設計 → 分岐 (REST / GraphQL) → 各実装 → 結合テスト (合流))
  * 使い方: e2e/run.sh から呼ばれる (PLAYWRIGHT と LD_LIBRARY_PATH は run.sh が設定。プレビューが 4173 番で動いていること)
  */
@@ -76,11 +76,11 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
     const totalAfterMerge = await page.evaluate(() => document.body.innerText.match(/Done \d+ \/ (\d+)/)?.[1]);
     check('合流: 合流の部品は完了数の分母に入らない', totalAfterMerge === totalBeforeMerge, `${totalBeforeMerge} -> ${totalAfterMerge}`);
 
-    // ---- 今あるボックスを分岐に変える (詳細パネルの ⋯ →「分岐にする」) ----
+    // ---- 今あるボックスを分岐に変える (詳細パネルの「その他」タブ →「分岐にする」) ----
     await page.locator('.react-flow__pane').click({ position: { x: 20, y: 20 } }); await page.waitForTimeout(200);
     await box('設計する').click(); await page.waitForTimeout(400);
-    await page.locator('.panel.right button[title="その他"]').click();
-    await page.getByRole('button', { name: /分岐にする/ }).click();
+    await page.locator('.panel.right .seg__btn', { hasText: 'その他' }).click(); await page.waitForTimeout(200);
+    await page.locator('.panel.right .more-actions').getByRole('button', { name: /分岐にする/ }).click();
     const convert = page.getByRole('dialog', { name: '分岐にする' });
     check('分岐にする: 変えるときは題名の欄を出さない', await convert.getByPlaceholder('例: API の方式を決める').count() === 0);
     await convert.getByPlaceholder('例: API の方式はどれにしますか?').fill('設計の進め方は?');

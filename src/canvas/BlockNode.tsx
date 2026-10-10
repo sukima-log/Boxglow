@@ -220,6 +220,12 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           <span className="bg-branch-emblem" aria-hidden="true"><span>IF</span></span>
         </>
       )}
+      {/* 今ここ (本当にいま作業しているボックス、1 つ) の札: 枠の左上に NOW。畳んだ中にあるときは「NOW ▸ 題名」(押すとそのボックスへ)。活動の「作業中」とは別 */}
+      {view.workingNow && <span className="bg-now-tag" title={t("今ここ: 本当にいま作業しているボックス (start で移る。状態タブの Now でも切り替え)")}>NOW</span>}
+      {view.workingBelow.length > 0 && (
+        <button type="button" className="bg-now-tag bg-now-tag--below nodrag" title={view.workingBelow.map((w) => `${w.key ?? ""} ${w.title} (${actorName(w.activity?.actor ?? "")})`).join("\n")}
+          onClick={(e) => { e.stopPropagation(); select({ blockId: view.workingBelow[0].id }); }}>NOW ▸ {view.workingBelow[0].title}</button>
+      )}
       {verticalBand("in")}
       <div className="bg-block__head" style={{ height: headerH - (view.expanded ? 24 : card.metaH), ...(vertical && !view.expanded ? { marginTop: vertical.inputH } : {}) }}>
         {view.category && <span className={`bg-block__cat${view.category.neutral ? " neutral" : ""}`} data-category={view.category.key} title={t("カテゴリ: {label}", { label: t(view.category.label) })}>{!view.expanded && <CategoryIcon category={view.category.key} />}{t(view.category.label)}</span>}
@@ -252,15 +258,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           </span>
         )}
         <ClaimMark project={project} blockId={blockId} />
-        {/* 今ここ (本当にいま作業しているボックス): 札。活動の「作業中」とは別 (今ここは 1 つだけ) */}
-        {view.workingNow && <span className="meta-chip working-now" title={t("今ここ: 本当にいま作業しているボックス (start で移る。⋯ メニューでも切り替え)")}>{t("今ここ")}</span>}
-        {/* 畳んだ中 (大項目を含む) で作業中: どのボックスかを札で示す (押すとそのボックスへ) */}
-        {view.workingBelow.length > 0 && (
-          <button type="button" className="meta-chip working-below nodrag" title={view.workingBelow.map((w) => `${w.key ?? ""} ${w.title} (${actorName(w.activity?.actor ?? "")})`).join("\n")}
-            onClick={(e) => { e.stopPropagation(); select({ blockId: view.workingBelow[0].id }); }}>
-            {t("今ここ")}: {view.workingBelow[0].title}
-          </button>
-        )}
+
         {view.pending > 0 && <span className="meta-chip needs_decision">{t("判断待ち {n}", { n: view.pending })}</span>}
         {/* 見送り: 選ばなかった分岐の道 (進捗・次の候補・担当の一覧から外れる) / 分岐待ち: まだ答えていない分岐の先 */}
         {view.skipped && <span className="meta-chip skipped" title={t("選ばなかった分岐の道です。進捗や次の候補には数えません")}>{t("見送り")}</span>}
