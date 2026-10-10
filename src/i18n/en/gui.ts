@@ -140,4 +140,11 @@ export const gui: Record<string, string> = {
   "準備": "Readiness",
   "検査: 必ず直す / 着手の前に埋める / 見直し候補 (押すとそのボックスへ)": "Lint: must fix / before starting / review (click to open the box)",
   "着手の前に": "Before starting",
+  "レビュー": "Review",
+  "済": "Done",
+  "古い": "Stale",
+  "変わった: {what}": "Changed: {what}",
+  "確認": "Confirm",
+  "材料を見て評価したら、根拠を書いて記録します (妥当性の証明ではありません)": "After judging the material, record it with your basis (not a proof of validity)",
+  "根拠 (何を確認したか)": "Basis (what you checked)",
 };

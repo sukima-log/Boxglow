@@ -9,6 +9,7 @@ import { BranchDialog } from "./BranchDialog";
 import { BranchPicker } from "./BranchPicker";
 import { branchDecision, canConvertToBranch } from "../model/branch";
 import { reasonText, unpreparedReasons } from "../model/readiness";
+import { ReviewState } from "./ReviewState";
 import { CloseButton } from "./CloseButton";
 import { WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
@@ -365,6 +366,8 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
             {b.activity.note && b.activity.state !== "needs_decision" && <div className="text-[13px]">{b.activity.note}</div>}
           </div>
         )}
+        {/* レビューの記録の状態: 分解 (子があるとき) と着手準備。なし / 済 / 古い (何が変わったか)。人も「確認」で記録できる */}
+        {b.status !== "white" && <ReviewState project={project} blockId={blockId} />}
         {/* AI への引き継ぎ: セッションをまたいで残すメモ (project.handoffs にボックスごとに 1 つ)。メモがあるときは開いた状態で出す。
             下のボタンは、判断・入出力も含めた引き継ぎ情報 (agentContext) を JSON でコピーする */}
         <details className="text-[12px]" open={!!project.handoffs?.[blockId] && b.status !== "white"}>

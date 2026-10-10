@@ -86,6 +86,18 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('Activity の検査: 行を押すとそのボックスが選ばれる',await page.evaluate((ref)=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.key===ref;},firstRef));
     await page.evaluate(()=>window.boxglow.store.getState().select({}));
 
+    // レビューの記録の状態 (右パネル): 子を持つボックスは分解と着手準備の 2 行。なし → 確認で済 (human) → 子の説明を変えると古い (変わった部分)
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();const blk=Object.values(s.project.blocks).find(x=>x.title==='バックエンド');s.select({blockId:blk.id});});await page.waitForTimeout(400);
+    await page.locator('.panel.right .seg__btn',{hasText:'状態'}).click();await page.waitForTimeout(200);
+    const reviewRows=page.locator('.panel.right .review-state__row');
+    check('レビュー: 子を持つボックスには分解と着手準備の 2 行、記録が無ければ「なし」',await reviewRows.count()===2 && (await reviewRows.first().locator('.meta-chip').innerText())==='なし');
+    await reviewRows.first().getByRole('button',{name:'確認'}).click();
+    await page.locator('.review-state__note input').fill('子の成果で API の実装が作れる');await page.locator('.review-state__note .btn-primary').click();await page.waitForTimeout(400);
+    check('レビュー: 確認で記録され「済」になる (human)',(await reviewRows.first().locator('.meta-chip').innerText())==='済' && (await reviewRows.first().innerText()).includes('human'));
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();const parent=Object.values(s.project.blocks).find(x=>x.title==='バックエンド');const kid=Object.values(s.project.blocks).find(x=>x.parentId===parent.id);s.apply(p=>({...p,blocks:{...p.blocks,[kid.id]:{...p.blocks[kid.id],description:'処理を変えた'}}}));});await page.waitForTimeout(400);
+    check('レビュー: 子の説明を変えると「古い」になり、変わった部分 (子の B 番号) が出る',(await reviewRows.first().locator('.meta-chip').innerText())==='古い' && /変わった: B\d+/.test(await reviewRows.first().innerText()),await reviewRows.first().innerText());
+    await page.evaluate(()=>window.boxglow.store.getState().select({}));
+
     // 担当の一覧 (表、In charge): 左下の表示の切り替えの表の記号 → 自分を決めていないので「全員」(担当の列つき) → さとうに切り替えて未完了 2 件 → 完了済みも表示で 4 件 → 行を押すと表のまま右に詳細が開く → Esc で詳細、もう一度で表を閉じる
     await page.evaluate(()=>window.boxglow.store.getState().select({}));
     await page.locator('.canvas-tools .view-switch__table').first().click();await page.waitForTimeout(300);
