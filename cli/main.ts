@@ -23,7 +23,8 @@ import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
 import { resumeSummary, resumeReport } from "../src/model/resume";
 import { nextSteps, readiness, reasonText } from "../src/model/readiness";
 import { lint, lintCounts } from "../src/model/lint";
-import type { ExpectKind } from "../src/model/types";
+import { boxMaterial, changedText, makeRecord, reviewStatus, reviewable, splitMaterial } from "../src/model/review";
+import type { Block, ExpectKind } from "../src/model/types";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import AGENTS_SNIPPET_JA from "../docs/AGENTS_SNIPPET.md";
 import AGENTS_SNIPPET_EN from "../docs/AGENTS_SNIPPET.en.md";
@@ -47,7 +48,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, isInputNameLocked, normalizeInputNames, ackDecisions, isHumanActor } from "../src/model/graph";
+import { childrenOf, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, isInputNameLocked, normalizeInputNames, ackDecisions, isHumanActor } from "../src/model/graph";
 import { checkStart, checkDone, descriptionReminder, scopeEntries } from "../src/model/workflow";
 import type { WorkScope, WorkflowPolicy } from "../src/model/types";
 import type { Artifact } from "../src/model/types";
@@ -242,6 +243,24 @@ function readinessSummary(p: Project, blockId: string) {
   };
 }
 
+/**
+ * context に添えるレビューの状態
+ * Input : p, blockId / Output: { split: { state, changed?, by?, at? }, box: {...} } (対象外なら空)
+ */
+function reviewSummary(p: Project, blockId: string) {
+  if (!reviewable(p, blockId)) return {};
+  const b = p.blocks[blockId];
+  const one = (rec: Block["splitReview"], m: { sig: string; parts: Record<string, string> }) => {
+    const st = reviewStatus(rec, m);
+    return { state: st.state, ...(rec ? { by: rec.by, at: rec.at } : {}), ...(st.changed.length ? { changed: changedText(p, st.changed) } : {}) };
+  };
+  return {
+    ...(childrenOf(p, blockId).length ? { split: one(b.splitReview, splitMaterial(p, blockId)) } : {})
+  , box: one(b.boxReview, boxMaterial(p, blockId))
+  , howToGet: `boxglow review-split ${b.key ?? b.id} / boxglow review-box ${b.key ?? b.id}`
+  };
+}
+
 /** ブロックを探す (見つからなければ候補を示して終了) */
 function mustFind(p: Project, ref: string | undefined, what = "block") {
   if (!ref) throw new Error(t("<{what}> を指定してください (id または題名)", { what }));
@@ -431,7 +450,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   check                                          Git の成果物が今も見つかるか確認し、移動していればパスを付け替える。未コミットのときに記録した成果物は、コミット済みになっていれば Git の参照に補完する
   blocked <block> --note <困っていること>          詰まり
   review <block> [--note]                        確認待ち
-  ask <block> <質問> [--options "A|B"] [--context <判断材料>]   人間に判断を求める (判断待ちになる)。質問だけで判断できるよう、前提・比較・影響を --context に書く
+  ask <block> <質問> [--options "A|B"] [--context <判断材料>] [--branch]   人間に判断を求める (判断待ちになる)。--branch = 答えで後の作業が分かれる問い: そのボックスを分岐にする (選択肢ごとに道)。質問だけで判断できるよう、前提・比較・影響を --context に書く
   decision <block> --id <decision id> [--question] [--options "A|B"] [--context]   未回答の判断を書き直す
   answer <block> <回答> [--id <decision id>] [--by <名前>]   判断に答える (既定は最新の未回答)
   ack <block> [--id <decision id>]                人の回答を読んで引き取ったと記録する (status の「回答あり」から消える。start / done / blocked / review / set / split でも自動で引き取る)
@@ -449,6 +468,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   layout [block]                                 自動整列 (全体、または指定したボックスの中)
   log [--n 20]                                   最近のログ
   validate                                       形式と結線の検査
+  review-split <block> / split-ok <block> --note <根拠>   分解のレビューの材料 (親の範囲・入出力、子の対象・入出力・予定成果物、結線、チェック項目) を読む / 評価したと申告し根拠を残す (材料が変わると「古い」)
+  review-box <block> / box-ok <block> --note <根拠>       着手準備のレビューの材料 (対象・処理・予定成果物・確認方法・入力の供給元・上流の分岐の答え) を読む / 記録する (分岐の答えが変わっても古くなる)
   lint [block] [--json] [--strict]               計画 (またはボックスの配下) の検査: 必ず直す (予定成果物・完了条件の欠落、親出力の担当の未定・重複、排他の道の両方を必須) と
                                                  見直し候補 (子が 1 個、つながらない出力、形だけの記入、道の先が無い分岐、入力 1 本の合流、兄弟の同じ予定成果物) を分けて出す。--strict は必ず直すがあれば失敗
   merge <base> <ours> <theirs>                    boxglow.json をボックス・ポート・線の単位で 3 方向マージし <ours> に書く (Git のマージドライバ用)
@@ -540,7 +561,7 @@ Usage (npx boxglow <command> ...):
   check                                          Check that Git artifacts can still be found, and update the path if they moved. Artifacts recorded while uncommitted become Git references once they are committed
   blocked <block> --note <what is blocking you>    Blocked
   review <block> [--note]                        Waiting for review
-  ask <block> <question> [--options "A|B"] [--context <background>]   Ask a person to decide (becomes Needs decision). Put the assumptions, comparison and impact in --context so the question can be decided on its own
+  ask <block> <question> [--options "A|B"] [--context <background>] [--branch]   Ask a person to decide (becomes Needs decision). --branch = the answer changes the work that follows: turn the box into a branch (one path per option). Put the assumptions, comparison and impact in --context so the question can be decided on its own
   decision <block> --id <decision id> [--question] [--options "A|B"] [--context]   Rewrite an unanswered decision
   answer <block> <answer> [--id <decision id>] [--by <name>]   Answer a decision (default: the latest unanswered one)
   ack <block> [--id <decision id>]                Record that you have read a person's answer and taken it on (removes it from "Answered" in status. start / done / blocked / review / set / split also do this automatically)
@@ -558,6 +579,8 @@ Usage (npx boxglow <command> ...):
   layout [block]                                 Auto layout (everything, or inside the given box)
   log [--n 20]                                   Recent log
   validate                                       Check the format and the wiring
+  review-split <block> / split-ok <block> --note <basis>   Read the material for reviewing a breakdown (parent scope and ports, children's targets, ports and planned deliverables, wiring, checklist) / record that you reviewed it, with your basis (goes stale when the material changes)
+  review-box <block> / box-ok <block> --note <basis>       Read the material for reviewing a box's readiness (target, work, planned deliverable, checks, input sources, upstream branch answers) / record it (goes stale when a branch answer changes too)
   lint [block] [--json] [--strict]               Check the plan (or a box and its descendants): must-fix (missing expect / acceptance, parent outputs with no or two makers, both exclusive paths required) and
                                                  review candidates (a single child, unconnected outputs, token entries, empty branch paths, single-input merges, siblings with the same expect). --strict fails on must-fix
   merge <base> <ours> <theirs>                    3-way merge boxglow.json by box, port and wire, and write the result to <ours> (for the Git merge driver)
@@ -744,7 +767,7 @@ function main(argv: string[]): void {
 /** Input: CLIの範囲フラグ / Output: 保存する WorkScope の項目名。 */
 const SCOPE_OPTIONS = { goal: "goal", "non-goals": "nonGoals", acceptance: "acceptance", consult: "consult" } as const;
 /** guard が有効な計画で、AI に確認トークンを要求するコマンド (作業を記録するもの) */
-const GUARDED_COMMANDS = ["start", "done", "set", "split", "artifact", "ack", "blocked", "review", "leave", "checkpoint"];
+const GUARDED_COMMANDS = ["start", "done", "set", "split", "artifact", "ack", "blocked", "review", "leave", "checkpoint", "split-ok", "box-ok"];
 /** 確認トークンは要求しないが、ボックスのコンテキストを変えるコマンド (最新のトークンを付けて実行すると、新しいトークンを返す) */
 const CONTEXT_CHANGING_COMMANDS = ["ask", "decision", "answer", "reopen"];
 
@@ -810,6 +833,32 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       p={...p,claimPolicy:{mode:mode as "off"|"warn"|"reject",leaseMinutes:options.minutes===undefined?(p.claimPolicy?.leaseMinutes??30):Number(str(options.minutes))}};
       save(path,p);out(t("受け持ち設定: {mode}",{mode}));return;
     }
+    case "review-split":
+    case "review-box": {
+      // 意味のレビューの材料 (読むだけ): 分解 (親と直下の子・結線) か、ボックスの着手準備 (対象・入力の供給元・上流の分岐の答え)。記録の状態も添える
+      const b = mustFind(p, rest[0]);
+      if (!reviewable(p, b.id)) throw new Error(t("最上位とプロジェクトのボックスはレビューの対象ではありません"));
+      const m = cmd === "review-split" ? splitMaterial(p, b.id) : boxMaterial(p, b.id);
+      const rec = cmd === "review-split" ? b.splitReview : b.boxReview;
+      const st = reviewStatus(rec, m);
+      const record = cmd === "review-split" ? "split-ok" : "box-ok";
+      out(JSON.stringify({ ...m.material, checklist: m.checklist, review: { state: st.state, ...(rec ? { by: rec.by, at: rec.at, note: rec.note } : {}), ...(st.changed.length ? { changed: changedText(p, st.changed) } : {}) }, howToRecord: `boxglow ${record} ${b.key ?? b.id} --note "<根拠>"` }, null, 2));
+      return;
+    }
+    case "split-ok":
+    case "box-ok": {
+      // 評価したと申告し、根拠を残す (妥当性の証明ではない)。署名は今の材料から作る
+      const b = mustFind(p, rest[0]);
+      if (!reviewable(p, b.id)) throw new Error(t("最上位とプロジェクトのボックスはレビューの対象ではありません"));
+      const note = str(options.note)?.trim();
+      if (!note) throw new Error(t("--note <根拠 (何を確認したか)> を指定してください"));
+      const m = cmd === "split-ok" ? splitMaterial(p, b.id) : boxMaterial(p, b.id);
+      const rec = makeRecord(actor, note, m.sig, m.parts);
+      p = updateBlock(p, b.id, cmd === "split-ok" ? { splitReview: rec } : { boxReview: rec });
+      save(path, p);
+      out(t("{what}の確認を記録しました: 「{title}」({actor})。材料が変わると「古い」になります", { what: cmd === "split-ok" ? t("分解") : t("着手準備"), title: b.title, actor }));
+      return;
+    }
     case "lint": {
       // 計画 (またはボックスの配下) の検査: 必ず直す (error) と見直し候補 (review) を分けて出す。--strict は error があれば失敗にする
       const issues = lint(p, rest[0] ? mustFind(p, rest[0]).id : undefined);
@@ -847,7 +896,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       // readiness (着手の準備: 要具体化の理由と次の一手、入力待ち) は受領証の外に添える (確認トークンの元には含めない。判定は計画から毎回導出する)
       const ctxId = mustFind(p, rest[0]).id;
       const ctxLint = lint(p, ctxId);
-      out(JSON.stringify({...(options.brief ? briefReceipt : contextReceipt)(p, ctxId), readiness: readinessSummary(p, ctxId), lint: { ...lintCounts(ctxLint), top: ctxLint.slice(0, 3).map((x) => `${x.ref}: ${x.text}`), howToGet: "boxglow lint " + (p.blocks[ctxId].key ?? ctxId) }, ...(claimsEnabled(p)?{claimSummary:claimSummary(p,claimRequest.identity)}:{})}, null, 2));
+      out(JSON.stringify({...(options.brief ? briefReceipt : contextReceipt)(p, ctxId), readiness: readinessSummary(p, ctxId), reviews: reviewSummary(p, ctxId), lint: { ...lintCounts(ctxLint), top: ctxLint.slice(0, 3).map((x) => `${x.ref}: ${x.text}`), howToGet: "boxglow lint " + (p.blocks[ctxId].key ?? ctxId) }, ...(claimsEnabled(p)?{claimSummary:claimSummary(p,claimRequest.identity)}:{})}, null, 2));
       return;
     }
     case "guard": {
@@ -1107,7 +1156,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const specText = str(options["spec-file"]) ? readFileSync(str(options["spec-file"])!, "utf8") : str(options.spec);
       if (!specText) throw new Error(t("--spec '<JSON>' または --spec-file <path> を指定してください"));
       const spec = JSON.parse(specText);
-      const r = splitBlock(p, b.id, spec, actor);
+      const r = splitBlock(p, b.id, spec, actor, { branch: addBranch, join: addMerge });
       // 壊れた構造 (結線先が無い、循環、形の違う expect) は保存しない。途中の分解 (子が 1 個、親出力の担当がまだ無い) は保存して不足として知らせる
       if (r.fatal) throw new Error(t("分解を保存しませんでした (壊れた構造):") + "\n" + r.errors.map((x) => "- " + x).join("\n"));
       save(path, layoutScope(r.project, b.id));
@@ -1380,9 +1429,21 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const question = rest.slice(1).join(" ");
       if (!question) throw new Error(t("<質問> を指定してください"));
       const opts = str(options.options) ? str(options.options)!.split("|").map((s) => s.trim()).filter(Boolean) : [];
+      // --branch: 答えで後の作業が分かれる問いは、その場で分岐のボックスにする (選択肢ごとに道ができる)
+      if (options.branch) {
+        if (opts.length < 2) throw new Error(t("--branch には選択肢が 2 つ以上要ります (--options \"A|B\")"));
+        const can = canConvertToBranch(p, b.id);
+        if (!can.ok) throw new Error(can.reason === "already" ? t("「{title}」はすでに分岐です", { title: b.title }) : can.reason === "children" ? t("中にボックスを持つボックスは、分岐にできません") : t("プロジェクトのボックスは分岐にできません"));
+        const r = convertToBranch(p, b.id, { question, options: opts, context: str(options.context), actor });
+        save(path, r.project);
+        out(t("分岐にしました: 「{title}」 {question} (道: {options})。各道の最初のボックスへ connect してください", { title: b.title, question, options: opts.join(" / ") }));
+        return;
+      }
       const r = askDecision(p, b.id, actor, question, opts, str(options.context) ?? "");
       save(path, r.project);
       out(t("判断待ち: 「{title}」 {question} (decision: {id})", { title: b.title, question, id: String(r.decisionId) }));
+      // 選択肢が 2 つ以上で、分岐ではないボックスへの問いなら 1 行だけ案内する (毎回は出さない)
+      if (opts.length >= 2 && !b.branch && canConvertToBranch(p, b.id).ok) out(t("答えで後の作業が分かれるなら --branch で分岐にできます"));
       return;
     }
     case "decision": {

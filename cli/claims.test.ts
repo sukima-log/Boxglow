@@ -232,3 +232,42 @@ it("split は壊れた構造 (結線先が無い) を保存せず、途中の分
  expect(JSON.parse(f.cli("resume","--json","--actor","codex").stdout).lint.errors).toBeGreaterThan(0);
  // set --split-by none で消える
  expect(f.cli("set","alpha","--split-by","none","--actor","codex").status).toBe(0);expect((Object.values(f.read().blocks).find((b:any)=>b.title==="alpha") as any).splitBy).toBeUndefined();});
+
+// ---- 段階 3: レビューの記録、ask --branch、split の branch / join ----
+it("review-split / split-ok / review-box / box-ok: 記録と無効化、context の reviews",()=>{const f=fixture(false);
+ const spec={blocks:[{title:"survey",outputs:["notes"],expect:"note:where",acceptance:"known"},{title:"impl",outputs:["code"],expect:"file:src/a.ts",acceptance:"tests pass"}],connections:[{from:"survey.notes",to:"impl"},{from:"impl.code",to:"parent.result"}],splitBy:"stage"};
+ expect(f.cli("split","alpha","--spec",JSON.stringify(spec),"--actor","codex").status).toBe(0);
+ const rs=JSON.parse(f.cli("review-split","alpha","--actor","codex").stdout);expect(rs.children.length).toBe(2);expect(rs.checklist.length).toBeGreaterThan(3);expect(rs.review.state).toBe("none");expect(rs.parent.splitBy).toBe("stage");
+ expect(f.cli("split-ok","alpha","--actor","codex").status).toBe(1); // 根拠が要る
+ expect(f.cli("split-ok","alpha","--note","survey と impl で result を作れる","--actor","codex").status).toBe(0);
+ expect(JSON.parse(f.cli("review-split","alpha","--actor","codex").stdout).review.state).toBe("ok");
+ expect(JSON.parse(f.cli("context","alpha","--actor","codex").stdout).reviews.split.state).toBe("ok");
+ // 子の説明を変えると古くなり、何が変わったかが出る。位置の変更 (layout) では古くならない
+ expect(f.cli("layout","alpha","--actor","codex").status).toBe(0);
+ expect(JSON.parse(f.cli("review-split","alpha","--actor","codex").stdout).review.state).toBe("ok");
+ expect(f.cli("set","impl","--note","別の処理","--actor","codex").status).toBe(0);
+ const stale=JSON.parse(f.cli("review-split","alpha","--actor","codex").stdout).review;expect(stale.state).toBe("stale");expect(stale.changed).toMatch(/B\d+/);
+ expect(JSON.parse(f.cli("context","alpha","--actor","codex").stdout).reviews.split.state).toBe("stale");
+ // box-ok: 入力の供給元の変更で古くなる
+ const rb=JSON.parse(f.cli("review-box","impl","--actor","codex").stdout);expect(rb.inputs[0].from.output).toBe("notes");
+ expect(f.cli("box-ok","impl","--note","対象と確認方法が書けている","--actor","codex").status).toBe(0);
+ expect(JSON.parse(f.cli("context","impl","--actor","codex").stdout).reviews.box.state).toBe("ok");
+ expect(f.cli("port","survey","--expect","notes=note:where and why","--actor","codex").status).toBe(0);
+ const rb2=JSON.parse(f.cli("review-box","impl","--actor","codex").stdout).review;expect(rb2.state).toBe("stale");expect(rb2.changed).toMatch(/入力|input/i);});
+it("ask --branch で分岐にでき、split の JSON で branch / join を作れる",()=>{const f=fixture(false);
+ // 選択肢が 2 つ以上の普通の ask には 1 行の案内が付く
+ const a=f.cli("ask","beta","which way?","--options","X|Y","--actor","codex");expect(a.status).toBe(0);expect(a.stdout).toContain("--branch");
+ const b=f.cli("ask","alpha","REST or GraphQL?","--options","REST|GraphQL","--branch","--actor","codex");expect(b.status,b.stderr).toBe(0);
+ const alpha=Object.values(f.read().blocks).find((x:any)=>x.title==="alpha") as any;expect(alpha.branch).toBeTruthy();
+ const outs=Object.values(f.read().ports).filter((q:any)=>q.blockId===alpha.id&&q.direction==="out").map((q:any)=>q.branchOption).sort();expect(outs).toEqual(["GraphQL","REST"]);
+ // split の JSON で分岐と合流
+ const spec={blocks:[{title:"decide",branch:{question:"auth?",options:["mail","oauth"]}},{title:"mail impl",outputs:["auth"],expect:"file:src/mail.ts",acceptance:"ok"},{title:"oauth impl",outputs:["auth"]},{title:"merge",join:true},{title:"finish",outputs:["done"]}],
+  connections:[{from:"decide.mail",to:"mail impl"},{from:"decide.oauth",to:"oauth impl"},{from:"mail impl.auth",to:"merge"},{from:"oauth impl.auth",to:"merge"},{from:"merge.Merge",to:"finish"},{from:"finish.done",to:"parent.result"}]};
+ const s=f.cli("split","beta","--spec",JSON.stringify(spec),"--actor","codex");expect(s.status,s.stderr+s.stdout).toBe(0);
+ const p=f.read();const decide=Object.values(p.blocks).find((x:any)=>x.title==="decide") as any;expect(decide.branch).toBeTruthy();
+ const merge=Object.values(p.blocks).find((x:any)=>x.title==="merge") as any;expect(merge.merge).toBe(true);
+ expect(Object.values(p.ports).filter((q:any)=>q.blockId===merge.id&&q.direction==="in").length).toBe(2);
+ // lint: 排他の道の両方を必須にしていない (合流を挟んだ) ので error は具体化の欠落だけ
+ const l=JSON.parse(f.cli("lint","beta","--json","--actor","codex").stdout);expect(l.issues.some((x:any)=>x.kind==="branch-exclusive-and")).toBe(false);
+ // branch の指定が壊れていれば保存しない
+ const bad=f.cli("split","finish","--spec",JSON.stringify({blocks:[{title:"x",branch:{question:"q",options:["only"]}}]}),"--actor","codex");expect(bad.status).toBe(1);});

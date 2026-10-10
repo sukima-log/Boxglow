@@ -85,6 +85,8 @@ MCP provides `boxglow_context`, `boxglow_checkpoint`, and `contextToken` on guar
 | `status [--brief]` | Markdown summary (`--brief` omits the full tree): pending decisions, who is working where, tree with ids, next candidates |
 | `context <block>` | Context for the box (parents, input providers, decisions, handoff) with its `readiness` (ready / needs detail / waiting) |
 | `claim <block>` | Hold a box without starting it (before adding detail or splitting; "not needed" when claims are off) |
+| `review-split <parent>` / `split-ok <parent> --note` | Material and checklist for reviewing a breakdown / record the review with its basis (goes stale when the material changes) |
+| `review-box <block>` / `box-ok <block> --note` | The same for a box's readiness (target, deliverable, checks, inputs, upstream branch answers) |
 | `lint [block] [--strict]` | Must-fix gaps (missing expect / acceptance, parent outputs nobody makes, exclusive branch paths both required) and review candidates (single child, unconnected outputs, token entries) |
 | `start <block> --note` / `done <block> --artifact name=url` | Record work in progress / completion with deliverables |
 | `split <block> --spec '<json>'` | Decompose a box into child boxes with named inputs / outputs and connections |

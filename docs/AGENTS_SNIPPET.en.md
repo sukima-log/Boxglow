@@ -74,6 +74,18 @@ Outputs the parent makes itself (integrating the children's results, for example
 `split` refuses to save only a broken structure (a wire to nothing, a cycle, a malformed expect). Unfinished breakdowns (a single child, a parent output nobody makes yet) are saved and reported as gaps.
 After a split and before a start, read `npx boxglow lint <block>`. Fix the "must fix" items (missing expect / acceptance, parent outputs with no or two makers, both exclusive paths of one branch required) before going on.
 "Review" items (a single child, unconnected outputs, token entries, empty branch paths, single-input merges, siblings with the same expect) are for you to judge (the tool never refuses on them). `context` also prints the counts and the top three.
+
+**Content review (meaning cannot be checked by the tool: an AI or a person reads the material, judges, and records the basis)**
+- After a split: read `npx boxglow review-split <parent>` (the parent's goal, constraints, acceptance and ports; the children's targets, ports, planned deliverables and acceptance; the wiring; a checklist). When reviewed, record it with `npx boxglow split-ok <parent> --note "<basis: what you checked>"`.
+- Before a start: read `npx boxglow review-box <block>` (target, work, planned deliverable, checks, input sources, upstream branch answers) and record with `npx boxglow box-ok <block> --note "<basis>"`.
+- A record says "reviewed, with this basis"; it does not prove validity. When the material changes, `reviews` in `context` becomes `stale` (with what changed): read it again. Position, colours, progress and assignees do not make it stale. The breakdown record is not affected by branch answers; the readiness record is.
+- It is not a condition for `start` (in default or reject plans). Only needs-detail and missing inputs stop a start.
+
+**Branches and merges for agents**
+- When an `ask` has options and the answer changes the work that follows, add `--branch`: the box becomes a branch with one path (output) per option. `connect` each path to its first box, and put a `join` where the paths come together.
+- The split JSON can make them too: a child with `"branch": { "question": "...", "options": ["A", "B"] }` becomes a branch box (its outputs are the option names), `"join": true` a merge part. Example:
+  `{ "blocks": [{ "title": "Choose auth", "branch": { "question": "Which?", "options": ["Mail", "OAuth"] } }, { "title": "Mail impl", "outputs": ["Auth"] }, { "title": "OAuth impl", "outputs": ["Auth"] }, { "title": "Merge", "join": true }], "connections": [{ "from": "Choose auth.Mail", "to": "Mail impl" }, { "from": "Choose auth.OAuth", "to": "OAuth impl" }, { "from": "Mail impl.Auth", "to": "Merge" }, { "from": "OAuth impl.Auth", "to": "Merge" }, { "from": "Merge.Merge", "to": "parent.Auth" }] }`
+- `lint` reports a box that requires inputs from both exclusive paths of one branch (they never both arrive) as must-fix, and empty paths or single-input merges as review items.
 `parent.<name>` is an input / output of the box being split. `<block>` is a short ID (such as B12; shown in status) or a title.
 A box with no children has a single output (write just one entry in outputs). Make the title a short phrase that tells "what is made".
 Record dates and hours with `npx boxglow set <block> --due 2026-10-15 --start 2026-10-01 --estimate 8 --hours 3.5`.

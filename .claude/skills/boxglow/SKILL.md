@@ -25,7 +25,9 @@ description: Boxglow (boxglow.json) で計画と進捗を人間と共有する�
    出力の予定成果物 `npx boxglow port <block> --expect "<出力名>=file:src/x.ts"` (kind は file / dir / url / doc / note / decision / result。まだ無いファイルでよい)、完了条件 `npx boxglow scope <block> --acceptance "<完了と判断する条件>"`。
    大きいボックスは `npx boxglow split <block> --spec '<JSON>'` で分解する (形式は `npx boxglow help`)。今回着手する子だけ expect / acceptance を書き、先の子は題名と出力だけでよい。
    対象のファイルが分からないときは、架空のパスを書かず「対象を特定する調査」のボックスを出力 `note` で作って始める。
-   分解の後は `npx boxglow lint <block>` を読み、「必ず直す」を直してから進む (「見直し候補」は内容を見て判断)。直下の子の分け方は `"splitBy": "工程"` (または `set --split-by`) で一語残す
+   分解の後は `npx boxglow lint <block>` を読み、「必ず直す」を直してから進む (「見直し候補」は内容を見て判断)。直下の子の分け方は `"splitBy": "工程"` (または `set --split-by`) で一語残す。
+   内容のレビュー: `review-split <親>` の材料とチェック項目を読んで `split-ok <親> --note "<根拠>"`、着手の前は `review-box <block>` → `box-ok <block> --note "<根拠>"` (材料が変わると context の reviews が stale になる)。
+   答えで後の作業が分かれる問いは `ask ... --options "A|B" --branch` で分岐にする (split の JSON でも `"branch": { question, options }` / `"join": true`)
 4. 準備ができたら `npx boxglow context <block>` を読み直し、`npx boxglow start <block> --note "<何をするか>"`。
    確認トークンの要求 (guard) が有効な計画では、出力の `contextToken` (確認トークン) を `--context-token <確認トークン>` で付ける。
    要具体化のボックスへの start は既定では警告、`policy --unprepared reject` の計画では開始できない (`--reason` では通れない)。出力を子に任せきりの親は実行するものが無いので、子を start する

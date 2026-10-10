@@ -25,7 +25,9 @@ Do not edit it directly; update it with `npx boxglow`.
    the output's planned deliverable `npx boxglow port <block> --expect "<output>=file:src/x.ts"` (kind: file / dir / url / doc / note / decision / result; the file need not exist yet) and the acceptance criteria `npx boxglow scope <block> --acceptance "<when it counts as done>"`.
    Split a large box with `npx boxglow split <block> --spec '<JSON>'` (see `npx boxglow help` for the format). Write expect / acceptance only for the children you will start now; later children need only a title and an output.
    When you do not know which files are involved, do not invent paths: add a box "find the target" with a `note` output and start that.
-   After a split, read `npx boxglow lint <block>` and fix the "must fix" items before going on ("review" items are yours to judge). Record how the children are divided with `"splitBy": "stage"` (or `set --split-by`)
+   After a split, read `npx boxglow lint <block>` and fix the "must fix" items before going on ("review" items are yours to judge). Record how the children are divided with `"splitBy": "stage"` (or `set --split-by`).
+   Content review: read `review-split <parent>` (material and checklist) and record `split-ok <parent> --note "<basis>"`; before a start, `review-box <block>` → `box-ok <block> --note "<basis>"` (when the material changes, `reviews` in context goes stale).
+   When an answer changes the work that follows, `ask ... --options "A|B" --branch` turns the box into a branch (in the split JSON: `"branch": { question, options }` / `"join": true`)
 4. Once ready, read `npx boxglow context <block>` again and run `npx boxglow start <block> --note "<what you will do>"`.
    On a plan with the context guard on, pass the `contextToken` (context token) from the context output as `--context-token <context token>`.
    Starting a box that still needs detail warns by default; on a plan with `policy --unprepared reject` it is refused (`--reason` does not bypass it). A parent whose outputs are all made by its children has nothing to run itself: start the child instead

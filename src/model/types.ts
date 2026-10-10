@@ -231,6 +231,13 @@ export interface Block {
   issue?: string;
   /** 直下の子をどう分けたか (一語: 工程 / 成果物 / 機能 など。任意)。context に出し、兄弟の粒度を見直す材料にする */
   splitBy?: string;
+  /**
+   * 分解のレビューの記録 (split-ok): 誰が・いつ・根拠・評価した材料の署名。材料 (親の範囲・入出力、子の対象・入出力・予定成果物、結線) が変わると「古い」になる。
+   * 妥当性の証明ではなく「評価したと申告し根拠を残した記録」
+   */
+  splitReview?: { by: string; at: string; note: string; sig: string; parts: Record<string, string> };
+  /** ボックスの着手準備のレビューの記録 (box-ok)。上流の分岐の答えが変わっても古くなる */
+  boxReview?: { by: string; at: string; note: string; sig: string; parts: Record<string, string> };
   /** いまの活動 (無ければ null) */
   activity: Activity | null;
   /** 人間への質問と回答 (古い順) */

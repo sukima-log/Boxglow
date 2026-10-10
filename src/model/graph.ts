@@ -1555,15 +1555,22 @@ function parseExpectSpec(v: Expect | string | undefined): Expect | null | undefi
  *         from / to の題名に親の題名 (または "parent") を使うと、親の入力/出力 (内側) につながる
  *         expect = 子の出力の予定成果物 ({ kind, hint } または "kind:hint")、acceptance = 完了条件、goal = 今回行う処理 (scope に入る)。
  *         どれも任意 (無い子は「要具体化」として残り、着手の前に決める)。parentMakes = 子に任せず親自身が作る出力の名前 (owner: "self" を付ける)。
- *         splitBy = 直下の子をどう分けたか (一語: 工程 / 成果物 / 機能 など)
+ *         splitBy = 直下の子をどう分けたか (一語: 工程 / 成果物 / 機能 など)。
+ *         子に branch = { question, options, context? } があれば分岐のボックス (出力は選択肢ごとの道。makers.branch で作る)、
+ *         join = true なら合流の部品 (makers.join で作る。入力は connections で道の出力をつなぐと作られる)
+ *         makers = 分岐・合流を作る関数 (branch.ts の addBranch / addMerge。graph.ts から直接は参照できないので呼び出し側が渡す)
  * Output: { project, errors, fatal }。fatal = true は壊れた構造 (結線先が無い、循環、形の違う expect など) で、呼び出し側は保存しない。
  *         fatal でない errors は注意 (出力を 1 本にした、など) で、保存してよい
  */
 export function splitBlock(
   p: Project
 , parentId: string
-, spec: { blocks: { title: string; description?: string; inputs?: string[]; outputs?: string[]; expect?: Expect | string; acceptance?: string; goal?: string }[]; connections?: { from: string; to: string }[]; parentMakes?: string[]; splitBy?: string }
+, spec: { blocks: { title: string; description?: string; inputs?: string[]; outputs?: string[]; expect?: Expect | string; acceptance?: string; goal?: string; branch?: { question: string; options: string[]; context?: string }; join?: boolean }[]; connections?: { from: string; to: string }[]; parentMakes?: string[]; splitBy?: string }
 , actor: string
+, makers?: {
+    branch: (p: Project, args: { parentId: string; title: string; question: string; options: string[]; context?: string; actor: string }) => { project: Project; blockId: string }
+  ; join: (p: Project, args: { parentId: string; actor: string; title?: string }) => { project: Project; blockId: string }
+  }
 ): { project: Project; errors: string[]; fatal: boolean } {
   const errors: string[] = [];
   let fatal = false;
@@ -1573,6 +1580,22 @@ export function splitBlock(
   let q = clone(p);
   const made: Record<string, string> = {};
   for (const b of spec.blocks) {
+    // 分岐・合流の子 (makers が無ければ壊れた指定として扱う)
+    if (b.branch || b.join) {
+      if (!makers) { errors.push(t("「{title}」: この入口では branch / join の子を作れません", { title: b.title })); fatal = true; continue; }
+      if (b.branch) {
+        const options = [...new Set((b.branch.options ?? []).map((o) => String(o).trim()).filter(Boolean))];
+        if (!b.branch.question || options.length < 2) { errors.push(t("「{title}」の branch には question と 2 つ以上の options が要ります", { title: b.title })); fatal = true; continue; }
+        const r = makers.branch(q, { parentId, title: b.title, question: b.branch.question, options, context: b.branch.context, actor });
+        q = r.project; made[b.title] = r.blockId;
+      } else {
+        const r = makers.join(q, { parentId, actor, title: b.title });
+        q = r.project; made[b.title] = r.blockId;
+      }
+      if (b.description) { q.blocks[made[b.title]].description = b.description; q.blocks[made[b.title]].descriptionUpdatedAt = now(); }
+      for (const name of b.inputs ?? []) q = addPort(q, { blockId: made[b.title], direction: "in", name }).project;
+      continue;
+    }
     const r = addBlock(q, { parentId, title: b.title, outputName: b.outputs?.[0] });
     q = r.project;
     made[b.title] = r.blockId;

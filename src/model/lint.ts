@@ -111,7 +111,7 @@ function broadHint(hint: string): boolean {
  * Input : p
  * Output: "ポート id:面" → 印の集まり。印は "分岐の id|選択肢"。合流を通った道は "分岐の id|*" (どれが来ても届く)
  */
-function pathTags(p: Project): Map<string, Set<string>> {
+export function pathTags(p: Project): Map<string, Set<string>> {
   const tags = new Map<string, Set<string>>();
   const add = (key: string, tag: string) => { const s = tags.get(key) ?? new Set<string>(); const before = s.size; s.add(tag); tags.set(key, s); return s.size !== before; };
   // 分岐の出力に印を付ける
