@@ -30,6 +30,23 @@ describe("lint", () => {
     expect(ks).toContain("review:dangling-output");
     expect(kinds(prepared(r.project, r.blockId), r.blockId).filter((k) => k.startsWith("error"))).toEqual([]);
   });
+  it("まだ始めていないボックスの欠落は later、始めたボックスと検査の対象そのものは error", () => {
+    const { p, parentId } = base();
+    const parent = addBlock(p, { parentId, title: "親", outputName: "アプリ" });
+    const c1 = addBlock(parent.project, { parentId: parent.blockId, title: "今回", outputName: "部品 1" });
+    const c2 = addBlock(c1.project, { parentId: parent.blockId, title: "先の仕事", outputName: "部品 2" });
+    let q = c2.project;
+    // 親を対象に検査: 子の欠落は later (今回着手する分だけ具体化すればよい)
+    const fromParent = lint(q, parent.blockId);
+    expect(fromParent.filter((x) => x.blockId === c2.blockId && x.severity !== "review").map((x) => x.severity)).toEqual(["later", "later"]); // (review は未接続の出力)
+    // 子そのものを対象にすると error
+    expect(lint(q, c2.blockId).filter((x) => x.severity !== "review").map((x) => x.severity)).toEqual(["error", "error"]);
+    // 具体化せずに始めた (gray) 子は、親から見ても error
+    q = updateBlock(q, c1.blockId, { status: "gray" });
+    expect(lint(q, parent.blockId).filter((x) => x.blockId === c1.blockId && x.severity !== "review").map((x) => x.severity)).toEqual(["error", "error"]);
+    const c = lintCounts(lint(q, parent.blockId));
+    expect(c.errors).toBeGreaterThan(0); expect(c.later).toBe(2);
+  });
   it("形だけの記入は review (拒否しない)", () => {
     const { p, parentId } = base();
     const r = addBlock(p, { parentId, title: "実装", outputName: "コード" });

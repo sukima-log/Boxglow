@@ -388,7 +388,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   claim-renew <block> --instance <固定ID> --claim-token <受領証>    期限を延長
   claim-release <block> --reason <理由> --actor human              人が強制解除
   受け持ち有効時: 保存する操作に --instance と --claim-token。通常の start は block 範囲。
-  focus/groupなど計画設定: context root → start root で取得、終了は leave root。
+  focus/groupなど計画設定: context root → claim root で取得 (start root でも取れるが実行中にはしない claim を使う)、終了は leave root。
   自動で引き上げる入力は元のボックスの範囲。他者の実行ID・受領証を借りない。
   checkpoint は延長、done/leave は解放。同じ共有ファイルの協調制御。別端末の同期は排他しない。
   resume [--json] [--include-completed]           現況・着手できる候補・入力待ちを表示。完了済みの引き継ぎは件数のみ (指定で展開)
@@ -396,7 +396,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  今回達成すること / 対象外 / 完了条件 / 相談条件。省略は表示、none で項目を消す
   focus [<block>|none]                           今回優先するボックスとその配下を指定 (候補内で着手可・入力待ちを区別)。省略は表示
   policy [--start warn|reject] [--done warn|reject] [--unprepared warn|reject]  入力待ちの開始 / 成果物なしの完了 / 要具体化の開始。既定 warn。人の操作は拒否しない
-                                                 reject の start も --reason があれば通す。done は既存の出力成果物も数える。set --status white にも適用
+                                                 --start reject は --reason があれば通す。--unprepared reject は理由では通れない (先に具体化する)。done は既存の出力成果物も数える。set --status white にも適用
                                                  guard 有効時の scope 設定・focus 設定・policy 設定は --context-token が必要
   context <block> [--brief]                      ボックスのコンテキスト (親と入力元の説明・判断・入出力の条件・引き継ぎ) と確認トークン contextToken を JSON で出す
                                                  --brief = 短い形: 対象の情報は全部、親・上流は題名・状態・有効な判断・対象につながる出力だけ。省いたものの件数と取り方を出す (確認トークンは同じ)
@@ -499,7 +499,7 @@ Usage (npx boxglow <command> ...):
   claim-renew <block> --instance <fixed-ID> --claim-token <receipt>  Renew expiry
   claim-release <block> --reason <reason> --actor human             Human force release
   When enabled, writes require --instance and --claim-token. Default start scope: block.
-  Plan settings (focus/group): context root → start root; release with leave root.
+  Plan settings (focus/group): context root → claim root (start root also works; claim does not mark it in progress); release with leave root.
   Promoted inputs use the original box scope. Never borrow another instance ID or receipt.
   checkpoint renews; done/leave releases. Coordination for one shared file, not a distributed lease.
   resume [--json] [--include-completed]           Current work, ready/waiting candidates, then handoffs; completed notes are counted unless requested
@@ -507,7 +507,7 @@ Usage (npx boxglow <command> ...):
                                                  Goal / non-goals / acceptance / consult before expansion. No flags reads; none clears a field
   focus [<block>|none]                           Prioritize this box and descendants, separating ready/waiting within each scope. No argument reads
   policy [--start warn|reject] [--done warn|reject] [--unprepared warn|reject]  Missing-input starts / artifact-free completion / starts that still need detail; default warn. Human actions are never rejected
-                                                 A start reason overrides reject. Existing output artifacts count for done; set --status white also checks policy
+                                                 A start reason overrides --start reject, but not --unprepared reject (add detail first). Existing output artifacts count for done; set --status white also checks policy
                                                  With guard on, scope/focus/policy writes require --context-token
   context <block> [--brief]                      Print a box's context (descriptions, decisions, input/output contracts and handoff notes of its parents and input providers) and its contextToken as JSON
                                                  --brief = short form: everything about the box itself; parents and input providers reduced to title, status, answered decisions and the outputs feeding it; says what was left out (same contextToken)
@@ -865,9 +865,10 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const counts = lintCounts(issues);
       if (options.json) { out(JSON.stringify({ ...counts, issues }, null, 2)); }
       else {
-        const errors = issues.filter((x) => x.severity === "error"), reviews = issues.filter((x) => x.severity === "review");
-        const lines = [t("検査: 必ず直す {errors} 件 / 見直し候補 {reviews} 件", counts)];
+        const errors = issues.filter((x) => x.severity === "error"), later = issues.filter((x) => x.severity === "later"), reviews = issues.filter((x) => x.severity === "review");
+        const lines = [t("検査: 必ず直す {errors} 件 / 着手の前に {later} 件 / 見直し候補 {reviews} 件", counts)];
         if (errors.length) lines.push("", "## " + t("必ず直す"), ...errors.map((x) => `- ${x.ref}: ${x.text}`));
+        if (later.length) lines.push("", "## " + t("着手の前に埋める (まだ始めていないボックス。今回着手する分だけでよい)"), ...later.map((x) => `- ${x.ref}: ${x.text}`));
         if (reviews.length) lines.push("", "## " + t("見直し候補"), ...reviews.map((x) => `- ${x.ref}: ${x.text}`));
         out(lines.join("\n"));
       }
@@ -1111,7 +1112,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       if (str(options.note)) p = updateBlock(p, r.blockId, { description: str(options.note)! });
       if (str(options.category)) p = setCategory(p, r.blockId, categoryKeyOf(str(options.category)!));
       save(path, p);
-      out(t("追加: 「{title}」(id: {id})", { title, id: r.blockId }));
+      out(t("追加: {key} 「{title}」(id: {id})", { key: p.blocks[r.blockId]?.key ?? "", title, id: r.blockId }));
       return;
     }
     case "branch": {

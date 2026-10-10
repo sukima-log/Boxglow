@@ -59,7 +59,7 @@ export function resumeReport(project: Project, options: { includeCompleted?: boo
     ...s.handoffs.map(h => "- " + h.key + " " + h.title + " (" + h.actor + ", " + (h.status === "white" ? "Done" : h.status === "gray" ? "In Progress" : "New") + ")\n  " + h.freshnessText + "\n" + h.note),
     ...(!options.includeCompleted && s.completedHandoffCount ? [t("完了済みの引き継ぎ {n} 件。resume --include-completed で表示できます。", { n: s.completedHandoffCount })] : []),
     ...(s.descriptionReminders.length ? [t("説明の見直し候補: {names} (show で確認)", { names: s.descriptionReminders.map(x => x.key ?? x.title).join(", ") })] : []),
-    ...(s.lint.errors || s.lint.reviews ? [t("検査: 必ず直す {errors} 件 / 見直し候補 {reviews} 件 (boxglow lint で確認)", s.lint)] : []),
+    ...(s.lint.errors || s.lint.later || s.lint.reviews ? [t("検査: 必ず直す {errors} 件 / 着手の前に {later} 件 / 見直し候補 {reviews} 件 (boxglow lint で確認)", s.lint)] : []),
     "", s.instructions,
   ].join("\n");
 }

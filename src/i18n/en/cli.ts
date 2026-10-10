@@ -61,7 +61,6 @@ export const cli: Record<string, string> = {
 , "注意 ({count} 件。計画の穴):": "Warnings ({count}; gaps in the plan):"
 
   // ---- add / split / move / port / tidy / remove ----
-, "追加: 「{title}」(id: {id})": "Added: \"{title}\" (id: {id})"
 , "--spec '<JSON>' または --spec-file <path> を指定してください": "Specify --spec '<JSON>' or --spec-file <path>"
 , "分解: 「{title}」に {count} 個を追加": "Split: added {count} box(es) to \"{title}\""
 , "--parent <block|project> を指定してください": "Specify --parent <block|project>"
@@ -245,10 +244,8 @@ export const cli: Record<string, string> = {
 , "分解を保存しませんでした (壊れた構造):": "The breakdown was not saved (broken structure):"
 , "blocks は { title, outputs } の配列で、題名が要ります": "blocks must be an array of { title, outputs } with a title each"
 , "見直し (lint):": "Review (lint):"
-, "検査: 必ず直す {errors} 件 / 見直し候補 {reviews} 件": "Lint: must fix {errors} / review {reviews}"
 , "必ず直す": "Must fix"
 , "見直し候補": "Review"
-, "検査: 必ず直す {errors} 件 / 見直し候補 {reviews} 件 (boxglow lint で確認)": "Lint: must fix {errors} / review {reviews} (see boxglow lint)"
 , "計画 (またはボックスの配下) の検査: 必ず直す (予定成果物・完了条件の欠落、親出力の担当の未定・重複、排他の道の両方を必須) と見直し候補 (子が 1 個、つながらない出力、形だけの記入、道の先が無い分岐、入力 1 本の合流、兄弟の同じ予定成果物) を分けて返す": "Check the plan (or a box and its descendants): must-fix (missing expect / acceptance, parent outputs with no or two makers, both exclusive paths required) and review candidates (a single child, unconnected outputs, token entries, empty branch paths, single-input merges, siblings with the same expect)"
 , "省略すると計画全体": "Omit for the whole plan"
 , "直下の子の分け方 (一語: 工程 / 成果物 / 機能 など。none で消す)": "How the direct children are divided (one word: stage / deliverable / feature; none clears it)"
@@ -271,4 +268,8 @@ export const cli: Record<string, string> = {
 , "着手準備": "readiness"
 , "着手準備を評価したと申告し、根拠を残す。材料や上流の分岐の答えが変わると古くなる": "Record that you reviewed the box's readiness, with your basis. It goes stale when the material or an upstream branch answer changes"
 , "答えで後の作業が分かれるなら --branch で分岐にできます": "If the answer changes the work that follows, --branch turns the box into a branch"
+, "検査: 必ず直す {errors} 件 / 着手の前に {later} 件 / 見直し候補 {reviews} 件": "Lint: must fix {errors} / before starting {later} / review {reviews}"
+, "着手の前に埋める (まだ始めていないボックス。今回着手する分だけでよい)": "Fill in before starting (boxes not started yet; only the ones you start now)"
+, "検査: 必ず直す {errors} 件 / 着手の前に {later} 件 / 見直し候補 {reviews} 件 (boxglow lint で確認)": "Lint: must fix {errors} / before starting {later} / review {reviews} (see boxglow lint)"
+, "追加: {key} 「{title}」(id: {id})": "Added: {key} \"{title}\" (id: {id})"
 };

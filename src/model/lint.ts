@@ -1,8 +1,10 @@
 /**
  * 計画の検査 (lint): 機械で分かる欠落と、見直し候補を分けて出す
  *
- *   error  (必ず直す):   予定成果物・完了条件の欠落、親出力の担当の未定・重複、出力の無いボックス、
- *                        同じ分岐の排他の道の両方を 1 つのボックスが必須にしている (両方が届くことは無い)
+ *   error  (必ず直す):   親出力の担当の未定・重複、同じ分岐の排他の道の両方を 1 つのボックスが必須にしている (両方が届くことは無い)、
+ *                        作業中 (In Progress) なのに予定成果物・完了条件・出力が無い (具体化せずに始めている)、検査の対象そのものの欠落
+ *   later  (着手の前に): まだ始めていないボックスの予定成果物・完了条件・出力の欠落。今回着手する分だけ具体化すればよいので、先の仕事の分は
+ *                        「必ず直す」ではなく「着手の前に埋める」として分けて出す (形だけの記入を先まで書かせない)
  *   review (見直し候補): 子が 1 個だけ、どこにもつながらない出力、形だけの記入 (expect の見当が広すぎる、完了条件が題名と同じ・短すぎる)、
  *                        分岐の道の先にボックスが無い、合流の入力が 1 本、兄弟で同じ予定成果物
  *
@@ -17,8 +19,8 @@ import { t } from "../i18n/core";
 
 /** 検査の結果 1 件 */
 export interface LintIssue {
-  /** error = 必ず直す / review = 見直し候補 */
-  severity: "error" | "review";
+  /** error = 必ず直す / later = 着手の前に埋める (まだ始めていないボックスの具体化) / review = 見直し候補 */
+  severity: "error" | "later" | "review";
   /** 種類 (機械で扱うための短い名前) */
   kind: string;
   blockId: string;
@@ -32,7 +34,7 @@ export interface LintIssue {
 /**
  * 計画 (またはボックスの配下) を検査する
  * Input : p = 計画, rootId = 省略すると計画全体。指定するとそのボックスと子孫
- * Output: 問題の一覧 (error が先、次に review。同じ重さの中はボックスの順)
+ * Output: 問題の一覧 (error → later → review の順。同じ重さの中はボックスの順)
  */
 export function lint(p: Project, rootId?: string): LintIssue[] {
   const scope = rootId ? [p.blocks[rootId], ...descendantsOf(p, rootId)].filter((b): b is Block => !!b) : Object.values(p.blocks);
@@ -48,10 +50,14 @@ export function lint(p: Project, rootId?: string): LintIssue[] {
 
     // ---- 必ず直す ----
     if (!isProject && !b.merge && !b.branch) {
-      // 具体化の欠落 (画面と同じ理由。子に任せきりの親は含めない)
+      // 具体化の欠落 (画面と同じ理由。子に任せきりの親は含めない)。
+      // 担当の未定・重複は構造の誤りなので常に error。予定成果物・完了条件・出力の欠落は、作業中のボックスと検査の対象そのものなら error、
+      // まだ始めていないボックスなら later (着手の番で埋める)
       for (const r of unpreparedReasons(p, b.id)) {
         const kind = r.kind === "undecided" ? "undecided-output" : r.kind === "conflict" ? "conflict-output" : r.kind;
-        push("error", kind, b, reasonText(p, r), "port" in r ? r.port.id : undefined);
+        const structural = r.kind === "undecided" || r.kind === "conflict";
+        const now = structural || b.status === "gray" || b.id === rootId;
+        push(now ? "error" : "later", kind, b, reasonText(p, r), "port" in r ? r.port.id : undefined);
       }
     }
     // 同じ分岐の排他の道の両方から来る入力を、両方とも必須にしている (どちらか一方しか届かない)
@@ -96,7 +102,7 @@ export function lint(p: Project, rootId?: string): LintIssue[] {
       for (const [hint, list] of byHint) if (new Set(list.map((x) => x.id)).size > 1) push("review", "duplicate-expect", b, t("子の {names} が同じ予定成果物「{hint}」を持っています (責任が重なっていないか見直します)", { names: [...new Set(list.map(ref))].join(", "), hint }));
     }
   }
-  const order = (x: LintIssue) => (x.severity === "error" ? 0 : 1);
+  const order = (x: LintIssue) => (x.severity === "error" ? 0 : x.severity === "later" ? 1 : 2);
   return issues.sort((x, y) => order(x) - order(y));
 }
 
@@ -144,6 +150,6 @@ export function pathTags(p: Project): Map<string, Set<string>> {
  * 検査の件数の要約 (resume / context 用)
  * Input : issues / Output: { errors, reviews }
  */
-export function lintCounts(issues: LintIssue[]): { errors: number; reviews: number } {
-  return { errors: issues.filter((x) => x.severity === "error").length, reviews: issues.filter((x) => x.severity === "review").length };
+export function lintCounts(issues: LintIssue[]): { errors: number; later: number; reviews: number } {
+  return { errors: issues.filter((x) => x.severity === "error").length, later: issues.filter((x) => x.severity === "later").length, reviews: issues.filter((x) => x.severity === "review").length };
 }

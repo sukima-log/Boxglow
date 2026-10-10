@@ -193,8 +193,13 @@ describe("start の検査 (checkStart)", () => {
     const { p, parent, child } = parentWithChild();
     const warn = checkStart(p, parent, "codex");
     expect(warn.error).toBe("");
+    // 親の出力を作る子は案内に出るが、要具体化なので「今着手できる子」としては出ない
     expect(warn.warning).toContain(p.blocks[child].key ?? child);
+    expect(warn.warning).toContain("今着手できる子はありません");
     expect(warn.warning).toContain("claim");
+    // 子を具体化すると「今着手できる子」になる
+    const ready = checkStart(prepare(p, child), parent, "codex");
+    expect(ready.warning).toContain("今着手できる子: npx boxglow start " + (p.blocks[child].key ?? child));
     p.workflowPolicy = { startUnprepared: "reject" };
     expect(checkStart(p, parent, "codex").error).toContain("claim");
   });

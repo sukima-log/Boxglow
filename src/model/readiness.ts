@@ -169,8 +169,13 @@ export function nextSteps(p: Project, blockId: string, reasons: UnpreparedReason
     switch (r.kind) {
       case "no-outputs": once(t("npx boxglow port {ref} --out \"<出力名>\" --expect \"<出力名>=file:<パス>\"", { ref })); break;
       case "no-own-output": {
-        const children = r.delegated.flatMap((d) => d.owner.kind === "child" ? d.owner.blockIds : []).map((id) => p.blocks[id]?.key ?? id);
-        if (children.length) once(t("実行するなら子へ: npx boxglow start {children}", { children: [...new Set(children)].join(" / ") }));
+        // 親出力を作る子は、入力待ちや要具体化で今は始められないことが多い (最後の子であることが多い)。
+        // 「今着手できる子」(具体化済みで入力もそろっている) を先に案内し、親出力の担当は別に示す
+        const providers = [...new Set(r.delegated.flatMap((d) => d.owner.kind === "child" ? d.owner.blockIds : []))];
+        const startable = childrenOf(p, blockId).filter((c) => c.status === "black" && !c.merge && !c.branch && readiness(p, c.id).state === "ready");
+        if (startable.length) once(t("今着手できる子: npx boxglow start {children}", { children: startable.map((c) => c.key ?? c.id).join(" / ") }));
+        else once(t("今着手できる子はありません (要具体化か入力待ち)。npx boxglow lint {ref} で確かめてください", { ref }));
+        if (providers.length) once(t("親の出力を作るのは {children} (入力がそろってから)", { children: providers.map((id) => p.blocks[id]?.key ?? id).join(" / ") }));
         once(t("分解のための受け持ちだけなら: npx boxglow claim {ref}", { ref }));
         break;
       }

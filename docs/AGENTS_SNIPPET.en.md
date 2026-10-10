@@ -72,7 +72,8 @@ A child with just a title and an output, like the third one, stays "needs detail
 Outputs the parent makes itself (integrating the children's results, for example) are marked with `"parentMakes": ["<output>"]` (if a child's wire also feeds it, readiness reports two makers).
 `"splitBy": "stage"` records in one word how the direct children are divided (stage / deliverable / feature; also `set <block> --split-by`). Siblings should follow the same division and the same level of detail.
 `split` refuses to save only a broken structure (a wire to nothing, a cycle, a malformed expect). Unfinished breakdowns (a single child, a parent output nobody makes yet) are saved and reported as gaps.
-After a split and before a start, read `npx boxglow lint <block>`. Fix the "must fix" items (missing expect / acceptance, parent outputs with no or two makers, both exclusive paths of one branch required) before going on.
+After a split and before a start, read `npx boxglow lint <block>`. Fix the "must fix" items (parent outputs with no or two makers, both exclusive paths of one branch required, a box in progress without expect / acceptance, gaps on the box you are checking) before going on.
+"Fill in before starting" items (expect / acceptance of boxes not started yet) are filled when that child's turn comes (do not write token entries for later work now).
 "Review" items (a single child, unconnected outputs, token entries, empty branch paths, single-input merges, siblings with the same expect) are for you to judge (the tool never refuses on them). `context` also prints the counts and the top three.
 
 **Content review (meaning cannot be checked by the tool: an AI or a person reads the material, judges, and records the basis)**

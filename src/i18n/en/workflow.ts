@@ -52,7 +52,6 @@ export const workflow: Record<string, string> = {
   "出力「{name}」の予定成果物 (expect) が未定です": "Output \"{name}\" has no planned deliverable (expect)",
   "完了条件 (acceptance) が未定です": "No acceptance criteria",
   "npx boxglow port {ref} --out \"<出力名>\" --expect \"<出力名>=file:<パス>\"": "npx boxglow port {ref} --out \"<output>\" --expect \"<output>=file:<path>\"",
-  "実行するなら子へ: npx boxglow start {children}": "To do the work, start a child: npx boxglow start {children}",
   "分解のための受け持ちだけなら: npx boxglow claim {ref}": "To hold it only for planning: npx boxglow claim {ref}",
   "npx boxglow connect \"<子>.<出力>\" \"{ref}.{name}\" または npx boxglow port {ref} --self \"{name}\"": "npx boxglow connect \"<child>.<output>\" \"{ref}.{name}\" or npx boxglow port {ref} --self \"{name}\"",
   "npx boxglow disconnect \"<子>.<出力>\" \"{ref}.{name}\" または npx boxglow port {ref} --self \"{name}\" --no-self": "npx boxglow disconnect \"<child>.<output>\" \"{ref}.{name}\" or npx boxglow port {ref} --self \"{name}\" --no-self",
@@ -88,4 +87,7 @@ export const workflow: Record<string, string> = {
   "複数の子が同じ責任範囲を重複して担当していないか": "Do two children cover the same responsibility?",
   "親の「扱わないこと」(nonGoals) が子に紛れ込んでいないか": "Has anything from the parent's nonGoals crept into a child?",
   "親の出力ごとに、それを作る子 (または親自身の --self) があるか": "Does every parent output have a child (or the parent itself, --self) that makes it?",
+  "今着手できる子: npx boxglow start {children}": "Children you can start now: npx boxglow start {children}",
+  "今着手できる子はありません (要具体化か入力待ち)。npx boxglow lint {ref} で確かめてください": "No child can be started yet (needs detail or waiting for inputs). Check with npx boxglow lint {ref}",
+  "親の出力を作るのは {children} (入力がそろってから)": "The parent's output is made by {children} (once its inputs are in)",
 };
