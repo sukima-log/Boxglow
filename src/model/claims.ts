@@ -160,7 +160,7 @@ export function claimFootprintDetail(before: Project, after: Project): { ids: Se
   }
   for (const id of new Set([...Object.keys(before.handoffs??{}),...Object.keys(after.handoffs??{})])) if (!same(before.handoffs?.[id],after.handoffs?.[id])) owner(id);
   // 今ここ (now) を移すのは、移した先のボックスの操作。前の今ここの受け持ちは要らない (別の実行が持っていてもよい)
-  if (!same(before.now,after.now) && after.now?.blockId) owner(after.now.blockId);
+  for (const n of after.now ?? []) if (!(before.now ?? []).some((m) => m.blockId === n.blockId && m.at === n.at)) owner(n.blockId);
   // now (今ここ) は、その先のボックスの操作の付随記録なので、計画全体 (root) の受け持ちは要らない
   const excluded=new Set(["blocks","ports","edges","handoffs","claims","claimPolicy","log","agents","nextKey","updatedAt","version","now"]);
   for (const k of new Set([...Object.keys(before),...Object.keys(after)])) if (!excluded.has(k) && !same((before as unknown as Record<string,unknown>)[k],(after as unknown as Record<string,unknown>)[k])) ids.add("root");

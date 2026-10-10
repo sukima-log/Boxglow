@@ -16,7 +16,7 @@ import { WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
 import { isAcked as decisionIsAcked } from "../model/graph";
 import { useEffect, useState } from "react";
-import { setNow, addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, removeBlock, setCategory, setProgress, setSchedule, updateBlock, waitingFor } from "../model/graph";
+import { isNow, setNow, addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, removeBlock, setCategory, setProgress, setSchedule, updateBlock, waitingFor } from "../model/graph";
 import { saveTemplate } from "../lib/templates";
 import { actorLabel, ACTIVITY_LABEL, agoText } from "../model/report";
 import { DecisionCard, Timeline } from "./Timeline";
@@ -302,10 +302,10 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           {unread.map((d) => <DecisionCard key={d.id} project={project} blockId={blockId} decisionId={d.id} />)}
         </div>}
         <div className="sec__head"><span className="label">Status</span>
-          {/* 今ここ (本当にいま作業しているボックス、1 つ) の切り替え。図では NOW の札と太い枠 */}
+          {/* 今ここ (本当にいま作業しているボックス。複数可) の付け外し。図では NOW の札と太い枠 */}
           {!isProject && !readonly && (
-            <button className="now-toggle" data-on={project.now?.blockId === blockId} onClick={() => apply((p) => setNow(p, project.now?.blockId === blockId ? null : blockId, "human"))}
-              title={project.now?.blockId === blockId ? t("今ここを解除") : t("今ここにする (いま作業しているボックスとして、図に NOW の札と太い枠を付ける。1 つだけ)")}>NOW</button>
+            <button className="now-toggle" data-on={isNow(project, blockId)} onClick={() => apply((p) => setNow(p, blockId, "human", !isNow(p, blockId)))}
+              title={isNow(project, blockId) ? t("今ここを解除") : t("今ここにする (いま作業しているボックスとして、図に NOW の札と太い枠を付ける。複数の人や AI がいれば、いくつでも)")}>NOW</button>
           )}
         </div>
         <div className="seg">

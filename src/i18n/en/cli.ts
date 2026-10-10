@@ -276,6 +276,9 @@ export const cli: Record<string, string> = {
 , "今ここ: {key} 「{title}」({by}、{at})": "Now: {key} \"{title}\" ({by}, {at})"
 , "今ここ: なし": "Now: none"
 , "今ここ: {key} 「{title}」": "Now: {key} \"{title}\""
-, "今ここ (本当にいま作業しているボックス、1 つ) を置く / 消す / 見る。start で自動で移り、done / leave で消える。画面で太い枠と札が付く": "Set / clear / show \"now\" (the one box being worked on right now). start moves it, done / leave clear it. Shown with a thick frame and a badge"
+, "今ここ (本当にいま作業しているボックス。複数の AI や人がいれば、いくつでも) を付ける / 外す / 見る。start で自動で付き、done / leave で外れる。画面で太い枠と NOW の札が付く": "Add / remove / show \"now\" (the boxes being worked on right now; any number for several agents or people). start adds one, done / leave remove it. Shown with a thick frame and a NOW tag"
+, "ボックス。none で全部消す。省略すると今の値を見る": "Box. none clears all. Omit to show the current value"
+, "true で、そのボックスを今ここから外す": "true removes that box from now"
+, "今ここから外しました: {key} 「{title}」": "Removed from now: {key} \"{title}\""
 , "ボックス。none で消す。省略すると今の値を見る": "The box. none clears it. Omit to show the current value"
 };

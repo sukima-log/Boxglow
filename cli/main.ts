@@ -448,8 +448,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  通常は「同期を始める」から開始。--sync = 明示有効化、--no-sync = 無効。送り先は --server > BOXGLOW_SERVER > 既存の結び付け > 製品既定。空/off も無効
   mcp [--file <path>]                               MCP サーバ (標準入出力)。Claude Code などから status / start / done / ask ... をツールとして使う (.mcp.json は setup-agent が書く)
   connect <題名.出力名> <題名[.入力名]>           結線 (受け側は題名だけでよい: 出力名と同じ名前の入力を作ってつなぐ。親子は自動で内側の面。最終成果物へは project)
-  now [<block>|none]                             今ここ (本当にいま作業しているボックス、1 つ) を置く / 消す / 見る。start で自動で移り、done / leave で消える。画面では太い枠と「作業中: 題名」の札
-  start <block> [--note <何をするか>] [--reason <理由>]  入力待ちは既定で警告。理由を記録すると警告なしで開始。今ここもこのボックスに移る。
+  now [<block>|none] [--off]                     今ここ (本当にいま作業しているボックス。複数の AI や人がいれば、いくつでも) を付ける / 外す (--off) / 全部消す (none) / 見る。start で自動で付き、done / leave で外れる。画面では太い枠と NOW の札
+  start <block> [--note <何をするか>] [--reason <理由>]  入力待ちは既定で警告。理由を記録すると警告なしで開始。今ここにもこのボックスが付く。
                                                  要具体化 (自身が作る出力が無い、出力の予定成果物 expect・完了条件 acceptance が未定) も既定は警告 (policy --unprepared reject で AI は開始不可。理由では通れない)
   done <block> [--artifact <題名>=<URL またはパス>]... [--output <出力名>] [--note]   完了 (成果物を付けて white)
                                                  パスが Git 管理下なら「コミット + パス + blob」で記録する (アップロードしない)
@@ -560,8 +560,8 @@ Usage (npx boxglow <command> ...):
                                                  Normally use Start syncing in the UI. --sync enables; --no-sync disables. Server: --server > BOXGLOW_SERVER > existing binding > product default. Empty/off also disables.
   mcp [--file <path>]                               MCP server (stdio). Lets Claude Code and others use status / start / done / ask ... as tools (setup-agent writes .mcp.json)
   connect <title.output> <title[.input]>           Connect (the receiving side can be just a title: an input with the same name as the output is created and connected. Parent and child connect on the inner side automatically. Use project for the final deliverable)
-  now [<block>|none]                             The box being worked on right now (one). start moves it, done / leave clear it. Shown on the canvas with a thick frame and a "Working: <title>" badge
-  start <block> [--note <what you will do>] [--reason <reason>]  Missing inputs warn by default; a recorded reason allows starting without a warning. Also moves "now" to this box.
+  now [<block>|none] [--off]                     The boxes being worked on right now (any number: several agents or people). start adds one, done / leave remove it, --off removes one, none clears all. Shown on the canvas with a thick frame and a NOW tag
+  start <block> [--note <what you will do>] [--reason <reason>]  Missing inputs warn by default; a recorded reason allows starting without a warning. Also marks this box as "now".
                                                  A box that still needs detail (no output of its own, or an output without expect / acceptance) warns by default too (policy --unprepared reject blocks AI starts; a reason does not bypass it)
   done <block> [--artifact <title>=<URL or path>]... [--output <output name>] [--note]   Finish (attach artifacts and turn it white)
                                                  If the path is tracked by Git, it is recorded as "commit + path + blob" (nothing is uploaded)
@@ -868,12 +868,15 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       return;
     }
     case "now": {
-      // 今ここ: 本当にいま作業しているボックス (1 つ) を置く / 消す / 見る。start でも自動で移る
-      if (!rest[0]) { out(p.now ? t("今ここ: {key} 「{title}」({by}、{at})", { key: p.blocks[p.now.blockId]?.key ?? "", title: p.blocks[p.now.blockId]?.title ?? "?", by: p.now.by, at: p.now.at }) : t("今ここ: なし")); return; }
+      // 今ここ: 本当にいま作業しているボックス (複数の AI や人がいれば、いくつでも) を付ける / 外す / 見る。start でも自動で付く
+      const show = () => out((p.now ?? []).length ? (p.now ?? []).map((n) => t("今ここ: {key} 「{title}」({by}、{at})", { key: p.blocks[n.blockId]?.key ?? "", title: p.blocks[n.blockId]?.title ?? "?", by: n.by, at: n.at })).join("\n") : t("今ここ: なし"));
+      if (!rest[0]) { show(); return; }
       if (rest[0] === "none") { save(path, setNow(p, null, actor)); out(t("今ここ: なし")); return; }
       const b = mustFind(p, rest[0]);
-      save(path, setNow(p, b.id, actor));
-      out(t("今ここ: {key} 「{title}」", { key: b.key ?? "", title: b.title }));
+      const off = !!options.off;
+      p = setNow(p, b.id, actor, !off);
+      save(path, p);
+      out(off ? t("今ここから外しました: {key} 「{title}」", { key: b.key ?? "", title: b.title }) : t("今ここ: {key} 「{title}」", { key: b.key ?? "", title: b.title }));
       return;
     }
     case "lint": {
@@ -1345,7 +1348,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     case "leave": {
       const b = mustFind(p, rest[0]);
       p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
-      if (p.now?.blockId === b.id) p = setNow(p, null, actor); // 今ここだったら消す
+      p = setNow(p, b.id, actor, false); // 今ここに付いていれば外す
       save(path, clearActivity(p, b.id));
       out(t("活動を消しました: 「{title}」", { title: b.title }));
       return;
@@ -1361,7 +1364,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const r = finishBlock(p, b.id, actor, { artifacts, outputName: str(options.output), note: str(options.note) });
       if (r.error) throw new Error(r.error);
       // 今ここだったら消す (完了した)
-      save(path, p.now?.blockId === b.id ? setNow(r.project, null, actor) : r.project);
+      save(path, setNow(r.project, b.id, actor, false)); // 今ここに付いていれば外す (完了した)
       out(t("完了: 「{title}」", { title: b.title }) + `${artifacts.length ? t(" 成果物: ") + artifacts.map((a) => a.title + (a.kind === "git" ? ` (git ${a.path} @ ${(a.commit ?? "").slice(0, 7)})` : "")).join(", ") : ""}`);
       // 成果物の無い完了は「何ができたか」が後から分からない。具体的な物 (ファイル・URL・コミット) を付けるよう促す
       if (check.warning) out(check.warning);

@@ -287,14 +287,19 @@ it("subtree の受け持ちで split でき、押された兄弟の位置は侵�
  const st=f.cli("start","c1",...proof);expect(st.status,st.stderr).toBe(0);expect(receipt(st.stdout).blockId).toBe(r.blockId);
  expect(f.cli("set","c2","--note","x","--actor","codex","--instance","two").status).toBe(1);});
 
-// ---- 今ここ (now): start で移り、now で切り替え、done / leave で消える ----
-it("今ここは start で移り、now で切り替え、done で消える",()=>{const f=fixture(false);
+// ---- 今ここ (now): start で足され、now で付け外し (複数可)、done / leave でそのボックスの分が消える ----
+it("今ここは start で足され、複数付けられ、done / --off / leave でそのボックスの分だけ消える",()=>{const f=fixture(false);
+ const ids=()=> (f.read().now ?? []).map((n:any)=>n.blockId);
  expect(f.cli("now","--actor","codex").stdout).toMatch(/なし|none/);
  expect(f.cli("start","alpha","--actor","codex").status).toBe(0);
- const alpha=Object.values(f.read().blocks).find((b:any)=>b.title==="alpha") as any;expect(f.read().now.blockId).toBe(alpha.id);expect(f.read().now.by).toBe("codex");
- expect(f.cli("now","beta","--actor","human").status).toBe(0);const beta=Object.values(f.read().blocks).find((b:any)=>b.title==="beta") as any;expect(f.read().now.blockId).toBe(beta.id);
- expect(f.cli("now","--actor","codex").stdout).toContain("beta");
- expect(f.cli("done","alpha","--actor","codex").status).toBe(0);expect(f.read().now.blockId).toBe(beta.id); // 今ここでない箱の done では消えない
- expect(f.cli("now","none","--actor","codex").status).toBe(0);expect(f.read().now).toBeUndefined();
- expect(f.cli("start","beta","--actor","codex").status).toBe(0);expect(f.read().now.blockId).toBe(beta.id);
+ const alpha=Object.values(f.read().blocks).find((b:any)=>b.title==="alpha") as any;expect(ids()).toEqual([alpha.id]);expect(f.read().now[0].by).toBe("codex");
+ // 別の人が beta にも付ける → 2 つ並ぶ (alpha は残る)
+ expect(f.cli("now","beta","--actor","human").status).toBe(0);const beta=Object.values(f.read().blocks).find((b:any)=>b.title==="beta") as any;expect(ids()).toEqual([alpha.id,beta.id]);
+ expect(f.cli("now","--actor","codex").stdout).toContain("beta");expect(f.cli("now","--actor","codex").stdout).toContain("alpha");
+ expect(f.cli("now","beta","--actor","human").status).toBe(0);expect(ids()).toEqual([alpha.id,beta.id]); // 重ねて付けても増えない
+ expect(f.cli("done","alpha","--actor","codex").status).toBe(0);expect(ids()).toEqual([beta.id]); // done したボックスの分だけ消える
+ expect(f.cli("now","beta","--off","--actor","human").status).toBe(0);expect(f.read().now).toBeUndefined(); // --off で外す
+ expect(f.cli("start","beta","--actor","codex").status).toBe(0);expect(f.cli("now","alpha","--actor","human").status).toBe(0);expect(ids()).toEqual([beta.id,alpha.id]);
+ expect(f.cli("now","none","--actor","codex").status).toBe(0);expect(f.read().now).toBeUndefined(); // none で全部消す
+ expect(f.cli("start","beta","--actor","codex").status).toBe(0);expect(ids()).toEqual([beta.id]);
  expect(f.cli("leave","beta","--actor","codex").status).toBe(0);expect(f.read().now).toBeUndefined();});

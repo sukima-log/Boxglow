@@ -98,13 +98,14 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('今ここ: 札を押すとそのボックスが選ばれる',await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title==='トークンを保存する';}));
     await page.evaluate(()=>{const s=window.boxglow.store.getState();s.select({});const b=Object.values(s.project.blocks).find(x=>x.title==='実装する');s.setViewScope(b.id);});await page.waitForTimeout(1500);
     check('今ここ: タブの中では今ここのボックス自身に枠と札が付き (In Progress の他の箱には付かない)、大項目の札は出ない',await page.locator('.bg-block.working-now').count()===1 && (await page.locator('.bg-block.working-now .bg-block__title').first().innerText())==='トークンを保存する' && await page.locator('.bg-block.working-below').count()===0);
-    // 人が状態タブの NOW で切り替えられる: バックエンドを今ここにすると、枠と NOW の札が移る
+    // 人が状態タブの NOW で付け外しできる: バックエンドにも付けると、複数 (複数の人や AI の作業) に枠と札が付く
     await page.evaluate(()=>{const s=window.boxglow.store.getState();const b=Object.values(s.project.blocks).find(x=>x.title==='バックエンド');s.select({blockId:b.id,panelTab:'status'});});await page.waitForTimeout(400);
     await page.locator('.panel.right .now-toggle').click();await page.waitForTimeout(500);
-    check('今ここ: 状態タブの NOW で切り替えると枠と札が移る',(await page.locator('.bg-block.working-now .bg-block__title').first().innerText())==='バックエンド' && await page.locator('.bg-block.working-now').count()===1 && (await page.locator('.bg-block.working-now .bg-now-tag').innerText())==='NOW' && (await page.locator('.panel.right .now-toggle').getAttribute('data-on'))==='true');
-    check('今ここ: ツリーの行にも NOW が付く',(await page.locator('.tree-panel').count()===0) || (await page.locator('.tree-now').first().innerText())==='NOW');
+    const nowTitles=(await page.locator('.bg-block.working-now .bg-block__title').allInnerTexts()).sort();
+    check('今ここ: 状態タブの NOW を押すと足され、元の今ここと両方に枠と札が付く (複数可)',nowTitles.join('|')==='トークンを保存する|バックエンド' && (await page.locator('.bg-block.working-now .bg-now-tag').allInnerTexts()).every((x)=>x==='NOW') && (await page.locator('.panel.right .now-toggle').getAttribute('data-on'))==='true',nowTitles.join('|'));
+    check('今ここ: ツリーの行にも NOW が付く (2 行)',(await page.locator('.tree-panel').count()===0) || await page.locator('.tree-now').count()===2);
     await page.locator('.panel.right .now-toggle').click();await page.waitForTimeout(400);
-    check('今ここ: もう一度押すと解除され枠が消える',await page.locator('.bg-block.working-now').count()===0);
+    check('今ここ: もう一度押すとそのボックスだけ外れ、元の今ここは残る',await page.locator('.bg-block.working-now').count()===1 && (await page.locator('.bg-block.working-now .bg-block__title').first().innerText())==='トークンを保存する');
     await page.evaluate(()=>{const s=window.boxglow.store.getState();s.select({});s.setViewScope(null);});await page.waitForTimeout(800);
 
     // Activity の検査 (lint) のタブ: 3 組に分かれ、行を押すとボックスが選ばれる。タブの数字は必ず直すの件数

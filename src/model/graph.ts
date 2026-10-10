@@ -592,7 +592,7 @@ export function removeBlock(p: Project, blockId: string): Project {
     else delete q.handoffs;
   }
   // 消したボックス (またはその配下) が今ここなら、今ここも消す
-  if (q.now && !q.blocks[q.now.blockId]) { const { now: _n, ...rest } = q; void _n; return normalizePromotions(rest as Project); }
+  if (q.now?.some((n) => !q.blocks[n.blockId])) { const kept = q.now.filter((n) => !!q.blocks[n.blockId]); const { now: _n, ...rest } = q; void _n; return normalizePromotions(kept.length ? { ...rest, now: kept } as Project : rest as Project); }
   return normalizePromotions(q);
 }
 
@@ -2478,11 +2478,11 @@ export function wireNet(p: Project, edgeId: string): Set<string> {
 }
 
 /**
- * 今ここ (本当にいま作業しているボックス) と、その配下に持つ先祖
+ * 今ここ (本当にいま作業しているボックス。複数可) と、その配下に持つ先祖
  * Input : p = 計画
- * Output: { working: 今ここのボックスの id の集まり (0 か 1 個), below: 先祖の id → 配下の今ここのボックス }
+ * Output: { working: 今ここのボックスの id の集まり, below: 先祖の id → 配下の今ここのボックス (付けた順) }
  *   画面で「今どこを作業しているか」を目立たせるために使う (Top では大項目に、タブの中では畳んだ親に示す)。
- *   In Progress や activity.working の全部ではなく、project.now の 1 つだけ。計画ごとに 1 回だけ計算する (WeakMap)
+ *   In Progress や activity.working の全部ではなく、project.now に付けたものだけ。計画ごとに 1 回だけ計算する (WeakMap)
  */
 const WORKING_CACHE = new WeakMap<Project, { working: Set<string>; below: Map<string, Block[]> }>();
 export function workingNow(p: Project): { working: Set<string>; below: Map<string, Block[]> } {
@@ -2490,8 +2490,9 @@ export function workingNow(p: Project): { working: Set<string>; below: Map<strin
   if (hit) return hit;
   const working = new Set<string>();
   const below = new Map<string, Block[]>();
-  const b = p.now ? p.blocks[p.now.blockId] : undefined;
-  if (b && b.id !== ROOT_ID) {
+  for (const n of p.now ?? []) {
+    const b = p.blocks[n.blockId];
+    if (!b || b.id === ROOT_ID || working.has(b.id)) continue;
     working.add(b.id);
     for (const a of ancestorsOf(p, b.id)) { if (a.id === ROOT_ID) break; below.set(a.id, [...(below.get(a.id) ?? []), b]); }
   }
@@ -2500,15 +2501,23 @@ export function workingNow(p: Project): { working: Set<string>; below: Map<strin
   return result;
 }
 
+/** 今ここに付いているか */
+export function isNow(p: Project, blockId: string): boolean {
+  return (p.now ?? []).some((n) => n.blockId === blockId);
+}
+
 /**
- * 今ここを置く / 消す
- * Input : p, blockId = 今ここにするボックス (null で消す), by = 誰が
- * Output: 更新した計画 (ボックスが無ければそのまま)
+ * 今ここを付ける / 外す
+ * Input : p, blockId = ボックス (null で全部外す), by = 誰が, on = true で付ける (既定)、false で外す
+ * Output: 更新した計画 (ボックスが無ければそのまま。重複して付けない)
  */
-export function setNow(p: Project, blockId: string | null, by: string): Project {
-  if (blockId === null) { if (!p.now) return p; const { now: _n, ...rest } = p; void _n; return rest as Project; }
+export function setNow(p: Project, blockId: string | null, by: string, on = true): Project {
+  const strip = (q: Project): Project => { const { now: _n, ...rest } = q; void _n; return rest as Project; };
+  if (blockId === null) return p.now ? strip(p) : p;
   if (!p.blocks[blockId] || blockId === ROOT_ID) return p;
-  return { ...p, now: { blockId, by, at: new Date().toISOString() } };
+  const rest = (p.now ?? []).filter((n) => n.blockId !== blockId);
+  if (!on) return rest.length ? { ...p, now: rest } : strip(p);
+  return { ...p, now: [...rest, { blockId, by, at: new Date().toISOString() }] };
 }
 
 /**

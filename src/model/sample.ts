@@ -241,7 +241,7 @@ export function buildSampleProject(): Project {
 
   // AI の受け持ち (計画ごとに有効にする): 並行して動く AI が、互いのボックスを書き換えないようにする
   // 同じ Claude Code でも、実行 ID (instanceId) が違えば別の書き手 (サブエージェント)。期限は開いた時刻から 30 分
-  // 今ここ: 本当にいま作業しているボックス (1 つ)。Top では「実装する」に、実装するのタブでは「バックエンド」の中の「GitHub OAuth で実装する」に札が付く
+  // 今ここ: 本当にいま作業しているボックス (複数可。見本では 1 つ)。Top では「実装する」に、実装するのタブでは「バックエンド」の中の「GitHub OAuth で実装する」に札が付く
   p = setNow(p, token.id, "claude-code");
   p.claimPolicy = { mode: "reject", leaseMinutes: 30 };
   const now = Date.now();

@@ -220,11 +220,11 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           <span className="bg-branch-emblem" aria-hidden="true"><span>IF</span></span>
         </>
       )}
-      {/* 今ここ (本当にいま作業しているボックス、1 つ) の札: 枠の左上に NOW。畳んだ中にあるときは「NOW ▸ 題名」(押すとそのボックスへ)。活動の「作業中」とは別 */}
+      {/* 今ここ (本当にいま作業しているボックス。複数可) の札: 枠の左上に NOW。畳んだ中にあるときは「NOW ▸ 題名 (+n)」(押すと最初のボックスへ)。活動の「作業中」とは別 */}
       {view.workingNow && <span className="bg-now-tag" title={t("今ここ: 本当にいま作業しているボックス (start で移る。状態タブの Now でも切り替え)")}>NOW</span>}
       {view.workingBelow.length > 0 && (
         <button type="button" className="bg-now-tag bg-now-tag--below nodrag" title={view.workingBelow.map((w) => `${w.key ?? ""} ${w.title} (${actorName(w.activity?.actor ?? "")})`).join("\n")}
-          onClick={(e) => { e.stopPropagation(); select({ blockId: view.workingBelow[0].id }); }}>NOW ▸ {view.workingBelow[0].title}</button>
+          onClick={(e) => { e.stopPropagation(); select({ blockId: view.workingBelow[0].id }); }}>NOW ▸ {view.workingBelow[0].title}{view.workingBelow.length > 1 ? ` +${view.workingBelow.length - 1}` : ""}</button>
       )}
       {verticalBand("in")}
       <div className="bg-block__head" style={{ height: headerH - (view.expanded ? 24 : card.metaH), ...(vertical && !view.expanded ? { marginTop: vertical.inputH } : {}) }}>
