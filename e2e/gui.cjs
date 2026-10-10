@@ -74,6 +74,18 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('Claims タブ: 受け持ちが実行 ID・残り時間つきで期限の近い順に並ぶ',claimRows.length===3 && /release-worker/.test(claimRows[0]) && claimRows.every((x)=>/残り \d+ 分/.test(x)) && claimRows.some((x)=>/api-worker/.test(x)) && claimRows.some((x)=>/test-worker/.test(x)),JSON.stringify(claimRows));
     await page.locator('.claim-list .tree-row',{hasText:'api-worker'}).click();await page.waitForTimeout(300);
     check('Claims タブ: 行を押すとそのボックス (バックエンド) が選ばれる',await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title;})==='バックエンド');
+    // Activity の検査 (lint) のタブ: 3 組に分かれ、行を押すとボックスが選ばれる。タブの数字は必ず直すの件数
+    await page.evaluate(()=>window.boxglow.store.getState().select({timeline:true}));await page.waitForTimeout(300);
+    await page.locator('.panel.right .seg__btn',{hasText:'Lint'}).click();await page.waitForTimeout(300);
+    const lintGroups=await page.locator('.lint-list [data-severity]').evaluateAll(es=>es.map(e=>e.dataset.severity));
+    check('Activity の検査: 組に分かれて並ぶ (サンプルは着手の前に、だけ)',lintGroups.length>=1 && lintGroups.includes('later'));
+    const lintCount=(await page.locator('.panel.right .seg__btn',{hasText:'Lint'}).innerText()).replace(/\D/g,'');
+    check('Activity の検査: タブの数字は必ず直すの件数 (サンプルは 0)',lintCount==='0' && await page.locator('.lint-list [data-severity="error"]').count()===0);
+    const firstRef=await page.locator('.lint-list .tree-row .dec-key').first().innerText();
+    await page.locator('.lint-list .tree-row').first().click();await page.waitForTimeout(400);
+    check('Activity の検査: 行を押すとそのボックスが選ばれる',await page.evaluate((ref)=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.key===ref;},firstRef));
+    await page.evaluate(()=>window.boxglow.store.getState().select({}));
+
     // 担当の一覧 (表、In charge): 左下の表示の切り替えの表の記号 → 自分を決めていないので「全員」(担当の列つき) → さとうに切り替えて未完了 2 件 → 完了済みも表示で 4 件 → 行を押すと表のまま右に詳細が開く → Esc で詳細、もう一度で表を閉じる
     await page.evaluate(()=>window.boxglow.store.getState().select({}));
     await page.locator('.canvas-tools .view-switch__table').first().click();await page.waitForTimeout(300);

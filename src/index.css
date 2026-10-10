@@ -1805,3 +1805,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .unprepared-list__item { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
 .unprepared-list__item:hover { text-decoration-style: solid; }
 .task-table__unprepared { color: var(--accent); font-weight: 600; }
+
+/* Activity の検査 (lint) の一覧: 組ごとの見出しと件数。必ず直すは注意色 */
+.lint-list__count { font-weight: 400; opacity: .7; margin-left: 4px; }
+.lint-list [data-severity="error"] .label { color: var(--accent); }

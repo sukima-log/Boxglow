@@ -4,8 +4,9 @@
  */
 import { CloseButton } from "./CloseButton";
 import { candidateGroups } from "../model/workflow";
+import { lint } from "../model/lint";
 import { resumeSummary } from "../model/resume";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { answerDecision, editDecisionAnswer, summarize, candidatesOf, reopenDecision, ancestorsOf, kindOf, portsOf, isAcked } from "../model/graph";
 import { actorLabel, ACTIVITY_LABEL, agoText, shortTime } from "../model/report";
 import { ROOT_ID, type Project } from "../model/types";
@@ -125,7 +126,7 @@ function BlockRef({ project, blockId, onJump }: { project: Project; blockId: str
 }
 
 /** Activity のタブ (一度に 1 項目だけ見せる。混ざって見えると、どれが判断待ちでどれが作業中か分かりにくい) */
-type ActivityTab = "resume" | "decisions" | "answered" | "working" | "claims" | "next" | "log";
+type ActivityTab = "resume" | "decisions" | "answered" | "working" | "claims" | "next" | "lint" | "log";
 
 export function Timeline({ project }: { project: Project }) {
   useLang(); // 言語が変わったら描き直す
@@ -143,6 +144,8 @@ export function Timeline({ project }: { project: Project }) {
   // 受け持ちの一覧 (Claims タブ)。時刻は受け持ちの共通の時計 (15 秒ごと) で、期限切れを判定する
   const claimNow = useClaimClock();
   const claimRows = claimListOf(project, claimNow);
+  // 検査 (lint) の結果 (計画全体)。計画が変わったときだけ計算し直す
+  const lintIssues = useMemo(() => lint(project), [project]);
   // タブと件数。最初に開くのは「人の対応が要る順」で中身のある最初のタブ (判断待ち → 回答済み → 作業中 → 次の候補 → ログ)
   const tabs: { id: ActivityTab; label: string; count: number | null; help: string }[] = [
     { id: "resume", label: "Resume", count: resume.handoffs.length, help: t("引き継ぎ・未確認の回答・次の候補") },
@@ -152,6 +155,8 @@ export function Timeline({ project }: { project: Project }) {
   // 受け持ち: 受け持ちを使う計画で、解除されていない受け持ちがあるときだけタブを出す (使わない計画では見せない)
   , ...(claimRows.length > 0 ? [{ id: "claims" as const, label: "Claims", count: claimRows.filter((r) => r.active).length, help: t("受け持ち: どの AI (実行 ID) がどのボックスを持っているか") }] : [])
   , { id: "next", label: "Next", count: s.next.length, help: t("未着手のボックス: 着手できる / 入力待ち") }
+  // 検査 (lint): 必ず直す / 着手の前に埋める / 見直し候補。数字は必ず直すの件数
+  , { id: "lint", label: "Lint", count: lintIssues.filter((x) => x.severity === "error").length, help: t("検査: 必ず直す / 着手の前に埋める / 見直し候補 (押すとそのボックスへ)") }
   , { id: "log", label: "Log", count: null, help: t("最近の記録 (新しい順)") }
   ];
   // 並びは「再開」が先頭だが、最初に開く優先順は 判断待ち → 回答済み → 再開 → 作業中 → 次の候補 (人の対応が要るものを先に)
@@ -269,6 +274,23 @@ export function Timeline({ project }: { project: Project }) {
       )}
 
       {tab === "next" && <NextCandidates project={project} limit={30} onJump={jump} />}
+
+      {tab === "lint" && (
+        <section className="flex flex-col gap-2 lint-list">
+          {lintIssues.length === 0 && empty(t("なし"))}
+          {/* 3 組に分けて出す: 必ず直す (構造の誤り・作業中の未記入) → 着手の前に埋める (まだ始めていないボックス) → 見直し候補 */}
+          {(["error", "later", "review"] as const).map((sev) => {
+            const rows = lintIssues.filter((x) => x.severity === sev);
+            if (!rows.length) return null;
+            return <div key={sev} data-severity={sev}>
+              <h3 className="label">{sev === "error" ? t("必ず直す") : sev === "later" ? t("着手の前に") : t("見直し候補")} <span className="lint-list__count">{rows.length}</span></h3>
+              {rows.map((x, i) => <button key={`${x.blockId}-${x.kind}-${i}`} className="tree-row text-left" style={{ alignItems: "flex-start" }} onClick={() => jump(x.blockId)}>
+                <span className="dec-key">{x.ref}</span><span className="text-[12px]" style={{ whiteSpace: "normal" }}>{x.text}</span>
+              </button>)}
+            </div>;
+          })}
+        </section>
+      )}
 
       {tab === "log" && (
         <section>

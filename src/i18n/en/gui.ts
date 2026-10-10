@@ -138,4 +138,6 @@ export const gui: Record<string, string> = {
   "中に、要具体化のボックスが {n} 個あります": "{n} boxes inside still need detail",
   "要具体化 {n}": "Needs detail {n}",
   "準備": "Readiness",
+  "検査: 必ず直す / 着手の前に埋める / 見直し候補 (押すとそのボックスへ)": "Lint: must fix / before starting / review (click to open the box)",
+  "着手の前に": "Before starting",
 };

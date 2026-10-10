@@ -98,7 +98,7 @@ function squeezed(file) {
     check("帯に回答済みが出る", (await page.locator(".summary-chip").innerText()).includes("回答済み"));
     // Activity は項目ごとのタブ: 件数つきの 5 つのタブがあり、押した項目だけが出る
     const tabLabels = (await page.locator("aside.right .seg__btn").allInnerTexts()).map((x) => x.replace(/\s+/g, " ").trim());
-    check("Activity: 項目ごとのタブ (件数つき) が並ぶ", tabLabels.length === 6 && tabLabels[0].startsWith("Resume") && tabLabels[1].startsWith("Decisions") && tabLabels[2] === "Answered 1" && tabLabels[3] === "Working 1", JSON.stringify(tabLabels));
+    check("Activity: 項目ごとのタブ (件数つき) が並ぶ", tabLabels.length === 7 && tabLabels[5].startsWith("Lint") && tabLabels[0].startsWith("Resume") && tabLabels[1].startsWith("Decisions") && tabLabels[2] === "Answered 1" && tabLabels[3] === "Working 1", JSON.stringify(tabLabels));
     await page.locator("aside.right .seg__btn", { hasText: "Working" }).click();
     await page.waitForTimeout(300);
     const working = await page.locator("aside.right").innerText();
