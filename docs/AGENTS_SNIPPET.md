@@ -52,7 +52,7 @@ boxglow.json はリポジトリ直下に置く (`npx boxglow init --name "<プ�
 {
   "blocks": [
     { "title": "対象箇所を特定する", "inputs": ["再現手順"], "outputs": ["調査メモ"],
-      "expect": "note:対象のファイルと処理、根拠、変更候補", "acceptance": "変更するファイルと処理が決まる、または決められない理由と次の判断が分かる",
+      "expect": "note:対象のファイルと処理、根拠、変更候補、確認方法、未決事項", "acceptance": "変更するファイルと処理が決まり、後続のボックスに expect と acceptance を設定できる。または、設定できない理由と必要な判断が分かる",
       "goal": "再現して経路を追う。製品コードの修正は今回の範囲外" },
     { "title": "保存の再試行後に同期状態を取り直す", "inputs": ["調査メモ"], "outputs": ["修正"],
       "expect": "file:src/sync/state.ts", "acceptance": "保存を一度失敗させ、再保存後に同期状態と操作が戻る (テストで確認)" },

@@ -52,7 +52,7 @@ When there are many top-level inputs, create a group with `npx boxglow group "<g
 {
   "blocks": [
     { "title": "Find the target", "inputs": ["Repro steps"], "outputs": ["Notes"],
-      "expect": "note:the files and code paths involved, evidence, candidate changes", "acceptance": "the files and code to change are known, or the reason they are not and the next decision is clear",
+      "expect": "note:the files and code paths involved, evidence, candidate changes, how to check, open questions", "acceptance": "the files and code to change are known and the following boxes can be given expect and acceptance; or the reason they cannot, and the decision needed, is clear",
       "goal": "reproduce and trace the path; changing product code is out of scope here" },
     { "title": "Refresh sync state after a retried save", "inputs": ["Notes"], "outputs": ["Fix"],
       "expect": "file:src/sync/state.ts", "acceptance": "fail one save, retry, and the sync state and actions come back (covered by a test)" },
