@@ -5,7 +5,7 @@
 _Fixes and small improvements found after 0.6.0 go here._
 
 - Plans with nine or more sections fold the done sections into one tab ("✓ n"; click to show them). An output's details list the boxes that use it ("Used by"), following wires through parents; click one to jump.
-- Where the work is right now: a box being worked on gets a thick orange frame, and when it is inside a collapsed box (a major box on Top, or a folded parent in a tab) that box gets the frame and a "Working: <title>" badge that jumps to it. Inside an open tab only the working box itself is framed.
+- **Now**: the one box being worked on right now (not every In Progress box). `start` moves it, `done` / `leave` clear it, `boxglow now <block>` / `now none` (MCP `boxglow_now`) switch it, and people switch it from the box's ⋯ menu ("Set as now"). On the canvas it gets a thick orange frame and a "Now" badge; when it is inside a collapsed box (a section on Top, or a folded parent in a tab) that box gets the frame and a "Now: <title>" badge that jumps to it. Inside an open tab only the box itself is framed. Stored as `now` in the plan file (optional; older versions ignore it).
 - Top now has a heading strip with the final deliverables and the first pending decision (click it to open Activity); it stays readable at any zoom. When a plan first opens and the whole diagram would be too small to read, the view starts at a readable zoom from the top-left instead (Fit still shows everything). Below 900 px wide the vertical flow is the default.
 - The block tree can be resized by dragging its right edge (180 to 560 px; remembered in the browser; double-click the edge to reset).
 

@@ -161,4 +161,9 @@ export const gui: Record<string, string> = {
   "最終成果物": "Deliverable",
   "完了した大項目 {n} 個 (押すと展開)": "{n} done sections (click to show)",
   "完了した大項目を畳む": "Fold the done sections",
+  "今ここ": "Now",
+  "今ここにする": "Set as now",
+  "今ここを解除": "Clear now",
+  "太い枠と「作業中」の札で、今どこを作業しているかを示します。1 つだけ": "Marks where the work is right now with a thick frame and a badge (one box)",
+  "今ここ: 本当にいま作業しているボックス (start で移る。⋯ メニューでも切り替え)": "Now: the box being worked on right now (start moves it; the ⋯ menu switches it too)",
 };

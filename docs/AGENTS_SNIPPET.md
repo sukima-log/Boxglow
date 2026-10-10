@@ -23,6 +23,7 @@ boxglow.json はリポジトリ直下に置く (`npx boxglow init --name "<プ�
    - 1 つのボックスで出力を作る見通しが立たないなら `npx boxglow split <block> --spec '<JSON>'` で中に小さなボックスを置く。今回着手する子だけ expect / acceptance を書き、先の子は題名と出力だけでよい (要具体化として残る)。入力は不明なら省略してよい (自動で上の階層の入力になる)
    - 対象のファイルが分からないときは、架空のファイルを書かず「対象を特定する調査」のボックスを出力 `note` で作って始める
 4. **着手を記録**: 準備ができたら `npx boxglow context <block>` を読み直してから `npx boxglow start <block> --note "<何をするか>"`。同時に進めるボックスは 1〜2 個まで。
+   start したボックスが「今ここ」(本当にいま作業しているボックス、1 つ) になり、画面で太い枠と札が付く。別のボックスに移るときは `npx boxglow now <block>` で切り替える (start でも移る)。done / leave で消える。人も画面の ⋯ メニューで切り替える
    確認トークンの要求 (guard) が有効な計画では、出力の `contextToken` (確認トークン) を付ける:
    `npx boxglow start <block> --note "<何をするか>" --context-token <確認トークン>` (下の「確認トークンと引き継ぎ」を参照)
    要具体化のボックスへの start は既定では警告 (理由と次の一手が出る)。`policy --unprepared reject` の計画では開始できない (`--reason` では通れない。人の操作は通る)。出力を子に任せきりの親も実行するものが無いので、子を start する

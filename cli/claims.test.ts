@@ -286,3 +286,15 @@ it("subtree の受け持ちで split でき、押された兄弟の位置は侵�
  // 受け持ちを継承して子を start できる。two は範囲外
  const st=f.cli("start","c1",...proof);expect(st.status,st.stderr).toBe(0);expect(receipt(st.stdout).blockId).toBe(r.blockId);
  expect(f.cli("set","c2","--note","x","--actor","codex","--instance","two").status).toBe(1);});
+
+// ---- 今ここ (now): start で移り、now で切り替え、done / leave で消える ----
+it("今ここは start で移り、now で切り替え、done で消える",()=>{const f=fixture(false);
+ expect(f.cli("now","--actor","codex").stdout).toMatch(/なし|none/);
+ expect(f.cli("start","alpha","--actor","codex").status).toBe(0);
+ const alpha=Object.values(f.read().blocks).find((b:any)=>b.title==="alpha") as any;expect(f.read().now.blockId).toBe(alpha.id);expect(f.read().now.by).toBe("codex");
+ expect(f.cli("now","beta","--actor","human").status).toBe(0);const beta=Object.values(f.read().blocks).find((b:any)=>b.title==="beta") as any;expect(f.read().now.blockId).toBe(beta.id);
+ expect(f.cli("now","--actor","codex").stdout).toContain("beta");
+ expect(f.cli("done","alpha","--actor","codex").status).toBe(0);expect(f.read().now.blockId).toBe(beta.id); // 今ここでない箱の done では消えない
+ expect(f.cli("now","none","--actor","codex").status).toBe(0);expect(f.read().now).toBeUndefined();
+ expect(f.cli("start","beta","--actor","codex").status).toBe(0);expect(f.read().now.blockId).toBe(beta.id);
+ expect(f.cli("leave","beta","--actor","codex").status).toBe(0);expect(f.read().now).toBeUndefined();});

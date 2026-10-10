@@ -591,6 +591,8 @@ export function removeBlock(p: Project, blockId: string): Project {
     if (Object.keys(rest).length > 0) q.handoffs = rest;
     else delete q.handoffs;
   }
+  // 消したボックス (またはその配下) が今ここなら、今ここも消す
+  if (q.now && !q.blocks[q.now.blockId]) { const { now: _n, ...rest } = q; void _n; return normalizePromotions(rest as Project); }
   return normalizePromotions(q);
 }
 
@@ -2476,11 +2478,11 @@ export function wireNet(p: Project, edgeId: string): Set<string> {
 }
 
 /**
- * いま作業中 (activity.state = working) のボックスと、その配下に作業中を持つ先祖
+ * 今ここ (本当にいま作業しているボックス) と、その配下に持つ先祖
  * Input : p = 計画
- * Output: { working: 作業中のボックスの id の集まり, below: 先祖の id → 配下の作業中のボックス (近い順) }
- *   画面で「今どこを作業しているか」を目立たせるために使う (Top では大項目に、タブの中では畳んだ親に、配下の作業を示す)。
- *   計画ごとに 1 回だけ計算する (WeakMap)
+ * Output: { working: 今ここのボックスの id の集まり (0 か 1 個), below: 先祖の id → 配下の今ここのボックス }
+ *   画面で「今どこを作業しているか」を目立たせるために使う (Top では大項目に、タブの中では畳んだ親に示す)。
+ *   In Progress や activity.working の全部ではなく、project.now の 1 つだけ。計画ごとに 1 回だけ計算する (WeakMap)
  */
 const WORKING_CACHE = new WeakMap<Project, { working: Set<string>; below: Map<string, Block[]> }>();
 export function workingNow(p: Project): { working: Set<string>; below: Map<string, Block[]> } {
@@ -2488,14 +2490,25 @@ export function workingNow(p: Project): { working: Set<string>; below: Map<strin
   if (hit) return hit;
   const working = new Set<string>();
   const below = new Map<string, Block[]>();
-  for (const b of Object.values(p.blocks)) {
-    if (b.activity?.state !== "working" || b.id === ROOT_ID) continue;
+  const b = p.now ? p.blocks[p.now.blockId] : undefined;
+  if (b && b.id !== ROOT_ID) {
     working.add(b.id);
     for (const a of ancestorsOf(p, b.id)) { if (a.id === ROOT_ID) break; below.set(a.id, [...(below.get(a.id) ?? []), b]); }
   }
   const result = { working, below };
   WORKING_CACHE.set(p, result);
   return result;
+}
+
+/**
+ * 今ここを置く / 消す
+ * Input : p, blockId = 今ここにするボックス (null で消す), by = 誰が
+ * Output: 更新した計画 (ボックスが無ければそのまま)
+ */
+export function setNow(p: Project, blockId: string | null, by: string): Project {
+  if (blockId === null) { if (!p.now) return p; const { now: _n, ...rest } = p; void _n; return rest as Project; }
+  if (!p.blocks[blockId] || blockId === ROOT_ID) return p;
+  return { ...p, now: { blockId, by, at: new Date().toISOString() } };
 }
 
 /**

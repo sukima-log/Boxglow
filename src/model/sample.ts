@@ -2,7 +2,7 @@
  * サンプルプロジェクト (記事の体験版と「サンプルを開く」で使う)
  * 題材: 小さな Web アプリを公開するまで。SW 開発らしく、部品を組み合わせて最終成果物を作る流れにする。
  */
-import { ackDecisions, addBlock, addInputGroup, addMember, addPort, answerDecision, askDecision, connect, createArtifact, createProject, portsOf, setActivity, setCategory, setInputGroup, setProgress, setSchedule, updateBlock, updatePort } from "./graph";
+import { ackDecisions, addBlock, addInputGroup, addMember, addPort, answerDecision, askDecision, connect, createArtifact, createProject, portsOf, setActivity, setCategory, setInputGroup, setProgress, setSchedule, updateBlock, updatePort, setNow } from "./graph";
 import { acquireClaim } from "./claims";
 import { addBranch, addMerge } from "./branch";
 import { ROOT_ID, type Expect, type Project } from "./types";
@@ -241,6 +241,8 @@ export function buildSampleProject(): Project {
 
   // AI の受け持ち (計画ごとに有効にする): 並行して動く AI が、互いのボックスを書き換えないようにする
   // 同じ Claude Code でも、実行 ID (instanceId) が違えば別の書き手 (サブエージェント)。期限は開いた時刻から 30 分
+  // 今ここ: 本当にいま作業しているボックス (1 つ)。Top では「実装する」に、実装するのタブでは「バックエンド」の中の「GitHub OAuth で実装する」に札が付く
+  p = setNow(p, token.id, "claude-code");
   p.claimPolicy = { mode: "reject", leaseMinutes: 30 };
   const now = Date.now();
   p = acquireClaim(p, be.blockId, "block", { actor: "claude-code", instanceId: "api-worker", tokens: [] }, now - 5 * 60_000, "sample-claim-api");

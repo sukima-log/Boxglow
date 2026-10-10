@@ -292,6 +292,11 @@ export interface Project {
   focusBlockId?: string;
   /** true なら、CLI / MCP で作業を記録するコマンドが最新のコンテキストの確認トークンを要求する (guard)。無い古い計画は要求しない */
   contextGuard?: boolean;
+  /**
+   * 今ここ: 本当にいま作業しているボックス (1 つ)。In Progress の全部ではない。
+   * AI の start で自動的に移り、人は画面の ⋯ メニュー、AI は now コマンドで切り替える。done / leave でそのボックスなら消える
+   */
+  now?: { blockId: string; by: string; at: string };
   /** 引き継ぎメモ (ボックスの id → 分かったこと・次の手順など)。件数に上限のある活動ログとは別に残る。無い古い計画もそのまま読める */
   handoffs?: Record<string, { note: string; actor: string; at: string }>;
   schemaVersion: number;

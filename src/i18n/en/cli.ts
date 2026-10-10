@@ -273,4 +273,9 @@ export const cli: Record<string, string> = {
 , "追加: {key} 「{title}」(id: {id})": "Added: {key} \"{title}\" (id: {id})"
 , "答えで後の作業が排他的に分かれるなら --branch で分岐にできます (優先順位や好みを聞くだけなら、このままでよい)": "If the answer splits the following work into exclusive paths, --branch turns the box into a branch (asking about priority or preference needs no branch)"
 , "元の出力「{name}」は 1 つ目の道「{option}」になりました (線は残ります)。成果物の意味の出力は、各道の先のボックスで持ちます": "The original output \"{name}\" became the first path \"{option}\" (its wires stay). The deliverable-type output now belongs to the boxes on each path"
+, "今ここ: {key} 「{title}」({by}、{at})": "Now: {key} \"{title}\" ({by}, {at})"
+, "今ここ: なし": "Now: none"
+, "今ここ: {key} 「{title}」": "Now: {key} \"{title}\""
+, "今ここ (本当にいま作業しているボックス、1 つ) を置く / 消す / 見る。start で自動で移り、done / leave で消える。画面で太い枠と札が付く": "Set / clear / show \"now\" (the one box being worked on right now). start moves it, done / leave clear it. Shown with a thick frame and a badge"
+, "ボックス。none で消す。省略すると今の値を見る": "The box. none clears it. Omit to show the current value"
 };

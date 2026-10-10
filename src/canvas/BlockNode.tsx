@@ -252,11 +252,13 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           </span>
         )}
         <ClaimMark project={project} blockId={blockId} />
+        {/* 今ここ (本当にいま作業しているボックス): 札。活動の「作業中」とは別 (今ここは 1 つだけ) */}
+        {view.workingNow && <span className="meta-chip working-now" title={t("今ここ: 本当にいま作業しているボックス (start で移る。⋯ メニューでも切り替え)")}>{t("今ここ")}</span>}
         {/* 畳んだ中 (大項目を含む) で作業中: どのボックスかを札で示す (押すとそのボックスへ) */}
         {view.workingBelow.length > 0 && (
           <button type="button" className="meta-chip working-below nodrag" title={view.workingBelow.map((w) => `${w.key ?? ""} ${w.title} (${actorName(w.activity?.actor ?? "")})`).join("\n")}
             onClick={(e) => { e.stopPropagation(); select({ blockId: view.workingBelow[0].id }); }}>
-            {t("作業中")}: {view.workingBelow[0].title}{view.workingBelow.length > 1 ? ` +${view.workingBelow.length - 1}` : ""}
+            {t("今ここ")}: {view.workingBelow[0].title}
           </button>
         )}
         {view.pending > 0 && <span className="meta-chip needs_decision">{t("判断待ち {n}", { n: view.pending })}</span>}

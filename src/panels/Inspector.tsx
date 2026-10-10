@@ -16,7 +16,7 @@ import { WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
 import { isAcked as decisionIsAcked } from "../model/graph";
 import { useEffect, useState } from "react";
-import { addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, removeBlock, setCategory, setProgress, setSchedule, updateBlock, waitingFor } from "../model/graph";
+import { setNow, addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, removeBlock, setCategory, setProgress, setSchedule, updateBlock, waitingFor } from "../model/graph";
 import { saveTemplate } from "../lib/templates";
 import { actorLabel, ACTIVITY_LABEL, agoText } from "../model/report";
 import { DecisionCard, Timeline } from "./Timeline";
@@ -232,6 +232,9 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
             <button className="btn btn-ghost btn-sm" onClick={() => setMenu(!menu)} title={t("その他")}>⋯</button>
             {menu && (
               <div className="card absolute right-0 mt-1 p-1 flex flex-col z-30" style={{ minWidth: 200 }}>
+                {/* 今ここ: 本当にいま作業しているボックス (1 つ)。人はここで切り替える (AI は start か now で) */}
+                {!isProject && <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); apply((p) => setNow(p, project.now?.blockId === blockId ? null : blockId, "human")); }}
+                  title={t("太い枠と「作業中」の札で、今どこを作業しているかを示します。1 つだけ")}>{project.now?.blockId === blockId ? t("今ここを解除") : t("今ここにする")}</button>}
                 <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); setScopeEditing(true); }}>{t("作業範囲を編集")}</button>
                 <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); apply(p => ({ ...p, focusBlockId: p.focusBlockId === blockId ? undefined : blockId })); }}>{project.focusBlockId === blockId ? t("今回の範囲を解除") : t("今回の範囲にする")}</button>
                 {!isProject && <button className="btn btn-ghost btn-sm justify-start" onClick={saveAsTemplate}>Save as Part</button>}
