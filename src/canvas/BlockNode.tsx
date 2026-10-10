@@ -58,6 +58,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   const { blockId } = data;
   const vertical = data.vertical;
   const headerH = data.headerH ?? 44;
+  const select = useProjectStore((s) => s.select);
   const viewScope = useProjectStore((s) => s.viewScope);
   const overviewZoom = useStore((s) => s.transform[2] < 0.65);
   const canEdit = useProjectStore((s) => !s.readonly && s.editMode);
@@ -251,7 +252,8 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         {view.skipped && <span className="meta-chip skipped" title={t("選ばなかった分岐の道です。進捗や次の候補には数えません")}>{t("見送り")}</span>}
         {view.waitingBranch && !view.skipped && <span className="meta-chip branch-waiting" title={t("まだ答えていない分岐の先です。答えると、この道へ進むかが決まります")}>{t("分岐待ち")}</span>}
         {/* 要具体化: 着手の前に、出力の予定成果物と完了条件を決める。親には配下の件数 */}
-        {view.unprepared && !view.skipped && <span className="meta-chip unprepared" title={t("着手の前に、出力の予定成果物 (expect) と完了条件を決めます")}>{t("要具体化")}</span>}
+        {/* 押すと右パネルの状態タブ (着手の前に決めること) を開く */}
+        {view.unprepared && !view.skipped && <button type="button" className="meta-chip unprepared nodrag" title={t("着手の前に、出力の予定成果物 (expect) と完了条件を決めます (押すと状態タブ)")} onClick={(e) => { e.stopPropagation(); select({ blockId, panelTab: "status" }); }}>{t("要具体化")}</button>}
         {!view.unprepared && view.unpreparedBelow > 0 && !view.skipped && <span className="meta-chip unprepared below" title={t("中に、要具体化のボックスが {n} 個あります", { n: view.unpreparedBelow })}>{t("要具体化 {n}", { n: view.unpreparedBelow })}</span>}
         {view.dueDate && view.status !== "white" && (
           <span className={`meta-chip ${view.overdue ? "overdue" : "bg-block__secondary"}`} title={view.daysLeft === null ? t("期日 {date}", { date: view.dueDate }) : view.daysLeft < 0 ? t("期日 {date} ({d} 日超過)", { date: view.dueDate, d: -view.daysLeft }) : t("期日 {date} (あと {d} 日)", { date: view.dueDate, d: view.daysLeft })}>

@@ -107,8 +107,9 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
     // ---- 要具体化 (readiness): 予定成果物・完了条件の無いボックスに札が付き、右パネルに不足が並ぶ。親には配下の件数 ----
     const roughBox = page.locator('.react-flow__node-block .bg-block', { has: page.locator('.meta-chip.unprepared:not(.below)') }).first();
     check('要具体化: 予定成果物・完了条件の無いボックスに「要具体化」の札が付く', await roughBox.count() === 1);
-    await roughBox.click(); await page.waitForTimeout(400);
-    await page.locator('.panel.right .seg__btn', { hasText: '状態' }).click(); await page.waitForTimeout(200); // 前の確認で入出力タブを開いたまま (タブは保たれる)
+    // 図の「要具体化」の札を押すと、右パネルが状態タブで開く (前の確認で入出力タブを開いたままでも)
+    await roughBox.locator('.meta-chip.unprepared').click(); await page.waitForTimeout(400);
+    check('要具体化: 図の札を押すと状態タブが開く', (await page.locator('.panel.right .seg__btn[data-on="true"]').first().innerText()).includes('状態'));
     const roughList = await page.locator('.panel.right .readiness-fields__label').allInnerTexts();
     check('要具体化: 右パネルに不足 (予定成果物 / 完了条件) の欄が並ぶ', roughList.some((x) => x.includes('予定成果物')) && roughList.some((x) => x.includes('完了条件')), JSON.stringify(roughList));
     // 状態タブの「着手の前に決めること」で、その場で予定成果物と完了条件を埋められる。埋まると行が消える

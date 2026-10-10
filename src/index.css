@@ -1710,6 +1710,8 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .meta-chip.branch-waiting { background: transparent; border: 1px dashed var(--primary); color: var(--primary-strong); }
 /* 要具体化: 着手の前に決めることが残っている (注意色の点線。親の配下の件数は薄く) */
 .meta-chip.unprepared { background: transparent; border: 1px dashed var(--accent); color: var(--accent); }
+button.meta-chip.unprepared { cursor: pointer; font: inherit; }
+button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .meta-chip.unprepared.below { opacity: .75; }
 /* 分岐の出力: 選んだ道は太字、見送りの道は取り消し線 */
 .bg-block__port.out.branch-chosen .bg-block__port-name { font-weight: 800; color: var(--primary-strong); }

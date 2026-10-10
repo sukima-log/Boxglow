@@ -44,6 +44,8 @@ export interface Selection {
   project: boolean;
   /** タイムライン (活動・判断・ログ) を開いているとき */
   timeline: boolean;
+  /** 右パネルで開いてほしいタブ (図の札を押したときなど)。パネルが読んだら消す */
+  panelTab?: "status" | "io" | "owner" | "dates" | "more";
 }
 
 /** 何も選んでいない状態 */
@@ -196,6 +198,8 @@ interface State {
   undo: () => void;
   redo: () => void;
   select: (sel: Partial<Selection>) => void;
+  /** 右パネルのタブの要求を消す (パネルが読んだ後) */
+  clearPanelTab: () => void;
   setToast: (msg: string | null) => void;
 
   refreshList: () => Promise<void>;
@@ -921,6 +925,7 @@ export const useProjectStore = create<State>((set, get) => {
       const lastEdgeId = cur.edgeId && next.blockId ? cur.edgeId : next.blockId && next.blockId === cur.blockId ? get().lastEdgeId : null;
       set({ selection: next, lastEdgeId });
     }
+  , clearPanelTab: () => { const { panelTab: _t, ...rest } = get().selection; void _t; set({ selection: rest as Selection }); }
   , setToast: (msg) => set({ toast: msg })
 
   , refreshList: async () => set({ projects: await listProjects() })

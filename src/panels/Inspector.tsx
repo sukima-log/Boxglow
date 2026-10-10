@@ -171,6 +171,10 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   const percent = effectiveProgress(project, blockId);
   const isProject = kindOf(b) === "project";
 
+  // 図の札 (要具体化など) から開いたときは、要求されたタブを開く
+  const panelTab = useProjectStore((s) => s.selection.panelTab);
+  const clearPanelTab = useProjectStore((s) => s.clearPanelTab);
+  useEffect(() => { if (panelTab) { setTab(panelTab); clearPanelTab(); } }, [panelTab, clearPanelTab]);
   // 別のブロックを選んだら開いていたものを閉じる
   useEffect(() => {
     setAiOpen(false);
