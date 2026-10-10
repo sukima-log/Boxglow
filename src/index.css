@@ -1780,3 +1780,17 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .add-menu__icon.branch::after { content: "IF"; font-size: 9px; transform: rotate(-45deg); }
 .add-menu__icon.merge { border-radius: 4px 50% 50% 4px / 4px 50% 50% 4px; }
 
+
+/* 右パネルの「道を選ぶ」欄 (分岐のボックスを選んだとき、題名の直下に出す)。
+   余白は 8px 単位。選んだ道は主色で強め、見送りの道は薄くして取り消し線 (図の見送りの表し方とそろえる) */
+.branch-picker { display: flex; flex-direction: column; gap: 8px; padding: 8px 8px 8px 16px; border: 1.5px solid var(--primary-strong); border-radius: 8px; background: var(--bg-card); }
+.branch-picker__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+.branch-picker__question { margin: 0; font-size: 13px; line-height: 20px; color: var(--text); }
+.branch-picker__note { margin: 0; font-size: 12px; line-height: 18px; color: var(--accent); }
+.branch-picker__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.branch-picker__item { display: flex; align-items: center; gap: 8px; min-height: 32px; }
+.branch-picker__name { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+.branch-picker__mark { flex: none; width: 16px; text-align: center; font-size: 11px; color: var(--primary-strong); }
+.branch-picker__item[data-state="chosen"] .branch-picker__name { color: var(--primary-strong); font-weight: 800; }
+.branch-picker__item[data-state="skipped"] .branch-picker__name { opacity: .55; text-decoration: line-through; }
+.meta-chip.branch-chosen { background: var(--primary); color: var(--on-primary); border-color: var(--primary); opacity: 1; }

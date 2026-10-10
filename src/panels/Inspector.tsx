@@ -6,7 +6,8 @@ import { ClaimSettings, ClaimDetails } from "./Claims";
  * 文言は日本語で書き t() で包む (英語は src/i18n/en/inspector.ts の辞書で引く)
  */
 import { BranchDialog } from "./BranchDialog";
-import { canConvertToBranch } from "../model/branch";
+import { BranchPicker } from "./BranchPicker";
+import { branchDecision, canConvertToBranch } from "../model/branch";
 import { CloseButton } from "./CloseButton";
 import { WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
@@ -161,7 +162,9 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   const chain = [...ancestorsOf(project, blockId)].reverse();
   const suggest = canSuggestWhite(project, blockId);
   const prog = computeProgress(project, blockId);
-  const pending = b.decisions.filter((d) => d.answer === undefined); // まだ答えていない質問
+  // まだ答えていない質問。分岐の問いは先頭の「道を選ぶ」欄で答えるので、ここ (状態タブの「回答が必要です」) には重ねて出さない
+  const branchQ = branchDecision(b);
+  const pending = b.decisions.filter((d) => d.answer === undefined && d !== branchQ);
   // 人が答えたが、AI がまだ引き取っていない (ack していない) 回答。引き取られるまでパネルの先頭に残す
   const unread =b.decisions.filter((d) => d.answer !== undefined && !decisionIsAcked(project, blockId, d));
   const percent = effectiveProgress(project, blockId);
@@ -246,6 +249,8 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       {branching && <BranchDialog convertBlockId={blockId} onClose={() => setBranching(false)} />}
       <DebouncedText className="input font-head text-[16px]" value={b.title} disabled={readonly} placeholder={t("Title (何を作るか)")}
         onCommit={(v) => apply((p) => updateBlock(p, blockId, { title: v }))} />
+      {/* 分岐のボックス: どの道に進むかを、題名の直下で選ぶ (タブを開かなくても見つかるように) */}
+      <BranchPicker project={project} blockId={blockId} />
 
         {/* カテゴリは「状態」タブの中ではなく題名の直下に置く。どの詳細タブでも分類を確認・変更できるようにする。
             候補が多いので選択欄にまとめる。空の値はモデルの null (カテゴリなし) に戻し、閲覧専用では変更させない。札の訳は common.ts。 */}

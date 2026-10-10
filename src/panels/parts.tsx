@@ -61,6 +61,9 @@ export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add
   );
 }
 
+/** 詳細を開いた入出力の id (ページを開いている間、タブやボックスを移っても開いたままにするための記憶) */
+const OPEN_PORTS = new Set<string>();
+
 /**
  * ブロックの入力 (または出力) ポートの一覧
  * 行: 名前 → その下に成果物 (リンク) の一覧と「+ Add」。「▾」で形式・制約 (1 行) と必須の設定
@@ -80,7 +83,15 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
   const apply = useProjectStore((s) => s.apply);
   const ports = blockId === ROOT_ID && direction === "in" && groupId !== undefined ? rootInputsOf(project, groupId) : portsOf(project, blockId, direction);
   const groups = blockId === ROOT_ID && direction === "in" ? inputGroupsOf(project) : [];
-  const [open, setOpen] = useState<string | null>(null);
+  // 詳細を開いている入出力の id の集まり。いくつでも同時に開ける (1 つ開くと他が閉じる、ということはしない)。
+  // 自分で閉じるまで開いたままにするため、別のタブやボックスへ移って戻っても覚えておく (OPEN_PORTS はページを開いている間だけ保つ)
+  const [open, setOpenState] = useState<ReadonlySet<string>>(() => new Set(OPEN_PORTS));
+  const isOpen = (id: string) => open.has(id);
+  const toggleOpen = (id: string) => {
+    // 開閉を切り替え、覚えている集まりにも反映する
+    if (OPEN_PORTS.has(id)) OPEN_PORTS.delete(id); else OPEN_PORTS.add(id);
+    setOpenState(new Set(OPEN_PORTS));
+  };
   const canRemove = (promoted: boolean) => !readonly && !promoted && (direction === "in" || ports.length > 1);
 
   return (
@@ -115,7 +126,7 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                   {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
                 </select>
               )}
-              <button className="btn btn-ghost btn-sm" onClick={() => setOpen(open === q.id ? null : q.id)} title={t("形式・制約などの設定")}>{open === q.id ? "▴" : "▾"}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => toggleOpen(q.id)} aria-expanded={isOpen(q.id)} title={t("形式・制約などの設定")}>{isOpen(q.id) ? "▴" : "▾"}</button>
               {canRemove(!!q.promotedFrom) && <button className="btn btn-ghost btn-sm" title="Remove" onClick={() => apply((p) => removePort(p, q.id))}>×</button>}
             </div>
             {/* 成果物 (主役): 名前の直下に並べる */}
@@ -131,9 +142,9 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                     onChange={(next) => apply((p) => updatePort(p, q.id, { artifacts: next }))} />
                 </>
               )}
-              {desc && open !== q.id && <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{desc}</div>}
+              {desc && !isOpen(q.id) && <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{desc}</div>}
             </div>
-            {open === q.id && (
+            {isOpen(q.id) && (
               <div className="flex flex-col gap-1 pl-2 pb-2">
                 {src ? (
                   <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("形式・制約は供給元「{name}」の出力で書きます", { name: src.name })}{src.description ? `: ${src.description}` : ""}</div>

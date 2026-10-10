@@ -26,9 +26,12 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
       && (await box('結合テスト').getAttribute('class')).includes('branch-waiting'));
     const totalBefore = await page.evaluate(() => document.body.innerText.match(/Done \d+ \/ (\d+)/)?.[1]);
 
-    // ---- 詳細パネルで REST を選んで答える ----
+    // ---- 詳細パネルの先頭の「道を選ぶ」欄で REST を選ぶ ----
     await box('API の方式を決める').click(); await page.waitForTimeout(400);
-    await page.locator('.panel.right button', { hasText: /^REST$/ }).first().click(); await page.waitForTimeout(600);
+    const picker = page.locator('.panel.right .branch-picker');
+    check('道を選ぶ: 分岐のボックスを選ぶと、パネルの先頭に道ごとの「この道にする」が並ぶ', await picker.isVisible() && await picker.getByRole('button', { name: 'この道にする' }).count() === 2);
+    check('道を選ぶ: 分岐の問いは「回答が必要です」には重ねて出さない', await page.locator('.panel.right .attention-section', { hasText: '回答が必要です' }).count() === 0);
+    await picker.locator('.branch-picker__item', { hasText: 'REST' }).getByRole('button', { name: 'この道にする' }).click(); await page.waitForTimeout(600);
     const st = await page.evaluate(() => { const s = window.boxglow.store.getState(); const b = Object.values(s.project.blocks).find((x) => x.title === 'API の方式を決める'); return b.status; });
     check('分岐: 選択肢で答えると、分岐のボックスは完了になる', st === 'white', st);
     check('分岐: 選んだ道は ✓、選ばなかった道は見送りの印', await box('API の方式を決める').locator('.bg-block__port.out.branch-chosen').innerText().then((x) => x.includes('REST'))
@@ -37,6 +40,12 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
       && await box('GraphQL で実装する').locator('.meta-chip.skipped').isVisible());
     check('分岐: 選んだ道と合流先は、見送りでも分岐待ちでもない', !/is-skipped|branch-waiting/.test(await box('REST で実装する').getAttribute('class'))
       && !/is-skipped|branch-waiting/.test(await box('結合テスト').getAttribute('class')));
+    check('道を選ぶ: 答えた後は、選んだ道に「選んだ道」、ほかの道に「見送り」が付く', await picker.locator('.branch-picker__item[data-state="chosen"]').innerText().then((x) => x.includes('REST') && x.includes('選んだ道'))
+      && await picker.locator('.branch-picker__item[data-state="skipped"]').innerText().then((x) => x.includes('GraphQL')));
+    // 選び直す → 見送りが外れ、もう一度選べる。確かめた後は REST を選び直して、元の流れに戻す
+    await picker.getByRole('button', { name: '選び直す' }).click(); await page.waitForTimeout(600);
+    check('道を選ぶ: 「選び直す」で見送りが外れ、もう一度「この道にする」が並ぶ', !(await box('GraphQL で実装する').getAttribute('class')).includes('is-skipped') && await picker.getByRole('button', { name: 'この道にする' }).count() === 2);
+    await picker.locator('.branch-picker__item', { hasText: 'REST' }).getByRole('button', { name: 'この道にする' }).click(); await page.waitForTimeout(600);
     const totalAfter = await page.evaluate(() => document.body.innerText.match(/Done \d+ \/ (\d+)/)?.[1]);
     check('分岐: 見送りのボックスは完了数の分母から外れる', Number(totalAfter) === Number(totalBefore) - 1, `${totalBefore} -> ${totalAfter}`);
 
@@ -80,6 +89,20 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
     const converted = await page.evaluate(() => { const s = window.boxglow.store.getState(); const b = Object.values(s.project.blocks).find((x) => x.title === '設計する'); const outs = Object.values(s.project.ports).filter((q) => q.blockId === b.id && q.direction === 'out'); return { branch: !!b.branch, outs: outs.map((q) => q.branchOption), wired: Object.values(s.project.edges).some((e) => e.from.portId === outs[0]?.id) }; });
     check('分岐にする: 今の出力は 1 つ目の道になり、線も残る。2 つ目の道が足される', converted.branch && converted.outs.join('|') === '画面から|API から' && converted.wired, JSON.stringify(converted));
     check('分岐にする: 変えたボックスに「分岐」の札が付く', await box('設計する').locator('.bg-block__tag.branch').isVisible());
+
+    // ---- 入出力の詳細 (▾) は、いくつでも同時に開けて、自分で閉じるまで開いたまま ----
+    await box('API の方式を決める').click(); await page.waitForTimeout(400);
+    await page.locator('.panel.right .seg__btn', { hasText: '入出力' }).click(); await page.waitForTimeout(300);
+    const toggles = page.locator('.panel.right button[title="形式・制約などの設定"]');
+    const nToggle = await toggles.count();
+    for (let i = 0; i < nToggle; i++) await toggles.nth(i).click();
+    const expanded = () => page.locator('.panel.right button[title="形式・制約などの設定"][aria-expanded="true"]').count();
+    check('入出力: 詳細を開いても、ほかの入出力の詳細は閉じない', nToggle >= 2 && await expanded() === nToggle, `${nToggle}`);
+    await box('REST で実装する').click(); await page.waitForTimeout(300);
+    await box('API の方式を決める').click(); await page.waitForTimeout(300);
+    check('入出力: 別のボックスへ移って戻っても、開いた詳細は開いたまま', await expanded() === nToggle);
+    await toggles.nth(0).click(); await page.waitForTimeout(200);
+    check('入出力: 自分で閉じたものだけが閉じる', await expanded() === nToggle - 1);
 
     check('分岐: 実行時のエラーが無い', errors.length === 0, errors.join(' | '));
   } finally {

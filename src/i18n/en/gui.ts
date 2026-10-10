@@ -124,4 +124,12 @@ export const gui: Record<string, string> = {
   "ふつうの作業 (N)": "A regular task (N)",
   "まだ決まっていない分かれ道": "A fork that is not decided yet",
   "分かれた道をまとめる": "Brings paths together",
+  "道を選ぶ": "Choose a path",
+  "答えを履歴に残して未回答に戻す (見送りの道も元に戻る)": "Keep the answer in the history and make it unanswered again (skipped paths come back)",
+  "選び直す": "Choose again",
+  "答え「{answer}」は選択肢のどれでもないため、道はまだ選ばれていません": "The answer \"{answer}\" is not one of the options, so no path is chosen yet",
+  "{name} (選択肢: {option})": "{name} (option: {option})",
+  "選んだ道": "Chosen",
+  "この道に進む (ほかの道は見送りになり、分岐のボックスは完了になる)": "Go this way (the other paths are skipped and the branch box is completed)",
+  "この道にする": "Choose this",
 };
