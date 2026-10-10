@@ -2498,3 +2498,34 @@ export function workingNow(p: Project): { working: Set<string>; below: Map<strin
   return result;
 }
 
+/**
+ * 出力の下流: この出力を入力として使っているボックス (線をたどる。親の出力に束ねられた先や、親の入力から子へ配られた先も追う)
+ * Input : p, portId = 出力ポートの id
+ * Output: 使っているボックス (重複なし。見つかった順)。最上位の出力ノードに届く場合は含めない (図で分かる)
+ */
+export function consumersOf(p: Project, portId: string, seen: Set<string> = new Set()): Block[] {
+  if (seen.has(portId)) return [];
+  const port = p.ports[portId];
+  if (!port) return [];
+  const next = new Set(seen).add(portId);
+  const out: Block[] = [];
+  const push = (b: Block | undefined) => { if (b && b.id !== ROOT_ID && !out.some((x) => x.id === b.id)) out.push(b); };
+  // 出力の外側から出る線 (兄弟の入力 / 親の出力の内側)。入力の内側から出る線 (子の入力 / 親の出力への through)
+  const side = port.direction === "out" ? "outer" : "inner";
+  for (const e of outgoingEdges(p, { portId, side })) {
+    if (e.auto) continue;
+    const to = p.ports[e.to.portId];
+    if (!to) continue;
+    if (to.direction === "in") {
+      const b = p.blocks[to.blockId];
+      // 子を持つ箱の入力は、その中で配られる先まで追う (中で誰も使っていなければ、その箱自身)
+      const inner = consumersOf(p, to.id, next);
+      if (inner.length) inner.forEach(push); else push(b);
+    } else {
+      // 親の出力に束ねられた: その親の出力の先を追う
+      consumersOf(p, to.id, next).forEach(push);
+    }
+  }
+  return out;
+}
+

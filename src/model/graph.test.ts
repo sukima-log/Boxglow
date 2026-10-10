@@ -46,6 +46,7 @@ import {
 , setSchedule
 , sourceOfInput
 , connectToBlock
+, consumersOf
 , moveBlock
 , moveBlockToParent
 , resolveOverlap
@@ -1020,5 +1021,28 @@ describe("normalizeInputNames: 古い食い違いをそろえる", () => {
 describe("newId", () => {
   it("先頭が「-」の id を作らない (2 万個作って確かめる)", () => {
     for (let i = 0; i < 20000; i++) expect(newId().startsWith("-")).toBe(false);
+  });
+});
+
+describe("出力の下流 (consumersOf)", () => {
+  it("兄弟の入力、親の出力に束ねた先、親の入力から子へ配った先をたどる", () => {
+    const base = createProject("下流");
+    const pid = defaultTaskParent(base);
+    const a = addBlock(base, { parentId: pid, title: "A", outputName: "部品" });
+    let p = a.project;
+    const b = addBlock(p, { parentId: pid, title: "B", outputName: "製品" }); p = b.project;
+    // A.部品 → B (兄弟)
+    p = connectToBlock(p, { portId: portsOf(p, a.blockId, "out")[0].id, side: "outer" }, b.blockId).project;
+    expect(consumersOf(p, portsOf(p, a.blockId, "out")[0].id).map((x) => x.title)).toEqual(["B"]);
+    // B の中に子 C を置き、B の入力「部品」を C へ配る → A.部品 の下流は C (B ではなく、実際に使う C)
+    const c = addBlock(p, { parentId: b.blockId, title: "C", outputName: "製品の中身" }); p = c.project;
+    const bIn = portsOf(p, b.blockId, "in").find((q) => q.name === "部品")!;
+    p = connectToBlock(p, { portId: bIn.id, side: "inner" }, c.blockId).project;
+    expect(consumersOf(p, portsOf(p, a.blockId, "out")[0].id).map((x) => x.title)).toEqual(["C"]);
+    // C.製品の中身 → B.製品 (親の出力に束ねる) → B.製品 を使う D
+    const d = addBlock(p, { parentId: pid, title: "D", outputName: "完成" }); p = d.project;
+    p = connect(p, { portId: portsOf(p, c.blockId, "out")[0].id, side: "outer" }, { portId: portsOf(p, b.blockId, "out")[0].id, side: "inner" }).project;
+    p = connectToBlock(p, { portId: portsOf(p, b.blockId, "out")[0].id, side: "outer" }, d.blockId).project;
+    expect(consumersOf(p, portsOf(p, c.blockId, "out")[0].id).map((x) => x.title)).toEqual(["D"]);
   });
 });

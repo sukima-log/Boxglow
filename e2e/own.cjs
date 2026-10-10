@@ -46,6 +46,14 @@ const MAX_SWITCH_MS = 1200;
       if (n > 0) per.push(`${m.title} ${n}`);
     }
     check(`自分の計画: 線どうしの交差の合計が ${MAX_CROSSINGS} 以下`, total <= MAX_CROSSINGS, `合計 ${total} (${per.join(", ")})`);
+    // 大項目が 9 個以上の計画では、完了した大項目のタブが「✓ n」に畳まれ、押すと展開する
+    const majorsN = await page.evaluate(() => { const s = window.boxglow.store.getState(); const pj = new Set(Object.values(s.project.blocks).filter((b) => b.kind === "project").map((b) => b.id)); return Object.values(s.project.blocks).filter((b) => pj.has(b.parentId)).length; });
+    if (majorsN >= 9) {
+      const before = await page.locator(".canvas-tab").count();
+      check("自分の計画: 完了した大項目のタブが畳まれる", await page.locator(".canvas-tab--done-fold").count() === 1 && before < majorsN + 1, `${before} / ${majorsN}`);
+      await page.locator(".canvas-tab--done-fold").click(); await page.waitForTimeout(300);
+      check("自分の計画: 畳んだタブを押すと展開する", await page.locator(".canvas-tab").count() === majorsN + 2);
+    }
 
     check("自分の計画: どのタブでもボックスを貫く配線がない", hits.length === 0, JSON.stringify(hits));
 

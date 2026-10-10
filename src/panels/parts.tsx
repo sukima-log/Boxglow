@@ -3,7 +3,7 @@
  * ポートの行は「名前」と、その直下に「成果物 (リンク)」を主役として並べる。形式・制約は 1 行の補足。
  */
 import { useEffect, useRef, useState } from "react";
-import { addPort, createArtifact, inputGroupsOf, isInputNameLocked, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort } from "../model/graph";
+import { addPort, consumersOf, createArtifact, inputGroupsOf, isInputNameLocked, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort } from "../model/graph";
 import type { Artifact, ExpectKind, Project } from "../model/types";
 import { setInputAnyOf } from "../model/branch";
 import { ROOT_ID } from "../model/types";
@@ -98,6 +98,7 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
   groupId?: string | null;
 }) {
   useLang(); // 言語が変わったら描き直す
+  const select = useProjectStore((s) => s.select);
   const apply = useProjectStore((s) => s.apply);
   const ports = blockId === ROOT_ID && direction === "in" && groupId !== undefined ? rootInputsOf(project, groupId) : portsOf(project, blockId, direction);
   const groups = blockId === ROOT_ID && direction === "in" ? inputGroupsOf(project) : [];
@@ -161,6 +162,11 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                 </>
               )}
               {desc && !isOpen(q.id) && <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{desc}</div>}
+              {/* 下流: この出力を使う箱 (押すと移る)。変えるとどこを確かめ直すかの手がかり */}
+              {direction === "out" && (() => { const users = consumersOf(project, q.id); return users.length ? (
+                <div className="text-[11px] mt-1 port-consumers" style={{ color: "var(--text-muted)" }}>
+                  {t("使う箱:")} {users.map((b, i) => <span key={b.id}>{i > 0 && ", "}<button type="button" className="port-consumers__item" onClick={() => select({ blockId: b.id })}>{b.title}</button></span>)}
+                </div>) : null; })()}
             </div>
             {isOpen(q.id) && (
               <div className="flex flex-col gap-1 pl-2 pb-2">

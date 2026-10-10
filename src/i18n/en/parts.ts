@@ -93,4 +93,5 @@ export const parts: Record<string, string> = {
 , "予定成果物の種類": "Deliverable kind"
 , "予定成果物": "Deliverable"
 , "パスの見当や題名 (例: src/auth/callback.ts)": "A path or title (e.g. src/auth/callback.ts)"
+, "使う箱:": "Used by:"
 };

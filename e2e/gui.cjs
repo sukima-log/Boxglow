@@ -83,6 +83,14 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('Top の見出し行: 問いを押すと Activity が開く',await page.evaluate(()=>window.boxglow.store.getState().selection.timeline===true));}
     await page.evaluate(()=>window.boxglow.store.getState().select({}));await page.waitForTimeout(200);
 
+    // 出力の詳細に「使う箱」(下流) が並び、押すとその箱へ
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();const b=Object.values(s.project.blocks).find(x=>x.title==='設計する');s.select({blockId:b.id,panelTab:'io'});});await page.waitForTimeout(500);
+    const consumers=await page.locator('.port-consumers').first().innerText();
+    check('入出力: 出力の詳細に「使う箱」が並ぶ (設計書 → 一覧画面・編集画面・ノートの API・認証方式を決める)',consumers.includes('一覧画面') && consumers.includes('認証方式を決める'),consumers);
+    await page.locator('.port-consumers__item',{hasText:'一覧画面'}).click();await page.waitForTimeout(300);
+    check('入出力: 「使う箱」を押すとその箱が選ばれる',await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title==='一覧画面';}));
+    await page.evaluate(()=>window.boxglow.store.getState().select({}));await page.waitForTimeout(200);
+
     // 今どこを作業しているか: Top では作業中を含む大項目に太い枠と「作業中: 題名」の札、タブの中では作業中のボックス自身に枠
     const topWorking=await page.locator('.bg-block.working-below').allInnerTexts();
     check('作業中の強調: Top では作業中を含む大項目に札 (作業中: バックエンド)',topWorking.length===1 && topWorking[0].includes('実装する') && topWorking[0].includes('作業中: バックエンド'),JSON.stringify(topWorking));

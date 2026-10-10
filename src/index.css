@@ -1852,3 +1852,7 @@ button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent)
 .readiness-fields__inputs { display: flex; gap: 4px; align-items: center; }
 .readiness-fields__note { font-size: 11px; color: var(--accent); }
 
+/* 出力の詳細の「使う箱」(下流)。押すとその箱へ */
+.port-consumers__item { background: none; border: 0; padding: 0; font: inherit; color: var(--primary-strong); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }
+.port-consumers__item:hover { text-decoration-style: solid; }
+

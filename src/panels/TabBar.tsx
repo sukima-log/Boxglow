@@ -20,6 +20,12 @@ export function TabBar({ project, majors, scope, onSelect, marked }: { project: 
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(false);
   const [listOpen, setListOpen] = useState(false);
+  // 大項目が多い (9 個以上) 計画では、完了した大項目のタブを「✓ n」に畳む (帯に収まらず、終わった大項目の一覧として読めないため。B158)。
+  // 押すと展開し、もう一度押すと畳む。開いているタブが完了のものなら、それだけは畳まない
+  const FOLD_FROM = 9;
+  const [doneOpen, setDoneOpen] = useState(false);
+  const foldDone = majors.length >= FOLD_FROM && !doneOpen;
+  const doneCount = majors.filter((b) => b.status === "white" && b.id !== scope).length;
 
   // 帯の端まで来たら ◀ ▶ を薄くする
   const updateArrows = () => {
@@ -66,7 +72,17 @@ export function TabBar({ project, majors, scope, onSelect, marked }: { project: 
       </div>
       <div className="tab-strip" ref={strip} onScroll={updateArrows}>
         <button className="canvas-tab" role="tab" data-on={scope === null} data-marked={marked?.has(null) || undefined} onClick={() => pick(null)} title={t("大項目の一覧を俯瞰する (中はそれぞれのタブで)")}>Top</button>
-        {majors.map((b) => (
+        {foldDone && doneCount > 0 && (
+          <button className="canvas-tab canvas-tab--done-fold" role="tab" aria-expanded={false} onClick={() => setDoneOpen(true)} title={t("完了した大項目 {n} 個 (押すと展開)", { n: doneCount })}>
+            <StatusIcon status="white" /><span className="truncate">{doneCount}</span>
+          </button>
+        )}
+        {majors.length >= FOLD_FROM && doneOpen && doneCount > 0 && (
+          <button className="canvas-tab canvas-tab--done-fold" role="tab" aria-expanded={true} onClick={() => setDoneOpen(false)} title={t("完了した大項目を畳む")}>
+            <StatusIcon status="white" /><span className="truncate">{doneCount} ▴</span>
+          </button>
+        )}
+        {majors.filter((b) => !(foldDone && b.status === "white" && b.id !== scope)).map((b) => (
           <button key={b.id} className="canvas-tab" role="tab" data-on={scope === b.id} data-marked={marked?.has(b.id) || undefined} onClick={() => pick(b.id)} title={marked?.has(b.id) ? t("{title} (選んだ線の続きがある)", { title: b.title }) : t("{title} の中を見る", { title: b.title })}>
             <StatusIcon status={b.status} />
             <span className="truncate">{b.title}</span>

@@ -159,4 +159,6 @@ export const gui: Record<string, string> = {
   "ドラッグで幅を変える (ダブルクリックで元に戻す)": "Drag to resize (double-click to reset)",
   "最終成果物: {names}": "Final deliverables: {names}",
   "最終成果物": "Deliverable",
+  "完了した大項目 {n} 個 (押すと展開)": "{n} done sections (click to show)",
+  "完了した大項目を畳む": "Fold the done sections",
 };
