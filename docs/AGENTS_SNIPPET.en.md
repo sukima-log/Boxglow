@@ -70,6 +70,10 @@ When there are many top-level inputs, create a group with `npx boxglow group "<g
 `expect` (planned deliverable: `"kind:hint"` or `{ "kind", "hint" }`), `acceptance` and `goal` go only on the children you will start now.
 A child with just a title and an output, like the third one, stays "needs detail" until its turn; then set them with `port --expect` / `scope --acceptance`.
 Outputs the parent makes itself (integrating the children's results, for example) are marked with `"parentMakes": ["<output>"]` (if a child's wire also feeds it, readiness reports two makers).
+`"splitBy": "stage"` records in one word how the direct children are divided (stage / deliverable / feature; also `set <block> --split-by`). Siblings should follow the same division and the same level of detail.
+`split` refuses to save only a broken structure (a wire to nothing, a cycle, a malformed expect). Unfinished breakdowns (a single child, a parent output nobody makes yet) are saved and reported as gaps.
+After a split and before a start, read `npx boxglow lint <block>`. Fix the "must fix" items (missing expect / acceptance, parent outputs with no or two makers, both exclusive paths of one branch required) before going on.
+"Review" items (a single child, unconnected outputs, token entries, empty branch paths, single-input merges, siblings with the same expect) are for you to judge (the tool never refuses on them). `context` also prints the counts and the top three.
 `parent.<name>` is an input / output of the box being split. `<block>` is a short ID (such as B12; shown in status) or a title.
 A box with no children has a single output (write just one entry in outputs). Make the title a short phrase that tells "what is made".
 Record dates and hours with `npx boxglow set <block> --due 2026-10-15 --start 2026-10-01 --estimate 8 --hours 3.5`.

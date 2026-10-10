@@ -229,6 +229,8 @@ export interface Block {
   repo?: string;
   /** 外部の課題 (JIRA / Redmine / GitHub Issue など) の URL。画面には URL から取り出したキー (PROJ-123, #45) を札で出す */
   issue?: string;
+  /** 直下の子をどう分けたか (一語: 工程 / 成果物 / 機能 など。任意)。context に出し、兄弟の粒度を見直す材料にする */
+  splitBy?: string;
   /** いまの活動 (無ければ null) */
   activity: Activity | null;
   /** 人間への質問と回答 (古い順) */

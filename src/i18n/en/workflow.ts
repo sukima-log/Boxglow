@@ -65,4 +65,12 @@ export const workflow: Record<string, string> = {
   "要具体化: {reasons}": "Needs detail: {reasons}",
   "(要具体化: {reasons})": "(needs detail: {reasons})",
   "次の候補 (今回の範囲を優先し、着手できる・要具体化・入力待ちを区別)": "Next candidates (current scope first; ready / needs detail / waiting for inputs)",
+  "入力「{a}」と「{b}」は分岐「{branch}」の別の道から来ますが、両方とも必須です (両方が届くことはありません。片方を任意にするか、合流でまとめてください)": "Inputs \"{a}\" and \"{b}\" come from different paths of branch \"{branch}\" but both are required (they never both arrive: make one optional, or merge them)",
+  "子が 1 個だけです (分解の途中なら、残りの子を足すか、親と 1 つにまとめます)": "Only one child (if the breakdown is unfinished, add the rest; otherwise fold it into the parent)",
+  "分岐の道「{name}」の先にボックスがありません": "Branch path \"{name}\" leads to no box",
+  "出力「{name}」がどこにもつながっていません": "Output \"{name}\" is not connected anywhere",
+  "出力「{name}」の予定成果物の見当「{hint}」は広すぎます (ファイルや題名まで書きます)": "The planned deliverable of \"{name}\" (\"{hint}\") is too broad (name the file or title)",
+  "完了条件「{text}」が短すぎるか題名と同じです (何をどう確かめるかを書きます)": "Acceptance \"{text}\" is too short or the same as the title (say what is checked and how)",
+  "合流の入力が {n} 本です (2 本以上の道をまとめる部品です)": "The merge has {n} input(s) (it joins two or more paths)",
+  "子の {names} が同じ予定成果物「{hint}」を持っています (責任が重なっていないか見直します)": "Children {names} share the planned deliverable \"{hint}\" (check for overlapping responsibility)",
 };

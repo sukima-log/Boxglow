@@ -22,6 +22,7 @@ import { projectProblem } from "../src/model/validate-file";
 import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
 import { resumeSummary, resumeReport } from "../src/model/resume";
 import { nextSteps, readiness, reasonText } from "../src/model/readiness";
+import { lint, lintCounts } from "../src/model/lint";
 import type { ExpectKind } from "../src/model/types";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import AGENTS_SNIPPET_JA from "../docs/AGENTS_SNIPPET.md";
@@ -228,8 +229,12 @@ function parseExpect(spec: string, only?: string): { name: string; expect: { kin
  */
 function readinessSummary(p: Project, blockId: string) {
   const r = readiness(p, blockId);
+  const b = p.blocks[blockId];
+  const parent = b?.parentId ? p.blocks[b.parentId] : undefined;
   return {
     state: r.state
+  , ...(b?.splitBy ? { splitBy: b.splitBy } : {})
+  , ...(parent?.splitBy ? { parentSplitBy: parent.splitBy } : {})
   , unprepared: r.unprepared.map((x) => reasonText(p, x))
   , next: nextSteps(p, blockId, r.unprepared)
   , waiting: r.waiting
@@ -432,7 +437,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   ack <block> [--id <decision id>]                人の回答を読んで引き取ったと記録する (status の「回答あり」から消える。start / done / blocked / review / set / split でも自動で引き取る)
   reopen <block> [--id <decision id>] [--note <理由>]   判断をやり直す (方針転換)。前の答えは履歴に、候補はそのまま残る
   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <題名>] [--note <説明>] [--category <カテゴリ>|none] [--repo <パス>|none] [--issue <URL>|none]
-              [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <時間>|none] [--hours <実績時間>|none]
+              [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <時間>|none] [--hours <実績時間>|none] [--split-by <一語>|none]  (--split-by = 直下の子の分け方: 工程 / 成果物 / 機能 など)
   find <文字>                                    ID や題名でボックスを探す
   list --assignee <名前> | --unassigned | --everyone [--all] [--unprepared] [--json]   担当の一覧を表で出す (既定は未完了だけ。--all で完了済みも。--unprepared で要具体化だけ。並びは期日の近い順)
   group <名前>                                   最上位の入力グループを作る (例: "PCIe 仕様書")
@@ -444,6 +449,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   layout [block]                                 自動整列 (全体、または指定したボックスの中)
   log [--n 20]                                   最近のログ
   validate                                       形式と結線の検査
+  lint [block] [--json] [--strict]               計画 (またはボックスの配下) の検査: 必ず直す (予定成果物・完了条件の欠落、親出力の担当の未定・重複、排他の道の両方を必須) と
+                                                 見直し候補 (子が 1 個、つながらない出力、形だけの記入、道の先が無い分岐、入力 1 本の合流、兄弟の同じ予定成果物) を分けて出す。--strict は必ず直すがあれば失敗
   merge <base> <ours> <theirs>                    boxglow.json をボックス・ポート・線の単位で 3 方向マージし <ours> に書く (Git のマージドライバ用)
   git-setup                                      このリポジトリの Git に merge ドライバを登録 (.gitattributes + git config)。以後 git merge / pull が自動で使う
 
@@ -539,7 +546,7 @@ Usage (npx boxglow <command> ...):
   ack <block> [--id <decision id>]                Record that you have read a person's answer and taken it on (removes it from "Answered" in status. start / done / blocked / review / set / split also do this automatically)
   reopen <block> [--id <decision id>] [--note <reason>]   Reopen a decision (change of direction). The previous answer stays in the history and the options are kept
   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <title>] [--note <description>] [--category <category>|none] [--repo <path>|none] [--issue <URL>|none]
-              [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <hours>|none] [--hours <actual hours>|none]
+              [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <hours>|none] [--hours <actual hours>|none] [--split-by <word>|none]  (--split-by = how the direct children are divided: stage / deliverable / feature ...)
   find <text>                                    Find boxes by ID or title
   list --assignee <name> | --unassigned | --everyone [--all] [--unprepared] [--json]   List assigned boxes as a table (open ones by default; --all adds done ones; --unprepared only those that need detail; sorted by due date)
   group <name>                                   Create a top-level input group (e.g. "PCIe spec")
@@ -551,6 +558,8 @@ Usage (npx boxglow <command> ...):
   layout [block]                                 Auto layout (everything, or inside the given box)
   log [--n 20]                                   Recent log
   validate                                       Check the format and the wiring
+  lint [block] [--json] [--strict]               Check the plan (or a box and its descendants): must-fix (missing expect / acceptance, parent outputs with no or two makers, both exclusive paths required) and
+                                                 review candidates (a single child, unconnected outputs, token entries, empty branch paths, single-input merges, siblings with the same expect). --strict fails on must-fix
   merge <base> <ours> <theirs>                    3-way merge boxglow.json by box, port and wire, and write the result to <ours> (for the Git merge driver)
   git-setup                                      Register the merge driver in this repository's Git (.gitattributes + git config). git merge / pull then use it automatically
 
@@ -801,6 +810,21 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       p={...p,claimPolicy:{mode:mode as "off"|"warn"|"reject",leaseMinutes:options.minutes===undefined?(p.claimPolicy?.leaseMinutes??30):Number(str(options.minutes))}};
       save(path,p);out(t("受け持ち設定: {mode}",{mode}));return;
     }
+    case "lint": {
+      // 計画 (またはボックスの配下) の検査: 必ず直す (error) と見直し候補 (review) を分けて出す。--strict は error があれば失敗にする
+      const issues = lint(p, rest[0] ? mustFind(p, rest[0]).id : undefined);
+      const counts = lintCounts(issues);
+      if (options.json) { out(JSON.stringify({ ...counts, issues }, null, 2)); }
+      else {
+        const errors = issues.filter((x) => x.severity === "error"), reviews = issues.filter((x) => x.severity === "review");
+        const lines = [t("検査: 必ず直す {errors} 件 / 見直し候補 {reviews} 件", counts)];
+        if (errors.length) lines.push("", "## " + t("必ず直す"), ...errors.map((x) => `- ${x.ref}: ${x.text}`));
+        if (reviews.length) lines.push("", "## " + t("見直し候補"), ...reviews.map((x) => `- ${x.ref}: ${x.text}`));
+        out(lines.join("\n"));
+      }
+      if (options.strict && counts.errors > 0) process.exitCode = 1;
+      return;
+    }
     case "claim": {
       // 受け持ちだけを取得・更新する (実行中にはしない)。分解・具体化の前に使う。
       // 受け持ち制御が無効な計画では「取得不要」として正常終了し、計画も状態も変えない (手順を全計画で共通にするため)
@@ -822,7 +846,8 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       // --brief: 短いコンテキスト (対象の情報は全部、親・上流は絞る)。確認トークンは、全部の出力と同じ
       // readiness (着手の準備: 要具体化の理由と次の一手、入力待ち) は受領証の外に添える (確認トークンの元には含めない。判定は計画から毎回導出する)
       const ctxId = mustFind(p, rest[0]).id;
-      out(JSON.stringify({...(options.brief ? briefReceipt : contextReceipt)(p, ctxId), readiness: readinessSummary(p, ctxId), ...(claimsEnabled(p)?{claimSummary:claimSummary(p,claimRequest.identity)}:{})}, null, 2));
+      const ctxLint = lint(p, ctxId);
+      out(JSON.stringify({...(options.brief ? briefReceipt : contextReceipt)(p, ctxId), readiness: readinessSummary(p, ctxId), lint: { ...lintCounts(ctxLint), top: ctxLint.slice(0, 3).map((x) => `${x.ref}: ${x.text}`), howToGet: "boxglow lint " + (p.blocks[ctxId].key ?? ctxId) }, ...(claimsEnabled(p)?{claimSummary:claimSummary(p,claimRequest.identity)}:{})}, null, 2));
       return;
     }
     case "guard": {
@@ -1083,12 +1108,16 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       if (!specText) throw new Error(t("--spec '<JSON>' または --spec-file <path> を指定してください"));
       const spec = JSON.parse(specText);
       const r = splitBlock(p, b.id, spec, actor);
+      // 壊れた構造 (結線先が無い、循環、形の違う expect) は保存しない。途中の分解 (子が 1 個、親出力の担当がまだ無い) は保存して不足として知らせる
+      if (r.fatal) throw new Error(t("分解を保存しませんでした (壊れた構造):") + "\n" + r.errors.map((x) => "- " + x).join("\n"));
       save(path, layoutScope(r.project, b.id));
-      // 保存後に、まだ具体化していない子 (予定成果物・完了条件が無い) の数を知らせる (拒否はしない。今回着手する分だけ具体化すればよい)
+      // 保存後に、まだ具体化していない子 (予定成果物・完了条件が無い) の数と、親の配下の検査 (lint) の不足を知らせる (拒否はしない。今回着手する分だけ具体化すればよい)
       const kids = Object.values(r.project.blocks).filter((x) => x.parentId === b.id);
       const rough = kids.filter((x) => readiness(r.project, x.id).unprepared.length > 0);
+      const issues = lint(r.project, b.id).filter((x) => x.blockId === b.id || ["single-child", "undecided-output", "conflict-output", "branch-exclusive-and"].includes(x.kind));
       out(t("分解: 「{title}」に {count} 個を追加", { title: b.title, count: spec.blocks.length })
         + (rough.length ? "\n" + t("要具体化: 子 {total} 個のうち {n} 個 ({keys})。着手する前に expect と acceptance を決めてください", { total: kids.length, n: rough.length, keys: rough.map((x) => x.key ?? x.title).join(", ") }) : "")
+        + (issues.length ? "\n" + t("見直し (lint):") + "\n" + issues.map((x) => `- ${x.ref}: ${x.text}`).join("\n") : "")
         + (r.errors.length ? "\n" + r.errors.map((x) => "- " + x).join("\n") : ""));
       return;
     }
@@ -1421,6 +1450,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       if (str(options.category) !== undefined) p = setCategory(p, b.id, str(options.category) === "none" ? null : categoryKeyOf(str(options.category)!));
       if (str(options.repo) !== undefined) p = updateBlock(p, b.id, { repo: str(options.repo) === "none" ? undefined : str(options.repo) });
       if (str(options.issue) !== undefined) p = updateBlock(p, b.id, { issue: str(options.issue) === "none" ? undefined : str(options.issue) }); // JIRA / Redmine などの課題 URL
+      if (str(options["split-by"]) !== undefined) p = updateBlock(p, b.id, { splitBy: str(options["split-by"]) === "none" ? undefined : str(options["split-by"])!.trim() }); // 直下の子の分け方 (一語)
       save(path, p);
       out(t("更新: 「{title}」", { title: p.blocks[b.id].title }));
       return;

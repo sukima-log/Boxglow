@@ -1554,18 +1554,22 @@ function parseExpectSpec(v: Expect | string | undefined): Expect | null | undefi
  * Input : parentId, spec = { blocks: [{ title, description?, inputs?, outputs?, expect?, acceptance?, goal? }], connections?: [{ from: "題名.出力名", to: "題名.入力名" }], parentMakes?: [親の出力名] }
  *         from / to の題名に親の題名 (または "parent") を使うと、親の入力/出力 (内側) につながる
  *         expect = 子の出力の予定成果物 ({ kind, hint } または "kind:hint")、acceptance = 完了条件、goal = 今回行う処理 (scope に入る)。
- *         どれも任意 (無い子は「要具体化」として残り、着手の前に決める)。parentMakes = 子に任せず親自身が作る出力の名前 (owner: "self" を付ける)
- * Output: { project, errors }
+ *         どれも任意 (無い子は「要具体化」として残り、着手の前に決める)。parentMakes = 子に任せず親自身が作る出力の名前 (owner: "self" を付ける)。
+ *         splitBy = 直下の子をどう分けたか (一語: 工程 / 成果物 / 機能 など)
+ * Output: { project, errors, fatal }。fatal = true は壊れた構造 (結線先が無い、循環、形の違う expect など) で、呼び出し側は保存しない。
+ *         fatal でない errors は注意 (出力を 1 本にした、など) で、保存してよい
  */
 export function splitBlock(
   p: Project
 , parentId: string
-, spec: { blocks: { title: string; description?: string; inputs?: string[]; outputs?: string[]; expect?: Expect | string; acceptance?: string; goal?: string }[]; connections?: { from: string; to: string }[]; parentMakes?: string[] }
+, spec: { blocks: { title: string; description?: string; inputs?: string[]; outputs?: string[]; expect?: Expect | string; acceptance?: string; goal?: string }[]; connections?: { from: string; to: string }[]; parentMakes?: string[]; splitBy?: string }
 , actor: string
-): { project: Project; errors: string[] } {
+): { project: Project; errors: string[]; fatal: boolean } {
   const errors: string[] = [];
+  let fatal = false;
   const parent = p.blocks[parentId];
-  if (!parent) return { project: p, errors: [t("親ブロックが見つかりません")] };
+  if (!parent) return { project: p, errors: [t("親ブロックが見つかりません")], fatal: true };
+  if (!Array.isArray(spec.blocks) || spec.blocks.some((b) => !b || typeof b.title !== "string" || !b.title.trim())) return { project: p, errors: [t("blocks は { title, outputs } の配列で、題名が要ります")], fatal: true };
   let q = clone(p);
   const made: Record<string, string> = {};
   for (const b of spec.blocks) {
@@ -1575,7 +1579,7 @@ export function splitBlock(
     if (b.description) { q.blocks[r.blockId].description = b.description; q.blocks[r.blockId].descriptionUpdatedAt = now(); }
     // 具体化の情報 (任意): 予定成果物は出力に、完了条件と処理は scope に入れる
     const expect = parseExpectSpec(b.expect);
-    if (b.expect !== undefined && !expect) errors.push(t("「{title}」の expect は { kind, hint } または \"kind:hint\" の形で書いてください (kind は file / dir / url / doc / note / decision / result)", { title: b.title }));
+    if (b.expect !== undefined && !expect) { errors.push(t("「{title}」の expect は { kind, hint } または \"kind:hint\" の形で書いてください (kind は file / dir / url / doc / note / decision / result)", { title: b.title })); fatal = true; }
     if (expect) { const o = portsOf(q, r.blockId, "out")[0]; if (o) q.ports[o.id] = { ...o, expect }; }
     const scope: WorkScope = { ...q.blocks[r.blockId].scope };
     if (b.acceptance?.trim()) scope.acceptance = b.acceptance.trim();
@@ -1617,24 +1621,28 @@ export function splitBlock(
         to = { ep: { portId: port.id, side: "outer" }, why: "" };
       }
     }
+    // 結線先が無い・循環する: 壊れた構造なので保存しない (fatal)
     if (!from.ep || !to.ep) {
       errors.push(t("結線できません: {from} -> {to} ({why})", { from: c.from, to: c.to, why: !from.ep ? from.why : to.why }));
+      fatal = true;
       continue;
     }
     const r = connect(q, from.ep, to.ep);
-    if (r.error) errors.push(t("結線できません: {from} -> {to} ({why})", { from: c.from, to: c.to, why: r.error }));
+    if (r.error) { errors.push(t("結線できません: {from} -> {to} ({why})", { from: c.from, to: c.to, why: r.error })); fatal = true; }
     q = r.project;
   }
   // 親自身が作る出力 (統合・検証など): owner: "self" の印を付ける (子の結線と重なれば、判定で「重複」と案内される)
   for (const name of spec.parentMakes ?? []) {
     const o = portsOf(q, parentId, "out").find((x) => x.name === name);
-    if (!o) { errors.push(t("parentMakes: 親に出力「{name}」がありません", { name })); continue; }
+    if (!o) { errors.push(t("parentMakes: 親に出力「{name}」がありません", { name })); fatal = true; continue; }
     q.ports[o.id] = { ...o, owner: "self" };
   }
+  // 分解の方針 (一語)
+  if (spec.splitBy?.trim()) q.blocks[parentId].splitBy = spec.splitBy.trim();
   if (q.blocks[parentId].status === "black") { q.blocks[parentId].status = "gray"; q.blocks[parentId].statusChangedAt = now(); }
   q.blocks[parentId].collapsed = false;
   appendLog(q, { actor, kind: "split", blockId: parentId, message: t("「{title}」を {count} 個に分解: {list}", { title: parent.title, count: spec.blocks.length, list: spec.blocks.map((b) => b.title).join(", ") }) });
-  return { project: q, errors };
+  return { project: q, errors, fatal };
 }
 
 /* ------------------------------------------------------------------ */

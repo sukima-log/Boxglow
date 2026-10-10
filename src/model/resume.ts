@@ -4,6 +4,7 @@
  */
 import { summarize } from "./graph";
 import { candidateGroups, descriptionReminder, freshnessText, noteFreshness } from "./workflow";
+import { lint, lintCounts } from "./lint";
 import type { Project } from "./types";
 import { t } from "../i18n/core";
 
@@ -31,6 +32,8 @@ export function resumeSummary(project: Project, options: { includeCompleted?: bo
     handoffs: all.filter(h => h.status !== "white" || options.includeCompleted),
     completedHandoffCount: all.filter(h => h.status === "white").length,
     descriptionReminders: Object.values(project.blocks).filter(b => descriptionReminder(b)).map(b => ({ blockId: b.id, key: b.key, title: b.title, message: descriptionReminder(b), writtenAt: b.descriptionUpdatedAt })),
+    // 検査の件数 (必ず直す / 見直し候補)。中身は boxglow lint で読む
+    lint: lintCounts(lint(project)),
     instructions: t("作業の前に boxglow context <block> を読み、guard 付きの変更にはその contextToken を使ってください。この概要は回答を確認済みにせず、操作を許可するものでもありません。"),
   };
 }
@@ -56,6 +59,7 @@ export function resumeReport(project: Project, options: { includeCompleted?: boo
     ...s.handoffs.map(h => "- " + h.key + " " + h.title + " (" + h.actor + ", " + (h.status === "white" ? "Done" : h.status === "gray" ? "In Progress" : "New") + ")\n  " + h.freshnessText + "\n" + h.note),
     ...(!options.includeCompleted && s.completedHandoffCount ? [t("完了済みの引き継ぎ {n} 件。resume --include-completed で表示できます。", { n: s.completedHandoffCount })] : []),
     ...(s.descriptionReminders.length ? [t("説明の見直し候補: {names} (show で確認)", { names: s.descriptionReminders.map(x => x.key ?? x.title).join(", ") })] : []),
+    ...(s.lint.errors || s.lint.reviews ? [t("検査: 必ず直す {errors} 件 / 見直し候補 {reviews} 件 (boxglow lint で確認)", s.lint)] : []),
     "", s.instructions,
   ].join("\n");
 }

@@ -24,7 +24,8 @@ description: Boxglow (boxglow.json) で計画と進捗を人間と共有する�
 3. 具体化や分解の前に `npx boxglow claim <block>` で受け持ちだけを取る (実行中にはならない。受け持ち制御が無効な計画では「取得不要」で正常終了する)。不足を埋める:
    出力の予定成果物 `npx boxglow port <block> --expect "<出力名>=file:src/x.ts"` (kind は file / dir / url / doc / note / decision / result。まだ無いファイルでよい)、完了条件 `npx boxglow scope <block> --acceptance "<完了と判断する条件>"`。
    大きいボックスは `npx boxglow split <block> --spec '<JSON>'` で分解する (形式は `npx boxglow help`)。今回着手する子だけ expect / acceptance を書き、先の子は題名と出力だけでよい。
-   対象のファイルが分からないときは、架空のパスを書かず「対象を特定する調査」のボックスを出力 `note` で作って始める
+   対象のファイルが分からないときは、架空のパスを書かず「対象を特定する調査」のボックスを出力 `note` で作って始める。
+   分解の後は `npx boxglow lint <block>` を読み、「必ず直す」を直してから進む (「見直し候補」は内容を見て判断)。直下の子の分け方は `"splitBy": "工程"` (または `set --split-by`) で一語残す
 4. 準備ができたら `npx boxglow context <block>` を読み直し、`npx boxglow start <block> --note "<何をするか>"`。
    確認トークンの要求 (guard) が有効な計画では、出力の `contextToken` (確認トークン) を `--context-token <確認トークン>` で付ける。
    要具体化のボックスへの start は既定では警告、`policy --unprepared reject` の計画では開始できない (`--reason` では通れない)。出力を子に任せきりの親は実行するものが無いので、子を start する

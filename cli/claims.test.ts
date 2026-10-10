@@ -213,3 +213,22 @@ it("split の expect / acceptance / parentMakes と、context の readiness",()=
  const ctx3=JSON.parse(f.cli("context","beta","--actor","codex").stdout);expect(ctx3.readiness.outputs[0].owner).toBe("conflict");
  expect(f.cli("port","beta","--no-self","result","--actor","codex").status).toBe(0);
  expect(JSON.parse(f.cli("context","beta","--actor","codex").stdout).readiness.outputs[0].owner).toBe("child");});
+
+// ---- 段階 2: split の構造検査、lint、splitBy ----
+it("split は壊れた構造 (結線先が無い) を保存せず、途中の分解 (子 1 個) は保存して不足を知らせる",()=>{const f=fixture(false);const before=readFileSync(f.file,"utf8");
+ const bad=f.cli("split","alpha","--spec",JSON.stringify({blocks:[{title:"a",outputs:["x"]}],connections:[{from:"a.x",to:"nothere"}]}),"--actor","codex");
+ expect(bad.status).toBe(1);expect(bad.stderr.toLowerCase()).toMatch(/not saved|保存しません/);expect(readFileSync(f.file,"utf8")).toBe(before);
+ const one=f.cli("split","alpha","--spec",JSON.stringify({blocks:[{title:"survey",outputs:["notes"]}],splitBy:"stage"}),"--actor","codex");
+ expect(one.status,one.stderr).toBe(0);expect(one.stdout.toLowerCase()).toMatch(/only one child|子が 1 個/);
+ const p=f.read();const alpha=Object.values(p.blocks).find((b:any)=>b.title==="alpha") as any;expect(alpha.splitBy).toBe("stage");
+ // lint: 必ず直す / 見直し候補、--json、--strict
+ const l=f.cli("lint","alpha","--json","--actor","codex");expect(l.status).toBe(0);const j=JSON.parse(l.stdout);
+ expect(j.errors).toBeGreaterThan(0);expect(j.issues.some((x:any)=>x.kind==="single-child")).toBe(true);expect(j.issues.some((x:any)=>x.kind==="undecided-output")).toBe(true);
+ expect(f.cli("lint","--strict","--actor","codex").status).toBe(1);
+ const txt=f.cli("lint","--actor","codex");expect(txt.status).toBe(0);expect(txt.stdout.toLowerCase()).toMatch(/must fix|必ず直す/);
+ // context に lint の件数と上位、readiness に splitBy。resume にも件数
+ const ctx=JSON.parse(f.cli("context","alpha","--actor","codex").stdout);expect(ctx.lint.errors).toBeGreaterThan(0);expect(ctx.lint.top.length).toBeGreaterThan(0);expect(ctx.readiness.splitBy).toBe("stage");
+ const ctx2=JSON.parse(f.cli("context","survey","--actor","codex").stdout);expect(ctx2.readiness.parentSplitBy).toBe("stage");
+ expect(JSON.parse(f.cli("resume","--json","--actor","codex").stdout).lint.errors).toBeGreaterThan(0);
+ // set --split-by none で消える
+ expect(f.cli("set","alpha","--split-by","none","--actor","codex").status).toBe(0);expect((Object.values(f.read().blocks).find((b:any)=>b.title==="alpha") as any).splitBy).toBeUndefined();});
