@@ -25,11 +25,13 @@ export function WorkScopePanel({ project, blockId, editing, onClose }: { project
   });
   return <section className="work-scope text-[12px]">
     {focus && <span className="meta-chip">{t("今回の対象")}</span>}
-    {editing ? <div className="flex flex-col gap-2">
+    {editing ? <div className="work-scope__editor">
+      {/* 見出しと閉じる (×) を上に置き、下にも「閉じる」。欄は打った後に自動で保存される */}
+      <div className="work-scope__head"><span className="label">{t("作業範囲")}</span><button type="button" className="btn btn-ghost btn-sm" onClick={onClose} aria-label={t("閉じる")} title={t("閉じる")}>×</button></div>
       {SCOPE_FIELDS.map(([key, label]) => <label key={key}>{t(label)}
         <DebouncedText multiline className="input" aria-label={t(label)} value={b.scope?.[key] ?? ""} disabled={readonly} onCommit={v => change(key, v)} />
       </label>)}
-      <button className="btn btn-sm" onClick={onClose}>{t("閉じる")}</button>
+      <button className="btn btn-primary btn-sm work-scope__done" onClick={onClose}>{t("閉じる")}</button>
     </div> : entries.length > 0 && <details>
       <summary>{t("今回の範囲")}</summary>
       <dl className="flex flex-col gap-2 mt-2">{entries.map(x => <div key={x.key}><dt className="font-bold">{x.label}</dt><dd className="whitespace-pre-wrap break-words">{x.text}</dd></div>)}</dl>

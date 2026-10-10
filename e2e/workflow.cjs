@@ -48,7 +48,7 @@ const {chromium,open,check,result}=require('./lib.cjs');
       const goal=page.getByLabel('今回達成すること',{exact:true});await goal.fill('APIと画面の接続');await goal.blur();
       await page.waitForFunction(()=>Object.values(window.boxglow.store.getState().project.blocks).find(b=>b.key==='B8').scope.goal==='APIと画面の接続');
       check(theme+' 範囲: 人が詳細パネルで編集し保存できる',true);
-      await page.getByRole('button',{name:'閉じる',exact:true}).click();
+      await page.locator('.work-scope__done').click(); // 編集の下の「閉じる」(上の × も同じ)
       await page.locator('.panel.right .seg__btn',{hasText:'状態'}).click();await page.waitForTimeout(200); // Done のボタンは状態タブ
       await page.locator('.panel.right button[title^="Done:"]').click();
       check(theme+' 人の操作: rejectでも成果物なしのDoneを拒否しない',await page.evaluate(()=>Object.values(window.boxglow.store.getState().project.blocks).find(b=>b.key==='B8').status==='white'));

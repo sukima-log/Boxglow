@@ -174,4 +174,5 @@ export const gui: Record<string, string> = {
   "今ここ: 本当にいま作業しているボックス (start で移る。状態タブの Now でも切り替え)": "Now: the box being worked on right now (start moves it; the NOW button on the Status tab switches it too)",
   "今ここ (いま作業しているボックス)": "Now (the box being worked on)",
   "今ここ: {title}": "Now: {title}",
+  "作業範囲": "Scope",
 };
