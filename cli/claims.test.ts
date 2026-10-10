@@ -272,3 +272,16 @@ it("ask --branch で分岐にでき、split の JSON で branch / join を作れ
  const l=JSON.parse(f.cli("lint","beta","--json","--actor","codex").stdout);expect(l.issues.some((x:any)=>x.kind==="branch-exclusive-and")).toBe(false);
  // branch の指定が壊れていれば保存しない
  const bad=f.cli("split","finish","--spec",JSON.stringify({blocks:[{title:"x",branch:{question:"q",options:["only"]}}]}),"--actor","codex");expect(bad.status).toBe(1);});
+
+// ---- 段階 4 の試用 C: 受け持ち (subtree) を持ったまま split しても、重なりの解消で押された兄弟は範囲の侵害に数えない ----
+it("subtree の受け持ちで split でき、押された兄弟の位置は侵害に数えない。他の実行は同じ箱を claim できず、別の箱は取れる",()=>{const f=fixture();
+ // alpha の隣に beta がある。alpha を subtree で受け持ち、中に子を 3 つ置く (alpha が大きくなり beta が押される)
+ const c=f.cli("claim","alpha","--scope","subtree",...actor);expect(c.status,c.stderr).toBe(0);const r=receipt(c.stdout);const proof=[...actor,"--claim-token",r.token];
+ const other=f.cli("claim","alpha","--actor","codex","--instance","two");expect(other.status).toBe(1);expect(other.stderr).toMatch(/他の実行|another/i);
+ const ok=f.cli("claim","beta","--actor","codex","--instance","two");expect(ok.status,ok.stderr).toBe(0);
+ const spec={blocks:[{title:"c1",outputs:["o1"],expect:"file:a.ts",acceptance:"ok"},{title:"c2",outputs:["o2"]},{title:"c3",outputs:["o3"]}],connections:[{from:"c1.o1",to:"parent.result"}]};
+ const s=f.cli("split","alpha","--spec",JSON.stringify(spec),...proof);expect(s.status,s.stderr).toBe(0);
+ const before=f.read();const beta=Object.values(before.blocks).find((b:any)=>b.title==="beta") as any;expect(beta).toBeTruthy();
+ // 受け持ちを継承して子を start できる。two は範囲外
+ const st=f.cli("start","c1",...proof);expect(st.status,st.stderr).toBe(0);expect(receipt(st.stdout).blockId).toBe(r.blockId);
+ expect(f.cli("set","c2","--note","x","--actor","codex","--instance","two").status).toBe(1);});

@@ -115,9 +115,15 @@ export function claimFootprint(before: Project, after: Project): Set<string> {
     while (id && !before.blocks[id] && !seen.has(id)) { seen.add(id); id = after.blocks[id]?.parentId; }
     if (id) ids.add(id);
   };
+  // 位置と畳みだけの変更 (重なりの解消や整列で押された兄弟。split で親が大きくなると起きる) は、
+  // 誰かが受け持っているボックスなら従来どおり侵害に数え、誰も受け持っていないボックスなら数えない
+  // (受け持ち制御が reject の計画で、誰のものでもない隣のボックスが押されただけで保存できない、を避ける)
+  const content = (x: Project["blocks"][string] | undefined) => x && (({ position: _p, collapsed: _c, ...rest }) => rest)(x);
+  const held = (id: string) => Object.entries(before.claims ?? {}).some(([root, c]) => !c.releasedAt && covers(before, root, c, id));
   for (const id of new Set([...Object.keys(before.blocks),...Object.keys(after.blocks)])) {
     const a=before.blocks[id], b=after.blocks[id];
     if (same(a,b)) continue;
+    if (same(content(a),content(b)) && !held(id)) continue;
     owner(id);
     if (!a || !b || a.parentId !== b.parentId) { owner(a?.parentId); owner(b?.parentId); }
   }
