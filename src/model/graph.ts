@@ -2474,3 +2474,27 @@ export function wireNet(p: Project, edgeId: string): Set<string> {
   }
   return out;
 }
+
+/**
+ * いま作業中 (activity.state = working) のボックスと、その配下に作業中を持つ先祖
+ * Input : p = 計画
+ * Output: { working: 作業中のボックスの id の集まり, below: 先祖の id → 配下の作業中のボックス (近い順) }
+ *   画面で「今どこを作業しているか」を目立たせるために使う (Top では大項目に、タブの中では畳んだ親に、配下の作業を示す)。
+ *   計画ごとに 1 回だけ計算する (WeakMap)
+ */
+const WORKING_CACHE = new WeakMap<Project, { working: Set<string>; below: Map<string, Block[]> }>();
+export function workingNow(p: Project): { working: Set<string>; below: Map<string, Block[]> } {
+  const hit = WORKING_CACHE.get(p);
+  if (hit) return hit;
+  const working = new Set<string>();
+  const below = new Map<string, Block[]>();
+  for (const b of Object.values(p.blocks)) {
+    if (b.activity?.state !== "working" || b.id === ROOT_ID) continue;
+    working.add(b.id);
+    for (const a of ancestorsOf(p, b.id)) { if (a.id === ROOT_ID) break; below.set(a.id, [...(below.get(a.id) ?? []), b]); }
+  }
+  const result = { working, below };
+  WORKING_CACHE.set(p, result);
+  return result;
+}
+

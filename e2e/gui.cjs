@@ -83,6 +83,15 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('Top の見出し行: 問いを押すと Activity が開く',await page.evaluate(()=>window.boxglow.store.getState().selection.timeline===true));}
     await page.evaluate(()=>window.boxglow.store.getState().select({}));await page.waitForTimeout(200);
 
+    // 今どこを作業しているか: Top では作業中を含む大項目に太い枠と「作業中: 題名」の札、タブの中では作業中のボックス自身に枠
+    const topWorking=await page.locator('.bg-block.working-below').allInnerTexts();
+    check('作業中の強調: Top では作業中を含む大項目に札 (作業中: バックエンド)',topWorking.length===1 && topWorking[0].includes('実装する') && topWorking[0].includes('作業中: バックエンド'),JSON.stringify(topWorking));
+    await page.locator('.meta-chip.working-below').click();await page.waitForTimeout(400);
+    check('作業中の強調: 札を押すと作業中のボックスが選ばれる',await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title==='バックエンド';}));
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.select({});const b=Object.values(s.project.blocks).find(x=>x.title==='実装する');s.setViewScope(b.id);});await page.waitForTimeout(1500);
+    check('作業中の強調: タブの中では作業中のボックス自身に枠が付き、大項目の札は出ない',await page.locator('.bg-block.working-now').count()===1 && (await page.locator('.bg-block.working-now .bg-block__title').first().innerText())==='バックエンド' && await page.locator('.bg-block.working-below').count()===0);
+    await page.evaluate(()=>window.boxglow.store.getState().setViewScope(null));await page.waitForTimeout(800);
+
     // Activity の検査 (lint) のタブ: 3 組に分かれ、行を押すとボックスが選ばれる。タブの数字は必ず直すの件数
     await page.evaluate(()=>window.boxglow.store.getState().select({timeline:true}));await page.waitForTimeout(300);
     await page.locator('.panel.right .seg__btn',{hasText:'Lint'}).click();await page.waitForTimeout(300);

@@ -1,6 +1,7 @@
 import { ClaimMark, useClaimClock, visibleClaim } from "../panels/Claims";
 import { chosenOption, isSkipped, waitingBranches } from "../model/branch";
 import { unpreparedState } from "../model/readiness";
+import { workingNow } from "../model/graph";
 /**
  * ブロック (ボックス) のノード
  * 分類・題名・状態・入力・出力を縦に読むカード。親は子を包む領域として描く。
@@ -99,6 +100,9 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
       // 要具体化: 自身が作る出力が無い、予定成果物・完了条件が未定 (着手の前に決める)。親には配下の件数
     , unprepared: unpreparedState(p).self.has(blockId)
     , unpreparedBelow: unpreparedState(p).below.get(blockId) ?? 0
+      // 今どこを作業しているか: 自分が作業中か、畳んだ中 (大項目を含む) に作業中のボックスがあるか (展開して見えているときは、そのボックス自身が目立つ)
+    , workingNow: workingNow(p).working.has(blockId)
+    , workingBelow: (b?.collapsed || data.major) && !workingNow(p).working.has(blockId) ? (workingNow(p).below.get(blockId) ?? []) : []
     , pending: b?.decisions.filter((d) => d.answer === undefined).length ?? 0
     , activity: b?.activity ?? null
     , percent: effectiveProgress(p, blockId)
@@ -113,7 +117,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     , overdue: b ? isOverdue(b) : false
     , daysLeft: b ? daysToDue(b) : null
     };
-  }, [project, blockId]);
+  }, [project, blockId, data.major]);
 
   const card = useMemo(() => taskCardLayout(project, blockId), [project, blockId]);
   const rowAt = (i: number, direction: "in" | "out") => view.expanded
@@ -166,6 +170,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   , data.dimmed ? "dimmed" : ""
   , glow ? "just-glowed" : ""
   , view.activity ? `activity-${view.activity.state}` : ""
+  , view.workingNow ? "working-now" : view.workingBelow.length ? "working-below" : ""
   , view.isProject ? "kind-project" : ""
   , data.mine ? "mine" : ""
   , data.dropTarget ? "drop-target" : ""
@@ -247,6 +252,13 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           </span>
         )}
         <ClaimMark project={project} blockId={blockId} />
+        {/* 畳んだ中 (大項目を含む) で作業中: どのボックスかを札で示す (押すとそのボックスへ) */}
+        {view.workingBelow.length > 0 && (
+          <button type="button" className="meta-chip working-below nodrag" title={view.workingBelow.map((w) => `${w.key ?? ""} ${w.title} (${actorName(w.activity?.actor ?? "")})`).join("\n")}
+            onClick={(e) => { e.stopPropagation(); select({ blockId: view.workingBelow[0].id }); }}>
+            {t("作業中")}: {view.workingBelow[0].title}{view.workingBelow.length > 1 ? ` +${view.workingBelow.length - 1}` : ""}
+          </button>
+        )}
         {view.pending > 0 && <span className="meta-chip needs_decision">{t("判断待ち {n}", { n: view.pending })}</span>}
         {/* 見送り: 選ばなかった分岐の道 (進捗・次の候補・担当の一覧から外れる) / 分岐待ち: まだ答えていない分岐の先 */}
         {view.skipped && <span className="meta-chip skipped" title={t("選ばなかった分岐の道です。進捗や次の候補には数えません")}>{t("見送り")}</span>}

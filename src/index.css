@@ -581,6 +581,13 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* 作業中は細い帯と活動ラベルで示す */
 .bg-block.activity-working { animation: none; }
 .bg-block.activity-working.selected { animation: none; }
+/* 今どこを作業しているか: 作業中のボックスと、作業中を畳んだ中に持つ親 (Top の大項目など) は、注意色の太い枠と外側の光で目立たせる。
+   選択の枠 (橙) と区別できるよう、枠は 3px の注意色 + 薄い外光。畳んだ親には「作業中: 題名」の札 */
+.bg-block.working-now, .bg-block.working-below { outline: 3px solid var(--accent); outline-offset: 3px; box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 18%, transparent), var(--shadow-card); }
+.bg-block.working-now.selected, .bg-block.working-below.selected { outline-offset: 6px; }
+/* 展開した親 (.expanded は細い枠を outline で描く) が作業中のときも、同じ太い枠で目立たせる */
+.bg-block.expanded.working-now, .bg-block.expanded.working-below { outline: 3px solid var(--accent); outline-offset: 3px; box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 18%, transparent); }
+.meta-chip.working-below { background: var(--accent); color: #fff; border-color: var(--accent); opacity: 1; cursor: pointer; font: inherit; font-size: 10px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 判断待ちは情報行の小さなバッジで示す */
 .bg-block.activity-needs_decision { border-style: solid; }
 
