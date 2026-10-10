@@ -168,6 +168,17 @@ export function changedText(p: Project, changed: string[]): string {
   }).join(", ");
 }
 
+/**
+ * stale の案内 (何を確認すればよいか)。stale は「分解が不正」ではなく「前回の確認後に材料が変わった」という案内
+ * Input : p, kind = split | box, changed = 変わった部分 / Output: 1 文
+ */
+export function staleAdvice(p: Project, kind: "split" | "box", changed: string[]): string {
+  const what = changedText(p, changed);
+  return kind === "split"
+    ? t("前回の分解の確認後に {what} が変わっています。親の完了条件・対象外範囲と、兄弟との分担への影響を確認し、整合すれば split-ok を更新してください (全部を説明し直す必要はありません)", { what })
+    : t("前回の着手準備の確認後に {what} が変わっています。対象・成果・確認方法と入力の根拠を見直し、整合すれば box-ok を更新してください", { what });
+}
+
 /** 判定の対象か (最上位・プロジェクトのボックスは対象外) */
 export function reviewable(p: Project, blockId: string): boolean {
   const b = p.blocks[blockId];

@@ -11,8 +11,8 @@
  * 分岐・合流のボックスは作業ではないので、具体化の判定の対象外 (既存の分岐待ち・見送りで扱う)。
  */
 import { childrenOf, incomingEdges, kindOf, portsOf, waitingFor } from "./graph";
-import { isSkipped, waitingBranches } from "./branch";
-import { ROOT_ID, type Block, type Port, type Project } from "./types";
+import { branchState, isSkipped, waitingBranches } from "./branch";
+import { ROOT_ID, type Artifact, type Block, type Port, type Project } from "./types";
 import { t } from "../i18n/core";
 
 /** 出力の担当 */
@@ -225,3 +225,36 @@ export function unpreparedState(p: Project): { self: Set<string>; below: Map<str
 export function isUnprepared(p: Project, blockId: string): boolean {
   return unpreparedState(p).self.has(blockId);
 }
+
+/**
+ * 供給経路をたどって、出力の根拠になる成果物を集める (親の出力に付いていなくても、つながった子の出力の成果物を数える)
+ * Input : p = 計画, portId = 出力ポート (または入力ポート) の id
+ * Output: 成果物の一覧 (そのポートに直接付いたものがあればそれ。無ければ、内側 (子の出力・through) → 供給元を再帰でたどる)
+ *   - 実際の結線だけをたどる (同じ子の別の出力や、ボックスに付いた参考資料は数えない)
+ *   - 見送りの道 (選ばなかった分岐の線) は通らない。分岐の道そのものは成果物を持たない (判断の答えは成果物ではない)
+ *   - 末端が Done でも成果物が無ければ数えない (isSourceReady とは違う)
+ *   - 循環・壊れた参照では止まる
+ */
+export function suppliedArtifacts(p: Project, portId: string, seen: Set<string> = new Set()): Artifact[] {
+  if (seen.has(portId)) return [];
+  const port = p.ports[portId];
+  if (!port) return [];
+  if (port.artifacts.length > 0) return port.artifacts;
+  const next = new Set(seen).add(portId);
+  const gone = branchState(p).rejectedEdges;
+  const found: Artifact[] = [];
+  // 合流のボックスの出力: 入力のどれか (見送りでない道) から来た成果物を通す
+  const owner = p.blocks[port.blockId];
+  if (port.direction === "out" && owner?.merge) {
+    for (const q of portsOf(p, owner.id, "in")) for (const a of suppliedArtifacts(p, q.id, next)) if (!found.some((x) => x.id === a.id)) found.push(a);
+    return found;
+  }
+  // 出力なら内側 (子の出力 up / 親の入力 through)、入力なら外側 (兄弟の出力 / 親の入力 down) から来る線をたどる
+  const side = port.direction === "out" ? "inner" : "outer";
+  for (const e of incomingEdges(p, { portId, side })) {
+    if (e.auto || gone.has(e.id)) continue;
+    for (const a of suppliedArtifacts(p, e.from.portId, next)) if (!found.some((x) => x.id === a.id)) found.push(a);
+  }
+  return found;
+}
+

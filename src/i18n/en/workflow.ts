@@ -90,4 +90,6 @@ export const workflow: Record<string, string> = {
   "今着手できる子: npx boxglow start {children}": "Children you can start now: npx boxglow start {children}",
   "今着手できる子はありません (要具体化か入力待ち)。npx boxglow lint {ref} で確かめてください": "No child can be started yet (needs detail or waiting for inputs). Check with npx boxglow lint {ref}",
   "親の出力を作るのは {children} (入力がそろってから)": "The parent's output is made by {children} (once its inputs are in)",
+  "前回の分解の確認後に {what} が変わっています。親の完了条件・対象外範囲と、兄弟との分担への影響を確認し、整合すれば split-ok を更新してください (全部を説明し直す必要はありません)": "{what} changed after the last breakdown review. Check the effect on the parent's acceptance and nonGoals and on the division among siblings; if it still fits, update split-ok (no need to explain everything again)",
+  "前回の着手準備の確認後に {what} が変わっています。対象・成果・確認方法と入力の根拠を見直し、整合すれば box-ok を更新してください": "{what} changed after the last readiness review. Re-check the target, deliverable, checks and input sources; if it still fits, update box-ok",
 };

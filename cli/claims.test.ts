@@ -246,7 +246,8 @@ it("review-split / split-ok / review-box / box-ok: 記録と無効化、context 
  expect(f.cli("layout","alpha","--actor","codex").status).toBe(0);
  expect(JSON.parse(f.cli("review-split","alpha","--actor","codex").stdout).review.state).toBe("ok");
  expect(f.cli("set","impl","--note","別の処理","--actor","codex").status).toBe(0);
- const stale=JSON.parse(f.cli("review-split","alpha","--actor","codex").stdout).review;expect(stale.state).toBe("stale");expect(stale.changed).toMatch(/B\d+/);
+ const stale=JSON.parse(f.cli("review-split","alpha","--actor","codex").stdout).review;expect(stale.state).toBe("stale");expect(stale.changed).toMatch(/B\d+/);expect(stale.advice).toMatch(/split-ok/);
+ expect(JSON.parse(f.cli("context","alpha","--actor","codex").stdout).reviews.split.advice).toMatch(/split-ok/);
  expect(JSON.parse(f.cli("context","alpha","--actor","codex").stdout).reviews.split.state).toBe("stale");
  // box-ok: 入力の供給元の変更で古くなる
  const rb=JSON.parse(f.cli("review-box","impl","--actor","codex").stdout);expect(rb.inputs[0].from.output).toBe("notes");

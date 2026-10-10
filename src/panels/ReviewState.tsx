@@ -6,7 +6,7 @@
  */
 import { useState } from "react";
 import { childrenOf, updateBlock } from "../model/graph";
-import { boxMaterial, changedText, makeRecord, reviewStatus, reviewable, splitMaterial } from "../model/review";
+import { boxMaterial, changedText, makeRecord, reviewStatus, reviewable, splitMaterial, staleAdvice } from "../model/review";
 import type { Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
 import { agoText } from "../model/report";
@@ -47,7 +47,8 @@ export function ReviewState({ project, blockId }: { project: Project; blockId: s
               {st.state === "none" ? t("なし") : st.state === "ok" ? t("済") : t("古い")}
             </span>
             {st.state === "ok" && r.record && <span className="review-state__by">{r.record.by} · {agoText(r.record.at)}</span>}
-            {st.state === "stale" && <span className="review-state__changed" title={r.record?.note || undefined}>{t("変わった: {what}", { what: changedText(project, st.changed) })}</span>}
+            {/* 古い = 前回の確認後に変わった (不正ではない)。何を確認すればよいかはヒント */}
+            {st.state === "stale" && <span className="review-state__changed" title={staleAdvice(project, r.kind, st.changed)}>{t("変わった: {what}", { what: changedText(project, st.changed) })}</span>}
             {!readonly && noteFor !== r.kind && <button className="btn btn-ghost btn-sm" onClick={() => { setNoteFor(r.kind); setNote(""); }} title={t("材料を見て評価したら、根拠を書いて記録します (妥当性の証明ではありません)")}>{t("確認")}</button>}
             {noteFor === r.kind && (
               <span className="review-state__note">

@@ -5,7 +5,7 @@
 import type { Block, Project, WorkScope } from "./types";
 import { isHumanActor, portsOf, waitingFor } from "./graph";
 import { isSkipped } from "./branch";
-import { nextSteps, reasonText, unpreparedReasons } from "./readiness";
+import { nextSteps, reasonText, suppliedArtifacts, unpreparedReasons } from "./readiness";
 import { t } from "../i18n/core";
 
 /** Input: なし / Output: 作業範囲の項目と表示名 (翻訳は表示時)。 */
@@ -90,10 +90,14 @@ export function checkStart(p: Project, id: string, actor: string, reason = "") {
   return { warning: warnings.join("\n"), error: errors.join("\n") };
 }
 
-/** Input: 計画、ボックス、新規成果物の数、操作者 / Output: 成果物なしの警告・拒否理由。参考資料は成果物に数えない。 */
+/**
+ * Input: 計画、ボックス、新規成果物の数、操作者 / Output: 成果物なしの警告・拒否理由。参考資料は成果物に数えない。
+ * 「成果物が一つも無いこと」の検査 (完了条件全体の判定ではない)。出力に直接付いた成果物のほか、
+ * 子に任せた出力はつながった子の出力の成果物 (供給経路をたどる。suppliedArtifacts) も数える。親へ重複して付けなくてよい
+ */
 export function checkDone(p: Project, id: string, added: number, actor: string) {
   const outputs = portsOf(p, id, "out");
-  const hasOutput = outputs.some(x => x.artifacts.length > 0);
+  const hasOutput = outputs.some(x => x.artifacts.length > 0 || suppliedArtifacts(p, x.id).length > 0);
   // 付け先が無い新規成果物は実際には保存されないため、完了の根拠に数えない。
   if ((added > 0 && outputs.length > 0) || hasOutput) return { warning: "", error: "" };
   const warning = t("注意: 成果物が付いていません。--artifact \"<名前>=<パスまたは URL>\" で、人が後から開ける具体的な物を付けてください");

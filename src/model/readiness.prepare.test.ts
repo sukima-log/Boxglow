@@ -3,10 +3,10 @@
  * (Codex との設計で決めた確認事項 1〜13 をそのままテストにする)
  */
 import { describe, expect, it } from "vitest";
-import { addBlock, addPort, connect, connectToBlock, createArtifact, createProject, defaultTaskParent, portsOf, updateBlock, updatePort, fromJSON, toJSON } from "./graph";
-import { addBranch } from "./branch";
-import { isUnprepared, nextSteps, outputOwners, readiness, reasonText, unpreparedReasons, unpreparedState } from "./readiness";
-import { checkStart } from "./workflow";
+import { addBlock, addPort, answerDecision, connect, connectToBlock, createArtifact, createProject, defaultTaskParent, portsOf, updateBlock, updatePort, fromJSON, toJSON } from "./graph";
+import { addBranch, addMerge } from "./branch";
+import { isUnprepared, nextSteps, outputOwners, readiness, reasonText, suppliedArtifacts, unpreparedReasons, unpreparedState } from "./readiness";
+import { checkDone, checkStart } from "./workflow";
 import { validateProjectText } from "./validate-file";
 import { setLang } from "../i18n/core";
 import type { Project } from "./types";
@@ -249,5 +249,67 @@ describe("旧版との往復 (確認 8)", () => {
     withUnknown.ports[out.id].futureField = { a: 1 };
     const back2 = fromJSON(toJSON(validateProjectText(JSON.stringify(withUnknown))));
     expect((back2.ports[out.id] as unknown as { futureField?: unknown }).futureField).toEqual({ a: 1 });
+  });
+});
+
+describe("供給経路の成果物 (親の done で子の成果物を数える)", () => {
+  it("つながった子の出力の成果物だけを数え、同じ子の別の出力・参考資料・Done だけの子は数えない (Codex の確認 1〜3)", () => {
+    const { p, parent, child } = parentWithChild();
+    // 子は Done だが成果物なし → 数えない
+    let q = updateBlock(p, child, { status: "white" });
+    expect(suppliedArtifacts(q, portsOf(q, parent, "out")[0].id)).toEqual([]);
+    expect(checkDone(q, parent, 0, "codex").warning).not.toBe("");
+    // 子のボックスの参考資料 → 数えない
+    q = updateBlock(q, child, { artifacts: [createArtifact("参考", "https://example.com/ref")] });
+    expect(suppliedArtifacts(q, portsOf(q, parent, "out")[0].id)).toEqual([]);
+    // つながった子の出力に成果物 → 数える (親へ重複して付けなくてよい)。reject でも通る
+    const childOut = portsOf(q, child, "out")[0];
+    q = updatePort(q, childOut.id, { artifacts: [createArtifact("コード", "src/x.ts")] });
+    expect(suppliedArtifacts(q, portsOf(q, parent, "out")[0].id).map((a) => a.title)).toEqual(["コード"]);
+    q.workflowPolicy = { doneWithoutArtifacts: "reject" };
+    expect(checkDone(q, parent, 0, "codex")).toEqual({ warning: "", error: "" });
+    // 接続を外すと数えない (読み取り時に導出するので追従する)
+    const edge = Object.values(q.edges).find((e) => e.from.portId === childOut.id)!;
+    const cut = { ...q, edges: Object.fromEntries(Object.entries(q.edges).filter(([id]) => id !== edge.id)) };
+    expect(suppliedArtifacts(cut, portsOf(cut, parent, "out")[0].id)).toEqual([]);
+    expect(checkDone(cut, parent, 0, "codex").error).not.toBe("");
+  });
+  it("孫からの委譲と through をたどり、見送りの道は通らない (確認 4・5)", () => {
+    const { p, parent, child } = parentWithChild();
+    // 孫: 子の出力を孫の出力から供給する
+    const g = addBlock(p, { parentId: child, title: "孫", outputName: "コード" });
+    let q = g.project;
+    q = connect(q, { portId: portsOf(q, g.blockId, "out")[0].id, side: "outer" }, { portId: portsOf(q, child, "out")[0].id, side: "inner" }).project;
+    q = updatePort(q, portsOf(q, g.blockId, "out")[0].id, { artifacts: [createArtifact("孫のコード", "src/g.ts")] });
+    expect(suppliedArtifacts(q, portsOf(q, parent, "out")[0].id).map((a) => a.title)).toEqual(["孫のコード"]);
+    // through: 親の入力に付いた資料を親の出力へ通す
+    let r = addPort(q, { blockId: parent, direction: "in", name: "仕様" }).project;
+    r = addPort(r, { blockId: parent, direction: "out", name: "仕様 (転記)" }).project;
+    const inp = portsOf(r, parent, "in").find((x) => x.name === "仕様")!, outp = portsOf(r, parent, "out").find((x) => x.name === "仕様 (転記)")!;
+    r = connect(r, { portId: inp.id, side: "inner" }, { portId: outp.id, side: "inner" }).project;
+    r = updatePort(r, inp.id, { artifacts: [createArtifact("仕様書", "docs/spec.md")] });
+    expect(suppliedArtifacts(r, outp.id).map((a) => a.title)).toEqual(["仕様書"]);
+    // 見送りの道: 分岐の選ばれなかった道の先の成果物は数えない
+    const { p: p2 } = leaf();
+    const parentId = defaultTaskParent(p2);
+    const br = addBranch(p2, { parentId, title: "方式", question: "どれ?", options: ["A", "B"], actor: "human" });
+    let s2 = br.project;
+    const a = addBlock(s2, { parentId, title: "A で作る", outputName: "成果" }); s2 = a.project;
+    const b = addBlock(s2, { parentId, title: "B で作る", outputName: "成果" }); s2 = b.project;
+    const outs = portsOf(s2, br.blockId, "out");
+    s2 = connectToBlock(s2, { portId: outs.find((o) => o.branchOption === "A")!.id, side: "outer" }, a.blockId).project;
+    s2 = connectToBlock(s2, { portId: outs.find((o) => o.branchOption === "B")!.id, side: "outer" }, b.blockId).project;
+    const m = addMerge(s2, { parentId, actor: "human" }); s2 = m.project;
+    const mIn1 = addPort(s2, { blockId: m.blockId, direction: "in", name: "成果 A" }); s2 = mIn1.project;
+    const mIn2 = addPort(s2, { blockId: s2.blocks[m.blockId].id, direction: "in", name: "成果 B" }); s2 = mIn2.project;
+    s2 = connect(s2, { portId: portsOf(s2, a.blockId, "out")[0].id, side: "outer" }, { portId: mIn1.portId, side: "outer" }).project;
+    s2 = connect(s2, { portId: portsOf(s2, b.blockId, "out")[0].id, side: "outer" }, { portId: mIn2.portId, side: "outer" }).project;
+    s2 = updatePort(s2, portsOf(s2, b.blockId, "out")[0].id, { artifacts: [createArtifact("B の成果", "src/b.ts")] });
+    // A を選ぶ → B の道は見送り。合流の出力から見える成果物は無い
+    const chosen = answerDecision(s2, br.blockId, br.decisionId, "A", "human");
+    expect(suppliedArtifacts(chosen, portsOf(chosen, m.blockId, "out")[0].id)).toEqual([]);
+    // B を選べば数える
+    const chosenB = answerDecision(s2, br.blockId, br.decisionId, "B", "human");
+    expect(suppliedArtifacts(chosenB, portsOf(chosenB, m.blockId, "out")[0].id).map((x) => x.title)).toEqual(["B の成果"]);
   });
 });

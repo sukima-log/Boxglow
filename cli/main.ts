@@ -23,7 +23,7 @@ import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
 import { resumeSummary, resumeReport } from "../src/model/resume";
 import { nextSteps, readiness, reasonText } from "../src/model/readiness";
 import { lint, lintCounts } from "../src/model/lint";
-import { boxMaterial, changedText, makeRecord, reviewStatus, reviewable, splitMaterial } from "../src/model/review";
+import { boxMaterial, changedText, makeRecord, reviewStatus, reviewable, splitMaterial, staleAdvice } from "../src/model/review";
 import type { Block, ExpectKind } from "../src/model/types";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import AGENTS_SNIPPET_JA from "../docs/AGENTS_SNIPPET.md";
@@ -254,9 +254,14 @@ function reviewSummary(p: Project, blockId: string) {
     const st = reviewStatus(rec, m);
     return { state: st.state, ...(rec ? { by: rec.by, at: rec.at } : {}), ...(st.changed.length ? { changed: changedText(p, st.changed) } : {}) };
   };
+  // stale には案内 (何を確認すればよいか) を添える。stale は「不正」ではなく「前回の確認後に変わった」という意味
+  const withAdvice = (kind: "split" | "box", rec: Block["splitReview"], m: { sig: string; parts: Record<string, string> }) => {
+    const r = one(rec, m); const st = reviewStatus(rec, m);
+    return st.state === "stale" ? { ...r, advice: staleAdvice(p, kind, st.changed) } : r;
+  };
   return {
-    ...(childrenOf(p, blockId).length ? { split: one(b.splitReview, splitMaterial(p, blockId)) } : {})
-  , box: one(b.boxReview, boxMaterial(p, blockId))
+    ...(childrenOf(p, blockId).length ? { split: withAdvice("split", b.splitReview, splitMaterial(p, blockId)) } : {})
+  , box: withAdvice("box", b.boxReview, boxMaterial(p, blockId))
   , howToGet: `boxglow review-split ${b.key ?? b.id} / boxglow review-box ${b.key ?? b.id}`
   };
 }
@@ -842,7 +847,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const rec = cmd === "review-split" ? b.splitReview : b.boxReview;
       const st = reviewStatus(rec, m);
       const record = cmd === "review-split" ? "split-ok" : "box-ok";
-      out(JSON.stringify({ ...m.material, checklist: m.checklist, review: { state: st.state, ...(rec ? { by: rec.by, at: rec.at, note: rec.note } : {}), ...(st.changed.length ? { changed: changedText(p, st.changed) } : {}) }, howToRecord: `boxglow ${record} ${b.key ?? b.id} --note "<根拠>"` }, null, 2));
+      out(JSON.stringify({ ...m.material, checklist: m.checklist, review: { state: st.state, ...(rec ? { by: rec.by, at: rec.at, note: rec.note } : {}), ...(st.changed.length ? { changed: changedText(p, st.changed), advice: staleAdvice(p, cmd === "review-split" ? "split" : "box", st.changed) } : {}) }, howToRecord: `boxglow ${record} ${b.key ?? b.id} --note "<根拠>"` }, null, 2));
       return;
     }
     case "split-ok":
