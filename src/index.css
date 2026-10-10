@@ -588,7 +588,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* 展開した親 (.expanded は細い枠を outline で描く) が今ここのときも、同じ太い枠で目立たせる */
 .bg-block.expanded.working-now, .bg-block.expanded.working-below { outline: 4px solid var(--accent); outline-offset: 4px; box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent) 16%, transparent); }
 /* 枠の左上の NOW の札: 枠と同じ色で、何の枠かが分かる。畳んだ中にあるときは題名つきで押せる */
-.bg-now-tag { position: absolute; top: -28px; left: -4px; z-index: 6; padding: 3px 12px; border-radius: 6px 6px 6px 0; background: var(--accent); color: #fff; font: 800 13px/16px ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em; white-space: nowrap; pointer-events: none; }
+.bg-now-tag { position: absolute; top: -11px; left: -11px; z-index: 6; padding: 3px 10px; border-radius: 6px; background: var(--accent); color: #fff; font: 800 12px/16px ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em; white-space: nowrap; pointer-events: none; box-shadow: 0 1px 2px #0003; }
 .bg-now-tag--below { pointer-events: auto; cursor: pointer; border: 0; max-width: 260px; overflow: hidden; text-overflow: ellipsis; letter-spacing: .02em; }
 .bg-now-tag--below:hover { filter: brightness(1.08); }
 /* 判断待ちは情報行の小さなバッジで示す */
@@ -1863,8 +1863,13 @@ button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent)
 .now-toggle { margin-left: auto; padding: 2px 10px; border-radius: 999px; border: 2px solid var(--accent); background: transparent; color: var(--accent); font: 800 11px/16px ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em; cursor: pointer; }
 .now-toggle[data-on="true"] { background: var(--accent); color: #fff; }
 /* その他タブの操作の一覧 */
-.more-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.more-actions { display: flex; flex-direction: column; gap: 6px; }
+.more-actions .btn { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-card); color: var(--text); font-size: 13px; font-weight: 600; text-align: left; box-shadow: 0 1px 2px #0000000f; }
+.more-actions .btn::after { content: "\203A"; color: var(--text-muted); font-size: 16px; line-height: 1; margin-left: 12px; }
+.more-actions .btn:hover:not(:disabled) { background: var(--primary-soft); border-color: var(--primary); }
 .more-actions .btn[data-on="true"] { background: var(--primary-soft); border-color: var(--primary); }
+.more-actions .btn[data-on="true"]::after { content: "\2713"; color: var(--primary-strong); }
+.more-actions .btn:disabled { opacity: .5; }
 
 /* ツリーの今ここ: NOW の札と、配下にあることを示す印 */
 .tree-now { flex: none; padding: 1px 6px; border-radius: 4px; background: var(--accent); color: #fff; font: 800 9px/14px ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em; }
