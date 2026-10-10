@@ -8,8 +8,9 @@ import { ClaimSettings, ClaimDetails } from "./Claims";
 import { BranchDialog } from "./BranchDialog";
 import { BranchPicker } from "./BranchPicker";
 import { branchDecision, canConvertToBranch } from "../model/branch";
-import { reasonText, unpreparedReasons } from "../model/readiness";
+import { unpreparedReasons } from "../model/readiness";
 import { ReviewState } from "./ReviewState";
+import { ReadinessFields } from "./ReadinessFields";
 import { CloseButton } from "./CloseButton";
 import { WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
@@ -277,6 +278,12 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         ))}
       </div>
 
+      {/* 要具体化: 別のタブを開いていても、着手の前に決めることが残っていると気づけるようにする (押すと状態タブへ) */}
+      {tab !== "status" && b.status !== "white" && unpreparedReasons(project, blockId).length > 0 && (
+        <button className="btn btn-sm inspector-attention" onClick={() => setTab("status")} title={t("着手の前に、出力の予定成果物 (expect) と完了条件を決めます")}>
+          {t("要具体化")}<span aria-hidden="true" style={{ marginLeft: 8 }}>→</span>
+        </button>
+      )}
       {tab !== "status" && (pending.length > 0 || unread.length > 0) && (
         // Status 以外のタブを開いていても、回答待ちと AI 未確認の回答に気づけるようにする (タブは勝手に切り替えない)。
         // 0 件の項目は出さない。押すと Status へ移る (行き先は title と aria-label で伝える)
@@ -321,13 +328,8 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
             ? <div className="text-[12px]" style={{ color: "var(--primary-strong)" }}>{t("✓ Ready")}</div> : null;
           return (
             <div className="text-[12px] flex flex-col gap-1" style={{ color: "var(--text-muted)" }}>
-              {reasons.length > 0 && <ul className="unprepared-list" title={t("着手の前に、出力の予定成果物 (expect) と完了条件を決めます")}>
-                {/* 理由を押すと直す場所へ: 予定成果物・出力の担当は入出力タブ、完了条件は作業範囲の編集 */}
-                {reasons.map((r, i) => <li key={i}>
-                  <button type="button" className="unprepared-list__item" onClick={() => { if (r.kind === "missing-acceptance") setScopeEditing(true); else setTab("io"); }}
-                    title={r.kind === "missing-acceptance" ? t("作業範囲を編集") : t("入出力")}>{reasonText(project, r)}</button>
-                </li>)}
-              </ul>}
+              {/* 要具体化: 不足している欄をその場で埋める (入出力タブ・作業範囲と同じ値) */}
+              {reasons.length > 0 && <ReadinessFields project={project} blockId={blockId} onOpenIo={() => setTab("io")} />}
               {missing.length > 0 && <div>{t("待ち: {names}", { names: missing.join(", ") })}</div>}
             </div>
           );

@@ -147,4 +147,11 @@ export const gui: Record<string, string> = {
   "確認": "Confirm",
   "材料を見て評価したら、根拠を書いて記録します (妥当性の証明ではありません)": "After judging the material, record it with your basis (not a proof of validity)",
   "根拠 (何を確認したか)": "Basis (what you checked)",
+  "着手の前に決めること": "Before starting",
+  "出力「{name}」の予定成果物": "Planned deliverable of \"{name}\"",
+  "種類": "Kind",
+  "見当 (例: src/auth/callback.ts、docs/runbook.md)": "A path or title (e.g. src/auth/callback.ts, docs/runbook.md)",
+  "見当 (パスや題名) も書きます": "Also give a path or title",
+  "完了条件": "Acceptance",
+  "何をどう確かめれば完了か (例: 配信先の URL でアプリが開く)": "What is checked and how (e.g. the app opens at the published URL)",
 };

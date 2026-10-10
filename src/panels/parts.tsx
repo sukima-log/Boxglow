@@ -65,14 +65,14 @@ export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add
 const OPEN_PORTS = new Set<string>();
 
 /** 予定成果物の種類 (CLI の port --expect と同じ一覧) */
-const EXPECT_KINDS: ExpectKind[] = ["file", "dir", "url", "doc", "note", "decision", "result"];
+export const EXPECT_KINDS: ExpectKind[] = ["file", "dir", "url", "doc", "note", "decision", "result"];
 
 /**
  * 出力の予定成果物を書く / 消す
  * Input : p = 計画, portId = 出力ポート, kind = 種類 ("" なら消す), hint = 見当 (空なら種類だけ覚える。種類が無ければ消す)
  * Output: 更新した計画。種類が空なら expect を消す (ボックスは「要具体化」に戻る)
  */
-function setExpect(p: Project, portId: string, kind: ExpectKind | "", hint: string): Project {
+export function setExpect(p: Project, portId: string, kind: ExpectKind | "", hint: string): Project {
   const port = p.ports[portId];
   if (!port) return p;
   if (!kind) {
