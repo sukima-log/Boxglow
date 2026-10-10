@@ -119,4 +119,9 @@ export const gui: Record<string, string> = {
   "中にボックスを持つボックスは、分岐にできません": "A box with boxes inside cannot become a branch",
   "分かれた道を 1 つにまとめる合流の部品を足す (道の出力をこれにつなぐ)": "Add a merge part that brings paths together (connect the paths' outputs to it)",
   "合流: どれか 1 つの道が届けば、先へ進みます": "Merge: the work goes on as soon as any one path arrives",
+  "足すものを選ぶ (N でふつうのボックスをすぐに足す)": "Choose what to add (N adds a regular box right away)",
+  "足すもの": "Add",
+  "ふつうの作業 (N)": "A regular task (N)",
+  "まだ決まっていない分かれ道": "A fork that is not decided yet",
+  "分かれた道をまとめる": "Brings paths together",
 };

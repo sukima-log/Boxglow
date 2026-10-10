@@ -138,6 +138,14 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
 
   // 分岐を足すダイアログを開いているか
   const [branchOpen, setBranchOpen] = useState(false);
+  // + Block の「足すものを選ぶ」メニューを開いているか (外を押すと閉じる)
+  const [addOpen, setAddOpen] = useState(false);
+  useEffect(() => {
+    if (!addOpen) return;
+    const close = () => setAddOpen(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [addOpen]);
   const fileName = useProjectStore((s) => s.fileName);
   const editMode = useProjectStore((s) => s.editMode);
   const setEditMode = useProjectStore((s) => s.setEditMode);
@@ -236,7 +244,24 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
           <>
             {/* よく使う編集の操作は帯に出す (通常の幅)。760px 以下では帯から外し、⋯ メニューの中に同じ操作を出す (index.css の .desktop-action / .menu-actions)。
                 Auto Layout は帯に置かず、いつも ⋯ メニューに入れる (モードで出し入れすると帯の幅が変わり、折り返しが切り替わって表示が揺れるため) */}
-            <button className="btn btn-primary btn-sm desktop-action" onClick={addSibling} title={t("ブロックを追加 (N)。ボックスを選んでいればその中に、選んでいなければプロジェクトの中に")}>+ Block</button>
+            {/* + Block: 押すと、足すものを選ぶ小さなメニューが浮かぶ (ふつうのボックス / 分岐 (IF) / 合流 (Merge))。キーボードの N はすぐにふつうのボックスを足す */}
+            <div className="relative desktop-action add-menu">
+              <button className="btn btn-primary btn-sm" aria-haspopup="menu" aria-expanded={addOpen} onClick={(e) => { e.stopPropagation(); setAddOpen(!addOpen); }}
+                onKeyDown={(e) => { if (e.key === "Escape") setAddOpen(false); }} title={t("足すものを選ぶ (N でふつうのボックスをすぐに足す)")}>+ Block</button>
+              {addOpen && (
+                <div className="card add-menu__pop" role="menu" aria-label={t("足すもの")}>
+                  <button role="menuitem" className="add-menu__item" onClick={() => { setAddOpen(false); addSibling(); }}>
+                    <span className="add-menu__icon block" aria-hidden="true" /><span><b>Block</b><small>{t("ふつうの作業 (N)")}</small></span>
+                  </button>
+                  <button role="menuitem" className="add-menu__item" onClick={() => { setAddOpen(false); setBranchOpen(true); }}>
+                    <span className="add-menu__icon branch" aria-hidden="true">IF</span><span><b>Branch (IF)</b><small>{t("まだ決まっていない分かれ道")}</small></span>
+                  </button>
+                  <button role="menuitem" className="add-menu__item" onClick={() => { setAddOpen(false); addJoin(); }}>
+                    <span className="add-menu__icon merge" aria-hidden="true">OR</span><span><b>Merge</b><small>{t("分かれた道をまとめる")}</small></span>
+                  </button>
+                </div>
+              )}
+            </div>
             <button className="btn btn-ghost btn-sm desktop-action" onClick={undo} disabled={past === 0} title={t("元に戻す (Ctrl+Z)")} aria-label="Undo">↶</button>
             <button className="btn btn-ghost btn-sm desktop-action" onClick={redo} disabled={future === 0} title={t("やり直す (Ctrl+Y)")} aria-label="Redo">↷</button>
           </>
@@ -248,6 +273,8 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
               {/* 編集の操作: 帯に出せない狭い幅 (760px 以下) のときだけ、ここに出す (通常の幅では帯のボタンを使う) */}
               {!readonly && <div className="menu-actions">
                 <button className="btn btn-primary btn-sm" onClick={addSibling}>+ Block</button>
+                <button className="btn btn-sm" onClick={() => setBranchOpen(true)}>+ Branch (IF)</button>
+                <button className="btn btn-sm" onClick={addJoin}>+ Merge</button>
                 <button className="btn btn-ghost btn-sm" onClick={undo} disabled={past === 0}>Undo</button>
                 <button className="btn btn-ghost btn-sm" onClick={redo} disabled={future === 0}>Redo</button>
               </div>}
@@ -257,14 +284,6 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
               )}
               {!readonly && (
                 <button className="btn btn-ghost btn-sm justify-start" onClick={addProject} title={t("同じファイルにプロジェクトのボックスを足す")}>New Project</button>
-              )}
-              {/* 分岐: まだ決まっていない分かれ道 (問いと選択肢。答えで進む道が決まる) */}
-              {!readonly && (
-                <button className="btn btn-ghost btn-sm justify-start" onClick={() => setBranchOpen(true)} title={t("まだ決まっていない分かれ道を、問いと選択肢で足す")}>+ Branch</button>
-              )}
-              {/* 合流: 分かれた道が 1 つにまとまるところ (OR ゲート風の部品。どれか 1 つの道が届けば先へ通す) */}
-              {!readonly && (
-                <button className="btn btn-ghost btn-sm justify-start" onClick={addJoin} title={t("分かれた道を 1 つにまとめる合流の部品を足す (道の出力をこれにつなぐ)")}>+ Merge</button>
               )}
               {!readonly && <div style={{ borderTop: "1px solid var(--line-soft)", margin: "4px 0" }} />}
               <button className="btn btn-ghost btn-sm justify-start" onClick={exportJSON}>Export JSON</button>

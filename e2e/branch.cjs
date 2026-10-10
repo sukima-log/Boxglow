@@ -3,7 +3,7 @@
  *   - 答える前: 分岐のボックスに「分岐」の札、その先のボックスは「分岐待ち」(点線の枠)
  *   - 詳細パネルで選択肢を押して答えると: 分岐のボックスは完了、選んだ道は ✓、選ばなかった道の先は「見送り」(薄く・取り消し線)、
  *     見送りは完了数の分母から外れ、合流の入力を持つ結合テストは見送りにならない
- *   - ⋯ メニューの「+ Branch」から、問いと選択肢で分岐を足せる (選択肢ごとに道ができる)
+ *   - 上部の「+ Block」のメニューの「Branch (IF)」から、問いと選択肢で分岐を足せる (選択肢ごとに道ができる)
  *   - 詳細パネルの ⋯ の「分岐にする」で、今あるボックスを分岐に変えられる (今の出力は 1 つ目の道、線は残る)
  * 計画は e2e/fixtures/branch.boxglow.json (設計 → 分岐 (REST / GraphQL) → 各実装 → 結合テスト (合流))
  * 使い方: e2e/run.sh から呼ばれる (PLAYWRIGHT と LD_LIBRARY_PATH は run.sh が設定。プレビューが 4173 番で動いていること)
@@ -40,10 +40,12 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
     const totalAfter = await page.evaluate(() => document.body.innerText.match(/Done \d+ \/ (\d+)/)?.[1]);
     check('分岐: 見送りのボックスは完了数の分母から外れる', Number(totalAfter) === Number(totalBefore) - 1, `${totalBefore} -> ${totalAfter}`);
 
-    // ---- ⋯ メニューから分岐を足す ----
+    // ---- 「+ Block」のメニューから分岐を足す ----
     await page.locator('.react-flow__pane').click({ position: { x: 20, y: 20 } }); await page.waitForTimeout(200);
-    await page.locator('.topbar button[title="Menu"]').click();
-    await page.getByRole('button', { name: '+ Branch', exact: true }).click();
+    await page.getByRole('button', { name: '+ Block', exact: true }).click();
+    const addItems = await page.getByRole('menu', { name: '足すもの' }).getByRole('menuitem').allInnerTexts();
+    check('追加: 「+ Block」で Block / Branch (IF) / Merge を選ぶメニューが開く', addItems.length === 3 && /Block/.test(addItems[0]) && /Branch \(IF\)/.test(addItems[1]) && /Merge/.test(addItems[2]), JSON.stringify(addItems));
+    await page.getByRole('menuitem', { name: /^Branch \(IF\)/ }).click();
     const dialog = page.getByRole('dialog', { name: '分岐を足す' });
     check('分岐: 選択肢が 2 つそろうまで「分岐を足す」は押せない', await dialog.getByRole('button', { name: '分岐を足す', exact: true }).isDisabled());
     await dialog.getByPlaceholder('例: API の方式はどれにしますか?').fill('公開先はどれにしますか?');
@@ -52,14 +54,16 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
     const made = await page.evaluate(() => { const s = window.boxglow.store.getState(); const b = Object.values(s.project.blocks).find((x) => x.title === '公開先はどれにしますか?'); if (!b) return null; return { branch: !!b.branch, outs: Object.values(s.project.ports).filter((q) => q.blockId === b.id && q.direction === 'out').map((q) => q.branchOption), selected: s.selection.blockId === b.id }; });
     check('分岐: ダイアログから足した分岐は、選択肢ごとの道を持ち、選ばれた状態になる', !!made && made.branch && made.outs.join('|') === '静的ホスティング|自前のサーバー' && made.selected, JSON.stringify(made));
 
-    // ---- ⋯ メニューから合流の部品を足す (OR ゲート風の形で描かれ、作業の件数には入らない) ----
+    // ---- 「+ Block」のメニューから合流の部品を足す (OR ゲート風の形で描かれ、作業の件数には入らない) ----
     const totalBeforeMerge = await page.evaluate(() => document.body.innerText.match(/Done \d+ \/ (\d+)/)?.[1]);
     await page.locator('.react-flow__pane').click({ position: { x: 20, y: 20 } }); await page.waitForTimeout(200);
-    await page.locator('.topbar button[title="Menu"]').click();
-    await page.getByRole('button', { name: '+ Merge', exact: true }).click(); await page.waitForTimeout(600);
+    await page.getByRole('button', { name: '+ Block', exact: true }).click();
+    await page.getByRole('menuitem', { name: /^Merge/ }).click(); await page.waitForTimeout(600);
     const mergeMade = await page.evaluate(() => { const s = window.boxglow.store.getState(); const b = s.project.blocks[s.selection.blockId]; return b ? { merge: !!b.merge, title: b.title } : null; });
-    check('合流: ⋯ メニューの「+ Merge」で合流の部品が足され、選ばれた状態になる', !!mergeMade && mergeMade.merge, JSON.stringify(mergeMade));
+    check('合流: 「+ Block」のメニューの「Merge」で合流の部品が足され、選ばれた状態になる', !!mergeMade && mergeMade.merge, JSON.stringify(mergeMade));
     check('合流: 合流の部品は OR ゲート風の形で描かれる', await page.locator('.bg-block.kind-merge .bg-merge svg').count() >= 1);
+    check('合流: 部品の表記は「OR」だけ', (await page.locator('.bg-block.kind-merge .bg-merge').first().innerText()).trim() === 'OR');
+    check('分岐: 分岐のボックスには、八角形の枠と「IF」の印が付く', await page.locator('.bg-block.kind-branch:not(.expanded) .bg-branch-outline').count() >= 1 && (await page.locator('.bg-block.kind-branch .bg-branch-emblem').first().innerText()).trim() === 'IF');
     const totalAfterMerge = await page.evaluate(() => document.body.innerText.match(/Done \d+ \/ (\d+)/)?.[1]);
     check('合流: 合流の部品は完了数の分母に入らない', totalAfterMerge === totalBeforeMerge, `${totalBeforeMerge} -> ${totalAfterMerge}`);
 

@@ -27,7 +27,9 @@ async function drag(page, from, to) {
    await output.click({force:true});await backendIn.click({force:true});
    check(`${theme}: View では結線できない`,beforeView===await snapshot(p) && await p.locator('.canvas-connect-hint').count()===0);
    await p.locator('.mode-toggle').click();
+   // + Block はメニューを開くので、その中の「Block」(ふつうの作業) を選ぶ
    await p.getByRole('button',{name:'+ Block',exact:true}).click();
+   await p.getByRole('menuitem',{name:/^Block/}).click();
    const newId=await idOf(p,'新しいブロック');
    await p.getByRole('button',{name:'入出力 0/1',exact:true}).click();
    await p.getByRole('button',{name:'＋ 入力を追加',exact:true}).click();

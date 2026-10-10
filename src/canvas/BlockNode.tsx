@@ -194,15 +194,28 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           <svg viewBox="0 0 136 80" preserveAspectRatio="none" aria-hidden="true">
             <path d="M6 4 H70 C104 4 124 24 132 40 C124 56 104 76 70 76 H6 C20 58 20 22 6 4 Z" />
           </svg>
-          <span className="bg-merge__label"><b>OR</b>{t("合流")}</span>
+          <span className="bg-merge__label"><b>OR</b></span>
         </div>
       ) : <>
+      {/* 分岐のボックス: 角を斜めに落とした八角形の外形の線と、上の辺にまたがる「IF」のひし形の紋章 (フローチャートの判断の記号) */}
+      {view.branch && !view.expanded && (
+        <>
+          {(() => {
+            // 大きさ: 描画の直後は width / height が無いことがあるので、計算した寸法で補う
+            const w = Number(width ?? card.width), h = Number(height ?? card.height);
+            return <svg className="bg-branch-outline" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" aria-hidden="true">
+              <path d={`M14 1 H${w - 14} L${w - 1} 14 V${h - 14} L${w - 14} ${h - 1} H14 L1 ${h - 14} V14 Z`} />
+            </svg>;
+          })()}
+          <span className="bg-branch-emblem" aria-hidden="true"><span>IF</span></span>
+        </>
+      )}
       {verticalBand("in")}
       <div className="bg-block__head" style={{ height: headerH - (view.expanded ? 24 : card.metaH), ...(vertical && !view.expanded ? { marginTop: vertical.inputH } : {}) }}>
         {view.category && <span className={`bg-block__cat${view.category.neutral ? " neutral" : ""}`} data-category={view.category.key} title={t("カテゴリ: {label}", { label: t(view.category.label) })}>{!view.expanded && <CategoryIcon category={view.category.key} />}{t(view.category.label)}</span>}
         {view.isProject && <span className="bg-block__tag">Project</span>}
-        {/* 分岐のボックス: ひし形の印 (判断の答えで、どの出力の道へ進むかが決まる) */}
-        {view.branch && <span className="bg-block__tag branch" title={t("分岐: 判断の答えで、進む道 (出力) が決まります")}><span aria-hidden="true">◇</span> {t("分岐")}</span>}
+        {/* 分岐のボックス: 「分岐」の札 (判断の答えで、どの出力の道へ進むかが決まる) */}
+        {view.branch && <span className="bg-block__tag branch" title={t("分岐: 判断の答えで、進む道 (出力) が決まります")}>{t("分岐")}</span>}
         <span className="bg-block__title" title={view.fromTemplate ? t("{title} (部品: {name})", { title: view.title, name: view.fromTemplate }) : view.title}>{view.title}</span>
         {(view.kids > 0 || data.major) && viewScope !== blockId && (
           <button className="bg-block__toggle nodrag" onClick={toggle} onDoubleClick={ev => ev.stopPropagation()} title={data.major ? t("この大項目のタブを開く (中のボックス {n} 個)", { n: view.kids }) : view.collapsed ? t("下の階層を展開する") : t("下の階層を畳む")}>
