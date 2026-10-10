@@ -101,7 +101,7 @@ describe("CLIの範囲と再開",()=>{
     const {cli}=fixture();
     expect(cli("help","--lang","ja").stdout).toContain("今回達成すること");
     expect(cli("help","--lang","en").stdout).toContain("acceptance");
-    expect(cli("status","--brief","--lang","en").stdout).toContain("Waiting for inputs");
+    expect(cli("status","--brief","--lang","en").stdout).toContain("Needs detail");
     expect(cli("start","対象","--lang","en").stdout).not.toContain("必須");
   });
 });
@@ -142,7 +142,7 @@ describe("担当の一覧 (list)",()=>{
     const table=cli("list","--assignee","さとう");
     expect(table.status,table.stderr).toBe(0);
     expect(table.stdout).toContain("| ID | 題名 | 場所 | 状態 |");
-    expect(table.stdout).toMatch(/\| 対象 \|.*\| New \| 0% \| 2026-10-20 \|.*待ち: 仕様書/);
+    expect(table.stdout).toMatch(/\| 対象 \|.*\| New \| 0% \| 2026-10-20 \|.*要具体化: /);
     const json=JSON.parse(cli("list","--assignee","さとう","--json").stdout);
     expect(json).toHaveLength(1);
     expect(json[0]).toMatchObject({title:"対象",dueDate:"2026-10-20",missingInputs:["仕様書"]});

@@ -24,6 +24,7 @@ import {
 , type Decision
 , type Edge
 , type EdgeKind
+, type Expect
 , type Endpoint
 , type InputGroup
 , type LogKind
@@ -32,6 +33,7 @@ import {
 , type Project
 , type TemplateNode
 , type TemplateOrigin
+, type WorkScope
 } from "./types";
 
 /** ログに残す上限 (古いものから落とす) */
@@ -1531,15 +1533,34 @@ export function findBlock(p: Project, ref: string): { block: Block | null; candi
 }
 
 /**
+ * split の expect の指定を読む
+ * Input : v = { kind, hint } または "kind:hint" (無ければ undefined)
+ * Output: Expect。形が違う (kind が一覧に無い、hint が空) なら null
+ */
+function parseExpectSpec(v: Expect | string | undefined): Expect | null | undefined {
+  if (v === undefined) return undefined;
+  const KINDS = ["file", "dir", "url", "doc", "note", "decision", "result"];
+  if (typeof v === "string") {
+    const c = v.indexOf(":");
+    const kind = (c >= 0 ? v.slice(0, c) : v).trim();
+    const hint = (c >= 0 ? v.slice(c + 1) : "").trim();
+    return KINDS.includes(kind) && hint ? { kind: kind as Expect["kind"], hint } : null;
+  }
+  return v && KINDS.includes(v.kind) && typeof v.hint === "string" && v.hint.trim() ? { kind: v.kind, hint: v.hint.trim() } : null;
+}
+
+/**
  * ブロックを分解する (子ブロックをまとめて足し、名前で結線する)
- * Input : parentId, spec = { blocks: [{ title, description?, inputs?, outputs? }], connections?: [{ from: "題名.出力名", to: "題名.入力名" }] }
+ * Input : parentId, spec = { blocks: [{ title, description?, inputs?, outputs?, expect?, acceptance?, goal? }], connections?: [{ from: "題名.出力名", to: "題名.入力名" }], parentMakes?: [親の出力名] }
  *         from / to の題名に親の題名 (または "parent") を使うと、親の入力/出力 (内側) につながる
+ *         expect = 子の出力の予定成果物 ({ kind, hint } または "kind:hint")、acceptance = 完了条件、goal = 今回行う処理 (scope に入る)。
+ *         どれも任意 (無い子は「要具体化」として残り、着手の前に決める)。parentMakes = 子に任せず親自身が作る出力の名前 (owner: "self" を付ける)
  * Output: { project, errors }
  */
 export function splitBlock(
   p: Project
 , parentId: string
-, spec: { blocks: { title: string; description?: string; inputs?: string[]; outputs?: string[] }[]; connections?: { from: string; to: string }[] }
+, spec: { blocks: { title: string; description?: string; inputs?: string[]; outputs?: string[]; expect?: Expect | string; acceptance?: string; goal?: string }[]; connections?: { from: string; to: string }[]; parentMakes?: string[] }
 , actor: string
 ): { project: Project; errors: string[] } {
   const errors: string[] = [];
@@ -1552,6 +1573,14 @@ export function splitBlock(
     q = r.project;
     made[b.title] = r.blockId;
     if (b.description) { q.blocks[r.blockId].description = b.description; q.blocks[r.blockId].descriptionUpdatedAt = now(); }
+    // 具体化の情報 (任意): 予定成果物は出力に、完了条件と処理は scope に入れる
+    const expect = parseExpectSpec(b.expect);
+    if (b.expect !== undefined && !expect) errors.push(t("「{title}」の expect は { kind, hint } または \"kind:hint\" の形で書いてください (kind は file / dir / url / doc / note / decision / result)", { title: b.title }));
+    if (expect) { const o = portsOf(q, r.blockId, "out")[0]; if (o) q.ports[o.id] = { ...o, expect }; }
+    const scope: WorkScope = { ...q.blocks[r.blockId].scope };
+    if (b.acceptance?.trim()) scope.acceptance = b.acceptance.trim();
+    if (b.goal?.trim()) scope.goal = b.goal.trim();
+    if (Object.keys(scope).length) q.blocks[r.blockId].scope = scope;
     if ((b.outputs ?? []).length > 1) errors.push(t("「{title}」の出力は 1 本にしました (下の階層を持たないボックスの出力は 1 本。{omitted} は省略)", { title: b.title, omitted: b.outputs!.slice(1).join(", ") }));
     for (const name of b.inputs ?? []) q = addPort(q, { blockId: r.blockId, direction: "in", name }).project;
   }
@@ -1595,6 +1624,12 @@ export function splitBlock(
     const r = connect(q, from.ep, to.ep);
     if (r.error) errors.push(t("結線できません: {from} -> {to} ({why})", { from: c.from, to: c.to, why: r.error }));
     q = r.project;
+  }
+  // 親自身が作る出力 (統合・検証など): owner: "self" の印を付ける (子の結線と重なれば、判定で「重複」と案内される)
+  for (const name of spec.parentMakes ?? []) {
+    const o = portsOf(q, parentId, "out").find((x) => x.name === name);
+    if (!o) { errors.push(t("parentMakes: 親に出力「{name}」がありません", { name })); continue; }
+    q.ports[o.id] = { ...o, owner: "self" };
   }
   if (q.blocks[parentId].status === "black") { q.blocks[parentId].status = "gray"; q.blocks[parentId].statusChangedAt = now(); }
   q.blocks[parentId].collapsed = false;

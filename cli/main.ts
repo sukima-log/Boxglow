@@ -21,6 +21,8 @@ import { runLogin, runLogout, runWhoami } from "./sync/login";
 import { projectProblem } from "../src/model/validate-file";
 import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
 import { resumeSummary, resumeReport } from "../src/model/resume";
+import { nextSteps, readiness, reasonText } from "../src/model/readiness";
+import type { ExpectKind } from "../src/model/types";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import AGENTS_SNIPPET_JA from "../docs/AGENTS_SNIPPET.md";
 import AGENTS_SNIPPET_EN from "../docs/AGENTS_SNIPPET.en.md";
@@ -197,10 +199,48 @@ function writeExport(target: string, text: string): void {
   writeFileSync(target,text,"utf8");
 }
 
+/**
+ * --expect の指定を読む
+ * Input : spec = "<出力名>=<kind>:<hint>" または (only が指定されていれば) "<kind>:<hint>", only = 同じ呼び出しで足した 1 つの出力名
+ * Output: { name, expect }。kind が一覧に無い、hint が空、出力名が決まらないときは例外
+ */
+function parseExpect(spec: string, only?: string): { name: string; expect: { kind: ExpectKind; hint: string } } {
+  const KINDS: ExpectKind[] = ["file", "dir", "url", "doc", "note", "decision", "result"];
+  const kindPrefix = new RegExp(`^(${KINDS.join("|")}):`);
+  // "<出力名>=<kind>:<hint>" が先 (出力名が kind と同じ語 "result" でも読める)。= が無い、または = の右が kind: で始まらなければ、
+  // 同じ呼び出しで足した 1 つの出力への "<kind>:<hint>" とみなす
+  const eq = spec.indexOf("=");
+  let name: string | undefined, body: string;
+  if (eq >= 0 && kindPrefix.test(spec.slice(eq + 1))) { name = spec.slice(0, eq); body = spec.slice(eq + 1); }
+  else { name = only; body = spec; }
+  if (!name) throw new Error(t("--expect は <出力名>=<kind>:<hint> の形で指定してください: {spec}", { spec }));
+  const c = body.indexOf(":");
+  const kind = (c >= 0 ? body.slice(0, c) : body).trim() as ExpectKind;
+  const hint = (c >= 0 ? body.slice(c + 1) : "").trim();
+  if (!KINDS.includes(kind)) throw new Error(t("予定成果物の種類は {kinds} のどれかです: {spec}", { kinds: KINDS.join(" / "), spec }));
+  if (!hint) throw new Error(t("予定成果物の見当 (パスや題名) を書いてください: {spec}", { spec }));
+  return { name, expect: { kind, hint } };
+}
+
+/**
+ * context に添える着手の準備の要約
+ * Input : p, blockId / Output: { state, unprepared: 理由の文, next: 次の一手, waiting: 入力待ちの名前, outputs: 出力ごとの担当 }
+ */
+function readinessSummary(p: Project, blockId: string) {
+  const r = readiness(p, blockId);
+  return {
+    state: r.state
+  , unprepared: r.unprepared.map((x) => reasonText(p, x))
+  , next: nextSteps(p, blockId, r.unprepared)
+  , waiting: r.waiting
+  , outputs: r.outputs.map((o) => ({ name: o.port.name, owner: o.owner.kind, ...(o.owner.kind === "child" || o.owner.kind === "conflict" ? { by: o.owner.blockIds.map((id) => p.blocks[id]?.key ?? id) } : {}), ...(o.port.expect ? { expect: o.port.expect } : {}) }))
+  };
+}
+
 /** ブロックを探す (見つからなければ候補を示して終了) */
 function mustFind(p: Project, ref: string | undefined, what = "block") {
   if (!ref) throw new Error(t("<{what}> を指定してください (id または題名)", { what }));
-  const rootClaim=ref===ROOT_ID && claimsEnabled(p) && ["context","start","leave","checkpoint","claim-renew","claim-release"].includes(claimRequest.command);
+  const rootClaim=ref===ROOT_ID && claimsEnabled(p) && ["context","start","claim","leave","checkpoint","claim-renew","claim-release"].includes(claimRequest.command);
   const r = rootClaim ? findClaimBlock(p,ref) : findBlock(p, ref);
   if (!r.block) {
     // 文を組み立てずに、場合ごとに 1 文ずつ訳せる形にする (候補あり = 1 つに決まらない / 候補なし = 見つからない)
@@ -319,7 +359,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  Codex は AGENTS.md と .agents/skills、Claude Code は CLAUDE.md・スキル・フック・.mcp.json (既定: all)
   claims                                        受け持ち一覧 (自分・他者・期限切れ)
   claim-policy --mode reject|warn|off [--minutes 30] --actor human  計画ごとの有効化 (人の操作)
-  start <block> --instance <固定ID> [--scope subtree]              取得、受領証 CLAIM を表示
+  start <block> --instance <固定ID> [--scope subtree]              取得して実行中にする、受領証 CLAIM を表示
+  claim <block> --instance <固定ID> [--scope subtree]              取得だけ (実行中にはしない。分解・具体化の前に)、受領証 CLAIM を表示
   claim-renew <block> --instance <固定ID> --claim-token <受領証>    期限を延長
   claim-release <block> --reason <理由> --actor human              人が強制解除
   受け持ち有効時: 保存する操作に --instance と --claim-token。通常の start は block 範囲。
@@ -330,7 +371,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   scope <block> [--goal <本文>] [--non-goals <本文>] [--acceptance <本文>] [--consult <本文>]
                                                  今回達成すること / 対象外 / 完了条件 / 相談条件。省略は表示、none で項目を消す
   focus [<block>|none]                           今回優先するボックスとその配下を指定 (候補内で着手可・入力待ちを区別)。省略は表示
-  policy [--start warn|reject] [--done warn|reject]  入力待ちの開始 / 成果物なしの完了。既定 warn。人の操作は拒否しない
+  policy [--start warn|reject] [--done warn|reject] [--unprepared warn|reject]  入力待ちの開始 / 成果物なしの完了 / 要具体化の開始。既定 warn。人の操作は拒否しない
                                                  reject の start も --reason があれば通す。done は既存の出力成果物も数える。set --status white にも適用
                                                  guard 有効時の scope 設定・focus 設定・policy 設定は --context-token が必要
   context <block> [--brief]                      ボックスのコンテキスト (親と入力元の説明・判断・入出力の条件・引き継ぎ) と確認トークン contextToken を JSON で出す
@@ -363,12 +404,13 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   project <名前>                                 プロジェクトのボックスを最上位に足す (同じファイルで複数のプロジェクト) [--repo <パス>]  (複数リポジトリは boxglow.json を上のフォルダに置き、各リポジトリで BOXGLOW_FILE を指す)
   export-block <block> [--out <path>] [--tags "a,b"]   ボックスを下の階層ごとテンプレート (*.boxglow-block.json) に書き出す
   import-block <path> [--parent <block>]         テンプレートを挿入 (親を省略すると最初のプロジェクトのボックスの中)
-  split <block> --spec '<JSON>' | --spec-file <path>   下の階層にまとめて分解 (形式は docs/AGENTS_SNIPPET.md)
+  split <block> --spec '<JSON>' | --spec-file <path>   下の階層にまとめて分解 (形式は docs/AGENTS_SNIPPET.md)。子の expect / acceptance は今回着手する分だけでよい (無い子は要具体化として残る)
+  claim <block> [--scope block|subtree] [--note]    受け持ちだけを取る (実行中にはしない)。分解・具体化の前に: context → claim → split / port / scope → context → start。受け持ち制御が無効な計画では「取得不要」
   branch <題名> --options "A|B" | --option <A> --option <B> [--question <問い>] [--context <判断材料>] [--in <入力名>]... [--parent <block>]   まだ決まっていない分かれ道 (分岐) を足す。選択肢ごとに道 (出力) ができ、answer で答えると選ばなかった道は見送り
   branch --box <block> --options "A|B" [--question <問い>] [--context <判断材料>]   今あるボックスを分岐に変える (今の出力は 1 つ目の選択肢の道になる。中にボックスを持つものは不可)
   join [--title <題名>] [--parent <block>]           合流の部品を足す (分かれた道を 1 つにまとめる。道の出力を connect でつなぐと、どれか 1 つが届けば先へ進む)
   move <block> --parent <block|project>            ボックスを別の親の中へ移す (線は間のボックスのポートを経由してつながったまま)
-  port <block|project> [--in <名前>]... [--out <名前>]... [--rename <旧名>=<新名>] [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス)
+  port <block|project> [--in <名前>]... [--out <名前>]... [--expect "<出力名>=<kind>:<hint>"]... [--self <出力名>]... [--no-self <出力名>]... [--rename <旧名>=<新名>] [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス)
   disconnect <題名.出力名> <題名.入力名>          線を外す
   tidy                                              ファイルを規則にそろえて保存し直す (つないだ入力の名前を供給元に合わせる、大項目を畳む、重なりを解く)
   remove <block> [--force]                          ボックスを消す (中にボックスがあるときは --force。線も外れる。元に戻せないので Git で管理していること)
@@ -376,7 +418,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  通常は「同期を始める」から開始。--sync = 明示有効化、--no-sync = 無効。送り先は --server > BOXGLOW_SERVER > 既存の結び付け > 製品既定。空/off も無効
   mcp [--file <path>]                               MCP サーバ (標準入出力)。Claude Code などから status / start / done / ask ... をツールとして使う (.mcp.json は setup-agent が書く)
   connect <題名.出力名> <題名[.入力名]>           結線 (受け側は題名だけでよい: 出力名と同じ名前の入力を作ってつなぐ。親子は自動で内側の面。最終成果物へは project)
-  start <block> [--note <何をするか>] [--reason <理由>]  入力待ちは既定で警告。理由を記録すると警告なしで開始
+  start <block> [--note <何をするか>] [--reason <理由>]  入力待ちは既定で警告。理由を記録すると警告なしで開始。
+                                                 要具体化 (自身が作る出力が無い、出力の予定成果物 expect・完了条件 acceptance が未定) も既定は警告 (policy --unprepared reject で AI は開始不可。理由では通れない)
   done <block> [--artifact <題名>=<URL またはパス>]... [--output <出力名>] [--note]   完了 (成果物を付けて white)
                                                  パスが Git 管理下なら「コミット + パス + blob」で記録する (アップロードしない)
   artifact <block> <URL またはパス> [--title <題名>] [--output <出力名>]   成果物だけ付ける (完了にはしない)
@@ -391,7 +434,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <題名>] [--note <説明>] [--category <カテゴリ>|none] [--repo <パス>|none] [--issue <URL>|none]
               [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <時間>|none] [--hours <実績時間>|none]
   find <文字>                                    ID や題名でボックスを探す
-  list --assignee <名前> | --unassigned | --everyone [--all] [--json]   担当の一覧を表で出す (既定は未完了だけ。--all で完了済みも。並びは期日の近い順)
+  list --assignee <名前> | --unassigned | --everyone [--all] [--unprepared] [--json]   担当の一覧を表で出す (既定は未完了だけ。--all で完了済みも。--unprepared で要具体化だけ。並びは期日の近い順)
   group <名前>                                   最上位の入力グループを作る (例: "PCIe 仕様書")
   group-set <入力名> <グループ名|none>            最上位の入力をグループに入れる / 外す
   group-export <グループ名> [--out <path>]        グループを JSON に書き出す (他のプロジェクトで group-import)
@@ -423,7 +466,8 @@ Usage (npx boxglow <command> ...):
                                                  Codex: AGENTS.md and .agents/skills. Claude Code: CLAUDE.md, skill, hook and .mcp.json (default: all)
   claims                                        Claims grouped by own/others/expired
   claim-policy --mode reject|warn|off [--minutes 30] --actor human  Opt in per plan (human)
-  start <block> --instance <fixed-ID> [--scope subtree]             Acquire; prints CLAIM receipt
+  start <block> --instance <fixed-ID> [--scope subtree]             Acquire and start; prints CLAIM receipt
+  claim <block> --instance <fixed-ID> [--scope subtree]             Acquire only (no start; before planning); prints CLAIM receipt
   claim-renew <block> --instance <fixed-ID> --claim-token <receipt>  Renew expiry
   claim-release <block> --reason <reason> --actor human             Human force release
   When enabled, writes require --instance and --claim-token. Default start scope: block.
@@ -434,7 +478,7 @@ Usage (npx boxglow <command> ...):
   scope <block> [--goal <text>] [--non-goals <text>] [--acceptance <text>] [--consult <text>]
                                                  Goal / non-goals / acceptance / consult before expansion. No flags reads; none clears a field
   focus [<block>|none]                           Prioritize this box and descendants, separating ready/waiting within each scope. No argument reads
-  policy [--start warn|reject] [--done warn|reject]  Missing-input starts / artifact-free completion; default warn. Human actions are never rejected
+  policy [--start warn|reject] [--done warn|reject] [--unprepared warn|reject]  Missing-input starts / artifact-free completion / starts that still need detail; default warn. Human actions are never rejected
                                                  A start reason overrides reject. Existing output artifacts count for done; set --status white also checks policy
                                                  With guard on, scope/focus/policy writes require --context-token
   context <block> [--brief]                      Print a box's context (descriptions, decisions, input/output contracts and handoff notes of its parents and input providers) and its contextToken as JSON
@@ -467,12 +511,13 @@ Usage (npx boxglow <command> ...):
   project <name>                                 Add a project box at the top level (several projects in one file) [--repo <path>]  (for several repositories, put boxglow.json in a parent folder and point BOXGLOW_FILE at it from each repository)
   export-block <block> [--out <path>] [--tags "a,b"]   Write a box and everything under it out as a template (*.boxglow-block.json)
   import-block <path> [--parent <block>]         Insert a template (without a parent, goes inside the first project box)
-  split <block> --spec '<JSON>' | --spec-file <path>   Break a box down into child boxes in one go (format: docs/AGENTS_SNIPPET.en.md)
+  split <block> --spec '<JSON>' | --spec-file <path>   Break a box down into child boxes in one go (format: docs/AGENTS_SNIPPET.en.md). expect / acceptance only for the children you will start now (the others stay "needs detail")
+  claim <block> [--scope block|subtree] [--note]    Hold a box without starting it. Before planning: context → claim → split / port / scope → context → start. Prints "not needed" when claims are off
   branch <title> --options "A|B" | --option <A> --option <B> [--question <question>] [--context <background>] [--in <input name>]... [--parent <block>]   Add an undecided fork (branch). Each option gets a path (output); answering it with answer skips the paths not chosen
   branch --box <block> --options "A|B" [--question <question>] [--context <background>]   Turn an existing box into a branch (its output becomes the first option's path; not for boxes with children)
   join [--title <title>] [--parent <block>]          Add a merge part (where paths come together; connect the paths' outputs to it, and any one of them arriving lets the work go on)
   move <block> --parent <block|project>            Move a box into another parent (wires stay connected through the ports of the boxes in between)
-  port <block|project> [--in <name>]... [--out <name>]... [--rename <old>=<new>] [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, or rename them. --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
+  port <block|project> [--in <name>]... [--out <name>]... [--expect "<output>=<kind>:<hint>"]... [--self <output>]... [--no-self <output>]... [--rename <old>=<new>] [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, rename them, set an output's planned deliverable (expect: kind file / dir / url / doc / note / decision / result + a path or title) or mark it as made by this box itself (--self). --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
   disconnect <title.output> <title.input>          Remove a wire
   tidy                                              Normalize the file and save it again (match connected input names to their source, collapse top-level items, resolve overlaps)
   remove <block> [--force]                          Delete a box (--force if it contains boxes. Its wires are removed too. This cannot be undone, so keep the file in Git)
@@ -480,7 +525,8 @@ Usage (npx boxglow <command> ...):
                                                  Normally use Start syncing in the UI. --sync enables; --no-sync disables. Server: --server > BOXGLOW_SERVER > existing binding > product default. Empty/off also disables.
   mcp [--file <path>]                               MCP server (stdio). Lets Claude Code and others use status / start / done / ask ... as tools (setup-agent writes .mcp.json)
   connect <title.output> <title[.input]>           Connect (the receiving side can be just a title: an input with the same name as the output is created and connected. Parent and child connect on the inner side automatically. Use project for the final deliverable)
-  start <block> [--note <what you will do>] [--reason <reason>]  Missing inputs warn by default; a recorded reason allows starting without a warning
+  start <block> [--note <what you will do>] [--reason <reason>]  Missing inputs warn by default; a recorded reason allows starting without a warning.
+                                                 A box that still needs detail (no output of its own, or an output without expect / acceptance) warns by default too (policy --unprepared reject blocks AI starts; a reason does not bypass it)
   done <block> [--artifact <title>=<URL or path>]... [--output <output name>] [--note]   Finish (attach artifacts and turn it white)
                                                  If the path is tracked by Git, it is recorded as "commit + path + blob" (nothing is uploaded)
   artifact <block> <URL or path> [--title <title>] [--output <output name>]   Attach an artifact only (does not finish the box)
@@ -495,7 +541,7 @@ Usage (npx boxglow <command> ...):
   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <title>] [--note <description>] [--category <category>|none] [--repo <path>|none] [--issue <URL>|none]
               [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <hours>|none] [--hours <actual hours>|none]
   find <text>                                    Find boxes by ID or title
-  list --assignee <name> | --unassigned | --everyone [--all] [--json]   List assigned boxes as a table (open ones by default; --all adds done ones; sorted by due date)
+  list --assignee <name> | --unassigned | --everyone [--all] [--unprepared] [--json]   List assigned boxes as a table (open ones by default; --all adds done ones; --unprepared only those that need detail; sorted by due date)
   group <name>                                   Create a top-level input group (e.g. "PCIe spec")
   group-set <input name> <group name|none>       Put a top-level input into a group / take it out
   group-export <group name> [--out <path>]       Write a group out as JSON (group-import it in another project)
@@ -650,7 +696,7 @@ function main(argv: string[]): void {
       // トークンが無い・古いときは返さない (人の変更を読まないまま新しいトークンを手に入れられないようにする)
       const b = findBlock(p, rest[0] ?? "").block;
       if (b && contextReceipt(p, b.id).contextToken === token) tokenTarget = b.id;
-    } else if ((cmd === "focus" && rest[0] !== undefined) || (cmd === "policy" && (options.start !== undefined || options.done !== undefined))) {
+    } else if ((cmd === "focus" && rest[0] !== undefined) || (cmd === "policy" && (options.start !== undefined || options.done !== undefined || options.unprepared !== undefined))) {
       // 計画全体の規則を変える前にも、現在の指示を読んだことを照合する。
       if (!isCurrentToken(p, token)) throw new Error(t("計画の設定を変える前に context を読み、--context-token を付けてください。"));
       tokenTarget = Object.keys(p.blocks).find(id => contextReceipt(p, id).contextToken === token);
@@ -660,7 +706,7 @@ function main(argv: string[]): void {
     }
   }
   runCommand(cmd, rest, options, actor, path, p, AGENTS_SNIPPET, SKILL_MD);
-  if(lastSavedText && cmd === "start") {
+  if(lastSavedText && (cmd === "start" || cmd === "claim")) {
     const saved=fromJSON(lastSavedText), id=findClaimBlock(saved,rest[0]).block?.id;
     if(id && claimsEnabled(saved) && !claimRequest.human) {
       const held=Object.entries(saved.claims??{}).find(([root,c])=>activeClaim(c,Date.now()) && c.instanceId===claimRequest.identity.instanceId && c.actor===claimRequest.identity.actor && covers(saved,root,c,id));
@@ -731,17 +777,17 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     }
     case "policy": {
       const patch: WorkflowPolicy = { ...p.workflowPolicy };
-      for (const [flag, key] of [["start", "startWithoutInputs"], ["done", "doneWithoutArtifacts"]] as const) {
+      for (const [flag, key] of [["start", "startWithoutInputs"], ["done", "doneWithoutArtifacts"], ["unprepared", "startUnprepared"]] as const) {
         if (options[flag] === undefined) continue;
         const value = str(options[flag]);
         if (value !== "warn" && value !== "reject") throw new Error(t("確認方法は warn または reject を指定してください。"));
         patch[key] = value;
       }
-      if (options.start !== undefined || options.done !== undefined) {
+      if (options.start !== undefined || options.done !== undefined || options.unprepared !== undefined) {
         p.workflowPolicy = patch;
         save(path, p);
       }
-      out(JSON.stringify({ startWithoutInputs: patch.startWithoutInputs ?? "warn", doneWithoutArtifacts: patch.doneWithoutArtifacts ?? "warn" }, null, 2));
+      out(JSON.stringify({ startWithoutInputs: patch.startWithoutInputs ?? "warn", doneWithoutArtifacts: patch.doneWithoutArtifacts ?? "warn", startUnprepared: patch.startUnprepared ?? "warn" }, null, 2));
       return;
     }
     case "claims": {
@@ -755,6 +801,16 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       p={...p,claimPolicy:{mode:mode as "off"|"warn"|"reject",leaseMinutes:options.minutes===undefined?(p.claimPolicy?.leaseMinutes??30):Number(str(options.minutes))}};
       save(path,p);out(t("受け持ち設定: {mode}",{mode}));return;
     }
+    case "claim": {
+      // 受け持ちだけを取得・更新する (実行中にはしない)。分解・具体化の前に使う。
+      // 受け持ち制御が無効な計画では「取得不要」として正常終了し、計画も状態も変えない (手順を全計画で共通にするため)
+      const b = mustFind(p, rest[0]);
+      if (!claimsEnabled(p)) { out(t("受け持ち: 取得不要 (この計画では受け持ち制御が無効です)") + "\n" + JSON.stringify({ claimed: false, reason: "disabled", blockId: b.id })); return; }
+      if (claimRequest.human) { out(t("受け持ち: 取得不要 (人の操作は受け持ちを取りません)") + "\n" + JSON.stringify({ claimed: false, reason: "human", blockId: b.id })); return; }
+      save(path, p); // 取得・更新は保存の中 (prepareClaimSave) で行う。受領証は保存後に CLAIM 行で出す
+      out(t("受け持ち: 取得しました (実行中にはしていません。具体化の後に start してください)"));
+      return;
+    }
     case "claim-release":
     case "claim-renew": {
       const target=mustFind(p,rest[0]);
@@ -764,7 +820,9 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     case "context": {
       // ボックスのコンテキストと確認トークンを JSON で出す (読むだけ)
       // --brief: 短いコンテキスト (対象の情報は全部、親・上流は絞る)。確認トークンは、全部の出力と同じ
-      out(JSON.stringify({...(options.brief ? briefReceipt : contextReceipt)(p, mustFind(p, rest[0]).id),...(claimsEnabled(p)?{claimSummary:claimSummary(p,claimRequest.identity)}:{})}, null, 2));
+      // readiness (着手の準備: 要具体化の理由と次の一手、入力待ち) は受領証の外に添える (確認トークンの元には含めない。判定は計画から毎回導出する)
+      const ctxId = mustFind(p, rest[0]).id;
+      out(JSON.stringify({...(options.brief ? briefReceipt : contextReceipt)(p, ctxId), readiness: readinessSummary(p, ctxId), ...(claimsEnabled(p)?{claimSummary:claimSummary(p,claimRequest.identity)}:{})}, null, 2));
       return;
     }
     case "guard": {
@@ -898,7 +956,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
         if (!m) throw new Error(t("メンバー「{name}」が見つかりません (メンバー: {names})", { name: who, names: p.members.map((x) => x.name).join(", ") || t("(なし)") }));
         target = { memberId: m.id };
       }
-      const rows = assignmentRows(p, target, { includeDone: !!options.all });
+      const rows = assignmentRows(p, target, { includeDone: !!options.all, onlyUnprepared: !!options.unprepared });
       if (options.json) { out(JSON.stringify(rows, null, 2)); return; }
       if (rows.length === 0) { out(options.all ? t("担当のボックスはありません") : t("未完了の担当のボックスはありません")); return; }
       // 表の中の | は区切りと紛れるので、全角に置き換える
@@ -906,9 +964,9 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       // 全員のときだけ、誰の担当かの列を足す
       const who = "everyone" in target;
       const lines = [
-        `| ID | ${t("題名")} | ${t("場所")} | ${who ? `${t("担当")} | ` : ""}${t("状態")} | ${t("進捗")} | ${t("期日")} | ${t("見積")} | ${t("入力")} | ${t("判断待ち")} |`
+        `| ID | ${t("題名")} | ${t("場所")} | ${who ? `${t("担当")} | ` : ""}${t("状態")} | ${t("進捗")} | ${t("期日")} | ${t("見積")} | ${t("準備")} | ${t("判断待ち")} |`
       , `|---|---|---|${who ? "---|" : ""}---|---:|---|---:|---|---:|`
-      , ...rows.map((r) => `| ${r.key} | ${cell(r.title)} | ${cell(r.where)} | ${who ? `${cell(r.assignees.join(", ") || t("未担当"))} | ` : ""}${STATUS_LABEL[r.status]} | ${r.progress}% | ${r.dueDate ?? ""}${r.overdue ? ` (${t("期日切れ")})` : ""} | ${r.estimateHours !== undefined ? `${r.estimateHours}h` : ""} | ${r.status === "white" ? "" : r.missingInputs.length ? cell(t("待ち: {names}", { names: r.missingInputs.join(", ") })) : t("そろった")} | ${r.pendingDecisions || ""} |`)
+      , ...rows.map((r) => `| ${r.key} | ${cell(r.title)} | ${cell(r.where)} | ${who ? `${cell(r.assignees.join(", ") || t("未担当"))} | ` : ""}${STATUS_LABEL[r.status]} | ${r.progress}% | ${r.dueDate ?? ""}${r.overdue ? ` (${t("期日切れ")})` : ""} | ${r.estimateHours !== undefined ? `${r.estimateHours}h` : ""} | ${r.status === "white" ? "" : r.unprepared.length ? cell(t("要具体化: {reasons}", { reasons: r.unprepared.join("; ") })) : r.missingInputs.length ? cell(t("待ち: {names}", { names: r.missingInputs.join(", ") })) : t("そろった")} | ${r.pendingDecisions || ""} |`)
       ];
       out(lines.join("\n"));
       return;
@@ -1026,7 +1084,12 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const spec = JSON.parse(specText);
       const r = splitBlock(p, b.id, spec, actor);
       save(path, layoutScope(r.project, b.id));
-      out(t("分解: 「{title}」に {count} 個を追加", { title: b.title, count: spec.blocks.length }) + (r.errors.length ? "\n" + r.errors.map((x) => "- " + x).join("\n") : ""));
+      // 保存後に、まだ具体化していない子 (予定成果物・完了条件が無い) の数を知らせる (拒否はしない。今回着手する分だけ具体化すればよい)
+      const kids = Object.values(r.project.blocks).filter((x) => x.parentId === b.id);
+      const rough = kids.filter((x) => readiness(r.project, x.id).unprepared.length > 0);
+      out(t("分解: 「{title}」に {count} 個を追加", { title: b.title, count: spec.blocks.length })
+        + (rough.length ? "\n" + t("要具体化: 子 {total} 個のうち {n} 個 ({keys})。着手する前に expect と acceptance を決めてください", { total: kids.length, n: rough.length, keys: rough.map((x) => x.key ?? x.title).join(", ") }) : "")
+        + (r.errors.length ? "\n" + r.errors.map((x) => "- " + x).join("\n") : ""));
       return;
     }
     case "move": {
@@ -1046,7 +1109,25 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const blockId = target === "project" ? (projectBlocks(p)[0]?.id ?? ROOT_ID) : target === ROOT_ID ? ROOT_ID : mustFind(p, target).id;
       const added: string[] = [];
       for (const name of list(options.in)) { p = addPort(p, { blockId, direction: "in", name }).project; added.push(t("入力 {name}", { name })); }
-      for (const name of list(options.out)) { p = addPort(p, { blockId, direction: "out", name }).project; added.push(t("出力 {name}", { name })); }
+      const newOuts = list(options.out);
+      for (const name of newOuts) { p = addPort(p, { blockId, direction: "out", name }).project; added.push(t("出力 {name}", { name })); }
+      // 予定成果物: --expect "<出力名>=<kind>:<hint>"。同じ呼び出しで --out を 1 つだけ足したなら "<kind>:<hint>" だけでもよい
+      for (const spec of list(options.expect)) {
+        const { name, expect } = parseExpect(spec, newOuts.length === 1 ? newOuts[0] : undefined);
+        const port = portsOf(p, blockId, "out").find((x) => x.name === name);
+        if (!port) throw new Error(t("出力「{name}」が見つかりません", { name }));
+        p = updatePort(p, port.id, { expect });
+        added.push(t("予定成果物 {name} = {kind}:{hint}", { name, kind: expect.kind, hint: expect.hint }));
+      }
+      // 担当の印: --self "<出力名>" = 子に任せず自身が作る / --no-self "<出力名>" = 印を外す
+      for (const [flag, on] of [["self", true], ["no-self", false]] as const) {
+        for (const name of list(options[flag])) {
+          const port = portsOf(p, blockId, "out").find((x) => x.name === name);
+          if (!port) throw new Error(t("出力「{name}」が見つかりません", { name }));
+          p = on ? updatePort(p, port.id, { owner: "self" }) : { ...p, ports: { ...p.ports, [port.id]: Object.fromEntries(Object.entries(port).filter(([k]) => k !== "owner")) as typeof port } };
+          added.push(on ? t("自身が作る {name}", { name }) : t("印を外す {name}", { name }));
+        }
+      }
       // 合流の入力にする (どれか 1 つが届けばよい) / 通常の入力に戻す
       for (const [flag, on] of [["any-of", true], ["all-of", false]] as const) {
         for (const name of list(options[flag])) {
@@ -1068,7 +1149,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
         p = updatePort(p, port.id, { name: to });
         added.push(`${from} -> ${to}`);
       }
-      if (added.length === 0) throw new Error(t("--in <名前> / --out <名前> / --rename <旧名>=<新名> / --any-of <入力名> / --all-of <入力名> のいずれかを指定してください"));
+      if (added.length === 0) throw new Error(t("--in <名前> / --out <名前> / --expect <出力名>=<kind>:<hint> / --self <出力名> / --rename <旧名>=<新名> / --any-of <入力名> / --all-of <入力名> のいずれかを指定してください"));
       save(path, p);
       out(t("ポート: {title}: {list}", { title: p.blocks[blockId]?.title ?? "project", list: added.join(", ") }));
       return;

@@ -20,14 +20,19 @@ Do not edit it directly; update it with `npx boxglow`.
 ## Steps
 
 1. Read `npx boxglow resume` (or `npx boxglow status --brief`). Take in the handoff notes, the answers not yet read by the AI, the pending decisions, the boxes in progress and the next candidates. Use `npx boxglow status` when you need the whole tree
-2. Once you have chosen a box, check its inputs and outputs with `npx boxglow show <block>`, then run `npx boxglow start <block> --note "<what you will do>"`.
-   On a plan with the context guard on, first read `npx boxglow context <block>` and pass the `contextToken` (context token) from its output as `--context-token <context token>`
-3. Split a large box with `npx boxglow split <block> --spec '<JSON>'` (see `npx boxglow help` for the format). Always decide the output of each box
-4. When the deliverable exists, run `npx boxglow done <block> --artifact "<name>=<URL or path>"` (with the guard on, add `--context-token <context token>`; if your previous command printed "New context token: <token>", use that one)
-5. When a human decision is needed, run `npx boxglow ask <block> "<question>" --options "A|B"` and move on to another box
-6. When you are stuck: If the cause is a missing input (a deliverable of an earlier box, or material), do not mark the box as blocked. Check its input wires with `npx boxglow show <block>`; if no box produces what is missing, create one outside (upstream) with `npx boxglow add` and wire it to this box's input with `npx boxglow connect` (the wire stays in the waiting color, so the diagram shows what the box is waiting for). If a choice between options would let you continue, use `ask`. Record only obstacles outside the plan (an environment that does not work, missing permissions or keys, waiting for an outside reply, a failure with no known cause) with `npx boxglow blocked <block> --note "<what is in the way>"`
-7. Before an interruption, context compaction or a handoff, save a handoff note with `npx boxglow checkpoint <block> --note "Findings; next steps; unresolved questions"`
-8. At the end, summarize `npx boxglow status --brief` and report it
+2. Once you have chosen a box, read `npx boxglow context <block>`. If `readiness.state` is `ready` you can start. `unprepared` (needs detail) means you add detail first, following the reasons in `unprepared` and the commands in `next`. `waiting` means a required input or a branch answer is missing
+3. Before adding detail or splitting, hold the box with `npx boxglow claim <block>` (it does not start the box; on a plan without claims it prints "not needed" and succeeds). Fill in what is missing:
+   the output's planned deliverable `npx boxglow port <block> --expect "<output>=file:src/x.ts"` (kind: file / dir / url / doc / note / decision / result; the file need not exist yet) and the acceptance criteria `npx boxglow scope <block> --acceptance "<when it counts as done>"`.
+   Split a large box with `npx boxglow split <block> --spec '<JSON>'` (see `npx boxglow help` for the format). Write expect / acceptance only for the children you will start now; later children need only a title and an output.
+   When you do not know which files are involved, do not invent paths: add a box "find the target" with a `note` output and start that
+4. Once ready, read `npx boxglow context <block>` again and run `npx boxglow start <block> --note "<what you will do>"`.
+   On a plan with the context guard on, pass the `contextToken` (context token) from the context output as `--context-token <context token>`.
+   Starting a box that still needs detail warns by default; on a plan with `policy --unprepared reject` it is refused (`--reason` does not bypass it). A parent whose outputs are all made by its children has nothing to run itself: start the child instead
+5. When the deliverable exists, run `npx boxglow done <block> --artifact "<name>=<URL or path>"` (with the guard on, add `--context-token <context token>`; if your previous command printed "New context token: <token>", use that one)
+6. When a human decision is needed, run `npx boxglow ask <block> "<question>" --options "A|B"` and move on to another box
+7. When you are stuck: If the cause is a missing input (a deliverable of an earlier box, or material), do not mark the box as blocked. Check its input wires with `npx boxglow show <block>`; if no box produces what is missing, create one outside (upstream) with `npx boxglow add` and wire it to this box's input with `npx boxglow connect` (the wire stays in the waiting color, so the diagram shows what the box is waiting for). If a choice between options would let you continue, use `ask`. Record only obstacles outside the plan (an environment that does not work, missing permissions or keys, waiting for an outside reply, a failure with no known cause) with `npx boxglow blocked <block> --note "<what is in the way>"`
+8. Before an interruption, context compaction or a handoff, save a handoff note with `npx boxglow checkpoint <block> --note "Findings; next steps; unresolved questions"`
+9. At the end, summarize `npx boxglow status --brief` and report it
 
 ## Rules
 
@@ -68,12 +73,12 @@ npx boxglow done B12 --artifact "<name>=<path>" --context-token <new context tok
 
 ### Readiness, current scope, and fresh resume information
 
-- Read current activity, pending decisions, and unread answers first. Candidates are grouped by current scope / other candidates, then ready / waiting for inputs, with missing input names. A waiting candidate is not ready.
+- Read current activity, pending decisions, and unread answers first. Candidates are grouped by current scope / other candidates, then ready / needs detail / waiting for inputs, with the reasons and missing input names. A candidate that needs detail or is waiting is not ready. "Ready" is a mechanical check (an output of its own, expect, acceptance, required inputs) and does not judge how specific the text is.
 - Four optional scope fields are available: goal, non-goals, acceptance, and consult (when to consult before expanding scope). Read the target and parent scopes at the start of context before starting and finishing. Textual acceptance criteria are not automatically evaluated.
 - Use scope B12 --goal "Goal" --non-goals "Excluded" --acceptance "Checks" --consult "When to ask". scope B12 only reads; none or an empty string clears a field. In the inspector, use ⋯ → Edit work scope. Only populated fields appear in the collapsed scope section.
 - focus B12 prioritizes that box and its descendants; focus reads the selection, and focus none clears it. Other candidates remain in a separate group. Being listed does not authorize expanding scope or publishing.
 - Missing required inputs warn on start by default but still allow the start. Supply --reason "Why starting early is appropriate" to proceed without a warning and save the reason in both activity and the log. Artifact-free done also remains warning-only by default. Existing output artifacts or --artifact count; reference material on the box does not.
-- Only enable strict checks when selected for the plan: policy --start reject --done reject. Each can return to warn. A recorded start reason also overrides reject. The artifact requirement also applies to set --status white. Human operations (UI / --actor human) are never rejected. Do not impersonate a human or weaken policy to bypass rejection.
+- Only enable strict checks when selected for the plan: policy --start reject --done reject --unprepared reject. Each can return to warn. A recorded start reason overrides the missing-input rejection, but not the needs-detail one. The artifact requirement also applies to set --status white. Human operations (UI / --actor human) are never rejected. Do not impersonate a human or weaken policy to bypass rejection.
 - With guard enabled, scope writes, focus selection/clearing, and policy writes require --context-token. These changes print a new token: use it next. Read-only forms need no token.
 - resume hides completed handoff bodies and shows their count. Request resume --include-completed only when history is needed; context / show can still read individual notes.
 - descriptionUpdatedAt dates description changes; statusChangedAt dates status changes; handoffs use their existing at field. Notes predating a status change are marked. Unknown legacy dates stay unknown, and recency does not establish truth.

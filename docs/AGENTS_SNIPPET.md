@@ -16,19 +16,25 @@ boxglow.json はリポジトリ直下に置く (`npx boxglow init --name "<プ�
 ### 作業のたびに守ること
 
 1. **最初に読む**: `npx boxglow resume` (または `npx boxglow status --brief`) で、作業中・判断待ち・AI 未確認の回答・次の候補・未完了の引き継ぎメモを読む。前のセッションの続きは、ここに出る引き継ぎメモから再開する。`npx boxglow show <block>` で担当するボックスの入出力を確認する
-2. **着手を記録**: ボックスに取りかかるとき `npx boxglow start <block> --note "<何をするか>"`。同時に進めるボックスは 1〜2 個まで。
-   確認トークンの要求 (guard) が有効な計画では、先に `npx boxglow context <block>` を読み、出力の `contextToken` (確認トークン) を付ける:
+2. **準備を確認**: 取りかかる前に `npx boxglow context <block>` を読む。出力の `readiness` が準備の状態: `state` が `ready` なら着手できる。`unprepared` (要具体化) なら `unprepared` の理由と `next` の次の一手に従って先に具体化する。`waiting` は必須の入力か分岐の答えを待っている
+3. **受け持ち、具体化**: 具体化や分解の前に `npx boxglow claim <block>` で受け持ちだけを取る (実行中にはならない。受け持ち制御が無効な計画では「取得不要」で正常終了する)。そのうえで不足を埋める:
+   - 出力の予定成果物: `npx boxglow port <block> --expect "<出力名>=file:src/x.ts"` (kind は file / dir / url / doc / note / decision / result。hint はパスの見当や題名。まだ作っていないファイルでよい)
+   - 完了条件: `npx boxglow scope <block> --acceptance "<完了と判断する条件>"`。処理の範囲は `--goal`
+   - 1 つのボックスで出力を作る見通しが立たないなら `npx boxglow split <block> --spec '<JSON>'` で中に小さなボックスを置く。今回着手する子だけ expect / acceptance を書き、先の子は題名と出力だけでよい (要具体化として残る)。入力は不明なら省略してよい (自動で上の階層の入力になる)
+   - 対象のファイルが分からないときは、架空のファイルを書かず「対象を特定する調査」のボックスを出力 `note` で作って始める
+4. **着手を記録**: 準備ができたら `npx boxglow context <block>` を読み直してから `npx boxglow start <block> --note "<何をするか>"`。同時に進めるボックスは 1〜2 個まで。
+   確認トークンの要求 (guard) が有効な計画では、出力の `contextToken` (確認トークン) を付ける:
    `npx boxglow start <block> --note "<何をするか>" --context-token <確認トークン>` (下の「確認トークンと引き継ぎ」を参照)
-3. **分解**: 1 つのボックスで出力を作る見通しが立たないときは、`npx boxglow split <block> --spec '<JSON>'` で中に小さなボックスを置く。各ボックスに出力 (成果物) を必ず決める。入力は不明なら省略してよい (自動で上の階層の入力になる)
-4. **完了を記録**: 出力の成果物ができたら `npx boxglow done <block> --artifact "<名前>=<リポジトリ内のパス>"`。
+   要具体化のボックスへの start は既定では警告 (理由と次の一手が出る)。`policy --unprepared reject` の計画では開始できない (`--reason` では通れない。人の操作は通る)。出力を子に任せきりの親も実行するものが無いので、子を start する
+5. **完了を記録**: 出力の成果物ができたら `npx boxglow done <block> --artifact "<名前>=<リポジトリ内のパス>"`。
    guard が有効なら `--context-token <確認トークン>` を付ける (直前の自分の操作の出力に「新しい確認トークン: <token>」が出ていれば、それを使う)。
    HEAD にコミット済みで内容が一致するファイルは「コミット + パス + 中身のハッシュ」で記録される (アップロードはしない)。未コミット・未追跡のファイルはローカル参照として残り、コミットした後の `npx boxglow check` で Git の参照に補完される。記録のためだけにコミットしない。全階層が必要なら `npx boxglow status` を読む。PR や外部資料は URL でもよい。
    成果物だけ先に付けるなら `npx boxglow artifact <block> <パス>`。進捗の途中経過は `npx boxglow set <block> --progress 60`
-5. **人間の判断が要る**: `npx boxglow ask <block> "<質問>" --options "A|B"`。回答があるまでそのボックスは進めず、他のボックスへ移る。人の回答は `status` の「回答あり」に出る。読んだら `npx boxglow ack <block>` で引き取る (そのボックスの `start` / `done` / `set` などでも自動で引き取られる)。引き取るまで人の画面には「AI 未確認」として残り、人が答えを直せる。回答の中に問い返しがあれば、`ask` と `answer --by <自分>` で自分の答えも記録する
-6. **詰まったら**: 入力 (前のボックスの成果物・資料) が足りないことが原因なら、詰まりにしない。`npx boxglow show <block>` で入力の配線を確かめ、足りないものを作るボックスが無ければ `npx boxglow add` で外 (上流) に作り、`npx boxglow connect` でこのボックスの入力につなぐ (配線が「待ち」の色で残り、何を待っているかが図で見える)。選択肢から選んでもらえば進めるなら `ask`。それ以外の、計画の外にある障害 (環境が動かない、権限やキーが無い、外部の返事待ち、原因の分からない失敗) だけを `npx boxglow blocked <block> --note "<困っていること>"` で記録する
-7. **成果物の確認**: ファイルを移動・改名したら `npx boxglow check` を実行する (移動を検出してパスを付け替える。見つからなければ印が付く)
-8. **中断・引き継ぎの前に**: セッションの終わり・コンテキストの圧縮・他の AI や人への引き継ぎの前に、`npx boxglow checkpoint <block> --note "分かったこと; 次にすること; 未解決のこと"` で引き継ぎメモを残す (guard が有効なら `--context-token <確認トークン>` を付ける)。会話の履歴が消えても計画の中に残り、次のセッションが `resume` と `context` で読む
-9. **報告**: 作業の最後に `npx boxglow status --brief` の内容を要約して報告する
+6. **人間の判断が要る**: `npx boxglow ask <block> "<質問>" --options "A|B"`。回答があるまでそのボックスは進めず、他のボックスへ移る。人の回答は `status` の「回答あり」に出る。読んだら `npx boxglow ack <block>` で引き取る (そのボックスの `start` / `done` / `set` などでも自動で引き取られる)。引き取るまで人の画面には「AI 未確認」として残り、人が答えを直せる。回答の中に問い返しがあれば、`ask` と `answer --by <自分>` で自分の答えも記録する
+7. **詰まったら**: 入力 (前のボックスの成果物・資料) が足りないことが原因なら、詰まりにしない。`npx boxglow show <block>` で入力の配線を確かめ、足りないものを作るボックスが無ければ `npx boxglow add` で外 (上流) に作り、`npx boxglow connect` でこのボックスの入力につなぐ (配線が「待ち」の色で残り、何を待っているかが図で見える)。選択肢から選んでもらえば進めるなら `ask`。それ以外の、計画の外にある障害 (環境が動かない、権限やキーが無い、外部の返事待ち、原因の分からない失敗) だけを `npx boxglow blocked <block> --note "<困っていること>"` で記録する
+8. **成果物の確認**: ファイルを移動・改名したら `npx boxglow check` を実行する (移動を検出してパスを付け替える。見つからなければ印が付く)
+9. **中断・引き継ぎの前に**: セッションの終わり・コンテキストの圧縮・他の AI や人への引き継ぎの前に、`npx boxglow checkpoint <block> --note "分かったこと; 次にすること; 未解決のこと"` で引き継ぎメモを残す (guard が有効なら `--context-token <確認トークン>` を付ける)。会話の履歴が消えても計画の中に残り、次のセッションが `resume` と `context` で読む
+10. **報告**: 作業の最後に `npx boxglow status --brief` の内容を要約して報告する
 
 ### 構造の約束
 
@@ -45,17 +51,25 @@ boxglow.json はリポジトリ直下に置く (`npx boxglow init --name "<プ�
 ```json
 {
   "blocks": [
-    { "title": "設計", "description": "やること", "inputs": ["仕様"], "outputs": ["設計書"] },
-    { "title": "実装", "inputs": ["設計書"], "outputs": ["コード"] }
+    { "title": "対象箇所を特定する", "inputs": ["再現手順"], "outputs": ["調査メモ"],
+      "expect": "note:対象のファイルと処理、根拠、変更候補", "acceptance": "変更するファイルと処理が決まる、または決められない理由と次の判断が分かる",
+      "goal": "再現して経路を追う。製品コードの修正は今回の範囲外" },
+    { "title": "保存の再試行後に同期状態を取り直す", "inputs": ["調査メモ"], "outputs": ["修正"],
+      "expect": "file:src/sync/state.ts", "acceptance": "保存を一度失敗させ、再保存後に同期状態と操作が戻る (テストで確認)" },
+    { "title": "リリースノートを書く", "inputs": ["修正"], "outputs": ["ノート"] }
   ],
   "connections": [
-    { "from": "parent.仕様", "to": "設計.仕様" },
-    { "from": "設計.設計書", "to": "実装.設計書" },
-    { "from": "実装.コード", "to": "parent.出力" }
+    { "from": "parent.再現手順", "to": "対象箇所を特定する.再現手順" },
+    { "from": "対象箇所を特定する.調査メモ", "to": "保存の再試行後に同期状態を取り直す" },
+    { "from": "保存の再試行後に同期状態を取り直す.修正", "to": "リリースノートを書く" },
+    { "from": "リリースノートを書く.ノート", "to": "parent.出力" }
   ]
 }
 ```
 
+`expect` (予定成果物: `"kind:hint"` または `{ "kind", "hint" }`)、`acceptance` (完了条件)、`goal` (今回行う処理) は今回着手する子だけに書く。
+3 つ目の子のように題名と出力だけの子は「要具体化」として残り、着手する番になってから `port --expect` / `scope --acceptance` で決める。
+親自身が作る出力 (子の成果を統合するなど) は `"parentMakes": ["出力名"]` で印を付ける (子の結線と重なると「担当が重複」と案内される)。
 `parent.<名前>` は分解するボックス自身の入力 / 出力。`<block>` は短い ID (B12 など。status に出る) か題名。
 下の階層を持たないボックスの出力は 1 本 (outputs は 1 つだけ書く)。題名は「何を作るか」が分かる短い言葉にする。
 期日や時間は `npx boxglow set <block> --due 2026-10-15 --start 2026-10-01 --estimate 8 --hours 3.5` で記録する。
@@ -96,17 +110,18 @@ npx boxglow done B12 --artifact "<名前>=<パス>" --context-token <新しい�
 
 ### 着手・完了、今回の範囲、記録の鮮度
 
-- 最初に resume の現況 (活動・判断待ち・未確認回答) を読む。候補は「今回の範囲 / その他」の各組で「着手できる / 入力待ち」に分かれ、不足する入力名が出る。入力待ちを、準備済みと取り違えない。
+- 最初に resume の現況 (活動・判断待ち・未確認回答) を読む。候補は「今回の範囲 / その他」の各組で「着手できる / 要具体化 / 入力待ち」に分かれ、要具体化の理由と不足する入力名が出る。要具体化や入力待ちを、準備済みと取り違えない。
+- 「着手できる」(Ready) は、自身が作る出力があり、その予定成果物 (expect) と完了条件 (acceptance) が書かれ、必須の入力がそろっている、という機械検査の結果。内容が具体的かどうかまでは保証しない (`expect = src/`、`acceptance = 動作する` でも通る)。対象・処理・成果・確認方法を第三者が追えるように書く。
 - ボックスの任意4項目を scope で設定する。goal = 今回達成すること、non-goals = 今回は扱わないこと、acceptance = 完了と判断する条件、consult = 範囲を広げる前に相談する条件。context の先頭で対象と親の範囲を読み、着手前と完了前に照合する。完了条件の本文をAIが満たしたかは自動判定しない。
 - scope B12 --goal "達成すること" --non-goals "今回扱わないこと" --acceptance "確認する条件" --consult "相談する条件" で設定する。scope B12 は表示だけ。各項目に none または空文字を渡すと消す。画面では詳細パネルの ⋯ →「作業範囲を編集」。記入済みの項目だけが「今回の範囲」に出る。
 - focus B12 でこのボックスと配下を次候補の先頭にする。focus は現在の対象の表示、focus none は解除。対象外も別の組に残る。候補に出ること自体は作業範囲の拡大や公開を許可しない。
 - start の必須入力不足は既定で警告するが、従来どおり開始できる。先行作業が必要なら --reason "先に行う理由" を付ける。警告は出ず、理由は活動とログに残る。done の出力成果物なしも既定で警告のみ。既存の出力成果物または --artifact を数え、ボックスの参考資料は数えない。
-- 計画で選ぶ場合だけ policy --start reject --done reject にする。それぞれ warn に戻せる。入力待ちの拒否でも理由付きの開始は可能。成果物なしの拒否は set --status white にも効く。人の操作 (画面 / --actor human) は拒否しない。AIが拒否を避けるために人を名乗ったり、設定を弱めたりしない。
+- 計画で選ぶ場合だけ policy --start reject --done reject --unprepared reject にする。それぞれ warn に戻せる。入力待ちの拒否でも理由付きの開始は可能だが、要具体化の拒否は理由では通れない (先に具体化する)。成果物なしの拒否は set --status white にも効く。人の操作 (画面 / --actor human) は拒否しない。AIが拒否を避けるために人を名乗ったり、設定を弱めたりしない。
 - guard 有効時、scope の変更、focus の設定・解除、policy の変更にも --context-token が必要。scope/focus/policy を変えると新しいトークンが出るので、次の操作はそれを使う。表示だけには不要。
 - resume は完了済みの引き継ぎ本文を隠し、件数だけ示す。履歴が必要な場合だけ resume --include-completed で展開する (context / show では個別に読める)。
 - 説明は descriptionUpdatedAt、状態は statusChangedAt、引き継ぎは既存の at で日時を確認できる。状態変更より古いメモはその旨を示す。旧記録の不明な日時は補わない。「新しい記録」は真偽の保証ではない。
 - Done で古い状況説明が残る可能性がある場合、CLI・詳細パネル・resume に見直し案内が出る。本文は自動で消さない。内容を確認し、必要なら set B12 --note "現在の説明" (none で消去) または画面の Notes で直す。
-- MCP は boxglow_scope / boxglow_focus / boxglow_policy、boxglow_start の reason、boxglow_resume の includeCompleted を使う。変更には contextToken を付ける。
+- MCP は boxglow_scope / boxglow_focus / boxglow_policy、boxglow_claim、boxglow_port の expect / self、boxglow_start の reason、boxglow_resume の includeCompleted を使う。変更には contextToken を付ける。
 - データ形式は v5 のままで全項目は任意。旧版 (0.4.2以前) は新しい規則を実行せず、保存時に計画の workflowPolicy / focusBlockId を落とす。これらを使う計画の書き手 (CLI・serve・画面・拡張内のアプリ) は対応したビルドに揃える。版番号だけでなくビルド日時も確認する。
 
 
@@ -118,11 +133,11 @@ Codexは全CLI呼び出しに `--actor codex`、Claude Codeは `--actor claude-c
 
 ### 並列作業の受け持ち
 
-計画で受け持ちが有効なら、CLI実行ごとに一意の `BOXGLOW_INSTANCE_ID` を固定し、`claims` と `context` を読んでから `start` する。独立したエージェント間で実行IDを共有しない。既定はボックスのみ、必要なら `--scope subtree`。成功したCLAIM行のtokenを保持し、保存する操作に `--claim-token` を付ける。MCPは実行IDと受領証を自動で保持する。5分ごと (期限が短ければ半分以内) に `claim-renew` / `boxglow_claim_renew` を呼び、中断前はcheckpoint。done/leaveは対象の受け持ちを解放する。期限切れや世代違いを無視せず、最新contextを確認して取り直す。同名actorでも別実行の受け持ちは奪わない。設定・強制解除・同期競合の解決は人に依頼し、AIがhumanを名乗って代行しない。共有ファイル以外の同期コピー間には排他保証がない。詳しくは `docs/CLAIMS.md`。
+計画で受け持ちが有効なら、CLI実行ごとに一意の `BOXGLOW_INSTANCE_ID` を固定し、`claims` と `context` を読んでから `claim` (具体化・分解の前) または `start` (実行) する。`claim` で取った受け持ちは、そのまま `start` に引き継がれる。独立したエージェント間で実行IDを共有しない。既定はボックスのみ、必要なら `--scope subtree`。成功したCLAIM行のtokenを保持し、保存する操作に `--claim-token` を付ける。MCPは実行IDと受領証を自動で保持する。5分ごと (期限が短ければ半分以内) に `claim-renew` / `boxglow_claim_renew` を呼び、中断前はcheckpoint。done/leaveは対象の受け持ちを解放する。期限切れや世代違いを無視せず、最新contextを確認して取り直す。同名actorでも別実行の受け持ちは奪わない。設定・強制解除・同期競合の解決は人に依頼し、AIがhumanを名乗って代行しない。共有ファイル以外の同期コピー間には排他保証がない。詳しくは `docs/CLAIMS.md`。
 
 他者の実行ID・受領証を使わない。計画やclaimsの出力から他者の受領証を組み立てることも禁止。MCP再起動後の同名actorも別実行なので、自動で引き継がず期限を待つか人に解除を頼む。
 
-入力の自動引き上げは元のボックスの範囲で扱う。共有入力の内容変更や別ボックスへの配置変更には、影響する範囲の取得も必要。focusやgroupなど計画全体の設定には `context root` → `start root` でrootを取得し、そのCLAIMを渡す。rootのみの取得は通常のボックスを含まない。計画設定の変更はrootのみで足りる。rootのsubtreeは並行作業を全部止めるので、AIは使わず人に相談する。rootの終了は `leave root`。context guardの確認トークンも引き続き必要。
+入力の自動引き上げは元のボックスの範囲で扱う。共有入力の内容変更や別ボックスへの配置変更には、影響する範囲の取得も必要。focusやgroupなど計画全体の設定には `context root` → `claim root` でrootを取得し、そのCLAIMを渡す (`start root` でも取れるが、実行中にはしない `claim` を使う)。rootのみの取得は通常のボックスを含まない。計画設定の変更はrootのみで足りる。rootのsubtreeは並行作業を全部止めるので、AIは使わず人に相談する。rootの終了は `leave root`。context guardの確認トークンも引き続き必要。
 
 ---
 

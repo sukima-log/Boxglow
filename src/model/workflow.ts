@@ -5,6 +5,7 @@
 import type { Block, Project, WorkScope } from "./types";
 import { isHumanActor, portsOf, waitingFor } from "./graph";
 import { isSkipped } from "./branch";
+import { nextSteps, reasonText, unpreparedReasons } from "./readiness";
 import { t } from "../i18n/core";
 
 /** Input: なし / Output: 作業範囲の項目と表示名 (翻訳は表示時)。 */
@@ -33,29 +34,60 @@ export function inFocus(p: Project, id: string): boolean {
   return false;
 }
 
-/** Input: 計画、未着手候補 / Output: 今回の対象を先に、各範囲内を着手可能・入力待ちに分けた一覧。 */
+/**
+ * 次の候補を、今回の対象を先に、準備の状態 (着手できる / 要具体化 / 入力待ち) で分けた一覧にする
+ * Input : 計画、未着手の候補
+ * Output: 組の一覧 (空の組は出さない)。各組の state = ready | unprepared | waiting、ready は state === "ready" (古い利用側のため)。
+ *   要具体化と入力待ちの両方があるボックスは「要具体化」の組に入れ、待ちの名前も項目に残す (両方の不足が読める)
+ */
 export function candidateGroups(p: Project, blocks: Block[]) {
   const focused = !!p.focusBlockId && !!p.blocks[p.focusBlockId];
-  // 待ちの理由: 必須の入力と、まだ答えていない分岐 (分岐待ちは「入力待ち」の組に入る)
-  const candidates = blocks.map(b => ({ blockId: b.id, key: b.key, title: b.title, inFocus: inFocus(p, b.id), missingInputs: waitingFor(p, b.id) }));
+  // 待ちの理由: 必須の入力と、まだ答えていない分岐 (分岐待ちは「入力待ち」の組に入る)。要具体化の理由は別に持つ
+  const candidates = blocks.map(b => {
+    const reasons = unpreparedReasons(p, b.id);
+    const missingInputs = waitingFor(p, b.id);
+    const state: "ready" | "unprepared" | "waiting" = reasons.length ? "unprepared" : missingInputs.length ? "waiting" : "ready";
+    return { blockId: b.id, key: b.key, title: b.title, inFocus: inFocus(p, b.id), missingInputs, unprepared: reasons.map(r => reasonText(p, r)), state };
+  });
+  const label = { ready: "着手できる", unprepared: "要具体化", waiting: "入力待ち" } as const;
   return (focused ? [true, false] : [false]).flatMap(scope =>
-    [true, false].map(ready => ({
-      inFocus: scope, ready,
-      title: (focused ? (scope ? t("今回の範囲") : t("その他の候補")) + " · " : "") + (ready ? t("着手できる") : t("入力待ち")),
-      items: candidates.filter(c => c.inFocus === scope && (c.missingInputs.length === 0) === ready),
+    (["ready", "unprepared", "waiting"] as const).map(state => ({
+      inFocus: scope, ready: state === "ready", state,
+      title: (focused ? (scope ? t("今回の範囲") : t("その他の候補")) + " · " : "") + t(label[state]),
+      items: candidates.filter(c => c.inFocus === scope && c.state === state),
     }))).filter(g => g.items.length);
 }
 
-/** Input: 計画、ボックス、操作者、例外理由 / Output: 保存前の警告・拒否理由。理由があれば入力待ちでも開始可。 */
+/**
+ * 着手の前の確認 (CLI の start と MCP で共用)
+ * Input : 計画、ボックス、操作者、入力待ちで開始する理由
+ * Output: { warning, error }。warning は出して開始する。error があれば開始しない
+ *   2 つを別々に判定する:
+ *   - 入力待ち (必須の入力・分岐の答え): 理由 (--reason) があれば開始できる。startWithoutInputs = reject なら AI は理由が要る
+ *   - 要具体化 (自身が作る出力が無い、予定成果物・完了条件が未定): 理由では通れない。startUnprepared = reject なら AI は開始できない
+ *   人 (human) はどちらも拒否しない
+ */
 export function checkStart(p: Project, id: string, actor: string, reason = "") {
   // 見送りのボックス (選ばなかった分岐の道) は、やらない仕事。理由が無ければ警告する (拒否はしない。判断をやり直す前の下調べなどがあるため)
   if (isSkipped(p, id) && !reason.trim()) return { warning: t("選ばなかった分岐の道 (見送り) のボックスです。進める理由があれば --reason で記録してください"), error: "" };
-  // 必須の入力と、まだ答えていない分岐 (分岐待ちのボックスに着手すると、選ばれない道の仕事になるかもしれない)
+  const warnings: string[] = [];
+  const errors: string[] = [];
+  const human = isHumanActor(actor);
+  // 1. 必須の入力と、まだ答えていない分岐 (分岐待ちのボックスに着手すると、選ばれない道の仕事になるかもしれない)
   const names = waitingFor(p, id);
-  if (!names.length || reason.trim()) return { warning: "", error: "" };
-  const warning = t("必須の入力待ち: {names}", { names: names.join(", ") });
-  return { warning, error: p.workflowPolicy?.startWithoutInputs === "reject" && !isHumanActor(actor)
-    ? warning + " " + t("開始する理由を --reason で記録してください。") : "" };
+  if (names.length && !reason.trim()) {
+    const warning = t("必須の入力待ち: {names}", { names: names.join(", ") });
+    if (p.workflowPolicy?.startWithoutInputs === "reject" && !human) errors.push(warning + " " + t("開始する理由を --reason で記録してください。"));
+    else warnings.push(warning);
+  }
+  // 2. 要具体化: 理由 (--reason) では通れない (入力待ちの例外とは別の規則)
+  const reasons = unpreparedReasons(p, id, { forStart: true });
+  if (reasons.length) {
+    const text = [t("要具体化:"), ...reasons.map((r) => "- " + reasonText(p, r)), t("次:"), ...nextSteps(p, id, reasons).map((x) => "  " + x)].join("\n");
+    if (p.workflowPolicy?.startUnprepared === "reject" && !human) errors.push(text);
+    else warnings.push(text);
+  }
+  return { warning: warnings.join("\n"), error: errors.join("\n") };
 }
 
 /** Input: 計画、ボックス、新規成果物の数、操作者 / Output: 成果物なしの警告・拒否理由。参考資料は成果物に数えない。 */

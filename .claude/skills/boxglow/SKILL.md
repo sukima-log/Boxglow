@@ -20,14 +20,19 @@ description: Boxglow (boxglow.json) で計画と進捗を人間と共有する�
 ## 手順
 
 1. `npx boxglow resume` (または `npx boxglow status --brief`) を読む。作業中のボックス、判断待ち、AI 未確認の回答、次の候補、未完了の引き継ぎメモを把握する。全階層が要るときは `npx boxglow status`
-2. 担当するボックスを決めたら `npx boxglow show <block>` で入出力を確認し、`npx boxglow start <block> --note "<何をするか>"`。
-   確認トークンの要求 (guard) が有効な計画では、先に `npx boxglow context <block>` を読み、出力の `contextToken` (確認トークン) を `--context-token <確認トークン>` で付ける
-3. 大きいボックスは `npx boxglow split <block> --spec '<JSON>'` で分解する (形式は `npx boxglow help`)。各ボックスの出力を必ず決める
-4. 成果物ができたら `npx boxglow done <block> --artifact "<名前>=<URL またはパス>"` (guard が有効なら `--context-token <確認トークン>` を付ける。直前の自分の操作の出力に「新しい確認トークン: <token>」が出ていれば、それを使う)
-5. 人間の判断が要るときは `npx boxglow ask <block> "<質問>" --options "A|B"` して他のボックスへ移る
-6. 詰まったら: 入力 (前のボックスの成果物・資料) が足りないことが原因なら、詰まりにしない。`npx boxglow show <block>` で入力の配線を確かめ、足りないものを作るボックスが無ければ `npx boxglow add` で外 (上流) に作り、`npx boxglow connect` でこのボックスの入力につなぐ (配線が「待ち」の色で残り、何を待っているかが図で見える)。選択肢から選んでもらえば進めるなら `ask`。それ以外の、計画の外にある障害 (環境が動かない、権限やキーが無い、外部の返事待ち、原因の分からない失敗) だけを `npx boxglow blocked <block> --note "<困っていること>"` で記録する
-7. 中断・コンテキストの圧縮・引き継ぎの前に `npx boxglow checkpoint <block> --note "分かったこと; 次にすること; 未解決のこと"` で引き継ぎメモを残す
-8. 最後に `npx boxglow status --brief` を要約して報告する
+2. 担当するボックスを決めたら `npx boxglow context <block>` を読む。出力の `readiness.state` が `ready` なら着手できる。`unprepared` (要具体化) なら `unprepared` の理由と `next` の次の一手に従って先に具体化する。`waiting` は必須の入力か分岐の答えを待っている
+3. 具体化や分解の前に `npx boxglow claim <block>` で受け持ちだけを取る (実行中にはならない。受け持ち制御が無効な計画では「取得不要」で正常終了する)。不足を埋める:
+   出力の予定成果物 `npx boxglow port <block> --expect "<出力名>=file:src/x.ts"` (kind は file / dir / url / doc / note / decision / result。まだ無いファイルでよい)、完了条件 `npx boxglow scope <block> --acceptance "<完了と判断する条件>"`。
+   大きいボックスは `npx boxglow split <block> --spec '<JSON>'` で分解する (形式は `npx boxglow help`)。今回着手する子だけ expect / acceptance を書き、先の子は題名と出力だけでよい。
+   対象のファイルが分からないときは、架空のパスを書かず「対象を特定する調査」のボックスを出力 `note` で作って始める
+4. 準備ができたら `npx boxglow context <block>` を読み直し、`npx boxglow start <block> --note "<何をするか>"`。
+   確認トークンの要求 (guard) が有効な計画では、出力の `contextToken` (確認トークン) を `--context-token <確認トークン>` で付ける。
+   要具体化のボックスへの start は既定では警告、`policy --unprepared reject` の計画では開始できない (`--reason` では通れない)。出力を子に任せきりの親は実行するものが無いので、子を start する
+5. 成果物ができたら `npx boxglow done <block> --artifact "<名前>=<URL またはパス>"` (guard が有効なら `--context-token <確認トークン>` を付ける。直前の自分の操作の出力に「新しい確認トークン: <token>」が出ていれば、それを使う)
+6. 人間の判断が要るときは `npx boxglow ask <block> "<質問>" --options "A|B"` して他のボックスへ移る
+7. 詰まったら: 入力 (前のボックスの成果物・資料) が足りないことが原因なら、詰まりにしない。`npx boxglow show <block>` で入力の配線を確かめ、足りないものを作るボックスが無ければ `npx boxglow add` で外 (上流) に作り、`npx boxglow connect` でこのボックスの入力につなぐ (配線が「待ち」の色で残り、何を待っているかが図で見える)。選択肢から選んでもらえば進めるなら `ask`。それ以外の、計画の外にある障害 (環境が動かない、権限やキーが無い、外部の返事待ち、原因の分からない失敗) だけを `npx boxglow blocked <block> --note "<困っていること>"` で記録する
+8. 中断・コンテキストの圧縮・引き継ぎの前に `npx boxglow checkpoint <block> --note "分かったこと; 次にすること; 未解決のこと"` で引き継ぎメモを残す
+9. 最後に `npx boxglow status --brief` を要約して報告する
 
 ## 約束
 
@@ -68,12 +73,12 @@ npx boxglow done B12 --artifact "<名前>=<パス>" --context-token <新しい�
 
 ### 着手・完了、今回の範囲、記録の鮮度
 
-- 最初に resume の現況 (活動・判断待ち・未確認回答) を読む。候補は「今回の範囲 / その他」の各組で「着手できる / 入力待ち」に分かれ、不足する入力名が出る。入力待ちを、準備済みと取り違えない。
+- 最初に resume の現況 (活動・判断待ち・未確認回答) を読む。候補は「今回の範囲 / その他」の各組で「着手できる / 要具体化 / 入力待ち」に分かれ、要具体化の理由と不足する入力名が出る。要具体化や入力待ちを、準備済みと取り違えない。「着手できる」は機械検査 (自身が作る出力・expect・acceptance・必須の入力) の結果で、内容の具体さまでは保証しない。
 - ボックスの任意4項目を scope で設定する。goal = 今回達成すること、non-goals = 今回は扱わないこと、acceptance = 完了と判断する条件、consult = 範囲を広げる前に相談する条件。context の先頭で対象と親の範囲を読み、着手前と完了前に照合する。完了条件の本文をAIが満たしたかは自動判定しない。
 - scope B12 --goal "達成すること" --non-goals "今回扱わないこと" --acceptance "確認する条件" --consult "相談する条件" で設定する。scope B12 は表示だけ。各項目に none または空文字を渡すと消す。画面では詳細パネルの ⋯ →「作業範囲を編集」。記入済みの項目だけが「今回の範囲」に出る。
 - focus B12 でこのボックスと配下を次候補の先頭にする。focus は現在の対象の表示、focus none は解除。対象外も別の組に残る。候補に出ること自体は作業範囲の拡大や公開を許可しない。
 - start の必須入力不足は既定で警告するが、従来どおり開始できる。先行作業が必要なら --reason "先に行う理由" を付ける。警告は出ず、理由は活動とログに残る。done の出力成果物なしも既定で警告のみ。既存の出力成果物または --artifact を数え、ボックスの参考資料は数えない。
-- 計画で選ぶ場合だけ policy --start reject --done reject にする。それぞれ warn に戻せる。入力待ちの拒否でも理由付きの開始は可能。成果物なしの拒否は set --status white にも効く。人の操作 (画面 / --actor human) は拒否しない。AIが拒否を避けるために人を名乗ったり、設定を弱めたりしない。
+- 計画で選ぶ場合だけ policy --start reject --done reject --unprepared reject にする。それぞれ warn に戻せる。入力待ちの拒否でも理由付きの開始は可能だが、要具体化の拒否は理由では通れない。成果物なしの拒否は set --status white にも効く。人の操作 (画面 / --actor human) は拒否しない。AIが拒否を避けるために人を名乗ったり、設定を弱めたりしない。
 - guard 有効時、scope の変更、focus の設定・解除、policy の変更にも --context-token が必要。scope/focus/policy を変えると新しいトークンが出るので、次の操作はそれを使う。表示だけには不要。
 - resume は完了済みの引き継ぎ本文を隠し、件数だけ示す。履歴が必要な場合だけ resume --include-completed で展開する (context / show では個別に読める)。
 - 説明は descriptionUpdatedAt、状態は statusChangedAt、引き継ぎは既存の at で日時を確認できる。状態変更より古いメモはその旨を示す。旧記録の不明な日時は補わない。「新しい記録」は真偽の保証ではない。

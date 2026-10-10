@@ -57,6 +57,19 @@ export interface Member {
   color: string;
 }
 
+/** 予定成果物の種類: file = ファイル, dir = フォルダ, url = 公開先や PR, doc = 文書, note = 調査メモ・記録, decision = 判断の記録, result = 実行結果 (テストの結果など) */
+export type ExpectKind = "file" | "dir" | "url" | "doc" | "note" | "decision" | "result";
+
+/**
+ * 予定成果物 (着手の前に決める「何ができるか」)。まだ作っていないファイルの存在は要求しない。
+ * 実際にできた成果物 (artifacts) とは別の欄。着手の前に kind と hint (パスの見当や題名) を書くと、そのボックスは「具体化済み」になる
+ */
+export interface Expect {
+  kind: ExpectKind;
+  /** パスの見当 (src/auth/callback.ts) や題名 (調査メモ: 対象箇所と根拠)。行番号や最終的な関数名までは要らない */
+  hint: string;
+}
+
 /** 入出力ポート */
 export interface Port {
   id: string;
@@ -83,6 +96,13 @@ export interface Port {
    * 無ければ従来どおり、必須の入力はすべて要る
    */
   anyOf?: boolean;
+  /** 予定成果物 (出力だけ)。無ければ「要具体化」(着手の前に決める) */
+  expect?: Expect;
+  /**
+   * 出力の担当の印 (子を持つボックスの出力だけ): "self" = 子に任せず、このボックス自身が作る (統合・検証など)。
+   * 子を持たないボックスの出力は印が無くても自身の担当。子の出力がつながっている出力は子の担当 (印は付けない)
+   */
+  owner?: "self";
 }
 
 /** 最上位の入力のグループ (例: PCIe 仕様書、DDR 仕様書)。それぞれ別の入力ノードとして描く */
@@ -165,6 +185,8 @@ export interface WorkScope {
 export interface WorkflowPolicy {
   startWithoutInputs?: "warn" | "reject";
   doneWithoutArtifacts?: "warn" | "reject";
+  /** 要具体化 (自身が作る出力が無い、予定成果物・完了条件が未定) のボックスへの AI の着手。省略は warn。reject でも人の操作と --reason による回避はしない (理由では通れない) */
+  startUnprepared?: "warn" | "reject";
 }
 
 export interface Block {

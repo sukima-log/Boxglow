@@ -162,3 +162,54 @@ it("overview: 拡大の押し出しも受け持ち判定に含み、範囲外な
   expect(changed.stderr).toContain("(claude-code)");
   expect(readFileSync(f.file, "utf8")).toBe(before);
 });
+
+// ---- 着手の準備 (readiness) と claim (段階 1): 確認事項 4・5・10・13 ----
+it("claim は受け持ちだけを取り、実行中にはしない。具体化してから start できる (確認 4・10)",()=>{const f=fixture();
+ // reject の計画で、要具体化のボックスへの start は拒否される (理由でも通れない)
+ expect(f.cli("policy","--unprepared","reject","--actor","human").status).toBe(0);
+ const rejected=f.cli("start","alpha",...actor);expect(rejected.status).toBe(1);expect(rejected.stderr).toContain("expect");
+ const rejected2=f.cli("start","alpha","--reason","try",...actor);expect(rejected2.status).toBe(1);
+ // claim は取れる (状態は New のまま、受領証が出る)
+ const c=f.cli("claim","alpha",...actor);expect(c.status,c.stderr).toBe(0);const r=receipt(c.stdout);expect(f.read().blocks[r.blockId].status).toBe("black");expect(f.read().blocks[r.blockId].activity).toBeNull();
+ const proof=[...actor,"--claim-token",r.token];
+ // 受け持ちを持ったまま具体化 (port --expect / scope --acceptance)。他の実行は取れない
+ const pe=f.cli("port","alpha","--expect","result=file:src/alpha.ts",...proof);expect(pe.status,pe.stderr+pe.stdout).toBe(0);
+ expect(f.cli("scope","alpha","--acceptance","tests pass",...proof).status).toBe(0);
+ expect(f.cli("claim","alpha","--actor","codex","--instance","two").status).toBe(1);
+ // 具体化したので start できる (同じ受け持ちを継承)
+ const s=f.cli("start","alpha",...proof);expect(s.status,s.stderr).toBe(0);expect(f.read().blocks[r.blockId].activity.state).toBe("working");
+ expect(Object.keys(f.read().claims)).toHaveLength(1);
+ // claim 後に start が拒否されても、確認・延長・解放はできる (確認 13)
+ const c2=f.cli("claim","beta",...actor);expect(c2.status).toBe(0);const r2=receipt(c2.stdout);
+ const proof2=[...actor,"--claim-token",r2.token];
+ expect(f.cli("start","beta",...proof2).status).toBe(1);
+ expect(f.cli("claims",...proof2).status).toBe(0);
+ expect(f.cli("claim-renew","beta",...proof2).status).toBe(0);
+ expect(f.cli("checkpoint","beta","--note","half way",...proof2).status).toBe(0);
+ expect(f.cli("leave","beta",...proof2).status).toBe(0);expect(f.read().claims[r2.blockId].releasedAt).toBeTruthy();});
+it("受け持ち制御が無効な計画でも claim は取得不要で正常終了し、計画を変えない (確認 10)",()=>{const f=fixture(false);const before=readFileSync(f.file,"utf8");
+ const c=f.cli("claim","alpha","--actor","codex");expect(c.status,c.stderr).toBe(0);expect(c.stdout).toContain("\"claimed\":false");expect(c.stdout).not.toContain("CLAIM ");expect(readFileSync(f.file,"utf8")).toBe(before);
+ // 未設定の計画では、要具体化でも従来どおり start できる (警告だけ) (確認 5)
+ const s=f.cli("start","alpha","--actor","codex");expect(s.status,s.stderr).toBe(0);expect(s.stdout).toContain("expect");expect(f.read().claimPolicy).toBeUndefined();});
+it("claim root で計画全体を受け持てる (確認 4)",()=>{const f=fixture();const c=f.cli("claim","root","--scope","subtree",...actor);expect(c.status,c.stderr).toBe(0);const r=receipt(c.stdout);expect(r.blockId).toBe("root");
+ expect(f.cli("focus","alpha",...actor,"--claim-token",r.token).status).toBe(0);});
+it("split の expect / acceptance / parentMakes と、context の readiness",()=>{const f=fixture(false);
+ const spec={blocks:[{title:"survey",outputs:["notes"],expect:"note:where to change and why",acceptance:"the target files are known"},{title:"implement",outputs:["code"]}],connections:[{from:"survey.notes",to:"implement"},{from:"implement.code",to:"parent.result"}]};
+ const s=f.cli("split","alpha","--spec",JSON.stringify(spec),"--actor","codex");expect(s.status,s.stderr).toBe(0);
+ // 保存後に、要具体化の子の数が出る (拒否はしない)
+ expect(s.stdout).toContain("1");expect(s.stdout.toLowerCase()).toMatch(/needs detail|要具体化/);
+ const p=f.read();const survey=Object.values(p.blocks).find((b:any)=>b.title==="survey") as any;const outs=Object.values(p.ports).filter((q:any)=>q.blockId===survey.id&&q.direction==="out") as any[];
+ expect(outs[0].expect).toEqual({kind:"note",hint:"where to change and why"});expect(survey.scope.acceptance).toBe("the target files are known");
+ // context に readiness が付く (受領証の外)
+ const ctx=JSON.parse(f.cli("context","survey","--actor","codex").stdout);expect(ctx.readiness.state).toBe("ready");expect(ctx.readiness.outputs[0].owner).toBe("self");
+ const ctx2=JSON.parse(f.cli("context","implement","--actor","codex").stdout);expect(ctx2.readiness.state).toBe("unprepared");expect(ctx2.readiness.unprepared.join()).toContain("expect");expect(ctx2.readiness.next.join()).toContain("port");
+ // 親 (alpha) は出力を子に任せている: 自身の出力が無い → 未設定の計画では start できるが子を案内する
+ const parent=f.cli("start","alpha","--actor","codex");expect(parent.status,parent.stderr).toBe(0);expect(parent.stdout).toContain("claim");
+ // parentMakes で親自身が作る出力を印付けできる
+ const s2=f.cli("split","beta","--spec",JSON.stringify({blocks:[{title:"part",outputs:["piece"]}],parentMakes:["result"]}),"--actor","codex");expect(s2.status,s2.stderr).toBe(0);
+ const beta=Object.values(f.read().blocks).find((b:any)=>b.title==="beta") as any;const bo=Object.values(f.read().ports).find((q:any)=>q.blockId===beta.id&&q.direction==="out") as any;expect(bo.owner).toBe("self");
+ // --self と子の結線が重なると「重複」として案内される (確認 11)
+ expect(f.cli("connect","part.piece","beta.result","--actor","codex").status).toBe(0);
+ const ctx3=JSON.parse(f.cli("context","beta","--actor","codex").stdout);expect(ctx3.readiness.outputs[0].owner).toBe("conflict");
+ expect(f.cli("port","beta","--no-self","result","--actor","codex").status).toBe(0);
+ expect(JSON.parse(f.cli("context","beta","--actor","codex").stdout).readiness.outputs[0].owner).toBe("child");});

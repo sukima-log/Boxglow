@@ -50,7 +50,8 @@ export function prepareClaimSave(current: string|null, proposed: string, request
   if (!claimsEnabled(before) || human) return proposed;
   let checked=before;
   const proof={...who,tokens:[...who.tokens]};
-  if (command==="start") {
+  // start と claim は受け持ちを取得 (または継承して延長) する。claim は取得だけで、状態は変えない
+  if (command==="start" || command==="claim") {
     if (!id || (request.scope && !["block","subtree"].includes(request.scope))) throw new Error(t("受け持ちの範囲は block または subtree です。"));
     const inherited=Object.entries(before.claims??{}).find(([root,c])=>root!==id && activeClaim(c,now) && covers(before,root,c,id));
     if(inherited) { rejectForeignClaim(before,inherited[0],inherited[1],who,now); requireClaim(inherited[0],inherited[1],who,now); checked=renewClaims(before,[inherited[0]],who,now); }
@@ -60,7 +61,7 @@ export function prepareClaimSave(current: string|null, proposed: string, request
   }
   const ids=claimFootprint(before,after);
   // no-opでも完了・解除・延長は必ず世代と期限を照合する。
-  if(id && ["start","done","leave","checkpoint","claim-renew","set","port","artifact","ask","answer","ack","reopen","decision","blocked","review","scope","split","remove","move","layout","tidy"].includes(command)) ids.add(id);
+  if(id && ["start","claim","done","leave","checkpoint","claim-renew","set","port","artifact","ask","answer","ack","reopen","decision","blocked","review","scope","split","remove","move","layout","tidy"].includes(command)) ids.add(id);
   const result=checkClaimWrite(checked,ids,proof,now);
   if(command==="claim-renew" && !result.used.size) throw new Error(t("受け持ちがありません。"));
   for(const warning of result.warnings) emit(t("受け持ちの警告: {message}",{message:warning}));

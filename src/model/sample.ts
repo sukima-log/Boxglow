@@ -5,7 +5,7 @@
 import { ackDecisions, addBlock, addInputGroup, addMember, addPort, answerDecision, askDecision, connect, createArtifact, createProject, portsOf, setActivity, setCategory, setInputGroup, setProgress, setSchedule, updateBlock, updatePort } from "./graph";
 import { acquireClaim } from "./claims";
 import { addBranch, addMerge } from "./branch";
-import { ROOT_ID, type Project } from "./types";
+import { ROOT_ID, type Expect, type Project } from "./types";
 import { normalizeCollapsed, projectBlocks } from "./graph";
 import { layoutAll } from "./autolayout";
 
@@ -169,9 +169,12 @@ export function buildSampleProject(): Project {
   // 入力: parentId = 親, title = 題名, opts = { out: 出力名, from: [つなぐ元の端], status, assignee, category, description }
   // 出力: { id: 箱の id, out: 出力ポートの id }
   type End = { portId: string; side: "outer" | "inner" };
-  const child = (parentId: string, title: string, opts: { out: string; from?: { end: End; name: string }[]; status?: "black" | "gray" | "white"; assignee?: string; category?: string; description?: string }) => {
+  const child = (parentId: string, title: string, opts: { out: string; from?: { end: End; name: string }[]; status?: "black" | "gray" | "white"; assignee?: string; category?: string; description?: string; expect?: Expect; acceptance?: string }) => {
     const made = addBlock(p, { parentId, title, outputName: opts.out });
     p = made.project;
+    // 具体化の情報 (予定成果物と完了条件)。書かないボックスは「要具体化」として見える (着手の前に決める、の例)
+    if (opts.expect) { const o = portsOf(p, made.blockId, "out")[0]; p = { ...p, ports: { ...p.ports, [o.id]: { ...o, expect: opts.expect } } }; }
+    if (opts.acceptance) p = updateBlock(p, made.blockId, { scope: { acceptance: opts.acceptance } });
     for (const f of opts.from ?? []) {
       const inp = addPort(p, { blockId: made.blockId, direction: "in", name: f.name });
       p = connect(inp.project, f.end, { portId: inp.portId, side: "outer" }).project;
@@ -194,43 +197,43 @@ export function buildSampleProject(): Project {
   const inner = (portId: string): End => ({ portId, side: "inner" });
 
   // フロントエンド (完了): 中で「一覧画面」と「編集画面」に分かれ、フロントエンドの出力にまとまる
-  const listView = child(fe.blockId, "一覧画面", { out: "一覧画面", from: [{ end: inner(feIn.portId), name: "設計書" }], status: "white", assignee: m2.memberId, category: "ui" });
-  const editView = child(fe.blockId, "編集画面", { out: "編集画面", from: [{ end: inner(feIn.portId), name: "設計書" }], status: "white", assignee: m2.memberId, category: "ui" });
+  const listView = child(fe.blockId, "一覧画面", { out: "一覧画面", from: [{ end: inner(feIn.portId), name: "設計書" }], status: "white", assignee: m2.memberId, category: "ui", expect: { kind: "file", hint: "src/pages/NoteList.tsx" }, acceptance: "ノートの一覧が表示され、クリックで編集画面へ移る" });
+  const editView = child(fe.blockId, "編集画面", { out: "編集画面", from: [{ end: inner(feIn.portId), name: "設計書" }], status: "white", assignee: m2.memberId, category: "ui", expect: { kind: "file", hint: "src/pages/NoteEdit.tsx" }, acceptance: "本文を編集して保存できる" });
   p = connect(p, outer(listView.out), inner(feOut.id)).project;
   p = connect(p, outer(editView.out), inner(feOut.id)).project;
 
   // バックエンド (作業中): ノートの API と、認証の分岐 (答え済み)。選ばなかった道は見送り、2 つの道は「API をまとめる」で合流する
-  const notesApi = child(be.blockId, "ノートの API", { out: "ノートの API", from: [{ end: inner(beIn.portId), name: "設計書" }], status: "white", category: "build", description: "一覧・作成・削除の API" });
+  const notesApi = child(be.blockId, "ノートの API", { out: "ノートの API", from: [{ end: inner(beIn.portId), name: "設計書" }], status: "white", category: "build", description: "一覧・作成・削除の API", expect: { kind: "file", hint: "server/routes/notes.ts" }, acceptance: "一覧・作成・削除の API テストが通る" });
   const auth = addBranch(p, { parentId: be.blockId, title: "認証方式を決める", question: "ログインの方式はどれにしますか?", options: ["メールのリンク", "GitHub OAuth"], actor: "claude-code"
   , context: "利用者は開発者が中心です。\nメールのリンク: パスワード不要で誰でも使えますが、メールの配信の仕組みが要ります。\nGitHub OAuth: 開発者には手軽で、実装も小さく済みます。" });
   p = auth.project;
   const authIn = addPort(p, { blockId: auth.blockId, direction: "in", name: "設計書" });
   p = connect(authIn.project, inner(beIn.portId), outer(authIn.portId)).project;
   const [byMail, byGithub] = portsOf(p, auth.blockId, "out");
-  const mail = child(be.blockId, "メールのリンクで実装する", { out: "認証", from: [{ end: outer(byMail.id), name: "メールのリンク" }], category: "build" });
-  const github = child(be.blockId, "GitHub OAuth で実装する", { out: "認証", from: [{ end: outer(byGithub.id), name: "GitHub OAuth" }], status: "gray", assignee: m1.memberId, category: "build" });
+  const mail = child(be.blockId, "メールのリンクで実装する", { out: "認証", from: [{ end: outer(byMail.id), name: "メールのリンク" }], category: "build", expect: { kind: "file", hint: "server/auth/magic-link.ts" }, acceptance: "メールのリンクからログインできる" });
+  const github = child(be.blockId, "GitHub OAuth で実装する", { out: "認証", from: [{ end: outer(byGithub.id), name: "GitHub OAuth" }], status: "gray", assignee: m1.memberId, category: "build", acceptance: "GitHub のアカウントでログインできる" });
   // GitHub OAuth の道は、さらに中に 2 つの手順を持つ (プロジェクトから数えて 4 段の深さ)
   const githubIn = portsOf(p, github.id, "in")[0].id;
-  const callback = child(github.id, "コールバックを受ける", { out: "ログインの受け口", from: [{ end: inner(githubIn), name: "GitHub OAuth" }], status: "white", assignee: m1.memberId, category: "build" });
-  const token = child(github.id, "トークンを保存する", { out: "ログイン状態", from: [{ end: outer(callback.out), name: "ログインの受け口" }], status: "gray", assignee: m1.memberId, category: "build" });
+  const callback = child(github.id, "コールバックを受ける", { out: "ログインの受け口", from: [{ end: inner(githubIn), name: "GitHub OAuth" }], status: "white", assignee: m1.memberId, category: "build", expect: { kind: "file", hint: "server/auth/github-callback.ts" }, acceptance: "GitHub から戻ったリクエストでユーザーを特定できる" });
+  const token = child(github.id, "トークンを保存する", { out: "ログイン状態", from: [{ end: outer(callback.out), name: "ログインの受け口" }], status: "gray", assignee: m1.memberId, category: "build", expect: { kind: "file", hint: "server/auth/session.ts" }, acceptance: "再読み込みしてもログイン状態が保たれる" });
   p = connect(p, outer(token.out), inner(github.out)).project;
   // 合流のボックス (OR ゲート風): どちらの認証の道からでも、届けば先へ通す
   const authJoin = mergeOf(be.blockId, [{ end: outer(mail.out), name: "認証 (メール)" }, { end: outer(github.out), name: "認証 (GitHub)" }]);
-  const bundle = child(be.blockId, "API をまとめる", { out: "API の実装", from: [{ end: outer(notesApi.out), name: "ノートの API" }, { end: outer(authJoin), name: "認証" }], category: "build" });
+  const bundle = child(be.blockId, "API をまとめる", { out: "API の実装", from: [{ end: outer(notesApi.out), name: "ノートの API" }, { end: outer(authJoin), name: "認証" }], category: "build", expect: { kind: "file", hint: "server/index.ts" }, acceptance: "認証付きで API が一式動く" });
   p = connect(p, outer(bundle.out), inner(beOut.id)).project;
   // 認証の分岐は、人が GitHub OAuth と答え、AI も読み終えた (分岐は答えで完了になる)
   p = ackDecisions(answerDecision(p, auth.blockId, auth.decisionId, "GitHub OAuth", "さとう"), auth.blockId, "claude-code", auth.decisionId);
 
   // 公開する (未着手): 中に、まだ答えていない分岐 (監視の方法)。答えるまで、その先は「分岐待ち」
   const relInPort = relIn.portId;
-  const deploy = child(release.blockId, "ビルドを置く", { out: "置いたビルド", from: [{ end: inner(relInPort), name: "動くアプリ一式" }], category: "ops" });
+  const deploy = child(release.blockId, "ビルドを置く", { out: "置いたビルド", from: [{ end: inner(relInPort), name: "動くアプリ一式" }], category: "ops", expect: { kind: "url", hint: "https://notes.example.com (配信先)" }, acceptance: "配信先の URL でアプリが開く" });
   const watch = addBranch(p, { parentId: release.blockId, title: "監視の方法を決める", question: "公開後の監視はどうしますか?", options: ["外部の監視サービス", "自前で監視する"], actor: "codex"
   , context: "最初の利用者は少数です。\n外部の監視サービス: すぐ始められ、無料の枠で足ります。\n自前で監視する: 細かく調べられますが、仕組みの用意と保守が要ります。" });
   p = watch.project;
   const watchIn = addPort(p, { blockId: watch.blockId, direction: "in", name: "置いたビルド" });
   p = connect(watchIn.project, outer(deploy.out), outer(watchIn.portId)).project;
   const [bySaas, bySelf] = portsOf(p, watch.blockId, "out");
-  const saas = child(release.blockId, "監視サービスを設定する", { out: "監視の設定", from: [{ end: outer(bySaas.id), name: "外部の監視サービス" }], category: "ops" });
+  const saas = child(release.blockId, "監視サービスを設定する", { out: "監視の設定", from: [{ end: outer(bySaas.id), name: "外部の監視サービス" }], category: "ops", expect: { kind: "doc", hint: "docs/monitoring.md (監視の設定の記録)" }, acceptance: "停止を検知して通知が届く" });
   const self = child(release.blockId, "監視の仕組みを作る", { out: "監視の設定", from: [{ end: outer(bySelf.id), name: "自前で監視する" }], category: "ops" });
   const watchJoin = mergeOf(release.blockId, [{ end: outer(saas.out), name: "監視 (外部)" }, { end: outer(self.out), name: "監視 (自前)" }]);
   const runbook = child(release.blockId, "公開の手順書を書く", { out: "公開 URL", from: [{ end: outer(watchJoin), name: "監視の設定" }], category: "docs" });

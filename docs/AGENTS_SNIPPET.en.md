@@ -16,19 +16,25 @@ Status: BlackBox (only the output is decided) → GrayBox (being broken down or 
 ### What to do every time you work
 
 1. **Read first**: read `npx boxglow resume` (or `npx boxglow status --brief`) for work in progress, pending decisions, unread answers, next candidates, and handoffs for unfinished boxes. To continue a previous session, start from the handoff notes shown there. Check the inputs and outputs of your box with `npx boxglow show <block>`
-2. **Record the start**: when you take on a box, run `npx boxglow start <block> --note "<what you will do>"`. Work on at most 1-2 boxes at a time.
-   On a plan with the context guard on, first read `npx boxglow context <block>` and pass the `contextToken` (context token) from its output:
+2. **Check readiness**: before taking on a box, read `npx boxglow context <block>`. Its `readiness` is the state of preparation: `state: "ready"` means you can start. `"unprepared"` (needs detail) means you add detail first, following the reasons in `unprepared` and the commands in `next`. `"waiting"` means a required input or a branch answer is missing
+3. **Hold, then add detail**: before adding detail or splitting, hold the box with `npx boxglow claim <block>` (this does not start it; on a plan without claims it prints "not needed" and succeeds). Then fill in what is missing:
+   - the output's planned deliverable: `npx boxglow port <block> --expect "<output>=file:src/x.ts"` (kind: file / dir / url / doc / note / decision / result; hint: a path or title. The file need not exist yet)
+   - the acceptance criteria: `npx boxglow scope <block> --acceptance "<when it counts as done>"`; the work itself with `--goal`
+   - when you cannot see how to produce the output with a single box, place smaller boxes inside it with `npx boxglow split <block> --spec '<JSON>'`. Write expect / acceptance only for the children you will start now; later children need only a title and an output (they stay "needs detail"). Inputs can be omitted if unknown (they automatically become inputs of the level above)
+   - when you do not know which files are involved, do not invent paths: add a box "find the target" with a `note` output and start that
+4. **Record the start**: once ready, read `npx boxglow context <block>` again, then run `npx boxglow start <block> --note "<what you will do>"`. Work on at most 1-2 boxes at a time.
+   On a plan with the context guard on, pass the `contextToken` (context token) from the context output:
    `npx boxglow start <block> --note "<what you will do>" --context-token <context token>` (see "Context token and handoff" below)
-3. **Split**: when you cannot see how to produce the output with a single box, place smaller boxes inside it with `npx boxglow split <block> --spec '<JSON>'`. Always decide the output (deliverable) of each box. Inputs can be omitted if unknown (they automatically become inputs of the level above)
-4. **Record completion**: when the output's deliverable exists, run `npx boxglow done <block> --artifact "<name>=<path in the repository>"`.
+   Starting a box that still needs detail warns by default (with the reasons and the next commands). On a plan with `policy --unprepared reject` it is refused (`--reason` does not bypass it; human actions are allowed). A parent whose outputs are all made by its children has nothing to run itself: start the child instead
+5. **Record completion**: when the output's deliverable exists, run `npx boxglow done <block> --artifact "<name>=<path in the repository>"`.
    With the guard on, add `--context-token <context token>` (if your previous command printed "New context token: <token>", use that one).
    An unchanged file already committed to HEAD is recorded as "commit + path + content hash" (nothing is uploaded). Uncommitted or untracked files remain local file references, and `npx boxglow check` turns them into Git references once they are committed; do not create a commit solely to satisfy Boxglow. Use full `npx boxglow status` when you need the entire tree. For PRs and external material, a URL is fine.
    To attach a deliverable ahead of completion, use `npx boxglow artifact <block> <path>`. Record progress along the way with `npx boxglow set <block> --progress 60`
-5. **When a human decision is needed**: `npx boxglow ask <block> "<question>" --options "A|B"`. Do not proceed with that box until it is answered; move on to another box. A human's answer appears under "Answered" in `status`. After reading it, acknowledge it with `npx boxglow ack <block>` (`start` / `done` / `set` etc. on that box also acknowledge it automatically). Until you acknowledge it, it stays on the human's screen as "Not read by the AI yet" and the human can still revise the answer. If the answer contains a question back to you, record your own answer too with `ask` and `answer --by <yourself>`
-6. **When you are stuck**: If the cause is a missing input (a deliverable of an earlier box, or material), do not mark the box as blocked. Check its input wires with `npx boxglow show <block>`; if no box produces what is missing, create one outside (upstream) with `npx boxglow add` and wire it to this box's input with `npx boxglow connect` (the wire stays in the waiting color, so the diagram shows what the box is waiting for). If a choice between options would let you continue, use `ask`. Record only obstacles outside the plan (an environment that does not work, missing permissions or keys, waiting for an outside reply, a failure with no known cause) with `npx boxglow blocked <block> --note "<what is in the way>"`
-7. **Check deliverables**: after moving or renaming files, run `npx boxglow check` (it detects the move and updates the path; if the file cannot be found, it is flagged)
-8. **Before an interruption or a handoff**: before the session ends, the context is compacted, or you hand over to another AI or a person, save a handoff note with `npx boxglow checkpoint <block> --note "Findings; next steps; unresolved questions"` (with the guard on, add `--context-token <context token>`). It stays in the plan even when the chat history is gone, and the next session reads it with `resume` and `context`
-9. **Report**: at the end of your work, summarize `npx boxglow status --brief` and report it
+6. **When a human decision is needed**: `npx boxglow ask <block> "<question>" --options "A|B"`. Do not proceed with that box until it is answered; move on to another box. A human's answer appears under "Answered" in `status`. After reading it, acknowledge it with `npx boxglow ack <block>` (`start` / `done` / `set` etc. on that box also acknowledge it automatically). Until you acknowledge it, it stays on the human's screen as "Not read by the AI yet" and the human can still revise the answer. If the answer contains a question back to you, record your own answer too with `ask` and `answer --by <yourself>`
+7. **When you are stuck**: If the cause is a missing input (a deliverable of an earlier box, or material), do not mark the box as blocked. Check its input wires with `npx boxglow show <block>`; if no box produces what is missing, create one outside (upstream) with `npx boxglow add` and wire it to this box's input with `npx boxglow connect` (the wire stays in the waiting color, so the diagram shows what the box is waiting for). If a choice between options would let you continue, use `ask`. Record only obstacles outside the plan (an environment that does not work, missing permissions or keys, waiting for an outside reply, a failure with no known cause) with `npx boxglow blocked <block> --note "<what is in the way>"`
+8. **Check deliverables**: after moving or renaming files, run `npx boxglow check` (it detects the move and updates the path; if the file cannot be found, it is flagged)
+9. **Before an interruption or a handoff**: before the session ends, the context is compacted, or you hand over to another AI or a person, save a handoff note with `npx boxglow checkpoint <block> --note "Findings; next steps; unresolved questions"` (with the guard on, add `--context-token <context token>`). It stays in the plan even when the chat history is gone, and the next session reads it with `resume` and `context`
+10. **Report**: at the end of your work, summarize `npx boxglow status --brief` and report it
 
 ### Structural rules
 
@@ -45,17 +51,25 @@ When there are many top-level inputs, create a group with `npx boxglow group "<g
 ```json
 {
   "blocks": [
-    { "title": "Design", "description": "What to do", "inputs": ["Spec"], "outputs": ["Design doc"] },
-    { "title": "Build", "inputs": ["Design doc"], "outputs": ["Code"] }
+    { "title": "Find the target", "inputs": ["Repro steps"], "outputs": ["Notes"],
+      "expect": "note:the files and code paths involved, evidence, candidate changes", "acceptance": "the files and code to change are known, or the reason they are not and the next decision is clear",
+      "goal": "reproduce and trace the path; changing product code is out of scope here" },
+    { "title": "Refresh sync state after a retried save", "inputs": ["Notes"], "outputs": ["Fix"],
+      "expect": "file:src/sync/state.ts", "acceptance": "fail one save, retry, and the sync state and actions come back (covered by a test)" },
+    { "title": "Write the release note", "inputs": ["Fix"], "outputs": ["Note"] }
   ],
   "connections": [
-    { "from": "parent.Spec", "to": "Design.Spec" },
-    { "from": "Design.Design doc", "to": "Build.Design doc" },
-    { "from": "Build.Code", "to": "parent.Output" }
+    { "from": "parent.Repro steps", "to": "Find the target.Repro steps" },
+    { "from": "Find the target.Notes", "to": "Refresh sync state after a retried save" },
+    { "from": "Refresh sync state after a retried save.Fix", "to": "Write the release note" },
+    { "from": "Write the release note.Note", "to": "parent.Output" }
   ]
 }
 ```
 
+`expect` (planned deliverable: `"kind:hint"` or `{ "kind", "hint" }`), `acceptance` and `goal` go only on the children you will start now.
+A child with just a title and an output, like the third one, stays "needs detail" until its turn; then set them with `port --expect` / `scope --acceptance`.
+Outputs the parent makes itself (integrating the children's results, for example) are marked with `"parentMakes": ["<output>"]` (if a child's wire also feeds it, readiness reports two makers).
 `parent.<name>` is an input / output of the box being split. `<block>` is a short ID (such as B12; shown in status) or a title.
 A box with no children has a single output (write just one entry in outputs). Make the title a short phrase that tells "what is made".
 Record dates and hours with `npx boxglow set <block> --due 2026-10-15 --start 2026-10-01 --estimate 8 --hours 3.5`.
@@ -96,17 +110,18 @@ npx boxglow done B12 --artifact "<name>=<path>" --context-token <new context tok
 
 ### Readiness, current scope, and fresh resume information
 
-- Read current activity, pending decisions, and unread answers first. Candidates are grouped by current scope / other candidates, then ready / waiting for inputs, with missing input names. A waiting candidate is not ready.
+- Read current activity, pending decisions, and unread answers first. Candidates are grouped by current scope / other candidates, then ready / needs detail / waiting for inputs, with the reasons and missing input names. A candidate that needs detail or is waiting is not ready.
+- "Ready" is a mechanical check: the box makes at least one output itself, that output has a planned deliverable (expect), the acceptance criteria are written, and required inputs are in. It does not judge whether the text is specific (`expect = src/`, `acceptance = works` pass). Write them so a third party can follow the target, the work, the result and how it is checked.
 - Four optional scope fields are available: goal, non-goals, acceptance, and consult (when to consult before expanding scope). Read the target and parent scopes at the start of context before starting and finishing. Textual acceptance criteria are not automatically evaluated.
 - Use scope B12 --goal "Goal" --non-goals "Excluded" --acceptance "Checks" --consult "When to ask". scope B12 only reads; none or an empty string clears a field. In the inspector, use ⋯ → Edit work scope. Only populated fields appear in the collapsed scope section.
 - focus B12 prioritizes that box and its descendants; focus reads the selection, and focus none clears it. Other candidates remain in a separate group. Being listed does not authorize expanding scope or publishing.
 - Missing required inputs warn on start by default but still allow the start. Supply --reason "Why starting early is appropriate" to proceed without a warning and save the reason in both activity and the log. Artifact-free done also remains warning-only by default. Existing output artifacts or --artifact count; reference material on the box does not.
-- Only enable strict checks when selected for the plan: policy --start reject --done reject. Each can return to warn. A recorded start reason also overrides reject. The artifact requirement also applies to set --status white. Human operations (UI / --actor human) are never rejected. Do not impersonate a human or weaken policy to bypass rejection.
+- Only enable strict checks when selected for the plan: policy --start reject --done reject --unprepared reject. Each can return to warn. A recorded start reason overrides the missing-input rejection, but not the needs-detail one (add detail first). The artifact requirement also applies to set --status white. Human operations (UI / --actor human) are never rejected. Do not impersonate a human or weaken policy to bypass rejection.
 - With guard enabled, scope writes, focus selection/clearing, and policy writes require --context-token. These changes print a new token: use it next. Read-only forms need no token.
 - resume hides completed handoff bodies and shows their count. Request resume --include-completed only when history is needed; context / show can still read individual notes.
 - descriptionUpdatedAt dates description changes; statusChangedAt dates status changes; handoffs use their existing at field. Notes predating a status change are marked. Unknown legacy dates stay unknown, and recency does not establish truth.
 - After Done, CLI, inspector, and resume flag descriptions that may still describe an earlier state. Text is never rewritten automatically. Review it, then update with set B12 --note "Current description" (none clears it) or Notes in the UI.
-- MCP: boxglow_scope / boxglow_focus / boxglow_policy, reason on boxglow_start, and includeCompleted on boxglow_resume. Pass contextToken for writes.
+- MCP: boxglow_scope / boxglow_focus / boxglow_policy, boxglow_claim, expect / self on boxglow_port, reason on boxglow_start, and includeCompleted on boxglow_resume. Pass contextToken for writes.
 - All data fields are optional; schema v5 is unchanged. Old versions (0.4.2 and earlier) do not enforce these checks and drop workflowPolicy / focusBlockId when saving. Align all writers (CLI, serve, web app, bundled extension app) to a supporting build before using these settings. Check build time as well as version.
 
 
@@ -118,11 +133,11 @@ Codex must pass `--actor codex` on every CLI call; Claude Code must pass `--acto
 
 ### Claims for parallel work
 
-When claims are enabled for the plan, fix a unique `BOXGLOW_INSTANCE_ID` for each independent CLI session. Do not share it between agents. Read `claims` and `context`, then acquire with `start` (default block scope, `--scope subtree` for descendants). Keep the token from the successful CLAIM line and pass `--claim-token` on writes. MCP keeps its own instance ID and acquired receipts automatically. Renew with `claim-renew` / `boxglow_claim_renew` every 5 minutes (or within half the lease for shorter leases); checkpoint before handoff. done/leave releases the target claim. On expiry or a generation mismatch, reread context and acquire again. The same actor name does not make another instance yours. Ask a person to change claim settings, force release, or resolve sync conflicts; never impersonate human. Synced copies on different devices are not protected by a distributed lock. See `docs/CLAIMS.md`.
+When claims are enabled for the plan, fix a unique `BOXGLOW_INSTANCE_ID` for each independent CLI session. Do not share it between agents. Read `claims` and `context`, then acquire with `claim` (before adding detail or splitting) or `start` (to run); a claim taken with `claim` carries over to `start` (default block scope, `--scope subtree` for descendants). Keep the token from the successful CLAIM line and pass `--claim-token` on writes. MCP keeps its own instance ID and acquired receipts automatically. Renew with `claim-renew` / `boxglow_claim_renew` every 5 minutes (or within half the lease for shorter leases); checkpoint before handoff. done/leave releases the target claim. On expiry or a generation mismatch, reread context and acquire again. The same actor name does not make another instance yours. Ask a person to change claim settings, force release, or resolve sync conflicts; never impersonate human. Synced copies on different devices are not protected by a distributed lock. See `docs/CLAIMS.md`.
 
 Never use another instance’s ID or receipt, including receipts reconstructed from plan data or claims output. After MCP restarts, the same actor is still a different instance: wait for expiry or ask a person to release it; never take it over automatically.
 
-Automatically promoted inputs belong to the original box’s scope. Changes to shared input content or other boxes’ layout require claims for all affected boxes. For plan settings such as focus or group, use `context root` → `start root` and pass that CLAIM receipt. A block-scoped root claim does not include ordinary boxes and is sufficient for plan settings. A subtree claim on root blocks all parallel work: AI agents must not use it and must consult a person. End it with `leave root`. Context-guard tokens are still required.
+Automatically promoted inputs belong to the original box’s scope. Changes to shared input content or other boxes’ layout require claims for all affected boxes. For plan settings such as focus or group, use `context root` → `claim root` and pass that CLAIM receipt (`start root` also works, but `claim` does not mark it in progress). A block-scoped root claim does not include ordinary boxes and is sufficient for plan settings. A subtree claim on root blocks all parallel work: AI agents must not use it and must consult a person. End it with `leave root`. Context-guard tokens are still required.
 
 ---
 

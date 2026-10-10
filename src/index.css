@@ -1708,6 +1708,9 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 /* 分岐待ち (まだ答えていない分岐の先): 点線の枠で「まだ決まっていない」ことを示す */
 .bg-block.branch-waiting { outline: 2px dashed var(--line); outline-offset: 2px; }
 .meta-chip.branch-waiting { background: transparent; border: 1px dashed var(--primary); color: var(--primary-strong); }
+/* 要具体化: 着手の前に決めることが残っている (注意色の点線。親の配下の件数は薄く) */
+.meta-chip.unprepared { background: transparent; border: 1px dashed var(--accent); color: var(--accent); }
+.meta-chip.unprepared.below { opacity: .75; }
 /* 分岐の出力: 選んだ道は太字、見送りの道は取り消し線 */
 .bg-block__port.out.branch-chosen .bg-block__port-name { font-weight: 800; color: var(--primary-strong); }
 .bg-block__port.out.branch-rejected .bg-block__port-name { text-decoration: line-through; color: var(--text-muted); }
@@ -1795,3 +1798,8 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .branch-picker__item[data-state="chosen"] .branch-picker__name { color: var(--primary-strong); font-weight: 800; }
 .branch-picker__item[data-state="skipped"] .branch-picker__name { opacity: .55; text-decoration: line-through; }
 .meta-chip.branch-chosen { background: var(--primary); color: var(--on-primary); border-color: var(--primary); opacity: 1; }
+
+/* 右パネルの要具体化の一覧 (着手の前に決めること)。注意色の点で区切る */
+.unprepared-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; color: var(--accent); }
+.unprepared-list li::before { content: "\25CF"; font-size: 8px; margin-right: 6px; vertical-align: 2px; }
+.task-table__unprepared { color: var(--accent); font-weight: 600; }

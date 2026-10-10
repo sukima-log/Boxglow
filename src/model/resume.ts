@@ -49,7 +49,9 @@ export function resumeReport(project: Project, options: { includeCompleted?: boo
     "## " + t("AI未確認の回答"),
     ...s.unreadAnswers.map(a => "- " + a.key + " " + a.title + "\n  " + a.question + "\n  → " + a.answer),
     "## " + t("次の候補"),
-    ...s.nextGroups.flatMap(g => ["### " + g.title, ...g.items.map(a => "- " + a.key + " " + a.title + (a.missingInputs.length ? " — " + t("必須の入力待ち: {names}", { names: a.missingInputs.join(", ") }) : ""))]),
+    ...s.nextGroups.flatMap(g => ["### " + g.title, ...g.items.map(a => "- " + a.key + " " + a.title
+      + (a.unprepared.length ? " — " + t("要具体化: {reasons}", { reasons: a.unprepared.join("; ") }) : "")
+      + (a.missingInputs.length ? " — " + t("必須の入力待ち: {names}", { names: a.missingInputs.join(", ") }) : ""))]),
     "## " + t("引き継ぎ（新しい順）"),
     ...s.handoffs.map(h => "- " + h.key + " " + h.title + " (" + h.actor + ", " + (h.status === "white" ? "Done" : h.status === "gray" ? "In Progress" : "New") + ")\n  " + h.freshnessText + "\n" + h.note),
     ...(!options.includeCompleted && s.completedHandoffCount ? [t("完了済みの引き継ぎ {n} 件。resume --include-completed で表示できます。", { n: s.completedHandoffCount })] : []),

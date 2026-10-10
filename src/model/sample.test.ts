@@ -6,6 +6,7 @@ import { buildSampleProject } from "./sample";
 import { ROOT_ID } from "./types";
 import { ancestorsOf, portsOf } from "./graph";
 import { branchState } from "./branch";
+import { unpreparedState } from "./readiness";
 import { buildEdges, buildNodes } from "../canvas/layout";
 
 describe("サンプルプロジェクト", () => {
@@ -31,6 +32,11 @@ describe("サンプルプロジェクト", () => {
     expect(branches.skipped.size).toBeGreaterThan(0);
     expect(branches.pending.size).toBeGreaterThan(0);
     expect(Object.values(p.blocks).some((b) => b.merge)).toBe(true);
+    // 具体化済み (予定成果物と完了条件がある) と要具体化の両方がある (着手の前に決める、の例として)
+    const st = unpreparedState(p);
+    expect(st.self.size).toBeGreaterThan(0);
+    const leaves = Object.values(p.blocks).filter((b) => b.status !== "white" && !b.merge && !b.branch && b.id !== ROOT_ID && b.kind !== "project");
+    expect(leaves.some((b) => !st.self.has(b.id))).toBe(true);
     // 線の両端のノードが存在する
     const ids = new Set(nodes.map((n) => n.id));
     for (const e of edges) {

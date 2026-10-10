@@ -17,6 +17,12 @@ function fixture() {
   return { id: r.blockId, p: addPort(r.project, {blockId:r.blockId, direction:"in", name:"仕様書"}).project };
 }
 afterEach(() => vi.useRealTimers());
+/** 具体化済みにする (予定成果物と完了条件を付ける)。候補の「着手できる」はこれが要る */
+function prepared(p: ReturnType<typeof createProject>, id: string) {
+  for (const o of portsOf(p, id, "out")) o.expect = { kind: "file", hint: "src/x.ts" };
+  p.blocks[id].scope = { ...p.blocks[id].scope, acceptance: "テストが通る" };
+  return p;
+}
 
 describe("着手・完了の確認", () => {
   it("既存の計画は入力待ちでも警告のみで拒否しない", () => {
@@ -30,7 +36,9 @@ describe("着手・完了の確認", () => {
   it("拒否は計画で選んだAI操作だけに効き、理由付き開始と人は通る", () => {
     const {p,id} = fixture(); p.workflowPolicy={startWithoutInputs:"reject",doneWithoutArtifacts:"reject"};
     expect(checkStart(p,id,"codex").error).toContain("--reason");
-    expect(checkStart(p,id,"codex","モックを先に作る")).toEqual({warning:"",error:""});
+    // 理由があれば入力待ちは通る (要具体化の警告は別に残るが、拒否にはならない)
+    expect(checkStart(p,id,"codex","モックを先に作る").error).toBe("");
+    expect(checkStart(p,id,"codex","モックを先に作る").warning).not.toContain("入力待ち");
     expect(checkStart(p,id,"human").error).toBe("");
     expect(checkStart(p,id,"human:担当").error).toBe("");
     expect(checkDone(p,id,0,"codex").error).not.toBe("");
@@ -55,16 +63,25 @@ describe("範囲と候補の優先", () => {
     const child=addBlock(other.project,{parentId:id,title:"今回の子"});
     let p=child.project; p.focusBlockId=id;
     const waiting=addBlock(p,{parentId:id,title:"待つ子"}); p=addPort(waiting.project,{blockId:waiting.blockId,direction:"in",name:"API"}).project;
+    for (const bid of [other.blockId, child.blockId, waiting.blockId]) prepared(p, bid);
     const groups=candidateGroups(p,summarize(p).next);
     expect(groups.map(g=>[g.inFocus,g.ready])).toEqual([[true,true],[true,false],[false,true]]);
+    expect(groups.map(g=>g.state)).toEqual(["ready","waiting","ready"]);
     expect(groups[1].items[0].missingInputs).toEqual(["API"]);
+    // 具体化していないボックスは「要具体化」の組に入り、理由が付く (入力待ちより先)
+    const rough=addBlock(p,{parentId:id,title:"粗い子"}); const q=addPort(rough.project,{blockId:rough.blockId,direction:"in",name:"資料"}).project;
+    const g2=candidateGroups(q,summarize(q).next).find(g=>g.state==="unprepared")!;
+    expect(g2.items.map(x=>x.title)).toEqual(["粗い子"]);
+    expect(g2.items[0].unprepared.join()).toContain("expect");
+    expect(g2.items[0].missingInputs).toEqual(["資料"]);
+    expect(resumeReport(q)).toContain("要具体化");
     expect(summarize(p).next[0].id).toBe(child.blockId);
     expect(inFocus(p,id)).toBe(true);
     expect(resumeReport(p)).toContain("今回の範囲");
     expect(statusReport(p,{brief:true})).toContain("API");
   });
   it("対象指定が無い既存計画は従来どおり着手可能を先にする", () => {
-    const {p,id} = fixture(); const r=addBlock(p,{parentId:defaultTaskParent(p),title:"準備済み"});
+    const {p,id} = fixture(); const r=addBlock(p,{parentId:defaultTaskParent(p),title:"準備済み"}); prepared(r.project,r.blockId); prepared(r.project,id);
     expect(summarize(r.project).next.map(b=>b.id)).toEqual([r.blockId,id]);
     expect(candidateGroups(r.project,summarize(r.project).next).map(g=>g.ready)).toEqual([true,false]);
   });

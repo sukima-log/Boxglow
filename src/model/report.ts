@@ -135,11 +135,14 @@ export function statusReport(p: Project, options: { brief?: boolean } = {}): str
     lines.push("", t("階層は省略しています。全体は `boxglow status`、ボックスの詳細は `boxglow show <block>` で確認できます。"));
   }
   if (s.next.length > 0) {
-    lines.push("", "## " + t("次の候補 (今回の範囲を優先し、着手できる・入力待ちを区別)"));
+    lines.push("", "## " + t("次の候補 (今回の範囲を優先し、着手できる・要具体化・入力待ちを区別)"));
     if (p.focusBlockId) lines.push(t("今回の範囲: {title}", { title: p.blocks[p.focusBlockId]?.title ?? "" }));
     for (const group of candidateGroups(p, s.next)) {
       lines.push("### " + group.title);
-      for (const item of group.items.slice(0, 10)) lines.push("- " + (item.key ?? "") + " " + item.title + (item.missingInputs.length ? "  " + t("(必須の入力待ち: {names})", { names: item.missingInputs.join(", ") }) : "  " + t("(着手できる)")));
+      for (const item of group.items.slice(0, 10)) lines.push("- " + (item.key ?? "") + " " + item.title
+        + (item.unprepared.length ? "  " + t("(要具体化: {reasons})", { reasons: item.unprepared.join("; ") }) : "")
+        + (item.missingInputs.length ? "  " + t("(必須の入力待ち: {names})", { names: item.missingInputs.join(", ") }) : "")
+        + (item.state === "ready" ? "  " + t("(着手できる)") : ""));
     }
   }
   lines.push("");

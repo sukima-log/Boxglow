@@ -4,6 +4,7 @@
  */
 import { ancestorsOf, effectiveProgress, kindOf, waitingFor } from "./graph";
 import { isSkipped } from "./branch";
+import { reasonText, unpreparedReasons } from "./readiness";
 import { ROOT_ID, type BlockStatus, type Project } from "./types";
 
 /** 誰の担当を出すか: メンバーの id / 未担当 / 全員 (担当の有無を問わず、すべてのタスク) */
@@ -30,6 +31,8 @@ export interface AssignmentRow {
   missingInputs: string[];
   /** 未回答の判断 (人への質問) の数 */
   pendingDecisions: number;
+  /** 要具体化の理由 (自身が作る出力・予定成果物・完了条件の不足。空なら具体化済み。完了済みは空) */
+  unprepared: string[];
   /** 担当のメンバーの名前 (登録の順。担当がいなければ空) */
   assignees: string[];
 }
@@ -38,11 +41,12 @@ export interface AssignmentRow {
  * 担当のボックスを、表の行として取り出す
  * Input : p = 計画, target = 誰の担当か (メンバーの id、未担当、または全員),
  *         opts.includeDone = true なら完了済み (Done) も含める (既定は含めない),
+ *         opts.onlyUnprepared = true なら要具体化のボックスだけ,
  *         opts.today = 今日 (YYYY-MM-DD。期日を過ぎたかの判定。省略時は実行環境の今日)
  * Output: 行の配列。並びは「期日の近い順 (期日の無いものは後ろ)」→「B 番号の順」。
  *         プロジェクトのボックスと最上位は含めない (タスクではないため)
  */
-export function assignmentRows(p: Project, target: AssigneeTarget, opts: { includeDone?: boolean; today?: string } = {}): AssignmentRow[] {
+export function assignmentRows(p: Project, target: AssigneeTarget, opts: { includeDone?: boolean; onlyUnprepared?: boolean; today?: string } = {}): AssignmentRow[] {
   const today = opts.today ?? localToday();
   const rows: AssignmentRow[] = [];
   for (const b of Object.values(p.blocks)) {
@@ -74,11 +78,12 @@ export function assignmentRows(p: Project, target: AssigneeTarget, opts: { inclu
       // 入力の待ち (と、まだ答えていない分岐): 完了済みは、もう材料を待たないので空にする
     , missingInputs: b.status === "white" ? [] : waitingFor(p, b.id)
     , pendingDecisions: b.decisions.filter((d) => d.answer === undefined).length
+    , unprepared: b.status === "white" ? [] : unpreparedReasons(p, b.id).map((r) => reasonText(p, r))
       // 担当の名前: 登録の順にそろえる (消えたメンバーの id は飛ばす)
     , assignees: p.members.filter((m) => b.assigneeIds.includes(m.id)).map((m) => m.name)
     });
   }
-  return rows.sort(compareRows);
+  return (opts.onlyUnprepared ? rows.filter((r) => r.unprepared.length > 0) : rows).sort(compareRows);
 }
 
 /**

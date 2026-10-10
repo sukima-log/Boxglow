@@ -104,6 +104,14 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
     await toggles.nth(0).click(); await page.waitForTimeout(200);
     check('入出力: 自分で閉じたものだけが閉じる', await expanded() === nToggle - 1);
 
+    // ---- 要具体化 (readiness): 予定成果物・完了条件の無いボックスに札が付き、右パネルに不足が並ぶ。親には配下の件数 ----
+    const roughBox = page.locator('.react-flow__node-block .bg-block', { has: page.locator('.meta-chip.unprepared:not(.below)') }).first();
+    check('要具体化: 予定成果物・完了条件の無いボックスに「要具体化」の札が付く', await roughBox.count() === 1);
+    await roughBox.click(); await page.waitForTimeout(400);
+    await page.locator('.panel.right .seg__btn', { hasText: '状態' }).click(); await page.waitForTimeout(200); // 前の確認で入出力タブを開いたまま (タブは保たれる)
+    const roughList = await page.locator('.panel.right .unprepared-list li').allInnerTexts();
+    check('要具体化: 右パネルに不足 (expect / acceptance) が並ぶ', roughList.some((x) => x.includes('expect')) && roughList.some((x) => x.includes('acceptance')), JSON.stringify(roughList));
+
     check('分岐: 実行時のエラーが無い', errors.length === 0, errors.join(' | '));
   } finally {
     await browser.close();

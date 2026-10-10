@@ -8,6 +8,7 @@ import { ClaimSettings, ClaimDetails } from "./Claims";
 import { BranchDialog } from "./BranchDialog";
 import { BranchPicker } from "./BranchPicker";
 import { branchDecision, canConvertToBranch } from "../model/branch";
+import { reasonText, unpreparedReasons } from "../model/readiness";
 import { CloseButton } from "./CloseButton";
 import { WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
@@ -310,13 +311,21 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         {suggest && !readonly && (
           <button className="btn btn-primary btn-sm w-full" onClick={() => setStatus("white")} title={t("下の階層が全部完了し、出力に成果物が付いています")}>{t("→ Done")}</button>
         )}
-        {/* 必須の入力の状況 (I/O タブの 必須 / 任意 がこことボックスの Ready に効く) */}
-        {b.status !== "white" && kindOf(b) !== "project" && portsOf(project, blockId, "in").length > 0 && (() => {
+        {/* 着手の準備: 要具体化 (自身が作る出力・予定成果物・完了条件) と、必須の入力の状況を別々に出す (I/O タブの 必須 / 任意 と expect がここに効く) */}
+        {b.status !== "white" && kindOf(b) !== "project" && !b.merge && (() => {
+          const reasons = unpreparedReasons(project, blockId);
           // 必須の入力と、まだ答えていない分岐 (分岐待ち)
           const missing = waitingFor(project, blockId);
-          return missing.length === 0
-            ? <div className="text-[12px]" style={{ color: "var(--primary-strong)" }}>{t("✓ Ready")}</div>
-            : <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("待ち: {names}", { names: missing.join(", ") })}</div>;
+          if (reasons.length === 0 && missing.length === 0) return portsOf(project, blockId, "in").length > 0 || portsOf(project, blockId, "out").length > 0
+            ? <div className="text-[12px]" style={{ color: "var(--primary-strong)" }}>{t("✓ Ready")}</div> : null;
+          return (
+            <div className="text-[12px] flex flex-col gap-1" style={{ color: "var(--text-muted)" }}>
+              {reasons.length > 0 && <ul className="unprepared-list" title={t("着手の前に、出力の予定成果物 (expect) と完了条件を決めます")}>
+                {reasons.map((r, i) => <li key={i}>{reasonText(project, r)}</li>)}
+              </ul>}
+              {missing.length > 0 && <div>{t("待ち: {names}", { names: missing.join(", ") })}</div>}
+            </div>
+          );
         })()}
         {/* プロジェクトのボックス: 対応するリポジトリ (複数リポジトリを 1 つのファイルで管理するときの目印) */}
         {isProject && (

@@ -296,6 +296,7 @@ function NextCandidates({ project, limit, onJump }: { project: Project; limit: n
     {groups.map(g => <div key={g.title}><h3 className="label">{g.title}</h3>
       {g.items.slice(0, limit).map(b => <button key={b.blockId} className="tree-row text-left flex-wrap" onClick={() => onJump(b.blockId)}>
         <span className="dec-key">{b.key}</span><span>{b.title}</span>
+        {b.unprepared.length > 0 && <span className="basis-full text-[12px]" style={{ whiteSpace: "normal", color: "var(--text-muted)" }}>{b.unprepared.join(" / ")}</span>}
         {b.missingInputs.length > 0 && <span className="basis-full text-[12px]" style={{ whiteSpace: "normal", color: "var(--text-muted)" }}>{t("待ち: {names}", { names: b.missingInputs.join(", ") })}</span>}
       </button>)}
     </div>)}

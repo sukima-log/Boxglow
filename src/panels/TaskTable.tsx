@@ -33,7 +33,7 @@ function compareBy(key: SortKey, x: AssignmentRow, y: AssignmentRow): number {
       case "status": return STATUS_ORDER[x.status] - STATUS_ORDER[y.status];
       case "progress": return x.progress - y.progress;
       case "estimate": return (x.estimateHours ?? Infinity) - (y.estimateHours ?? Infinity);
-      case "inputs": return x.missingInputs.length - y.missingInputs.length;
+      case "inputs": return (Number(y.unprepared.length > 0) - Number(x.unprepared.length > 0)) || x.missingInputs.length - y.missingInputs.length;
       case "decisions": return x.pendingDecisions - y.pendingDecisions;
     }
   })();
@@ -56,17 +56,19 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
   // 対象: 選択肢の値は「メンバーの id」か、「全員」を表す "__everyone"、「未担当」を表す "__unassigned"
   const [target, setTarget] = useState<string>("memberId" in initial ? initial.memberId : "everyone" in initial ? "__everyone" : "__unassigned");
   const [includeDone, setIncludeDone] = useState(false);
+  // 要具体化のボックスだけに絞る (着手の前に決めることが残っているもの)
+  const [onlyUnprepared, setOnlyUnprepared] = useState(false);
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "due", desc: false });
   // 対象のメンバーが計画から消えた (別の端末や AI の編集) ときは、全員に切り替える
   const member = project.members.find((m) => m.id === target);
   const everyone = !member && target !== "__unassigned";
   const effective: AssigneeTarget = member ? { memberId: member.id } : everyone ? { everyone: true } : { unassigned: true };
   const rows = useMemo(() => {
-    const list = assignmentRows(project, effective, { includeDone });
+    const list = assignmentRows(project, effective, { includeDone, onlyUnprepared });
     const sorted = [...list].sort((x, y) => compareBy(sort.key, x, y));
     return sort.desc ? sorted.reverse() : sorted;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project, member?.id, everyone, includeDone, sort]);
+  }, [project, member?.id, everyone, includeDone, onlyUnprepared, sort]);
 
   // Esc で図に戻る (入力欄で使っているときは除く)。
   // 右に詳細を開いているときは、先に詳細だけを閉じる (画面全体の Esc の処理に任せる)。
@@ -115,6 +117,10 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
           <input type="checkbox" checked={includeDone} onChange={(e) => setIncludeDone(e.target.checked)} />
           {t("Done も表示")}
         </label>
+        <label className="task-table-view__toggle" title={t("着手の前に、出力の予定成果物 (expect) と完了条件を決めます")}>
+          <input type="checkbox" checked={onlyUnprepared} onChange={(e) => setOnlyUnprepared(e.target.checked)} />
+          {t("要具体化のみ")}
+        </label>
         <span className="task-table-view__count">{t("{n} 件", { n: rows.length })}</span>
         <span className="ml-auto"><CloseButton onClick={() => setTaskTable(null)} title={t("図に戻る (Esc)")} label={t("図に戻る")} /></span>
       </header>
@@ -134,7 +140,7 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
                 {head("progress", t("進捗"), "num")}
                 {head("due", t("期日"))}
                 {head("estimate", t("見積"), "num")}
-                {head("inputs", t("入力"))}
+                {head("inputs", t("準備"))}
                 {head("decisions", t("判断待ち"), "num")}
               </tr>
             </thead>
@@ -150,7 +156,8 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
                   {/* 期日を過ぎた未完了は、色と言葉で示す (色だけに頼らない) */}
                   <td data-overdue={r.overdue}>{r.dueDate ?? ""}{r.overdue ? ` (${t("期日切れ")})` : ""}</td>
                   <td className="num">{r.estimateHours !== undefined ? `${r.estimateHours}h` : ""}</td>
-                  <td title={r.missingInputs.join(", ")}>{r.status === "white" ? "" : r.missingInputs.length ? t("待ち {n}", { n: r.missingInputs.length }) : t("✓")}</td>
+                  {/* 準備: 要具体化 (理由はヒント) → 入力待ちの数 → ✓ */}
+                  <td title={[...r.unprepared, ...r.missingInputs].join(", ")}>{r.status === "white" ? "" : r.unprepared.length ? <span className="task-table__unprepared">{t("要具体化")}</span> : r.missingInputs.length ? t("待ち {n}", { n: r.missingInputs.length }) : t("✓")}</td>
                   <td className="num">{r.pendingDecisions || ""}</td>
                 </tr>
               ))}

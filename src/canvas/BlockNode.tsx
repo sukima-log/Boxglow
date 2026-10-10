@@ -1,5 +1,6 @@
 import { ClaimMark, useClaimClock, visibleClaim } from "../panels/Claims";
 import { chosenOption, isSkipped, waitingBranches } from "../model/branch";
+import { unpreparedState } from "../model/readiness";
 /**
  * ブロック (ボックス) のノード
  * 分類・題名・状態・入力・出力を縦に読むカード。親は子を包む領域として描く。
@@ -94,6 +95,9 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     , mergeReady: !!b?.merge && outs.length > 0 && isSourceReady(p, { portId: outs[0].id, side: "outer" })
     , skipped: isSkipped(p, blockId)
     , waitingBranch: waitingBranches(p, blockId).length > 0
+      // 要具体化: 自身が作る出力が無い、予定成果物・完了条件が未定 (着手の前に決める)。親には配下の件数
+    , unprepared: unpreparedState(p).self.has(blockId)
+    , unpreparedBelow: unpreparedState(p).below.get(blockId) ?? 0
     , pending: b?.decisions.filter((d) => d.answer === undefined).length ?? 0
     , activity: b?.activity ?? null
     , percent: effectiveProgress(p, blockId)
@@ -246,6 +250,9 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         {/* 見送り: 選ばなかった分岐の道 (進捗・次の候補・担当の一覧から外れる) / 分岐待ち: まだ答えていない分岐の先 */}
         {view.skipped && <span className="meta-chip skipped" title={t("選ばなかった分岐の道です。進捗や次の候補には数えません")}>{t("見送り")}</span>}
         {view.waitingBranch && !view.skipped && <span className="meta-chip branch-waiting" title={t("まだ答えていない分岐の先です。答えると、この道へ進むかが決まります")}>{t("分岐待ち")}</span>}
+        {/* 要具体化: 着手の前に、出力の予定成果物と完了条件を決める。親には配下の件数 */}
+        {view.unprepared && !view.skipped && <span className="meta-chip unprepared" title={t("着手の前に、出力の予定成果物 (expect) と完了条件を決めます")}>{t("要具体化")}</span>}
+        {!view.unprepared && view.unpreparedBelow > 0 && !view.skipped && <span className="meta-chip unprepared below" title={t("中に、要具体化のボックスが {n} 個あります", { n: view.unpreparedBelow })}>{t("要具体化 {n}", { n: view.unpreparedBelow })}</span>}
         {view.dueDate && view.status !== "white" && (
           <span className={`meta-chip ${view.overdue ? "overdue" : "bg-block__secondary"}`} title={view.daysLeft === null ? t("期日 {date}", { date: view.dueDate }) : view.daysLeft < 0 ? t("期日 {date} ({d} 日超過)", { date: view.dueDate, d: -view.daysLeft }) : t("期日 {date} (あと {d} 日)", { date: view.dueDate, d: view.daysLeft })}>
             {t("期日 {date}", { date: view.dueDate.slice(5).replace("-", "/") })}

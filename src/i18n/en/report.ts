@@ -92,7 +92,6 @@ export const report: Record<string, string> = {
 , "ボックスを足す。出力 (成果物の名前) を必ず決める。parent を省くと最初のプロジェクトのボックスの直下 (大項目) に入る": "Add a box. Always decide its output (the name of the deliverable). Without parent, it goes directly under the first project box (as a top-level item)"
 , "出力の名前 (具体的な成果物: ファイル・URL・PR)": "Output name (a concrete deliverable: file, URL, PR)"
 , "入力の名前": "Input names"
-, "大きいボックスを中のボックスに分解する。spec は { blocks: [{ title, inputs?: [名前], outputs: [名前] }], connections: [{ from: \"A.出力名\", to: \"B\" }] } の形 (to は題名だけでよい: 出力名と同じ入力が作られる。親の入力からは from: \"parent.入力名\"、親の出力へは to: \"parent.出力名\")": "Split a large box into inner boxes. spec has the form { boxes: [{ title, inputs?: [name], outputs: [name] }], connections: [{ from: \"A.outputName\", to: \"B\" }] } (to can be just a title: an input with the same name as the output is created. From the parent's input use from: \"parent.inputName\"; to the parent's output use to: \"parent.outputName\")"
 , "分解の指定 (JSON)": "Split spec (JSON)"
 , "線をつなぐ: <題名.出力名> から <題名> へ (受け側は題名だけでよい。出力名と同じ名前の入力が作られる。<題名.入力名> で既存の入力を指定してもよい。親の入力は project.入力名、親の出力へは 題名.出力名 -> project)": "Connect a wire: from <title.outputName> to <title> (the receiving side can be just a title; an input with the same name as the output is created. <title.inputName> selects an existing input. The parent's input is project.inputName; to the parent's output use title.outputName -> project)"
 , "線を外す": "Remove a wire"

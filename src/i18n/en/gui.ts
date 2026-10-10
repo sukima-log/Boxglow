@@ -133,4 +133,9 @@ export const gui: Record<string, string> = {
   "✓": "✓",
   "未読": "Unread",
   "AI がまだ読んでいません。編集できます": "Not read by the AI yet. You can still edit it",
+  "要具体化のみ": "Needs detail only",
+  "着手の前に、出力の予定成果物 (expect) と完了条件を決めます": "Before starting, set the output's planned deliverable (expect) and the acceptance criteria",
+  "中に、要具体化のボックスが {n} 個あります": "{n} boxes inside still need detail",
+  "要具体化 {n}": "Needs detail {n}",
+  "準備": "Readiness",
 };
