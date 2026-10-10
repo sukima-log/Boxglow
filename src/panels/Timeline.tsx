@@ -40,7 +40,7 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
   const submitKey = (ev: React.KeyboardEvent, go: () => void) => { if (!ev.nativeEvent.isComposing && ev.key === "Enter" && (ev.ctrlKey || ev.metaKey)) { ev.preventDefault(); go(); } };
   return (
     <div className="flex flex-col gap-2 pl-2" style={{ borderLeft: "3px solid var(--accent)" }}>
-      <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("{actor} からの質問 ({ago})", { actor: actorLabel(d.askedBy), ago: agoText(d.askedAt) })}</div>
+      <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("{actor} · {ago}", { actor: actorLabel(d.askedBy), ago: agoText(d.askedAt) })}</div>
       <div className="text-[13px] font-bold">{d.question}</div>
       {/* 判断材料: 質問だけで判断できるように、前提・比較・影響をここに出す */}
       {d.context && <div className="text-[12px] whitespace-pre-wrap" style={{ color: "var(--text-muted)", background: "var(--bg-paper)", border: "1px solid var(--line-soft)", borderRadius: 8, padding: "6px 8px" }}>{d.context}</div>}
@@ -59,27 +59,27 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
               <div className="whitespace-pre-wrap">{t("選んだ:")} <b>{d.answer}</b> <span style={{ color: "var(--text-muted)" }}>({d.answeredBy})</span></div>
               {/* AI が読んだかどうか: 読まれるまでは橙の札で「未確認」。読まれたら誰がいつ引き取ったか */}
               {isAcked(project, blockId, d)
-                ? (d.ackedAt && <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{t("AI 確認済み ({by}、{ago})", { by: actorLabel(d.ackedBy ?? ""), ago: agoText(d.ackedAt) })}</div>)
-                : <div className="text-[11px] font-bold" style={{ color: "var(--accent)" }}>{t("AI 未確認 (まだ読まれていません。編集できます)")}</div>}
+                ? (d.ackedAt && <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{t("✓ 既読: {by} · {ago}", { by: actorLabel(d.ackedBy ?? ""), ago: agoText(d.ackedAt) })}</div>)
+                : <div className="text-[11px] font-bold" style={{ color: "var(--accent)" }} title={t("AI がまだ読んでいません。編集できます")}>{t("未読")}</div>}
             </>
           )}
           {/* 選ばなかった候補も残す (方針転換のときに戻れるように) */}
           {candidatesOf(d).rejected.length > 0 && (
             <div className="flex flex-wrap items-center gap-1 text-[12px]" style={{ color: "var(--text-muted)" }}>
-              {t("残した候補:")}
+              {t("候補:")}
               {candidatesOf(d).rejected.map((o) => <span key={o} className="meta-chip muted" style={{ fontSize: 11 }}>{o}</span>)}
             </div>
           )}
           {(d.history ?? []).length > 0 && (
             <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>
               {/* 答えの履歴: 「答え (誰、理由)」を → でつなぐ。読点は言語で変わるので理由付きの形も辞書で引く */}
-              {t("以前の答え:")} {d.history!.map((h) => h.note ? t("{answer} ({by}、{note})", { answer: h.answer, by: h.by, note: h.note }) : `${h.answer} (${h.by})`).join(" → ")}
+              {t("履歴:")} {d.history!.map((h) => h.note ? t("{answer} ({by}、{note})", { answer: h.answer, by: h.by, note: h.note }) : `${h.answer} (${h.by})`).join(" → ")}
             </div>
           )}
           {!readonly && editing === null && (
             <div className="flex gap-1">
               <button className="btn btn-ghost btn-sm" onClick={() => setEditing(d.answer ?? "")} title={t("答えの文面を直す (書き間違いや補足。選び直しではない)")}>Edit</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => { const note = prompt(t("やり直す理由 (任意)")) ?? ""; apply((p) => reopenDecision(p, blockId, decisionId, "human", note)); }} title={t("方針転換: 答えを履歴に残して、候補から選び直す")}>{t("やり直す")}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => { const note = prompt(t("やり直す理由 (任意)")) ?? ""; apply((p) => reopenDecision(p, blockId, decisionId, "human", note)); }} title={t("方針転換: 答えを履歴に残して、候補から選び直す")}>{t("Reopen")}</button>
             </div>
           )}
         </div>
@@ -93,8 +93,8 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
           <div className="flex flex-col gap-1">
             <textarea className="input" rows={3} placeholder={d.options.length > 0 ? t("または自由に書く (複数行可)") : t("回答を書く (複数行可)")} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => submitKey(e, () => answer(text))} />
             <div className="flex items-center gap-2 justify-end">
-              <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{t("Enter は改行。送るのはボタンか Ctrl+Enter")}</span>
-              <button className="btn btn-primary btn-sm" disabled={!text.trim()} onClick={() => answer(text)}>{t("回答する")}</button>
+              <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{t("Ctrl+Enter")}</span>
+              <button className="btn btn-primary btn-sm" disabled={!text.trim()} onClick={() => answer(text)}>{t("回答")}</button>
             </div>
           </div>
         </>
@@ -183,24 +183,22 @@ export function Timeline({ project }: { project: Project }) {
       {tab === "resume" && <section className="flex flex-col gap-2">
         {active.length > 0 && <><h3 className="label">{t("作業中・確認待ち")}</h3>{active.map(w => <div key={w.block.id}><BlockRef project={project} blockId={w.block.id} onJump={jump} /><p className="text-[12px]">{w.note}</p></div>)}</>}
         {s.decisions.length > 0 && <><h3 className="label">{t("判断待ち")}</h3>{s.decisions.map(({block, decision}) => <div key={decision.id}><BlockRef project={project} blockId={block.id} onJump={jump} /><DecisionCard project={project} blockId={block.id} decisionId={decision.id} /></div>)}</>}
-        {s.answered.length > 0 && <><h3 className="label">{t("AI未確認の回答")}</h3>{s.answered.map(({block, decision}) => <div key={decision.id}><BlockRef project={project} blockId={block.id} onJump={jump} /><DecisionCard project={project} blockId={block.id} decisionId={decision.id} /></div>)}</>}
+        {s.answered.length > 0 && <><h3 className="label">{t("AI 未読")}</h3>{s.answered.map(({block, decision}) => <div key={decision.id}><BlockRef project={project} blockId={block.id} onJump={jump} /><DecisionCard project={project} blockId={block.id} decisionId={decision.id} /></div>)}</>}
         <NextCandidates project={project} limit={5} onJump={jump} />
-        <h3 className="label">{t("引き継ぎ（新しい順）")}</h3>
-        {resume.handoffs.length === 0 && !resume.completedHandoffCount && empty(t("引き継ぎメモはまだありません。各タスクの「AI への引き継ぎ」に残せます。"))}
-        {resume.completedHandoffCount > 0 && <button className="btn btn-ghost btn-sm" aria-expanded={includeCompleted} onClick={() => setIncludeCompleted(!includeCompleted)}>{t("完了済みの引き継ぎ ({n})", { n: resume.completedHandoffCount })}</button>}
+        <h3 className="label">{t("引き継ぎ")}</h3>
+        {resume.handoffs.length === 0 && !resume.completedHandoffCount && empty(t("なし"))}
+        {resume.completedHandoffCount > 0 && <button className="btn btn-ghost btn-sm" aria-expanded={includeCompleted} onClick={() => setIncludeCompleted(!includeCompleted)}>{t("Done ({n})", { n: resume.completedHandoffCount })}</button>}
         {resume.handoffs.map(({ blockId, note, actor, freshnessText, status }) => <div key={blockId} className="resume-card">
           <BlockRef project={project} blockId={blockId} onJump={jump} />
           <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{actorLabel(actor)} · {STATUS_LABEL[status]} · {freshnessText}</div>
           <p className="whitespace-pre-wrap">{note}</p>
         </div>)}
-        {resume.descriptionReminders.length > 0 && <details className="text-[12px]"><summary>{t("説明の見直し候補 ({n})", { n: resume.descriptionReminders.length })}</summary>{resume.descriptionReminders.map(x => <BlockRef key={x.blockId} project={project} blockId={x.blockId} onJump={jump} />)}</details>}
-        <p className="text-[12px]">{t("CLI: boxglow resume → boxglow context B番号 で最新の判断を読みます。")}</p>
+        {resume.descriptionReminders.length > 0 && <details className="text-[12px]"><summary>{t("見直し ({n})", { n: resume.descriptionReminders.length })}</summary>{resume.descriptionReminders.map(x => <BlockRef key={x.blockId} project={project} blockId={x.blockId} onJump={jump} />)}</details>}
       </section>}
 
       {tab === "decisions" && (
         <section className="flex flex-col gap-2">
-          <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("あなたの回答で AI が進めます")}</span>
-          {s.decisions.length === 0 && empty(s.answered.length > 0 ? t("判断待ちはありません。答えたものは Answered にあります") : t("判断待ちはありません"))}
+          {s.decisions.length === 0 && empty(s.answered.length > 0 ? t("なし") : t("なし"))}
           {s.decisions.map(({ block, decision }) => (
             <div key={decision.id} className="flex flex-col gap-1">
               {/* どのボックスの判断かを見出しで示す: B 番号・階層のパス・題名・ボックスへ飛ぶボタン */}
@@ -214,8 +212,7 @@ export function Timeline({ project }: { project: Project }) {
       {tab === "answered" && (
         <section className="flex flex-col gap-2">
           {/* 答えた直後に一覧から消えると「どのボックスの何に答えたか」を見失う。AI が引き取る (ack) までここに残し、編集もできる */}
-          <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("AI がまだ読んでいない回答。読まれるまでここに残ります")}</span>
-          {s.answered.length === 0 && empty(t("AI が未確認の回答はありません"))}
+          {s.answered.length === 0 && empty(t("なし"))}
           {s.answered.map(({ block, decision }) => (
             <div key={decision.id} className="flex flex-col gap-1">
               <BlockRef project={project} blockId={block.id} onJump={jump} />
@@ -227,7 +224,7 @@ export function Timeline({ project }: { project: Project }) {
 
       {tab === "working" && (
         <section className="flex flex-col gap-1">
-          {active.length === 0 && empty(t("作業中のボックスはありません"))}
+          {active.length === 0 && empty(t("なし"))}
           {active.map((w) => {
             // 「全体のどこで、何のために」: ボックスの位置 (大項目 › 中項目) と、この作業が出すもの (出力の名前)
             const where = ancestorsOf(project, w.block.id).filter((a) => a.id !== ROOT_ID && kindOf(a) !== "project").reverse().map((a) => a.title).join(" › ");
@@ -250,8 +247,7 @@ export function Timeline({ project }: { project: Project }) {
 
       {tab === "claims" && (
         <section className="flex flex-col gap-1 claim-list">
-          <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("ほかの AI は、受け持ち中のボックスを書き換えません。解除はボックスの「担当」タブから")}</span>
-          {claimRows.length === 0 && empty(t("受け持ちはありません"))}
+          {claimRows.length === 0 && empty(t("なし"))}
           {claimRows.map((r) => (
             <button key={r.rootId} className="tree-row text-left flex-wrap" data-expired={!r.active} onClick={() => jump(r.rootId)}>
               {/* 誰が: AI の名前と実行 ID (同じ AI のサブエージェントを見分ける) */}
@@ -276,7 +272,7 @@ export function Timeline({ project }: { project: Project }) {
 
       {tab === "log" && (
         <section>
-          {log.length === 0 && <div className="text-[12px] mt-1" style={{ color: "var(--text-muted)" }}>{t("まだありません。CLI や画面の操作で記録されます。")}</div>}
+          {log.length === 0 && <div className="text-[12px] mt-1" style={{ color: "var(--text-muted)" }}>{t("なし")}</div>}
           {log.map((e) => (
             <div key={e.id} className="tl-row" style={{ cursor: e.blockId ? "pointer" : "default" }} onClick={() => e.blockId && project.blocks[e.blockId] && jump(e.blockId)}>
               <span className="tl-time">{shortTime(e.at)}</span>
@@ -296,11 +292,11 @@ function NextCandidates({ project, limit, onJump }: { project: Project; limit: n
   const groups = candidateGroups(project, summarize(project).next);
   return <section className="flex flex-col gap-2 next-candidates">
     {project.focusBlockId && <p className="text-[12px]">{t("今回の範囲: {title}", { title: project.blocks[project.focusBlockId]?.title ?? "" })}</p>}
-    {!groups.length && <p className="text-[12px]">{t("未着手のボックスはありません")}</p>}
+    {!groups.length && <p className="text-[12px]">{t("なし")}</p>}
     {groups.map(g => <div key={g.title}><h3 className="label">{g.title}</h3>
       {g.items.slice(0, limit).map(b => <button key={b.blockId} className="tree-row text-left flex-wrap" onClick={() => onJump(b.blockId)}>
         <span className="dec-key">{b.key}</span><span>{b.title}</span>
-        {b.missingInputs.length > 0 && <span className="basis-full text-[12px]" style={{ whiteSpace: "normal", color: "var(--text-muted)" }}>{t("必須の入力待ち: {names}", { names: b.missingInputs.join(", ") })}</span>}
+        {b.missingInputs.length > 0 && <span className="basis-full text-[12px]" style={{ whiteSpace: "normal", color: "var(--text-muted)" }}>{t("待ち: {names}", { names: b.missingInputs.join(", ") })}</span>}
       </button>)}
     </div>)}
   </section>;

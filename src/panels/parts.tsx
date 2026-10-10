@@ -137,7 +137,7 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                 </div>
               ) : (
                 <>
-                  <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{direction === "in" ? t("入力物 (この入力の実体)") : t("成果物 (この出力の実体)")}</div>
+                  <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{direction === "in" ? t("入力物") : t("成果物")}</div>
                   <ArtifactsEditor artifacts={q.artifacts} readonly={readonly} addLabel={direction === "in" ? t("入力物を追加") : t("成果物を追加")}
                     onChange={(next) => apply((p) => updatePort(p, q.id, { artifacts: next }))} />
                 </>
@@ -147,7 +147,7 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
             {isOpen(q.id) && (
               <div className="flex flex-col gap-1 pl-2 pb-2">
                 {src ? (
-                  <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("形式・制約は供給元「{name}」の出力で書きます", { name: src.name })}{src.description ? `: ${src.description}` : ""}</div>
+                  <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("形式: 供給元「{name}」", { name: src.name })}{src.description ? `: ${src.description}` : ""}</div>
                 ) : (
                   <DebouncedText className="input" placeholder={t("形式・制約 (任意。例: Markdown、PNG 1920x1080、API は OpenAPI 3)")} value={q.description} disabled={readonly}
                     onCommit={(v) => apply((p) => updatePort(p, q.id, { description: v }))} />
@@ -159,7 +159,6 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                       <button className="seg__btn" data-on={q.required} disabled={readonly} onClick={() => apply((p) => updatePort(p, q.id, { required: true }))} title={t("必須: この入力がそろうまで着手できない (ボックスの Ready に効く)")}>{t("必須")}</button>
                       <button className="seg__btn" data-on={!q.required} disabled={readonly} onClick={() => apply((p) => updatePort(p, q.id, { required: false }))} title={t("任意: 無くても着手できる")}>{t("任意")}</button>
                     </div>
-                    <span style={{ color: "var(--text-muted)" }}>{q.required ? t("そろうまで着手できない") : t("無くても着手できる")}</span>
                   </div>
                 )}
                 {/* 合流: 分かれた道が 1 つにまとまるところの入力。合流の入力どうしは、どれか 1 つが届けばよい */}
@@ -167,7 +166,7 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                 {direction === "in" && !q.promotedFrom && q.anyOf && (
                   <label className="flex items-center gap-2 text-[12px]" title={t("分かれた道 (分岐) が 1 つにまとまるところ。合流にした入力どうしは、どれか 1 つが届けば着手できます")}>
                     <input type="checkbox" checked={!!q.anyOf} disabled={readonly} onChange={(e) => apply((p) => setInputAnyOf(p, q.id, e.target.checked))} />
-                    {t("合流 (どれか 1 つが届けばよい)")}
+                    {t("OR")}
                   </label>
                 )}
               </div>

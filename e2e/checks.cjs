@@ -89,11 +89,11 @@ function squeezed(file) {
     await page.evaluate(() => window.boxglow.store.getState().select({ timeline: true }));
     await page.waitForTimeout(400);
     await page.locator("aside.right textarea").first().fill("Email magic link で進める");
-    await page.locator("aside.right").getByRole("button", { name: "回答する", exact: true }).first().click(); // タブの「Answered」と区別する
+    await page.locator("aside.right").getByRole("button", { name: "回答", exact: true }).first().click(); // タブの「Answered」と区別する
     await page.waitForTimeout(600);
     const after = await page.locator("aside.right").innerText();
     const dec = await page.evaluate((id) => { const d = window.boxglow.store.getState().project.blocks[id].decisions[0]; return { answer: d.answer, by: d.answeredBy, acked: !!d.ackedAt }; }, signIn);
-    check("答えた直後も一覧に残り、どのボックスの何への回答か分かる (AI 未確認)", /answered/i.test(after) && after.includes("Sign-in") && after.includes("Email magic link で進める") && after.includes("AI 未確認"), "");
+    check("答えた直後も一覧に残り、どのボックスの何への回答か分かる (AI 未確認)", /answered/i.test(after) && after.includes("Sign-in") && after.includes("Email magic link で進める") && after.includes("未読"), "");
     check("人の回答は AI が引き取るまで未確認のまま", dec.answer === "Email magic link で進める" && dec.by === "human" && !dec.acked, JSON.stringify(dec));
     check("帯に回答済みが出る", (await page.locator(".summary-chip").innerText()).includes("回答済み"));
     // Activity は項目ごとのタブ: 件数つきの 5 つのタブがあり、押した項目だけが出る

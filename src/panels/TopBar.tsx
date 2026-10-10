@@ -203,7 +203,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
       <button className="summary-chip" data-on={selection.timeline} onClick={() => select({ timeline: !selection.timeline })} title={t("今の状況 (作業中・判断待ち・ログ)")}>
         {busy > 0 && <span className="dot" />}
         {busy > 0 && <span><span className="summary-chip__txt">{t("作業中")} </span>{busy}</span>}
-        {sum.blocked.length > 0 && <span><span className="summary-chip__txt">{t("詰まり・確認待ち")} </span>{sum.blocked.length}</span>}
+        {sum.blocked.length > 0 && <span><span className="summary-chip__txt">{t("詰まり")} </span>{sum.blocked.length}</span>}
         {sum.decisions.length > 0 && <span className="summary-decision"><span className="summary-chip__txt">{t("判断待ち")} </span>{sum.decisions.length}</span>}
         {/* 人が答えて AI がまだ読んでいない回答: 答えた直後に見失わないよう、引き取られるまで帯に出す */}
         {sum.answered.length > 0 && <span><span className="summary-chip__txt">{t("回答済み")} </span>{sum.answered.length}</span>}
@@ -250,14 +250,14 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
                 onKeyDown={(e) => { if (e.key === "Escape") setAddOpen(false); }} title={t("足すものを選ぶ (N でふつうのボックスをすぐに足す)")}>+ Block</button>
               {addOpen && (
                 <div className="card add-menu__pop" role="menu" aria-label={t("足すもの")}>
-                  <button role="menuitem" className="add-menu__item" onClick={() => { setAddOpen(false); addSibling(); }}>
-                    <span className="add-menu__icon block" aria-hidden="true" /><span><b>Block</b><small>{t("ふつうの作業 (N)")}</small></span>
+                  <button role="menuitem" className="add-menu__item" onClick={() => { setAddOpen(false); addSibling(); }} title={t("ふつうの作業")}>
+                    <span className="add-menu__icon block" aria-hidden="true" /><b>Block</b><kbd className="add-menu__key">N</kbd>
                   </button>
-                  <button role="menuitem" className="add-menu__item" onClick={() => { setAddOpen(false); setBranchOpen(true); }}>
-                    <span className="add-menu__icon branch" aria-hidden="true">IF</span><span><b>Branch (IF)</b><small>{t("まだ決まっていない分かれ道")}</small></span>
+                  <button role="menuitem" className="add-menu__item" onClick={() => { setAddOpen(false); setBranchOpen(true); }} title={t("まだ決まっていない分かれ道")}>
+                    <span className="add-menu__icon branch" aria-hidden="true">IF</span><b>Branch</b>
                   </button>
-                  <button role="menuitem" className="add-menu__item" onClick={() => { setAddOpen(false); addJoin(); }}>
-                    <span className="add-menu__icon merge" aria-hidden="true">OR</span><span><b>Merge</b><small>{t("分かれた道をまとめる")}</small></span>
+                  <button role="menuitem" className="add-menu__item" onClick={() => { setAddOpen(false); addJoin(); }} title={t("分かれた道をまとめる")}>
+                    <span className="add-menu__icon merge" aria-hidden="true">OR</span><b>Merge</b>
                   </button>
                 </div>
               )}
@@ -273,7 +273,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
               {/* 編集の操作: 帯に出せない狭い幅 (760px 以下) のときだけ、ここに出す (通常の幅では帯のボタンを使う) */}
               {!readonly && <div className="menu-actions">
                 <button className="btn btn-primary btn-sm" onClick={addSibling}>+ Block</button>
-                <button className="btn btn-sm" onClick={() => setBranchOpen(true)}>+ Branch (IF)</button>
+                <button className="btn btn-sm" onClick={() => setBranchOpen(true)}>+ Branch</button>
                 <button className="btn btn-sm" onClick={addJoin}>+ Merge</button>
                 <button className="btn btn-ghost btn-sm" onClick={undo} disabled={past === 0}>Undo</button>
                 <button className="btn btn-ghost btn-sm" onClick={redo} disabled={future === 0}>Redo</button>

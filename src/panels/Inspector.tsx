@@ -118,12 +118,10 @@ function TerminalInspector({ project, which, groupId }: { project: Project; whic
       <PortsEditor project={project} blockId={ROOT_ID} direction={which} readonly={readonly} title={which === "in" ? "Inputs" : "Outputs"} allowAdd={which === "out" || !!group} groupId={which === "in" ? (group ? group.id : null) : undefined} />
       {which === "in" && !group && (
         <>
-          <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("ここには、下の階層で供給元が決まっていない入力が自動で上がります。各入力はグループに移せます。")}</div>
           <section className="sec">
-            <div className="sec__head"><span className="label">Groups</span>
-              {!readonly && <span className="flex gap-1"><button className="btn btn-ghost btn-sm" onClick={addGroup}>+ Group</button><button className="btn btn-ghost btn-sm" onClick={importGroup} title={t("他のプロジェクトで書き出したグループを読み込む")}>Import</button></span>}
+            <div className="sec__head"><span className="label" title={t("ここには、下の階層で供給元が決まっていない入力が自動で上がります。各入力はグループに移せます。")}>Groups</span>
+              {!readonly && <span className="flex gap-1"><button className="btn btn-ghost btn-sm" onClick={addGroup} title={t("仕様書などを種類ごとに分けるときは、グループを作って入力を入れます (例: PCIe 仕様書、DDR 仕様書)。")}>+ Group</button><button className="btn btn-ghost btn-sm" onClick={importGroup} title={t("他のプロジェクトで書き出したグループを読み込む")}>Import</button></span>}
             </div>
-            {groups.length === 0 && <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("仕様書などを種類ごとに分けるときは、グループを作って入力を入れます (例: PCIe 仕様書、DDR 仕様書)。")}</div>}
             {groups.map((g) => (
               <button key={g.id} className="tree-row text-left" onClick={() => select({ terminal: "in", terminalGroup: g.id })}>
                 <span className="truncate">{g.name}</span>
@@ -228,7 +226,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
             {menu && (
               <div className="card absolute right-0 mt-1 p-1 flex flex-col z-30" style={{ minWidth: 200 }}>
                 <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); setScopeEditing(true); }}>{t("作業範囲を編集")}</button>
-                <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); apply(p => ({ ...p, focusBlockId: p.focusBlockId === blockId ? undefined : blockId })); }}>{project.focusBlockId === blockId ? t("今回の範囲の優先を解除") : t("このボックスを今回の範囲にする")}</button>
+                <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); apply(p => ({ ...p, focusBlockId: p.focusBlockId === blockId ? undefined : blockId })); }}>{project.focusBlockId === blockId ? t("今回の範囲を解除") : t("今回の範囲にする")}</button>
                 {!isProject && <button className="btn btn-ghost btn-sm justify-start" onClick={saveAsTemplate}>Save as Part</button>}
                 <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); setShowPrompt("plan"); setTab("more"); }}>Show AI text</button>
                 {/* 分岐にする: 作った後で「決まっていない分かれ道だった」と分かったとき。中に箱を持つものは変えられない (理由をツールチップに出す) */}
@@ -281,9 +279,9 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         // Status 以外のタブを開いていても、回答待ちと AI 未確認の回答に気づけるようにする (タブは勝手に切り替えない)。
         // 0 件の項目は出さない。押すと Status へ移る (行き先は title と aria-label で伝える)
         <button className="btn btn-sm inspector-attention" onClick={() => setTab("status")} title={t("Status で確認")} aria-label={[
-          pending.length > 0 ? t("回答待ち {n}", { n: pending.length }) : "", unread.length > 0 ? t("AI未確認 {n}", { n: unread.length }) : "", t("Status で確認"),
+          pending.length > 0 ? t("未回答 {n}", { n: pending.length }) : "", unread.length > 0 ? t("AI 未読 {n}", { n: unread.length }) : "", t("Status で確認"),
         ].filter(Boolean).join(" ")}>
-          {[pending.length > 0 ? t("回答待ち {n}", { n: pending.length }) : "", unread.length > 0 ? t("AI未確認 {n}", { n: unread.length }) : ""].filter(Boolean).join("・")}
+          {[pending.length > 0 ? t("未回答 {n}", { n: pending.length }) : "", unread.length > 0 ? t("AI 未読 {n}", { n: unread.length }) : ""].filter(Boolean).join("・")}
           <span aria-hidden="true" style={{ marginLeft: 8 }}>→</span>
         </button>
       )}
@@ -293,11 +291,11 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       <section className="sec">
         {/* 人の対応が要るものを先頭に: 答えていない質問、次に AI がまだ読んでいない回答 (編集できる) */}
         {pending.length > 0 && <div className="attention-section">
-          <h3 className="label">{t("回答が必要です")}</h3>
+          <h3 className="label">{t("未回答")}</h3>
           {pending.map((d) => <DecisionCard key={d.id} project={project} blockId={blockId} decisionId={d.id} />)}
         </div>}
         {unread.length > 0 && <div className="attention-section">
-          <h3 className="label">{t("AI未確認の回答")}</h3>
+          <h3 className="label">{t("AI 未読")}</h3>
           {unread.map((d) => <DecisionCard key={d.id} project={project} blockId={blockId} decisionId={d.id} />)}
         </div>}
         <div className="sec__head"><span className="label">Status</span></div>
@@ -310,24 +308,23 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           ))}
         </div>
         {suggest && !readonly && (
-          <button className="btn btn-primary btn-sm w-full" onClick={() => setStatus("white")} title={t("下の階層が全部完了し、出力に成果物が付いています")}>{t("完了にできます → Done")}</button>
+          <button className="btn btn-primary btn-sm w-full" onClick={() => setStatus("white")} title={t("下の階層が全部完了し、出力に成果物が付いています")}>{t("→ Done")}</button>
         )}
         {/* 必須の入力の状況 (I/O タブの 必須 / 任意 がこことボックスの Ready に効く) */}
         {b.status !== "white" && kindOf(b) !== "project" && portsOf(project, blockId, "in").length > 0 && (() => {
           // 必須の入力と、まだ答えていない分岐 (分岐待ち)
           const missing = waitingFor(project, blockId);
           return missing.length === 0
-            ? <div className="text-[12px]" style={{ color: "var(--primary-strong)" }}>{t("必須の入力はそろっています (着手できます)")}</div>
-            : <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("必須の入力待ち: {names}", { names: missing.join(", ") })}</div>;
+            ? <div className="text-[12px]" style={{ color: "var(--primary-strong)" }}>{t("✓ Ready")}</div>
+            : <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("待ち: {names}", { names: missing.join(", ") })}</div>;
         })()}
         {/* プロジェクトのボックス: 対応するリポジトリ (複数リポジトリを 1 つのファイルで管理するときの目印) */}
         {isProject && (
           <>
             <div className="sec__head mt-2"><span className="label">Repository</span></div>
-            <input className="input" placeholder={t("パスや URL (例: ../mg-core、github.com/you/repo)")} value={b.repo ?? ""} disabled={readonly}
+            <input className="input" placeholder={t("パスや URL (例: ../mg-core、github.com/you/repo)")} title={t("複数のリポジトリをまたぐときは、boxglow.json を上のフォルダに 1 つ置き、各リポジトリの AI には環境変数 BOXGLOW_FILE でその場所を教えます")} value={b.repo ?? ""} disabled={readonly}
               onChange={(e) => apply((p) => updateBlock(p, blockId, { repo: e.target.value }), { history: false })}
               onBlur={(e) => apply((p) => updateBlock(p, blockId, { repo: e.target.value.trim() || undefined }))} />
-            <div className="text-[11px]" style={{ color: "var(--text-muted)" }}>{t("複数のリポジトリをまたぐときは、boxglow.json を上のフォルダに 1 つ置き、各リポジトリの AI には環境変数 BOXGLOW_FILE でその場所を教えます")}</div>
           </>
         )}
 
@@ -358,18 +355,17 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         {/* AI への引き継ぎ: セッションをまたいで残すメモ (project.handoffs にボックスごとに 1 つ)。メモがあるときは開いた状態で出す。
             下のボタンは、判断・入出力も含めた引き継ぎ情報 (agentContext) を JSON でコピーする */}
         <details className="text-[12px]" open={!!project.handoffs?.[blockId] && b.status !== "white"}>
-          <summary>{t("AI への引き継ぎ")}</summary>
+          <summary title={t("セッションを越えて残す発見・次の手順・未解決事項。AI は context コマンドで判断と合わせて読み直します。")}>{t("引き継ぎ")}</summary>
           {/* 引き継ぎが状態の変更より前のものだと分かったときだけ注記する (画面の文字を増やさない) */}
           {project.handoffs?.[blockId]?.note && freshnessText(b, project.handoffs[blockId].at, "older") && <p className="my-2 text-[11px]">{freshnessText(b, project.handoffs[blockId].at, "older")}</p>}
-          <p className="my-2">{t("セッションを越えて残す発見・次の手順・未解決事項。AI は context コマンドで判断と合わせて読み直します。")}</p>
-          <DebouncedText multiline className="input" value={project.handoffs?.[blockId]?.note ?? ""} disabled={readonly} placeholder={t("発見 / 次の手順 / 未解決事項")}
+          <DebouncedText multiline className="input mt-2" value={project.handoffs?.[blockId]?.note ?? ""} disabled={readonly} placeholder={t("発見 / 次の手順 / 未解決事項")}
             onCommit={(note) => apply((q) => ({ ...q, handoffs: { ...q.handoffs, [blockId]: { note, actor: "human", at: new Date().toISOString() } } }))} />
-          <button className="btn btn-sm mt-2" onClick={async () => { const ok = await copyText(JSON.stringify(agentContext(project, blockId), null, 2)); setToast(ok ? t("引き継ぎ情報をコピーしました") : t("コピーできませんでした")); }}>{t("判断・入出力も含めてコピー")}</button>
+          <button className="btn btn-sm mt-2" onClick={async () => { const ok = await copyText(JSON.stringify(agentContext(project, blockId), null, 2)); setToast(ok ? t("引き継ぎ情報をコピーしました") : t("コピーできませんでした")); }} title={t("判断・入出力も含めてコピー")}>Copy</button>
         </details>
         {/* 回答済みの判断も残す: 選んだもの・残した候補・以前の答えが見え、やり直せる */}
         {b.decisions.filter((d) => d.answer !== undefined && decisionIsAcked(project, blockId, d)).length > 0 && (
           <details className="text-[12px]">
-            <summary style={{ cursor: "pointer", color: "var(--text-muted)" }}>{t("判断の記録 ({n})", { n: b.decisions.filter((d) => d.answer !== undefined && decisionIsAcked(project, blockId, d)).length })}</summary>
+            <summary style={{ cursor: "pointer", color: "var(--text-muted)" }}>{t("判断 ({n})", { n: b.decisions.filter((d) => d.answer !== undefined && decisionIsAcked(project, blockId, d)).length })}</summary>
             <div className="flex flex-col gap-3 mt-2">
               {b.decisions.filter((d) => d.answer !== undefined && decisionIsAcked(project, blockId, d)).map((d) => <DecisionCard key={d.id} project={project} blockId={blockId} decisionId={d.id} />)}
             </div>
@@ -424,7 +420,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
                     <span className="avatar" style={{ background: m.color, width: 16, height: 16, fontSize: 9, marginRight: 6 }}>{m.name.slice(0, 1)}</span>{m.name}
                   </button>
                 ))}
-                {ownerHits.length === 0 && <div className="text-[12px] p-1" style={{ color: "var(--text-muted)" }}>{t("見つかりません。Enter で「{name}」を登録して割り当て", { name: ownerQuery.trim() })}</div>}
+                {ownerHits.length === 0 && <div className="text-[12px] p-1" style={{ color: "var(--text-muted)" }}>{t("Enter → 「{name}」を追加", { name: ownerQuery.trim() })}</div>}
               </div>
             )}
           </div>
@@ -472,9 +468,9 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         </div>
       {aiOpen && (
         <div className="flex flex-col pl-2" style={{ borderLeft: "3px solid var(--line-soft)" }}>
-          <button className="btn btn-ghost btn-sm justify-start" onClick={() => copyPrompt("plan")}>{t("手順を提案してもらう (コピー)")}</button>
-          <button className="btn btn-ghost btn-sm justify-start" onClick={() => copyPrompt("decompose")}>{t("分解案を JSON でもらう (コピー)")}</button>
-          <button className="btn btn-ghost btn-sm justify-start" onClick={() => copyPrompt("review")}>{t("入出力の抜けを指摘してもらう (コピー)")}</button>
+          <button className="btn btn-ghost btn-sm justify-start" onClick={() => copyPrompt("plan")}>{t("手順案")}</button>
+          <button className="btn btn-ghost btn-sm justify-start" onClick={() => copyPrompt("decompose")}>{t("分解案 (JSON)")}</button>
+          <button className="btn btn-ghost btn-sm justify-start" onClick={() => copyPrompt("review")}>{t("抜けの指摘")}</button>
         </div>
       )}
       {showPrompt && (

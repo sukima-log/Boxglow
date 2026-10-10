@@ -3,7 +3,7 @@
  *   - 答える前: 分岐のボックスに「分岐」の札、その先のボックスは「分岐待ち」(点線の枠)
  *   - 詳細パネルで選択肢を押して答えると: 分岐のボックスは完了、選んだ道は ✓、選ばなかった道の先は「見送り」(薄く・取り消し線)、
  *     見送りは完了数の分母から外れ、合流の入力を持つ結合テストは見送りにならない
- *   - 上部の「+ Block」のメニューの「Branch (IF)」から、問いと選択肢で分岐を足せる (選択肢ごとに道ができる)
+ *   - 上部の「+ Block」のメニューの「Branch」から、問いと選択肢で分岐を足せる (選択肢ごとに道ができる)
  *   - 詳細パネルの ⋯ の「分岐にする」で、今あるボックスを分岐に変えられる (今の出力は 1 つ目の道、線は残る)
  * 計画は e2e/fixtures/branch.boxglow.json (設計 → 分岐 (REST / GraphQL) → 各実装 → 結合テスト (合流))
  * 使い方: e2e/run.sh から呼ばれる (PLAYWRIGHT と LD_LIBRARY_PATH は run.sh が設定。プレビューが 4173 番で動いていること)
@@ -26,12 +26,12 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
       && (await box('結合テスト').getAttribute('class')).includes('branch-waiting'));
     const totalBefore = await page.evaluate(() => document.body.innerText.match(/Done \d+ \/ (\d+)/)?.[1]);
 
-    // ---- 詳細パネルの先頭の「道を選ぶ」欄で REST を選ぶ ----
+    // ---- 詳細パネルの先頭の「道」の欄で REST を選ぶ ----
     await box('API の方式を決める').click(); await page.waitForTimeout(400);
     const picker = page.locator('.panel.right .branch-picker');
-    check('道を選ぶ: 分岐のボックスを選ぶと、パネルの先頭に道ごとの「この道にする」が並ぶ', await picker.isVisible() && await picker.getByRole('button', { name: 'この道にする' }).count() === 2);
-    check('道を選ぶ: 分岐の問いは「回答が必要です」には重ねて出さない', await page.locator('.panel.right .attention-section', { hasText: '回答が必要です' }).count() === 0);
-    await picker.locator('.branch-picker__item', { hasText: 'REST' }).getByRole('button', { name: 'この道にする' }).click(); await page.waitForTimeout(600);
+    check('道を選ぶ: 分岐のボックスを選ぶと、パネルの先頭に道ごとの「選ぶ」が並ぶ', await picker.isVisible() && await picker.getByRole('button', { name: '選ぶ', exact: true }).count() === 2);
+    check('道を選ぶ: 分岐の問いは「未回答」には重ねて出さない', await page.locator('.panel.right .attention-section', { hasText: '未回答' }).count() === 0);
+    await picker.locator('.branch-picker__item', { hasText: 'REST' }).getByRole('button', { name: '選ぶ', exact: true }).click(); await page.waitForTimeout(600);
     const st = await page.evaluate(() => { const s = window.boxglow.store.getState(); const b = Object.values(s.project.blocks).find((x) => x.title === 'API の方式を決める'); return b.status; });
     check('分岐: 選択肢で答えると、分岐のボックスは完了になる', st === 'white', st);
     check('分岐: 選んだ道は ✓、選ばなかった道は見送りの印', await box('API の方式を決める').locator('.bg-block__port.out.branch-chosen').innerText().then((x) => x.includes('REST'))
@@ -40,12 +40,12 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
       && await box('GraphQL で実装する').locator('.meta-chip.skipped').isVisible());
     check('分岐: 選んだ道と合流先は、見送りでも分岐待ちでもない', !/is-skipped|branch-waiting/.test(await box('REST で実装する').getAttribute('class'))
       && !/is-skipped|branch-waiting/.test(await box('結合テスト').getAttribute('class')));
-    check('道を選ぶ: 答えた後は、選んだ道に「選んだ道」、ほかの道に「見送り」が付く', await picker.locator('.branch-picker__item[data-state="chosen"]').innerText().then((x) => x.includes('REST') && x.includes('選んだ道'))
+    check('道を選ぶ: 答えた後は、選んだ道に ✓、ほかの道に「見送り」が付く', await picker.locator('.branch-picker__item[data-state="chosen"]').innerText().then((x) => x.includes('REST') && x.includes('✓'))
       && await picker.locator('.branch-picker__item[data-state="skipped"]').innerText().then((x) => x.includes('GraphQL')));
     // 選び直す → 見送りが外れ、もう一度選べる。確かめた後は REST を選び直して、元の流れに戻す
-    await picker.getByRole('button', { name: '選び直す' }).click(); await page.waitForTimeout(600);
-    check('道を選ぶ: 「選び直す」で見送りが外れ、もう一度「この道にする」が並ぶ', !(await box('GraphQL で実装する').getAttribute('class')).includes('is-skipped') && await picker.getByRole('button', { name: 'この道にする' }).count() === 2);
-    await picker.locator('.branch-picker__item', { hasText: 'REST' }).getByRole('button', { name: 'この道にする' }).click(); await page.waitForTimeout(600);
+    await picker.getByRole('button', { name: 'Reopen', exact: true }).click(); await page.waitForTimeout(600);
+    check('道を選ぶ: 「Reopen」で見送りが外れ、もう一度「選ぶ」が並ぶ', !(await box('GraphQL で実装する').getAttribute('class')).includes('is-skipped') && await picker.getByRole('button', { name: '選ぶ', exact: true }).count() === 2);
+    await picker.locator('.branch-picker__item', { hasText: 'REST' }).getByRole('button', { name: '選ぶ', exact: true }).click(); await page.waitForTimeout(600);
     const totalAfter = await page.evaluate(() => document.body.innerText.match(/Done \d+ \/ (\d+)/)?.[1]);
     check('分岐: 見送りのボックスは完了数の分母から外れる', Number(totalAfter) === Number(totalBefore) - 1, `${totalBefore} -> ${totalAfter}`);
 
@@ -53,8 +53,8 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
     await page.locator('.react-flow__pane').click({ position: { x: 20, y: 20 } }); await page.waitForTimeout(200);
     await page.getByRole('button', { name: '+ Block', exact: true }).click();
     const addItems = await page.getByRole('menu', { name: '足すもの' }).getByRole('menuitem').allInnerTexts();
-    check('追加: 「+ Block」で Block / Branch (IF) / Merge を選ぶメニューが開く', addItems.length === 3 && /Block/.test(addItems[0]) && /Branch \(IF\)/.test(addItems[1]) && /Merge/.test(addItems[2]), JSON.stringify(addItems));
-    await page.getByRole('menuitem', { name: /^Branch \(IF\)/ }).click();
+    check('追加: 「+ Block」で Block / Branch / Merge を選ぶメニューが開く', addItems.length === 3 && /Block/.test(addItems[0]) && /Branch/.test(addItems[1]) && /Merge/.test(addItems[2]), JSON.stringify(addItems));
+    await page.getByRole('menuitem', { name: /^Branch/ }).click();
     const dialog = page.getByRole('dialog', { name: '分岐を足す' });
     check('分岐: 選択肢が 2 つそろうまで「分岐を足す」は押せない', await dialog.getByRole('button', { name: '分岐を足す', exact: true }).isDisabled());
     await dialog.getByPlaceholder('例: API の方式はどれにしますか?').fill('公開先はどれにしますか?');

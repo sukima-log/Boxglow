@@ -51,7 +51,6 @@ export const claims: Record<string,string> = {
   ,"他の実行が受け持っています: {block} ({actor})。実行ID: {instance}、範囲: {scope}、期限: {expires}。人に解除を頼むか、別のボックスへ進んでください。": "Another instance holds this claim: {block} ({actor}). Instance: {instance}; scope: {scope}; expires: {expires}. Ask a person to release it, or work on another block."
   ,"受け持ち: どの AI (実行 ID) がどのボックスを持っているか": "Claims: which agent (instance ID) holds which box"
   ,"ほかの AI は、受け持ち中のボックスを書き換えません。解除はボックスの「担当」タブから": "Other agents leave a claimed box alone. To release a claim, open the box's Owner tab"
-  ,"受け持ちはありません": "No claims"
   ,"残り {min} 分": "{min} min left"
   ,"同じ名前の別の実行です。自分の再起動前の実行とは限りません。他者の実行IDや受領証は使わないでください。": " This is a different instance of the same actor. It is not necessarily your own instance from before a restart. Do not use another instance's ID or receipt."
 };

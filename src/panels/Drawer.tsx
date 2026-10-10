@@ -159,7 +159,7 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
         {t("挿入先: {target}", { target: (() => { const pid = parentForNewBlock(project, selection, useProjectStore.getState().viewScope); const b = project.blocks[pid]; return b ? (kindOf(b) === "project" ? b.title : t("{title} の隣", { title: b.title })) : t("最上位"); })() })}
       </div>
       <div className="flex flex-col gap-1">
-        {templates.length === 0 && <div className="text-[12px] px-1" style={{ color: "var(--text-muted)" }}>{t("ボックスを選び、右の「⋯」から「Save as Part」すると、ここに並びます。")}</div>}
+        {templates.length === 0 && <div className="text-[12px] px-1" style={{ color: "var(--text-muted)" }} title={t("ボックスを選び、右の「⋯」から「Save as Part」すると、ここに並びます。")}>{t("なし")}</div>}
         {templates.map((tpl) => (
           <div key={tpl.id} className="flex items-center gap-1 text-[13px] px-1">
             <span className="truncate" title={`${tpl.description || tpl.name} (v${tpl.version}${tpl.tags.length ? ", " + tpl.tags.join(", ") : ""})`}>{tpl.name}</span>

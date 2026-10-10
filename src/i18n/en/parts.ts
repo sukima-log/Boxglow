@@ -1,6 +1,6 @@
 /** 英語の辞書 (parts: 詳細パネルの部品・引き出し・タイムライン)。キー = ソースの日本語の文 */
 export const parts: Record<string, string> = {
-  "回答する": "Answer",
+  "回答": "Answer",
 
   // ---- parts.tsx: 成果物の一覧 ----
   "ファイルの移動を検出し、パスを付け替えました": "File move detected; path updated"
@@ -21,11 +21,10 @@ export const parts: Record<string, string> = {
 , "入力グループ": "Input group"
 , "形式・制約などの設定": "Format, constraints and other settings"
 , "from {owner}「{name}」": "from {owner} \"{name}\""
-, "入力物 (この入力の実体)": "Input items (what this input actually is)"
-, "成果物 (この出力の実体)": "Deliverables (what this output actually is)"
+, "入力物": "Inputs"
 , "入力物を追加": "Add input item"
 , "成果物を追加": "Add deliverable"
-, "形式・制約は供給元「{name}」の出力で書きます": "Format and constraints are written on the source output \"{name}\""
+, "形式: 供給元「{name}」": "Format: from \"{name}\""
 , "形式・制約 (任意。例: Markdown、PNG 1920x1080、API は OpenAPI 3)": "Format / constraints (optional, e.g. Markdown, PNG 1920x1080, OpenAPI 3 for APIs)"
 , "必須: この入力がそろうまで着手できない (ボックスの Ready に効く)": "Required: work cannot start until this input is ready (affects the box's Ready)"
 , "任意: 無くても着手できる": "Optional: work can start without it"
@@ -61,28 +60,25 @@ export const parts: Record<string, string> = {
 , "外す": "Remove"
 , "色を変える": "Change color"
   // ---- Timeline.tsx: 判断のカード ----
-, "{actor} からの質問 ({ago})": "Question from {actor} ({ago})"
+, "{actor} · {ago}": "{actor} · {ago}"
 , "Ctrl+Enter でも保存": "Ctrl+Enter also saves"
 , "選んだ:": "Chosen:"
-, "残した候補:": "Other candidates:"
-, "以前の答え:": "Previous answers:"
+, "候補:": "Options:"
+, "履歴:": "History:"
 , "{answer} ({by}、{note})": "{answer} ({by}, {note})"
 , "答えの文面を直す (書き間違いや補足。選び直しではない)": "Edit the answer text (typos or notes, not a re-decision)"
 , "やり直す理由 (任意)": "Reason for redoing (optional)"
 , "方針転換: 答えを履歴に残して、候補から選び直す": "Change of direction: keep the answer in history and choose again"
-, "やり直す": "Redo"
 , "または自由に書く (複数行可)": "Or write freely (multi-line)"
 , "回答を書く (複数行可)": "Write an answer (multi-line)"
-, "Enter は改行。送るのはボタンか Ctrl+Enter": "Enter adds a line. Send with the button or Ctrl+Enter"
+, "Ctrl+Enter": "Ctrl+Enter"
   // ---- Timeline.tsx: ボックスの見出し・一覧 ----
 , "このボックスを画面で選ぶ": "Select this box on the canvas"
 , "ボックスへ →": "Go to box →"
 , "閉じる (Esc)": "Close (Esc)"
 , "出力: {outs}": "Output: {outs}"
-, "まだありません。CLI や画面の操作で記録されます。": "Nothing yet. Actions from the CLI or the UI are recorded here."
   // 回答の引き取り (ack)
-, "AI 確認済み ({by}、{ago})": "Read by the AI ({by}, {ago})"
-, "AI 未確認 (まだ読まれていません。編集できます)": "Not read by the AI yet (you can still edit)"
+, "✓ 既読: {by} · {ago}": "✓ Read: {by} · {ago}"
 , "回答済み": "Answered"
   // Activity のタブ
 , "判断待ち: あなたの回答で AI が進めます": "Needs decision: the AI continues once you answer"
@@ -91,11 +87,7 @@ export const parts: Record<string, string> = {
 , "未着手で、次に着手できるボックス": "Boxes not started yet that can be picked up next"
 , "最近の記録 (新しい順)": "Recent records (newest first)"
 , "あなたの回答で AI が進めます": "The AI continues once you answer"
-, "判断待ちはありません。答えたものは Answered にあります": "Nothing needs a decision. What you answered is under Answered"
-, "判断待ちはありません": "Nothing needs a decision"
 , "AI がまだ読んでいない回答。読まれるまでここに残ります": "Answers the AI has not read yet. They stay here until it does"
-, "AI が未確認の回答はありません": "No answers waiting to be read by the AI"
 , "作業中のボックスはありません": "No boxes are being worked on"
 , "未着手のボックス (着手できるものから)": "Boxes not started (ready ones first)"
-, "未着手のボックスはありません": "No boxes left to start"
 };

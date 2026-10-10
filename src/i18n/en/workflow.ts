@@ -33,8 +33,8 @@ export const workflow: Record<string, string> = {
   "今回優先するボックスとその配下を選ぶ。none で解除、省略は表示": "Prioritize a box and its descendants. Use none to clear; omit to read.",
   "AI の着手・完了確認を計画ごとに選ぶ。既定は警告、人の操作は拒否しない": "Choose agent start/completion checks per plan. Defaults to warnings; human actions are never rejected.",
   "作業範囲を編集": "Edit work scope",
-  "今回の範囲の優先を解除": "Clear scope priority",
-  "このボックスを今回の範囲にする": "Focus on this box",
+  "今回の範囲を解除": "Clear focus",
+  "今回の範囲にする": "Set as focus",
   "今回の対象": "Current focus",
   "閉じる": "Close",
   "AI の作業確認": "Agent workflow checks",
@@ -43,6 +43,6 @@ export const workflow: Record<string, string> = {
   "警告 (既定)": "Warn (default)",
   "拒否": "Reject",
   "人の操作は拒否しません。入力待ちの開始は、理由を記録すれば許可します。": "Human actions are never rejected. Recording a reason allows a start with missing inputs.",
-  "完了済みの引き継ぎ ({n})": "Completed handoff notes ({n})",
-  "説明の見直し候補 ({n})": "Descriptions to review ({n})"
+  "Done ({n})": "Done ({n})",
+  "見直し ({n})": "To review ({n})"
 };

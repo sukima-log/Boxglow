@@ -113,13 +113,13 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
         </select>
         <label className="task-table-view__toggle">
           <input type="checkbox" checked={includeDone} onChange={(e) => setIncludeDone(e.target.checked)} />
-          {t("完了済みも表示")}
+          {t("Done も表示")}
         </label>
         <span className="task-table-view__count">{t("{n} 件", { n: rows.length })}</span>
         <span className="ml-auto"><CloseButton onClick={() => setTaskTable(null)} title={t("図に戻る (Esc)")} label={t("図に戻る")} /></span>
       </header>
       {rows.length === 0 ? (
-        <p className="task-table-view__empty">{includeDone ? t("担当のボックスはありません") : t("未完了の担当のボックスはありません")}</p>
+        <p className="task-table-view__empty">{includeDone ? t("なし") : t("なし")}</p>
       ) : (
         <div className="task-table-view__scroll">
           <table className="task-table">
@@ -150,7 +150,7 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
                   {/* 期日を過ぎた未完了は、色と言葉で示す (色だけに頼らない) */}
                   <td data-overdue={r.overdue}>{r.dueDate ?? ""}{r.overdue ? ` (${t("期日切れ")})` : ""}</td>
                   <td className="num">{r.estimateHours !== undefined ? `${r.estimateHours}h` : ""}</td>
-                  <td title={r.missingInputs.join(", ")}>{r.status === "white" ? "" : r.missingInputs.length ? t("待ち {n}", { n: r.missingInputs.length }) : t("そろった")}</td>
+                  <td title={r.missingInputs.join(", ")}>{r.status === "white" ? "" : r.missingInputs.length ? t("待ち {n}", { n: r.missingInputs.length }) : t("✓")}</td>
                   <td className="num">{r.pendingDecisions || ""}</td>
                 </tr>
               ))}

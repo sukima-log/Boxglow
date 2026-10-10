@@ -73,12 +73,12 @@ const settle=p=>p.waitForTimeout(500);
    if(theme==='light') {
     await p.getByRole('tab',{name:'In Progress 公開する',exact:true}).click();await settle(p); // (公開するは中に箱を持つので作業中)
     await p.locator('.react-flow__node-block .bg-block__title').filter({hasText:/^公開する$/}).click();
-    await p.getByRole('heading',{name:'回答が必要です',exact:true}).waitFor();await settle(p);
+    await p.getByRole('heading',{name:'未回答',exact:true}).waitFor();await settle(p);
     await p.screenshot({path:path.join(out,'experience-decision.png')});
     await p.getByRole('button',{name:'静的ホスティング',exact:true}).click();
-    await p.getByRole('heading',{name:'AI未確認の回答',exact:true}).waitFor();await settle(p);
+    await p.getByRole('heading',{name:'AI 未読',exact:true}).waitFor();await settle(p);
     await p.screenshot({path:path.join(out,'experience-answer.png')});
-    check('回答は AI が確認するまで残る (残した候補も見える)',await p.getByText('残した候補:',{exact:false}).isVisible());
+    check('回答は AI が確認するまで残る (候補も見える)',await p.getByText('候補:',{exact:false}).isVisible());
     await p.getByRole('button',{name:'Home',exact:true}).click();await settle(p);
     await p.screenshot({path:path.join(out,'experience-home.png')});
     check('Home: 初回は「サンプルを試す」だけが主役で、自分の計画の操作は引き出しの中',await p.getByRole('button',{name:'サンプルを試す',exact:true}).isVisible() && !await p.getByText('npx boxglow serve --open',{exact:true}).isVisible());

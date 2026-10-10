@@ -73,7 +73,7 @@ export function CanvasTools({ snap, onSnap, showMap, onMap, fit, readFromTop }: 
   };
   return <>
     {connecting && <Panel position="top-center" className="canvas-connect-hint">
-      <span role="status">{t("接続先の入力をクリック。Esc でキャンセル")}</span>
+      <span role="status">{t("入力をクリック · Esc")}</span>
       <button className="btn btn-sm" onClick={cancel}>{t("キャンセル")}</button>
     </Panel>}
     <Panel position="bottom-left" className="canvas-tools">
@@ -103,7 +103,7 @@ export function CanvasTools({ snap, onSnap, showMap, onMap, fit, readFromTop }: 
           <summary title={t("表示と配置 (凡例・吸着・整列・ミニマップ・操作の説明)")}>View</summary>
           <div className="canvas-tools__popover">
       <div className="canvas-tools__legend" aria-label={t("配線の凡例")}>
-        <span><i />{t("未確定")}</span><span><i className="ready" />{t("確定済み")}</span><span><i className="selected" />{t("選択中の経路")}</span>
+        <span><i />{t("未確定")}</span><span><i className="ready" />{t("確定済み")}</span><span><i className="selected" />{t("選択中")}</span>
       </div>
             <div className="canvas-tools__buttons">
         {!canEdit && !vertical && <button aria-pressed={readingView} onClick={() => setReadingView(!readingView)} title={t("工程順に並べて表示。オフにすると保存した配置を表示します。")}>{t("工程順")}</button>}

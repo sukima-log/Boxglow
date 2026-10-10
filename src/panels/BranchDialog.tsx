@@ -59,16 +59,13 @@ export function BranchDialog({ onClose, convertBlockId }: { onClose: () => void;
           <h2 className="flex-1"><span aria-hidden="true">◇</span> {heading}</h2>
           <CloseButton onClick={onClose} title={t("閉じる")} />
         </div>
-        <p className="muted">{convertBlockId
-          ? t("このボックスを、問いと選択肢を持つ分岐に変えます。今の出力は 1 つ目の選択肢の道になり (つながっている線は残ります)、2 つ目以降の道が足されます。")
-          : t("まだ決まっていない分かれ道を、問いと選択肢で表します。選択肢ごとに道 (出力) ができ、答えると選ばなかった道は「見送り」になります。")}</p>
         <label className="branch-dialog__field">{t("問い")}
           <input className="input" autoFocus value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={t("例: API の方式はどれにしますか?")} />
         </label>
-        <label className="branch-dialog__field">{t("選択肢 (1 行に 1 つ、2 つ以上)")}
+        <label className="branch-dialog__field">{t("選択肢")}
           <textarea className="input" rows={3} value={options} onChange={(e) => setOptions(e.target.value)} placeholder={"REST\nGraphQL"} />
         </label>
-        {!convertBlockId && <label className="branch-dialog__field">{t("題名 (省略すると問いと同じ)")}
+        {!convertBlockId && <label className="branch-dialog__field">{t("題名 (任意)")}
           <input className="input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("例: API の方式を決める")} />
         </label>}
         <div className="flex justify-end gap-2">

@@ -2,11 +2,11 @@
 export const canvasReview: Record<string, string> = {
   "キャンセル": "Cancel",
   "この階層を整列しました。Ctrl+Z で元に戻せます。": "Arranged this level. Press Ctrl+Z to undo.",
-  "接続先の入力をクリック。Esc でキャンセル": "Click the destination input. Esc to cancel.",
+  "入力をクリック · Esc": "Click an input · Esc",
   "配線の凡例": "Connection legend",
   "未確定": "Pending",
   "確定済み": "Ready",
-  "選択中の経路": "Selected path",
+  "選択中": "Selected",
   "キャンバスの表示": "Canvas view",
   "縮小": "Zoom out",
   "拡大": "Zoom in",
