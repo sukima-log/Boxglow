@@ -917,8 +917,8 @@ export function effectiveProgress(p: Project, blockId: string): number {
   if (!b) return 0;
   if (b.status === "white") return 100;
   if (typeof b.progress === "number") return Math.max(0, Math.min(100, b.progress));
-  // 見送りの子 (選ばなかった分岐の道) は平均に入れない (やらない仕事なので、進捗を下げない)
-  const kids = childrenOf(p, blockId).filter((k) => !isSkipped(p, k.id));
+  // 見送りの子 (選ばなかった分岐の道) と合流のボックス (作業ではない部品) は平均に入れない
+  const kids = childrenOf(p, blockId).filter((k) => !isSkipped(p, k.id) && !k.merge);
   if (kids.length === 0) return 0;
   return Math.round(kids.reduce((acc, k) => acc + effectiveProgress(p, k.id), 0) / kids.length);
 }
@@ -930,7 +930,7 @@ export function effectiveProgress(p: Project, blockId: string): number {
  */
 export function computeProgress(p: Project, blockId: string): Progress {
   // 見送りのボックス (選ばなかった分岐の道) は数えない
-  const targets = descendantsOf(p, blockId).filter((b) => kindOf(b) !== "project" && !isSkipped(p, b.id));
+  const targets = descendantsOf(p, blockId).filter((b) => kindOf(b) !== "project" && !isSkipped(p, b.id) && !b.merge);
   const list = targets.length > 0 ? targets : blockId === ROOT_ID ? [] : [p.blocks[blockId]].filter((b) => b && kindOf(b) !== "project");
   const count = (s: BlockStatus) => list.filter((b) => b.status === s).length;
   const white = count("white");
@@ -982,8 +982,10 @@ export function isSourceReady(p: Project, ep: Endpoint, seen: Set<string> = new 
   const upstream = incomingEdges(p, { portId: port.id, side: backSide });
   if (upstream.length > 0) return upstream.every((e) => isSourceReady(p, e.from, nextSeen));
   if (port.direction === "in") return hasExternalInputArtifact(p, port.id);
-  // 分岐の出力 (道): 判断の答えそのものが成果物。選んだ道は答えた時点で届き、選ばなかった道は届かない
+  // 合流のボックスの出力: 入力のどれか 1 つが届けば届く (道のどれかが選ばれて進んできたら、先へ通す)
   const owner = p.blocks[port.blockId];
+  if (port.direction === "out" && owner?.merge) return portsOf(p, owner.id, "in").some((q) => isSourceReady(p, { portId: q.id, side: "inner" }, nextSeen));
+  // 分岐の出力 (道): 判断の答えそのものが成果物。選んだ道は答えた時点で届き、選ばなかった道は届かない
   if (port.branchOption !== undefined && owner?.branch) return chosenOption(owner) === port.branchOption;
   if (port.artifacts.length > 0) return true;
   return port.direction === "out" && p.blocks[port.blockId]?.status === "white";
@@ -1008,12 +1010,13 @@ export function isInputReady(p: Project, portId: string): boolean {
  */
 export function missingRequiredInputs(p: Project, blockId: string): Port[] {
   const missing = portsOf(p, blockId, "in").filter((q) => q.required && !isInputReady(p, q.id));
-  // 合流の入力 (anyOf) は、どれか 1 つがそろえば待たない。そろっていなければ、見送りの道から来るもの (もう届かない) は待ちに数えない
-  const merge = portsOf(p, blockId, "in").filter((q) => q.required && q.anyOf);
+  // 合流の入力 (anyOf、または合流のボックスの入力) は、どれか 1 つがそろえば待たない。そろっていなければ、見送りの道から来るもの (もう届かない) は待ちに数えない
+  const isMergeBox = !!p.blocks[blockId]?.merge;
+  const merge = portsOf(p, blockId, "in").filter((q) => q.required && (q.anyOf || isMergeBox));
   if (merge.length === 0) return missing;
-  if (merge.some((q) => isInputReady(p, q.id))) return missing.filter((q) => !q.anyOf);
+  if (merge.some((q) => isInputReady(p, q.id))) return missing.filter((q) => !(q.anyOf || isMergeBox));
   const gone = branchState(p).rejectedInputs;
-  return missing.filter((q) => !q.anyOf || !gone.has(q.id));
+  return missing.filter((q) => !(q.anyOf || isMergeBox) || !gone.has(q.id));
 }
 
 /**
@@ -1022,10 +1025,11 @@ export function missingRequiredInputs(p: Project, blockId: string): Port[] {
  */
 export function waitingFor(p: Project, blockId: string): string[] {
   const missing = missingRequiredInputs(p, blockId);
+  const isMergeBox = !!p.blocks[blockId]?.merge;
   // 合流の入力は、どれか 1 つが届けばよいので「A / B のどれか」と 1 つにまとめる (同じ名前は 1 回だけ)
-  const merge = [...new Set(missing.filter((q) => q.anyOf).map((q) => q.name))];
+  const merge = [...new Set(missing.filter((q) => q.anyOf || isMergeBox).map((q) => q.name))];
   return [
-    ...missing.filter((q) => !q.anyOf).map((q) => q.name)
+    ...missing.filter((q) => !(q.anyOf || isMergeBox)).map((q) => q.name)
   , ...(merge.length === 0 ? [] : merge.length === 1 ? [merge[0]] : [t("{names} のどれか", { names: merge.join(" / ") })])
   , ...waitingBranches(p, blockId).map((title) => t("分岐「{title}」の判断", { title }))
   ];
@@ -1488,7 +1492,8 @@ export interface Summary {
 /** 全体の要約 (上の帯・CLI の status 用) */
 export function summarize(p: Project): Summary {
   // 見送りのボックス (選ばなかった分岐の道) は、数にも次の候補にも入れない
-  const blocks = Object.values(p.blocks).filter((b) => b.id !== ROOT_ID && kindOf(b) !== "project" && !isSkipped(p, b.id));
+  // (合流のボックスは作業ではない部品なので、これも数えない)
+  const blocks = Object.values(p.blocks).filter((b) => b.id !== ROOT_ID && kindOf(b) !== "project" && !isSkipped(p, b.id) && !b.merge);
   const working = blocks.filter((b) => b.activity?.state === "working").map((b) => ({ block: b, actor: b.activity!.actor, note: b.activity!.note, since: b.activity!.since }));
   const blocked = blocks.filter((b) => b.activity?.state === "blocked" || b.activity?.state === "waiting_review").map((b) => ({ block: b, actor: b.activity!.actor, note: b.activity!.note }));
   const leafBlack = blocks

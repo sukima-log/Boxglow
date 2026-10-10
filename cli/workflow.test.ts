@@ -222,6 +222,18 @@ describe("分岐 (branch)",()=>{
     expect(again.status).not.toBe(0);
     expect(again.stderr).toContain("すでに分岐");
   });
+  it("join で合流の部品を足し、道の出力をつなげる",()=>{
+    const {cli,read}=fixture();
+    expect(cli("branch","方式","--options","A|B").status).toBe(0);
+    const made=cli("join","--title","方式の合流");
+    expect(made.status,made.stderr).toBe(0);
+    expect(cli("connect","方式.A","方式の合流").status).toBe(0);
+    expect(cli("connect","方式.B","方式の合流").status).toBe(0);
+    const p=read();
+    const join=Object.values(p.blocks as Record<string,{id:string;title:string;merge?:boolean}>).find(b=>b.title==="方式の合流")!;
+    expect(join.merge).toBe(true);
+    expect(Object.values(p.ports as Record<string,{blockId:string;direction:string}>).filter(q=>q.blockId===join.id&&q.direction==="in")).toHaveLength(2);
+  });
   it("選択肢が 1 つしか無い branch は止める",()=>{
     const {cli}=fixture();
     const r=cli("branch","方式","--options","REST");

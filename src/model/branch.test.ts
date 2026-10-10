@@ -180,3 +180,29 @@ describe("今あるボックスを分岐に変える", () => {
     expect(canConvertToBranch(p, y)).toEqual({ ok: false, reason: "children" });
   });
 });
+
+describe("合流の部品 (OR ゲート風)", () => {
+  it("どれか 1 つの道が届けば出力も届き、作業としては数えない。選んだ道から来れば見送りにならない", async () => {
+    const { addMerge } = await import("./branch");
+    const { isSourceReady, summarize, waitingFor } = await import("./graph");
+    let { p, br, x, y } = fixture(false);
+    const j = addMerge(p, { parentId: defaultTaskParent(p), actor: "human" }); p = j.project;
+    for (const from of [x, y]) {
+      const inp = addPort(p, { blockId: j.blockId, direction: "in", name: p.blocks[from].title }); p = inp.project;
+      p = connect(p, { portId: portsOf(p, from, "out")[0].id, side: "outer" }, { portId: inp.portId, side: "outer" }).project;
+    }
+    const out = portsOf(p, j.blockId, "out")[0];
+    expect(p.blocks[j.blockId].merge).toBe(true);
+    // まだどの道も届いていない
+    expect(isSourceReady(p, { portId: out.id, side: "outer" })).toBe(false);
+    // 合流の部品は、件数にも次の候補にも入らない
+    expect(summarize(p).next.some((b) => b.id === j.blockId)).toBe(false);
+    // REST と答え、X を完了にすると、合流の出力が届く。GraphQL の道 (Y) は見送りだが、合流は見送りにならない
+    p = answerDecision(p, br.blockId, br.decisionId, "REST", "human");
+    p = { ...p, blocks: { ...p.blocks, [x]: { ...p.blocks[x], status: "white" } } };
+    expect(isSourceReady(p, { portId: out.id, side: "outer" })).toBe(true);
+    expect(branchState(p).skipped.has(j.blockId)).toBe(false);
+    expect(waitingFor(p, j.blockId)).toEqual([]);
+  });
+});
+

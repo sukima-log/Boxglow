@@ -52,6 +52,17 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
     const made = await page.evaluate(() => { const s = window.boxglow.store.getState(); const b = Object.values(s.project.blocks).find((x) => x.title === '公開先はどれにしますか?'); if (!b) return null; return { branch: !!b.branch, outs: Object.values(s.project.ports).filter((q) => q.blockId === b.id && q.direction === 'out').map((q) => q.branchOption), selected: s.selection.blockId === b.id }; });
     check('分岐: ダイアログから足した分岐は、選択肢ごとの道を持ち、選ばれた状態になる', !!made && made.branch && made.outs.join('|') === '静的ホスティング|自前のサーバー' && made.selected, JSON.stringify(made));
 
+    // ---- ⋯ メニューから合流の部品を足す (OR ゲート風の形で描かれ、作業の件数には入らない) ----
+    const totalBeforeMerge = await page.evaluate(() => document.body.innerText.match(/Done \d+ \/ (\d+)/)?.[1]);
+    await page.locator('.react-flow__pane').click({ position: { x: 20, y: 20 } }); await page.waitForTimeout(200);
+    await page.locator('.topbar button[title="Menu"]').click();
+    await page.getByRole('button', { name: '+ Merge', exact: true }).click(); await page.waitForTimeout(600);
+    const mergeMade = await page.evaluate(() => { const s = window.boxglow.store.getState(); const b = s.project.blocks[s.selection.blockId]; return b ? { merge: !!b.merge, title: b.title } : null; });
+    check('合流: ⋯ メニューの「+ Merge」で合流の部品が足され、選ばれた状態になる', !!mergeMade && mergeMade.merge, JSON.stringify(mergeMade));
+    check('合流: 合流の部品は OR ゲート風の形で描かれる', await page.locator('.bg-block.kind-merge .bg-merge svg').count() >= 1);
+    const totalAfterMerge = await page.evaluate(() => document.body.innerText.match(/Done \d+ \/ (\d+)/)?.[1]);
+    check('合流: 合流の部品は完了数の分母に入らない', totalAfterMerge === totalBeforeMerge, `${totalBeforeMerge} -> ${totalAfterMerge}`);
+
     // ---- 今あるボックスを分岐に変える (詳細パネルの ⋯ →「分岐にする」) ----
     await page.locator('.react-flow__pane').click({ position: { x: 20, y: 20 } }); await page.waitForTimeout(200);
     await box('設計する').click(); await page.waitForTimeout(400);

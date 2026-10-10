@@ -4,7 +4,7 @@
  */
 import { ackDecisions, addBlock, addInputGroup, addMember, addPort, answerDecision, askDecision, connect, createArtifact, createProject, portsOf, setActivity, setCategory, setInputGroup, setProgress, setSchedule, updateBlock, updatePort } from "./graph";
 import { acquireClaim } from "./claims";
-import { addBranch, setInputAnyOf } from "./branch";
+import { addBranch, addMerge } from "./branch";
 import { ROOT_ID, type Project } from "./types";
 import { normalizeCollapsed, projectBlocks } from "./graph";
 import { layoutAll } from "./autolayout";
@@ -181,6 +181,16 @@ export function buildSampleProject(): Project {
     return { id: made.blockId, out: portsOf(p, made.blockId, "out")[0].id };
   };
   const outer = (portId: string): End => ({ portId, side: "outer" });
+  // 合流のボックスを足し、いくつかの道の出力を受ける。出力ポートの id を返す
+  const mergeOf = (parentId: string, from: { end: End; name: string }[]) => {
+    const made = addMerge(p, { parentId, actor: "human" });
+    p = made.project;
+    for (const f of from) {
+      const inp = addPort(p, { blockId: made.blockId, direction: "in", name: f.name });
+      p = connect(inp.project, f.end, { portId: inp.portId, side: "outer" }).project;
+    }
+    return portsOf(p, made.blockId, "out")[0].id;
+  };
   const inner = (portId: string): End => ({ portId, side: "inner" });
 
   // フロントエンド (完了): 中で「一覧画面」と「編集画面」に分かれ、フロントエンドの出力にまとまる
@@ -204,9 +214,9 @@ export function buildSampleProject(): Project {
   const callback = child(github.id, "コールバックを受ける", { out: "ログインの受け口", from: [{ end: inner(githubIn), name: "GitHub OAuth" }], status: "white", assignee: m1.memberId, category: "build" });
   const token = child(github.id, "トークンを保存する", { out: "ログイン状態", from: [{ end: outer(callback.out), name: "ログインの受け口" }], status: "gray", assignee: m1.memberId, category: "build" });
   p = connect(p, outer(token.out), inner(github.out)).project;
-  // 合流: どちらの認証の道からでも、届けば API をまとめられる
-  const bundle = child(be.blockId, "API をまとめる", { out: "API の実装", from: [{ end: outer(notesApi.out), name: "ノートの API" }, { end: outer(mail.out), name: "認証 (メール)" }, { end: outer(github.out), name: "認証 (GitHub)" }], category: "build" });
-  for (const q of portsOf(p, bundle.id, "in")) if (q.name !== "ノートの API") p = setInputAnyOf(p, q.id, true);
+  // 合流のボックス (OR ゲート風): どちらの認証の道からでも、届けば先へ通す
+  const authJoin = mergeOf(be.blockId, [{ end: outer(mail.out), name: "認証 (メール)" }, { end: outer(github.out), name: "認証 (GitHub)" }]);
+  const bundle = child(be.blockId, "API をまとめる", { out: "API の実装", from: [{ end: outer(notesApi.out), name: "ノートの API" }, { end: outer(authJoin), name: "認証" }], category: "build" });
   p = connect(p, outer(bundle.out), inner(beOut.id)).project;
   // 認証の分岐は、人が GitHub OAuth と答え、AI も読み終えた (分岐は答えで完了になる)
   p = ackDecisions(answerDecision(p, auth.blockId, auth.decisionId, "GitHub OAuth", "さとう"), auth.blockId, "claude-code", auth.decisionId);
@@ -222,8 +232,8 @@ export function buildSampleProject(): Project {
   const [bySaas, bySelf] = portsOf(p, watch.blockId, "out");
   const saas = child(release.blockId, "監視サービスを設定する", { out: "監視の設定", from: [{ end: outer(bySaas.id), name: "外部の監視サービス" }], category: "ops" });
   const self = child(release.blockId, "監視の仕組みを作る", { out: "監視の設定", from: [{ end: outer(bySelf.id), name: "自前で監視する" }], category: "ops" });
-  const runbook = child(release.blockId, "公開の手順書を書く", { out: "公開 URL", from: [{ end: outer(saas.out), name: "監視 (外部)" }, { end: outer(self.out), name: "監視 (自前)" }], category: "docs" });
-  for (const q of portsOf(p, runbook.id, "in")) p = setInputAnyOf(p, q.id, true);
+  const watchJoin = mergeOf(release.blockId, [{ end: outer(saas.out), name: "監視 (外部)" }, { end: outer(self.out), name: "監視 (自前)" }]);
+  const runbook = child(release.blockId, "公開の手順書を書く", { out: "公開 URL", from: [{ end: outer(watchJoin), name: "監視の設定" }], category: "docs" });
   p = connect(p, outer(runbook.out), inner(relOut.id)).project;
 
   // AI の受け持ち (計画ごとに有効にする): 並行して動く AI が、互いのボックスを書き換えないようにする

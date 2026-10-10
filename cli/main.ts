@@ -51,7 +51,7 @@ import type { Artifact } from "../src/model/types";
 import { blockToPrompt } from "../src/model/export";
 import { blockReport, logReport, statusReport } from "../src/model/report";
 import { assignmentRows, type AssigneeTarget } from "../src/model/assignments";
-import { addBranch, canConvertToBranch, convertToBranch, setInputAnyOf } from "../src/model/branch";
+import { addBranch, addMerge, canConvertToBranch, convertToBranch, setInputAnyOf } from "../src/model/branch";
 import { STATUS_LABEL } from "../src/model/status";
 import { checkGitRef, findGitRef, gitRefFor } from "./git";
 import { layoutAll, layoutScope, nextFreePosition } from "../src/model/autolayout";
@@ -366,6 +366,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   split <block> --spec '<JSON>' | --spec-file <path>   下の階層にまとめて分解 (形式は docs/AGENTS_SNIPPET.md)
   branch <題名> --options "A|B" | --option <A> --option <B> [--question <問い>] [--context <判断材料>] [--in <入力名>]... [--parent <block>]   まだ決まっていない分かれ道 (分岐) を足す。選択肢ごとに道 (出力) ができ、answer で答えると選ばなかった道は見送り
   branch --box <block> --options "A|B" [--question <問い>] [--context <判断材料>]   今あるボックスを分岐に変える (今の出力は 1 つ目の選択肢の道になる。中にボックスを持つものは不可)
+  join [--title <題名>] [--parent <block>]           合流の部品を足す (分かれた道を 1 つにまとめる。道の出力を connect でつなぐと、どれか 1 つが届けば先へ進む)
   move <block> --parent <block|project>            ボックスを別の親の中へ移す (線は間のボックスのポートを経由してつながったまま)
   port <block|project> [--in <名前>]... [--out <名前>]... [--rename <旧名>=<新名>] [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス)
   disconnect <題名.出力名> <題名.入力名>          線を外す
@@ -469,6 +470,7 @@ Usage (npx boxglow <command> ...):
   split <block> --spec '<JSON>' | --spec-file <path>   Break a box down into child boxes in one go (format: docs/AGENTS_SNIPPET.en.md)
   branch <title> --options "A|B" | --option <A> --option <B> [--question <question>] [--context <background>] [--in <input name>]... [--parent <block>]   Add an undecided fork (branch). Each option gets a path (output); answering it with answer skips the paths not chosen
   branch --box <block> --options "A|B" [--question <question>] [--context <background>]   Turn an existing box into a branch (its output becomes the first option's path; not for boxes with children)
+  join [--title <title>] [--parent <block>]          Add a merge part (where paths come together; connect the paths' outputs to it, and any one of them arriving lets the work go on)
   move <block> --parent <block|project>            Move a box into another parent (wires stay connected through the ports of the boxes in between)
   port <block|project> [--in <name>]... [--out <name>]... [--rename <old>=<new>] [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, or rename them. --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
   disconnect <title.output> <title.input>          Remove a wire
@@ -1004,6 +1006,16 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       for (const name of list(options.in)) p = addPort(p, { blockId: r.blockId, direction: "in", name }).project;
       save(path, p);
       out(t("分岐を追加: 「{title}」(id: {id})。道 (出力): {options}。判断に答えると、選ばなかった道の先は見送りになります", { title, id: r.blockId, options: choices.join(", ") }));
+      return;
+    }
+    case "join": {
+      // 合流の部品を足す: 分かれた道が 1 つにまとまるところ。道の出力を connect でこの部品へつなぎ、部品の出力を先の箱へつなぐ
+      // 例: join --title "認証の合流" --parent B7   →   connect "メールで実装.認証" "認証の合流"  /  connect "認証の合流.合流" "API をまとめる"
+      const parentId = str(options.parent) ? mustFind(p, str(options.parent)).id : defaultTaskParent(p);
+      const r = addMerge(p, { parentId, actor, title: str(options.title), position: nextFreePosition(p, parentId) });
+      p = r.project;
+      save(path, p);
+      out(t("合流を追加: 「{title}」(id: {id})。道の出力をこの部品へ connect し、出力「{out}」を先の箱へつないでください。どれか 1 つの道が届けば先へ進みます", { title: p.blocks[r.blockId].title, id: r.blockId, out: portsOf(p, r.blockId, "out")[0]?.name ?? "" }));
       return;
     }
     case "split": {

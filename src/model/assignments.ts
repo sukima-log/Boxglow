@@ -50,6 +50,8 @@ export function assignmentRows(p: Project, target: AssigneeTarget, opts: { inclu
     if (b.id === ROOT_ID || kindOf(b) === "project") continue;
     // 見送りのボックス (選ばなかった分岐の道) は、やらない仕事なので出さない
     if (isSkipped(p, b.id)) continue;
+    // 合流のボックスは作業ではない部品なので出さない
+    if (b.merge) continue;
     // 担当の判定: メンバーの担当か、担当がいないか (全員なら判定しない)
     const mine = "memberId" in target ? b.assigneeIds.includes(target.memberId)
       : "unassigned" in target ? b.assigneeIds.length === 0

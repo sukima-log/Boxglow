@@ -2,7 +2,7 @@
 import type { Project } from "../model/types";
 import { ROOT_ID } from "../model/types";
 import { portsOf, rootInputsOf } from "../model/graph";
-import { isExpanded, taskCardLayout, taskCardPorts, textWidth } from "../model/size";
+import { isExpanded, MERGE_W, taskCardLayout, taskCardPorts, textWidth } from "../model/size";
 import type { AnyRFNode } from "./layout";
 import { readingColumns } from "../model/readingLayout";
 import { routeAll, type NodeRect, type EdgeSpec } from "./routeAll";
@@ -78,6 +78,15 @@ export function verticalNodes(base: AnyRFNode[], p: Project, scope: string | nul
     const expanded = isExpanded(p, n.id);
     const ins = expanded ? portsOf(p, n.id, "in") : taskCardPorts(p, n.id, "in");
     const outs = expanded ? portsOf(p, n.id, "out") : taskCardPorts(p, n.id, "out");
+    // 合流のボックス: 小さな部品のまま。入力は上の辺に等間隔、出力は下の先端の中央 (名前の帯は持たない)
+    if (p.blocks[n.id]?.merge) {
+      const w = Math.max(MERGE_W, 24 + 40 * ins.length);
+      n.width = w;
+      n.height = 96;
+      n.data.headerH = 0;
+      n.data.vertical = { inputH: 0, outputH: 0, inputStart: 0, inputs: positions(ins.map(q => q.id), w, 16), outputs: outs.map(q => ({ id: q.id, x: w / 2 })) };
+      continue;
+    }
     const inputH = bandHeight(ins.map(q => q.name)), outputH = bandHeight(outs.map(q => q.name));
     const card = taskCardLayout(p, n.id);
     const headH = card.headerH;

@@ -152,7 +152,8 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                   </div>
                 )}
                 {/* 合流: 分かれた道が 1 つにまとまるところの入力。合流の入力どうしは、どれか 1 つが届けばよい */}
-                {direction === "in" && !q.promotedFrom && (
+                {/* (合流は、合流の部品 (⋯ → + Merge) で表す。ここは前の版で合流にした入力を元に戻すためだけに出す) */}
+                {direction === "in" && !q.promotedFrom && q.anyOf && (
                   <label className="flex items-center gap-2 text-[12px]" title={t("分かれた道 (分岐) が 1 つにまとまるところ。合流にした入力どうしは、どれか 1 つが届けば着手できます")}>
                     <input type="checkbox" checked={!!q.anyOf} disabled={readonly} onChange={(e) => apply((p) => setInputAnyOf(p, q.id, e.target.checked))} />
                     {t("合流 (どれか 1 つが届けばよい)")}

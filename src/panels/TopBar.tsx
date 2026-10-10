@@ -11,6 +11,7 @@ import { projectToMarkdown, scopeToMermaid } from "../model/export";
 import { ROOT_ID, type Project } from "../model/types";
 import { parentForNewBlock, useProjectStore } from "../store/useProjectStore";
 import { BranchDialog } from "./BranchDialog";
+import { addMerge } from "../model/branch";
 import { applyTheme, currentTheme, type Theme } from "../lib/theme";
 import { copyText, downloadText, pickTextFile, safeFilename } from "../lib/download";
 import { setLang, t, useLang } from "../i18n";
@@ -98,6 +99,17 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
    * Input / Output: なし (project を更新する)
    */
   const autoLayout = () => apply((p) => layoutAll(normalizeCollapsed(p)));
+  // 合流の部品を足す: 今見ている階層 (選んでいる箱があればその中) に置き、選ぶ
+  const addJoin = () => {
+    const parentId = parentForNewBlock(project, selection, useProjectStore.getState().viewScope);
+    apply((p) => {
+      const r = addMerge(p, { parentId, actor: "human" });
+      const q = structuredClone(r.project);
+      if (q.blocks[parentId]) q.blocks[parentId].collapsed = false;
+      setTimeout(() => { select({ blockId: r.blockId }); focusBlock(r.blockId); }, 0);
+      return q;
+    });
+  };
   const addSibling = () => {
     const parentId = parentForNewBlock(project, selection, useProjectStore.getState().viewScope);
     apply((p) => {
@@ -249,6 +261,10 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
               {/* 分岐: まだ決まっていない分かれ道 (問いと選択肢。答えで進む道が決まる) */}
               {!readonly && (
                 <button className="btn btn-ghost btn-sm justify-start" onClick={() => setBranchOpen(true)} title={t("まだ決まっていない分かれ道を、問いと選択肢で足す")}>+ Branch</button>
+              )}
+              {/* 合流: 分かれた道が 1 つにまとまるところ (OR ゲート風の部品。どれか 1 つの道が届けば先へ通す) */}
+              {!readonly && (
+                <button className="btn btn-ghost btn-sm justify-start" onClick={addJoin} title={t("分かれた道を 1 つにまとめる合流の部品を足す (道の出力をこれにつなぐ)")}>+ Merge</button>
               )}
               {!readonly && <div style={{ borderTop: "1px solid var(--line-soft)", margin: "4px 0" }} />}
               <button className="btn btn-ghost btn-sm justify-start" onClick={exportJSON}>Export JSON</button>

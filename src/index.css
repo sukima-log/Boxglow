@@ -1727,3 +1727,31 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .edge-bar__path { min-width: 0; }
 .edge-bar .wire-state { font-size: 12px; }
 
+/* ---- 合流のボックス (OR ゲート風の部品) ----
+   カードの枠・影は消し、SVG の形だけを見せる。届いたら (どれかの道が来たら) 縁が濃い緑になる */
+.bg-block.kind-merge { background: transparent !important; border: 0 !important; box-shadow: none !important; }
+.bg-block.kind-merge.selected .bg-merge path { stroke: var(--primary); stroke-width: 3; }
+.bg-merge { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.bg-merge svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.bg-merge path { fill: var(--bg-card); stroke: var(--line); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.bg-merge.ready path { stroke: var(--wire-ready, #1c8a4e); stroke-width: 2.5; }
+.bg-merge__label { position: relative; display: flex; flex-direction: column; align-items: center; line-height: 1.1; font-size: 11px; color: var(--text-muted); padding-right: 12px; }
+.bg-merge__label b { font-size: 16px; letter-spacing: .04em; color: var(--text); }
+/* 縦表示では上から下へ流すので、形を 90 度回す (文字は回さない) */
+.bg-merge.vertical svg { transform: rotate(90deg); transform-origin: center; width: var(--merge-h, 96px); height: var(--merge-w, 136px); left: calc(50% - 48px); top: calc(50% - 68px); }
+.bg-merge.vertical .bg-merge__label { padding: 0 0 12px; }
+
+/* ---- 分岐のボックス (左右が尖った六角形のカード) ----
+   見出しの左右に三角の先端を足して、フローチャートの判断 (◇) を横に広げた形にする。
+   中の文字の配置は普通のカードと同じなので、読みやすさは変えない。先端は見出しの色を受け継ぐ */
+.bg-block.kind-branch:not(.expanded) { border-color: var(--primary-strong); border-width: 2px; }
+.bg-block.kind-branch:not(.expanded) > .bg-block__head::before,
+.bg-block.kind-branch:not(.expanded) > .bg-block__head::after { content: ""; position: absolute; top: -2px; bottom: 0; width: 18px; background: var(--primary-strong); }
+.bg-block.kind-branch:not(.expanded) > .bg-block__head::before { left: -19px; clip-path: polygon(100% 0, 0 50%, 100% 100%); }
+.bg-block.kind-branch:not(.expanded) > .bg-block__head::after { right: -19px; clip-path: polygon(0 0, 100% 50%, 0 100%); }
+.bg-block.kind-branch .bg-block__tag.branch { font-size: 14px; padding: 2px 8px; border-width: 2px; font-weight: 800; }
+.bg-block.kind-branch .bg-block__tag.branch > span[aria-hidden] { font-size: 16px; }
+/* 合流の部品は、分岐待ち・見送りを四角の枠ではなく形の縁で示す (四角の点線は形を崩すため) */
+.bg-block.kind-merge.branch-waiting { outline: none; }
+.bg-block.kind-merge.branch-waiting .bg-merge path { stroke-dasharray: 6 4; }
+

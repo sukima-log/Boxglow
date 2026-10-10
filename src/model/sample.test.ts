@@ -30,7 +30,7 @@ describe("サンプルプロジェクト", () => {
     const branches = branchState(p);
     expect(branches.skipped.size).toBeGreaterThan(0);
     expect(branches.pending.size).toBeGreaterThan(0);
-    expect(Object.values(p.ports).some((q) => q.anyOf)).toBe(true);
+    expect(Object.values(p.blocks).some((b) => b.merge)).toBe(true);
     // 線の両端のノードが存在する
     const ids = new Set(nodes.map((n) => n.id));
     for (const e of edges) {

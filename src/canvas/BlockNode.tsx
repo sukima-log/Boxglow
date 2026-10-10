@@ -89,6 +89,9 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
       })
       // 分岐: このボックスが分岐か / 選ばなかった道の先 (見送り) か / まだ答えていない分岐の先 (分岐待ち) か
     , branch: !!b?.branch
+      // 合流のボックス (OR ゲート風の部品)。どれかの入力が届いたか (届いたら先へ通す)
+    , merge: !!b?.merge
+    , mergeReady: !!b?.merge && outs.length > 0 && isSourceReady(p, { portId: outs[0].id, side: "outer" })
     , skipped: isSkipped(p, blockId)
     , waitingBranch: waitingBranches(p, blockId).length > 0
     , pending: b?.decisions.filter((d) => d.answer === undefined).length ?? 0
@@ -163,6 +166,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   , data.dropTarget ? "drop-target" : ""
   , view.category ? "has-cat" : ""
   , view.branch ? "kind-branch" : ""
+  , view.merge ? "kind-merge" : ""
   , view.skipped ? "is-skipped" : ""
   , view.waitingBranch && !view.skipped ? "branch-waiting" : ""
   ].filter(Boolean).join(" ");
@@ -184,6 +188,15 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     <div className={cls} style={{ width, height, ...(view.category ? ({ "--cat": view.category.color } as React.CSSProperties) : {}) }} onDoubleClick={onDoubleClick} onClick={(ev) => { if ((ev.target as HTMLElement).closest(".react-flow__handle")) ev.stopPropagation(); }}>
       {/* 題名の行: カテゴリ、題名、プロジェクトの札、畳むボタン。
           カテゴリを選択時だけの補助行から外し、未選択・俯瞰でも仕事の種類を読める位置に固定する。 */}
+      {/* 合流のボックス: カードではなく OR ゲート風の形 (左がえぐれ、右が尖る)。縦表示では 90 度回して上から下へ流す */}
+      {view.merge ? (
+        <div className={`bg-merge ${vertical ? "vertical" : ""} ${view.mergeReady ? "ready" : ""}`} title={t("合流: どれか 1 つの道が届けば、先へ進みます")}>
+          <svg viewBox="0 0 136 80" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M6 4 H70 C104 4 124 24 132 40 C124 56 104 76 70 76 H6 C20 58 20 22 6 4 Z" />
+          </svg>
+          <span className="bg-merge__label"><b>OR</b>{t("合流")}</span>
+        </div>
+      ) : <>
       {verticalBand("in")}
       <div className="bg-block__head" style={{ height: headerH - (view.expanded ? 24 : card.metaH), ...(vertical && !view.expanded ? { marginTop: vertical.inputH } : {}) }}>
         {view.category && <span className={`bg-block__cat${view.category.neutral ? " neutral" : ""}`} data-category={view.category.key} title={t("カテゴリ: {label}", { label: t(view.category.label) })}>{!view.expanded && <CategoryIcon category={view.category.key} />}{t(view.category.label)}</span>}
@@ -257,6 +270,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           <span style={{ width: `${view.percent}%` }} />
         </div>
       )}
+      </>}
 
       {/* ハンドル: 入力は左、出力は右。展開中は内側用のハンドルも出す。
           結線できるのは Edit モードだけ (isConnectable = canEdit。View では丸を押しても線は変わらない)。

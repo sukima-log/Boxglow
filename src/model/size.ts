@@ -94,6 +94,11 @@ export function taskCardPorts(p: Project, blockId: string, direction: Port["dire
   return rows.sort((a, b) => (a.y === b.y ? 0 : a.y - b.y) || a.index - b.index).map(row => row.port);
 }
 
+/** 合流のボックス (OR ゲート風の部品) の幅・最小の高さ・入力 1 本あたりの高さ */
+export const MERGE_W = 136;
+const MERGE_MIN_H = 80;
+const MERGE_ROW = 32;
+
 /**
  * 表示名の折り返しと接続点を同じ寸法から求める。
  * Input: 計画と箱 ID。Output: カード全体・見出し・情報行の寸法と各ポート行の位置
@@ -103,6 +108,14 @@ export function taskCardLayout(p: Project, blockId: string) {
   const b = p.blocks[blockId];
   const ins = taskCardPorts(p, blockId, "in");
   const outs = taskCardPorts(p, blockId, "out");
+  // 合流のボックス: OR ゲートのような小さな部品。入力は左の弧に等間隔 (1 本あたり 32px)、出力は右の先端 (高さの中央) に 1 つ
+  if (b?.merge) {
+    const height = Math.max(MERGE_MIN_H, ins.length * MERGE_ROW + 16);
+    const step = (height - 16) / Math.max(1, ins.length);
+    const inputs = ins.map((q, i) => ({ id: q.id, top: 8 + i * step, height: step, center: 8 + i * step + step / 2 }));
+    const outputs = outs.map((q) => ({ id: q.id, top: 0, height, center: height / 2 }));
+    return { width: MERGE_W, height, headerH: 0, metaH: 0, inputs, outputs };
+  }
   const titleWidth = textWidth(b?.title ?? "", 22);
   const portWidth = Math.max(0, ...[...ins, ...outs].map(q => textWidth(q.name, 16) + 104));
   const width = Math.min(360, Math.max(BLOCK_W, titleWidth + 64, portWidth));

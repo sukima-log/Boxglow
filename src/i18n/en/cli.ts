@@ -210,7 +210,7 @@ export const cli: Record<string, string> = {
 , "ボックスに入力 / 出力を足す、名前を変える。anyOf の入力は合流 (どれか 1 つが届けばよい) にする": "Add or rename inputs / outputs of a box. Inputs in anyOf become a merge (any one of them is enough)"
 , "合流にする入力の名前 (分かれた道がまとまるところ)": "Names of inputs to make a merge (where the paths of a branch come together)"
 , "通常 (すべて要る) に戻す入力の名前": "Names of inputs to make normal again (all required)"
-, "まだ決まっていない分かれ道 (分岐) を足す。選択肢ごとに道 (出力) ができる。それぞれの道の最初のボックスへ connect し、道がまとまるところの入力は boxglow_port の anyOf で合流にする。人が答えると、選ばなかった道の先は見送りになる": "Add an undecided fork (branch). Each option becomes a path (output): connect each to the first box of that path, and make the inputs where the paths come together a merge with boxglow_port anyOf. When a person answers, the paths not chosen are skipped"
+, "まだ決まっていない分かれ道 (分岐) を足す。選択肢ごとに道 (出力) ができる。それぞれの道の最初のボックスへ connect し、道がまとまるところには boxglow_join で合流の部品を置く。人が答えると、選ばなかった道の先は見送りになる": "Add an undecided fork (branch). Each option becomes a path (output): connect each to the first box of that path, and add a merge part with boxglow_join where the paths come together. When a person answers, the paths not chosen are skipped"
 , "選択肢 (道の名前)": "Options (path names)"
 , "判断の問い (省略すると題名)": "The question to decide (defaults to the title)"
 , "判断材料: 前提・比較・影響": "Background: assumptions, comparison, impact"
@@ -220,4 +220,7 @@ export const cli: Record<string, string> = {
 , "分岐に変更: 「{title}」(id: {id})。道 (出力): {options}。今の出力は「{first}」の道になりました": "Made a branch: \"{title}\" (id: {id}). Paths (outputs): {options}. The existing output is now the \"{first}\" path"
 , "題名 (新しく足すとき)": "Title (when adding a new branch)"
 , "分岐に変える今あるボックス (指定すると新しくは足さない。今の出力は 1 つ目の選択肢の道になる)": "An existing box to turn into a branch (no new box is added; its output becomes the first option's path)"
+, "合流を追加: 「{title}」(id: {id})。道の出力をこの部品へ connect し、出力「{out}」を先の箱へつないでください。どれか 1 つの道が届けば先へ進みます": "Merge added: \"{title}\" (id: {id}). Connect the paths' outputs to it and its output \"{out}\" to the next box. Any one path arriving lets the work go on"
+, "合流の部品を足す (分かれた道が 1 つにまとまるところ)。道の出力を boxglow_connect でこの部品の題名へつなぎ、部品の出力 (合流) を先の箱へつなぐ。どれか 1 つの道が届けば先へ進む": "Add a merge part (where paths come together). Connect each path's output to its title with boxglow_connect, and connect its output (Merge) to the next box. Any one path arriving lets the work go on"
+, "題名 (省略すると「合流」)": "Title (defaults to \"Merge\")"
 };

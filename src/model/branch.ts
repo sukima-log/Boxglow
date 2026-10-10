@@ -11,6 +11,7 @@
  */
 import { addBlock, addPort, askDecision, childrenOf, descendantsOf, kindOf, portsOf, updatePort } from "./graph";
 import { ROOT_ID, type Block, type Decision, type Port, type Project } from "./types";
+import { t } from "../i18n/core";
 
 /** 線の端の状態: 未定の道 / 見送りの道 (見送りのほうが強い。一度見送りになった端は未定に戻らない) */
 type Taint = "pending" | "rejected";
@@ -130,8 +131,9 @@ export function branchState(p: Project): BranchState {
     if (!isTask(id)) return;
     const b = p.blocks[id];
     const ins = (insOf.get(id) ?? []).filter((q) => q.required);
-    const plain = ins.filter((q) => !q.anyOf).map((q) => taint.get(key(q.id, "outer")));
-    const any = ins.filter((q) => q.anyOf).map((q) => taint.get(key(q.id, "outer")));
+    // 合流のボックスの入力は、すべて「どれか 1 つでよい」入力として扱う
+    const plain = ins.filter((q) => !q.anyOf && !b.merge).map((q) => taint.get(key(q.id, "outer")));
+    const any = ins.filter((q) => q.anyOf || b.merge).map((q) => taint.get(key(q.id, "outer")));
     let t: Taint | undefined;
     if (plain.some((x) => x === "rejected") || (any.length > 0 && any.every((x) => x === "rejected"))) t = "rejected";
     else if (plain.some((x) => x === "pending") || (any.length > 0 && any.every(Boolean) && any.some((x) => x === "pending"))) t = "pending";
@@ -300,5 +302,16 @@ export function canConvertToBranch(p: Project, blockId: string): { ok: boolean; 
   if (b.branch) return { ok: false, reason: "already" };
   if (childrenOf(p, blockId).length > 0) return { ok: false, reason: "children" };
   return { ok: true, reason: "" };
+}
+
+/**
+ * 合流のボックスを足す (分かれた道が 1 つにまとまるところ。OR ゲートのような小さな部品)
+ * Input : p = 計画, args = { parentId: 置く先, actor: 足した人, position: 置く位置 (省略可), title: 題名 (省略時は「合流」) }
+ * Output: { project, blockId }。入力はまだ無い (道の出力をこの箱へ connect すると、その名前の入力ができる)。出力は 1 本
+ */
+export function addMerge(p: Project, args: { parentId: string; actor: string; position?: { x: number; y: number }; title?: string }): { project: Project; blockId: string } {
+  const made = addBlock(p, { parentId: args.parentId, title: args.title ?? t("合流"), position: args.position, actor: args.actor, outputName: t("合流") });
+  const q = made.project;
+  return { project: { ...q, blocks: { ...q.blocks, [made.blockId]: { ...q.blocks[made.blockId], merge: true } } }, blockId: made.blockId };
 }
 
