@@ -29,6 +29,17 @@ export function TreePanel({ project, filter, onClose }: { project: Project; filt
   // closed は枝の開閉、active はキー操作の位置、selected は図と共有する選択。
   // 矢印で探している間に図が動かないよう、フォーカスと選択を分ける。
   const [closed, setClosed] = useState<Set<string>>(new Set());
+  // 幅: 右端のつまみをドラッグして変える (180〜560px)。このブラウザだけで覚える (無ければ 260)
+  const [width, setWidth] = useState<number>(() => { try { const v = Number(localStorage.getItem("boxglow:treeWidth")); return v >= 180 && v <= 560 ? v : 260; } catch { return 260; } });
+  const startDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const startX = e.clientX, startW = width;
+    const target = e.currentTarget;
+    target.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => { const w = Math.min(560, Math.max(180, Math.round(startW + ev.clientX - startX))); setWidth(w); };
+    const up = () => { target.removeEventListener("pointermove", move); target.removeEventListener("pointerup", up); target.removeEventListener("pointercancel", up); setWidth((w) => { try { localStorage.setItem("boxglow:treeWidth", String(w)); } catch { /* 保存できなくてもよい */ } return w; }); };
+    target.addEventListener("pointermove", move); target.addEventListener("pointerup", up); target.addEventListener("pointercancel", up);
+  };
   const [active, setActive] = useState<string | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -247,6 +258,7 @@ export function TreePanel({ project, filter, onClose }: { project: Project; filt
       className="tree-panel"
       id="project-tree"
       aria-label={t("ツリー")}
+      style={{ width, flexBasis: width }}
       onKeyDown={(e) => {
         if (["Escape", "Delete", "Backspace"].includes(e.key)) e.stopPropagation();
         if (e.key === "Escape") {
@@ -258,6 +270,9 @@ export function TreePanel({ project, filter, onClose }: { project: Project; filt
         }
       }}
     >
+      {/* 幅を変えるつまみ (右端)。ダブルクリックで既定の幅に戻す */}
+      <div className="tree-panel__grip" role="separator" aria-orientation="vertical" aria-label={t("ツリーの幅")} title={t("ドラッグで幅を変える (ダブルクリックで元に戻す)")} onPointerDown={startDrag}
+        onDoubleClick={() => { setWidth(260); try { localStorage.setItem("boxglow:treeWidth", "260"); } catch { /* 保存できなくてもよい */ } }} />
       <div className="tree-panel__head">
         <strong>{t("ブロック")}</strong>
         {filtered && (

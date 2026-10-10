@@ -1192,6 +1192,10 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
   border-right: 1px solid var(--line-soft);
   color: var(--text);
 }
+/* ツリーの幅のつまみ: 右端の細い帯。触れると線が出る */
+.tree-panel__grip { position: absolute; top: 0; right: -4px; width: 8px; height: 100%; cursor: col-resize; z-index: 5; touch-action: none; }
+.tree-panel__grip::after { content: ""; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: transparent; transition: background .15s; }
+.tree-panel__grip:hover::after, .tree-panel__grip:active::after { background: var(--primary); }
 .tree-panel__head {
   display: flex;
   align-items: center;

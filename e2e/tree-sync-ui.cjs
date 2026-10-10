@@ -16,6 +16,16 @@ const { chromium, open, check, result } = require("./lib.cjs");
     await page.reload();
     await page.waitForSelector(".tree-panel");
     check("Tree: 開いた状態を記憶する", (await page.locator(".tree-toggle").getAttribute("aria-pressed")) === "true");
+    // 右端のつまみをドラッグすると幅が変わり、再読込でも保たれ、ダブルクリックで既定に戻る
+    const treeW0 = (await page.locator(".tree-panel").boundingBox()).width;
+    const grip = await page.locator(".tree-panel__grip").boundingBox();
+    await page.mouse.move(grip.x + 4, grip.y + 200); await page.mouse.down(); await page.mouse.move(grip.x + 124, grip.y + 200, { steps: 8 }); await page.mouse.up(); await page.waitForTimeout(200);
+    const treeW1 = (await page.locator(".tree-panel").boundingBox()).width;
+    check("Tree: つまみのドラッグで幅が変わる", Math.round(treeW1 - treeW0) === 120, `${treeW0} -> ${treeW1}`);
+    await page.reload(); await page.waitForSelector(".tree-panel");
+    check("Tree: 幅を記憶する", Math.round((await page.locator(".tree-panel").boundingBox()).width) === Math.round(treeW1));
+    await page.locator(".tree-panel__grip").dblclick(); await page.waitForTimeout(200);
+    check("Tree: ダブルクリックで既定の幅に戻る", Math.round((await page.locator(".tree-panel").boundingBox()).width) === 260);
     // デモの ID は生成されるため固定値に依存しない。内部 ID・階層・題名だけを検査側へ取り出す。
     const ids = await page.evaluate(() => {
       const p = window.boxglow.store.getState().project;
