@@ -4,6 +4,7 @@
  *   - 詳細パネルで選択肢を押して答えると: 分岐のボックスは完了、選んだ道は ✓、選ばなかった道の先は「見送り」(薄く・取り消し線)、
  *     見送りは完了数の分母から外れ、合流の入力を持つ結合テストは見送りにならない
  *   - ⋯ メニューの「+ Branch」から、問いと選択肢で分岐を足せる (選択肢ごとに道ができる)
+ *   - 詳細パネルの ⋯ の「分岐にする」で、今あるボックスを分岐に変えられる (今の出力は 1 つ目の道、線は残る)
  * 計画は e2e/fixtures/branch.boxglow.json (設計 → 分岐 (REST / GraphQL) → 各実装 → 結合テスト (合流))
  * 使い方: e2e/run.sh から呼ばれる (PLAYWRIGHT と LD_LIBRARY_PATH は run.sh が設定。プレビューが 4173 番で動いていること)
  */
@@ -50,6 +51,20 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
     await dialog.getByRole('button', { name: '分岐を足す', exact: true }).click(); await page.waitForTimeout(600);
     const made = await page.evaluate(() => { const s = window.boxglow.store.getState(); const b = Object.values(s.project.blocks).find((x) => x.title === '公開先はどれにしますか?'); if (!b) return null; return { branch: !!b.branch, outs: Object.values(s.project.ports).filter((q) => q.blockId === b.id && q.direction === 'out').map((q) => q.branchOption), selected: s.selection.blockId === b.id }; });
     check('分岐: ダイアログから足した分岐は、選択肢ごとの道を持ち、選ばれた状態になる', !!made && made.branch && made.outs.join('|') === '静的ホスティング|自前のサーバー' && made.selected, JSON.stringify(made));
+
+    // ---- 今あるボックスを分岐に変える (詳細パネルの ⋯ →「分岐にする」) ----
+    await page.locator('.react-flow__pane').click({ position: { x: 20, y: 20 } }); await page.waitForTimeout(200);
+    await box('設計する').click(); await page.waitForTimeout(400);
+    await page.locator('.panel.right button[title="その他"]').click();
+    await page.getByRole('button', { name: /分岐にする/ }).click();
+    const convert = page.getByRole('dialog', { name: '分岐にする' });
+    check('分岐にする: 変えるときは題名の欄を出さない', await convert.getByPlaceholder('例: API の方式を決める').count() === 0);
+    await convert.getByPlaceholder('例: API の方式はどれにしますか?').fill('設計の進め方は?');
+    await convert.locator('textarea').fill('画面から\nAPI から');
+    await convert.getByRole('button', { name: '分岐にする', exact: true }).click(); await page.waitForTimeout(600);
+    const converted = await page.evaluate(() => { const s = window.boxglow.store.getState(); const b = Object.values(s.project.blocks).find((x) => x.title === '設計する'); const outs = Object.values(s.project.ports).filter((q) => q.blockId === b.id && q.direction === 'out'); return { branch: !!b.branch, outs: outs.map((q) => q.branchOption), wired: Object.values(s.project.edges).some((e) => e.from.portId === outs[0]?.id) }; });
+    check('分岐にする: 今の出力は 1 つ目の道になり、線も残る。2 つ目の道が足される', converted.branch && converted.outs.join('|') === '画面から|API から' && converted.wired, JSON.stringify(converted));
+    check('分岐にする: 変えたボックスに「分岐」の札が付く', await box('設計する').locator('.bg-block__tag.branch').isVisible());
 
     check('分岐: 実行時のエラーが無い', errors.length === 0, errors.join(' | '));
   } finally {

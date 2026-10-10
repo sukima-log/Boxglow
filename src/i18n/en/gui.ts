@@ -113,4 +113,8 @@ export const gui: Record<string, string> = {
   "{names} のどれか": "any of {names}",
   "ダブルクリックで Top に戻る": "Double-click to go back to Top",
   "選択を外す (Esc)": "Clear the selection (Esc)",
+  "分岐にする": "Make it a branch",
+  "このボックスを、問いと選択肢を持つ分岐に変えます。今の出力は 1 つ目の選択肢の道になり (つながっている線は残ります)、2 つ目以降の道が足されます。": "Turn this box into a branch with a question and options. Its current output becomes the first option's path (wires stay connected), and paths for the other options are added.",
+  "問いと選択肢を持つ分岐に変える (今の出力は 1 つ目の選択肢の道になる)": "Turn into a branch with a question and options (the current output becomes the first option's path)",
+  "中にボックスを持つボックスは、分岐にできません": "A box with boxes inside cannot become a branch",
 };

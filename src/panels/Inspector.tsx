@@ -5,6 +5,8 @@ import { ClaimSettings, ClaimDetails } from "./Claims";
  * 何も選んでいなければ何も出さない (App 側でパネルごと隠す)
  * 文言は日本語で書き t() で包む (英語は src/i18n/en/inspector.ts の辞書で引く)
  */
+import { BranchDialog } from "./BranchDialog";
+import { canConvertToBranch } from "../model/branch";
 import { CloseButton } from "./CloseButton";
 import { WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
@@ -147,6 +149,8 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   const [showPrompt, setShowPrompt] = useState<"plan" | "decompose" | "review" | null>(null);
   const [more, setMore] = useState(true);
   const [menu, setMenu] = useState(false);
+  // 分岐に変えるダイアログを開いているか
+  const [branching, setBranching] = useState(false);
   const [ownerQuery, setOwnerQuery] = useState("");
   const [tab, setTab] = useState<"status" | "io" | "owner" | "dates" | "more">("status");
   const b = project.blocks[blockId];
@@ -224,6 +228,12 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
                 <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); apply(p => ({ ...p, focusBlockId: p.focusBlockId === blockId ? undefined : blockId })); }}>{project.focusBlockId === blockId ? t("今回の範囲の優先を解除") : t("このボックスを今回の範囲にする")}</button>
                 {!isProject && <button className="btn btn-ghost btn-sm justify-start" onClick={saveAsTemplate}>Save as Part</button>}
                 <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); setShowPrompt("plan"); setTab("more"); }}>Show AI text</button>
+                {/* 分岐にする: 作った後で「決まっていない分かれ道だった」と分かったとき。中に箱を持つものは変えられない (理由をツールチップに出す) */}
+                {!isProject && !b.branch && (() => {
+                  const can = canConvertToBranch(project, blockId);
+                  return <button className="btn btn-ghost btn-sm justify-start" disabled={!can.ok} onClick={() => { setMenu(false); setBranching(true); }}
+                    title={can.ok ? t("問いと選択肢を持つ分岐に変える (今の出力は 1 つ目の選択肢の道になる)") : t("中にボックスを持つボックスは、分岐にできません")}><span aria-hidden="true">◇</span> {t("分岐にする")}</button>;
+                })()}
                 <div style={{ borderTop: "1px solid var(--line-soft)", margin: "4px 0" }} />
                 <button className="btn btn-ghost btn-sm justify-start btn-danger" onClick={remove}>Delete</button>
               </div>
@@ -233,6 +243,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         <CloseButton onClick={() => select({})} />
       </div>
 
+      {branching && <BranchDialog convertBlockId={blockId} onClose={() => setBranching(false)} />}
       <DebouncedText className="input font-head text-[16px]" value={b.title} disabled={readonly} placeholder={t("Title (何を作るか)")}
         onCommit={(v) => apply((p) => updateBlock(p, blockId, { title: v }))} />
 

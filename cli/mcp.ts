@@ -92,8 +92,8 @@ export async function startMcp(run: Run): Promise<void> {
   // 分岐: ロードマップの時点で決まっていない分かれ道。選択肢ごとに道 (出力) ができ、boxglow_answer で答えると選ばなかった道の先は見送りになる
   server.registerTool("boxglow_branch", {
     description: t("まだ決まっていない分かれ道 (分岐) を足す。選択肢ごとに道 (出力) ができる。それぞれの道の最初のボックスへ connect し、道がまとまるところの入力は boxglow_port の anyOf で合流にする。人が答えると、選ばなかった道の先は見送りになる")
-  , inputSchema: { title: z.string(), options: z.array(z.string()).min(2).describe(t("選択肢 (道の名前)")), question: z.string().optional().describe(t("判断の問い (省略すると題名)")), context: z.string().optional().describe(t("判断材料: 前提・比較・影響")), in: z.array(z.string()).optional().describe(t("入力の名前")), parent: block.optional() }
-  }, async (a) => { const argv = ["branch", a.title]; opt(argv, "option", a.options); // 選択肢は 1 つずつ渡す (「|」を含む選択肢も分けない)
+  , inputSchema: { title: z.string().optional().describe(t("題名 (新しく足すとき)")), block: block.optional().describe(t("分岐に変える今あるボックス (指定すると新しくは足さない。今の出力は 1 つ目の選択肢の道になる)")), options: z.array(z.string()).min(2).describe(t("選択肢 (道の名前)")), question: z.string().optional().describe(t("判断の問い (省略すると題名)")), context: z.string().optional().describe(t("判断材料: 前提・比較・影響")), in: z.array(z.string()).optional().describe(t("入力の名前")), parent: block.optional() }
+  }, async (a) => { const argv = a.block ? ["branch", "--box", a.block] : ["branch", a.title ?? ""]; opt(argv, "option", a.options); // 選択肢は 1 つずつ渡す (「|」を含む選択肢も分けない)
      opt(argv, "question", a.question); opt(argv, "context", a.context); opt(argv, "in", a.in); opt(argv, "parent", a.parent); return safe(run, argv); });
   server.registerTool("boxglow_move", { description: t("ボックスを別の親の中へ移す (線はつなぎ直される)"), inputSchema: { block, parent: z.string().describe(t("移す先のボックスか project")) } }, async ({ block: b, parent }) => safe(run, ["move", b, "--parent", parent]));
   server.registerTool("boxglow_remove", { description: t("ボックスを消す (中にボックスがあれば force)"), inputSchema: { block, force: z.boolean().optional() } }, async ({ block: b, force }) => { const argv = ["remove", b]; opt(argv, "force", force); return safe(run, argv); });

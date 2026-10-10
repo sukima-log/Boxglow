@@ -256,3 +256,49 @@ export function setInputAnyOf(p: Project, portId: string, on: boolean): Project 
   delete q.ports[portId].anyOf;
   return q;
 }
+
+/**
+ * 今あるボックスを分岐に変える (作ってから「やっぱり決まっていない分かれ道だった」と分かったとき)
+ * Input : p = 計画, blockId = 変えるボックス, args = { question: 判断の問い, options: 選択肢 (2 つ以上), context: 判断材料, actor: 変えた人 }
+ * Output: { project, decisionId }。今の出力は 1 つ目の選択肢の道になり (名前を選択肢に変え、つながっている線は残す)、
+ *         2 つ目以降の選択肢の道 (出力) を足す。入力・担当・日程などはそのまま。
+ *         中にボックスを持つボックス・プロジェクトのボックス・すでに分岐のボックスは変えられない (例外)
+ */
+export function convertToBranch(p: Project, blockId: string, args: { question: string; options: string[]; context?: string; actor: string }): { project: Project; decisionId: string } {
+  const b = p.blocks[blockId];
+  if (!b || blockId === ROOT_ID || kindOf(b) === "project") throw new Error("project");
+  if (b.branch) throw new Error("already");
+  if (childrenOf(p, blockId).length > 0) throw new Error("children");
+  const options = [...new Set(args.options.map((o) => o.trim()).filter(Boolean))];
+  if (options.length < 2) throw new Error("options");
+  // 1. 判断 (問いと選択肢) を付け、分岐の印を付ける (印が先に無いと、2 本目以降の出力を足せない)
+  const asked = askDecision(p, blockId, args.actor, args.question, options, args.context ?? "");
+  let q = asked.project;
+  q = { ...q, blocks: { ...q.blocks, [blockId]: { ...q.blocks[blockId], branch: { decisionId: asked.decisionId! } } } };
+  // 2. 今の出力 (1 本目) を、1 つ目の選択肢の道にする。出力が無ければ足す
+  const first = portsOf(q, blockId, "out")[0];
+  if (first) q = updatePort(q, first.id, { name: options[0], branchOption: options[0] });
+  else {
+    const added = addPort(q, { blockId, direction: "out", name: options[0] });
+    q = updatePort(added.project, added.portId, { branchOption: options[0] });
+  }
+  // 3. 2 つ目以降の選択肢の道を足す
+  for (const option of options.slice(1)) {
+    const added = addPort(q, { blockId, direction: "out", name: option });
+    q = updatePort(added.project, added.portId, { branchOption: option });
+  }
+  return { project: q, decisionId: asked.decisionId! };
+}
+
+/**
+ * 分岐にできるか (詳細パネルのメニューで、押せるかと理由を出すため)
+ * Input : p, blockId / Output: { ok: できるか, reason: できない理由 (日本語の文。できるなら空) }
+ */
+export function canConvertToBranch(p: Project, blockId: string): { ok: boolean; reason: "" | "project" | "already" | "children" } {
+  const b = p.blocks[blockId];
+  if (!b || blockId === ROOT_ID || kindOf(b) === "project") return { ok: false, reason: "project" };
+  if (b.branch) return { ok: false, reason: "already" };
+  if (childrenOf(p, blockId).length > 0) return { ok: false, reason: "children" };
+  return { ok: true, reason: "" };
+}
+

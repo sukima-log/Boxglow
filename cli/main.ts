@@ -51,7 +51,7 @@ import type { Artifact } from "../src/model/types";
 import { blockToPrompt } from "../src/model/export";
 import { blockReport, logReport, statusReport } from "../src/model/report";
 import { assignmentRows, type AssigneeTarget } from "../src/model/assignments";
-import { addBranch, setInputAnyOf } from "../src/model/branch";
+import { addBranch, canConvertToBranch, convertToBranch, setInputAnyOf } from "../src/model/branch";
 import { STATUS_LABEL } from "../src/model/status";
 import { checkGitRef, findGitRef, gitRefFor } from "./git";
 import { layoutAll, layoutScope, nextFreePosition } from "../src/model/autolayout";
@@ -365,6 +365,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   import-block <path> [--parent <block>]         テンプレートを挿入 (親を省略すると最初のプロジェクトのボックスの中)
   split <block> --spec '<JSON>' | --spec-file <path>   下の階層にまとめて分解 (形式は docs/AGENTS_SNIPPET.md)
   branch <題名> --options "A|B" | --option <A> --option <B> [--question <問い>] [--context <判断材料>] [--in <入力名>]... [--parent <block>]   まだ決まっていない分かれ道 (分岐) を足す。選択肢ごとに道 (出力) ができ、answer で答えると選ばなかった道は見送り
+  branch --box <block> --options "A|B" [--question <問い>] [--context <判断材料>]   今あるボックスを分岐に変える (今の出力は 1 つ目の選択肢の道になる。中にボックスを持つものは不可)
   move <block> --parent <block|project>            ボックスを別の親の中へ移す (線は間のボックスのポートを経由してつながったまま)
   port <block|project> [--in <名前>]... [--out <名前>]... [--rename <旧名>=<新名>] [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス)
   disconnect <題名.出力名> <題名.入力名>          線を外す
@@ -467,6 +468,7 @@ Usage (npx boxglow <command> ...):
   import-block <path> [--parent <block>]         Insert a template (without a parent, goes inside the first project box)
   split <block> --spec '<JSON>' | --spec-file <path>   Break a box down into child boxes in one go (format: docs/AGENTS_SNIPPET.en.md)
   branch <title> --options "A|B" | --option <A> --option <B> [--question <question>] [--context <background>] [--in <input name>]... [--parent <block>]   Add an undecided fork (branch). Each option gets a path (output); answering it with answer skips the paths not chosen
+  branch --box <block> --options "A|B" [--question <question>] [--context <background>]   Turn an existing box into a branch (its output becomes the first option's path; not for boxes with children)
   move <block> --parent <block|project>            Move a box into another parent (wires stay connected through the ports of the boxes in between)
   port <block|project> [--in <name>]... [--out <name>]... [--rename <old>=<new>] [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, or rename them. --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
   disconnect <title.output> <title.input>          Remove a wire
@@ -981,11 +983,21 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     case "branch": {
       // 分岐のボックスを足す: まだ決まっていない分かれ道。選択肢ごとに出力 (道) ができ、判断に答えると選ばなかった道の先は「見送り」になる
       // 例: branch "API の方式を決める" --question "API の方式はどれにしますか?" --options "REST|GraphQL" --in 設計書 --context "比較: ..."
-      const title = rest[0];
-      if (!title) throw new Error(t("<題名> を指定してください"));
       // 選択肢: --option を繰り返す (選択肢に「|」を含められる) か、--options "A|B" (「|」で区切る)
       const choices = [...list(options.option), ...(str(options.options) ?? "").split("|")].map((x) => x.trim()).filter(Boolean);
       if (new Set(choices).size < 2) throw new Error(t("--options \"A|B\" (または --option を繰り返して) 選択肢を 2 つ以上指定してください"));
+      // 今あるボックスを分岐に変える (--box <block>): 今の出力は 1 つ目の選択肢の道になる
+      if (str(options.box)) {
+        const target = mustFind(p, str(options.box));
+        const can = canConvertToBranch(p, target.id);
+        if (!can.ok) throw new Error(can.reason === "children" ? t("「{title}」は中にボックスを持つので、分岐にできません", { title: target.title }) : can.reason === "already" ? t("「{title}」はすでに分岐です", { title: target.title }) : t("「{title}」は分岐にできません", { title: target.title }));
+        p = convertToBranch(p, target.id, { question: str(options.question) ?? target.title, options: choices, context: str(options.context) ?? "", actor }).project;
+        save(path, p);
+        out(t("分岐に変更: 「{title}」(id: {id})。道 (出力): {options}。今の出力は「{first}」の道になりました", { title: target.title, id: target.id, options: choices.join(", "), first: choices[0] }));
+        return;
+      }
+      const title = rest[0];
+      if (!title) throw new Error(t("<題名> を指定してください"));
       const parentId = str(options.parent) ? mustFind(p, str(options.parent)).id : defaultTaskParent(p);
       const r = addBranch(p, { parentId, title, question: str(options.question) ?? title, options: choices, context: str(options.context) ?? "", actor, position: nextFreePosition(p, parentId) });
       p = r.project;

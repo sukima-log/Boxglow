@@ -214,4 +214,10 @@ export const cli: Record<string, string> = {
 , "選択肢 (道の名前)": "Options (path names)"
 , "判断の問い (省略すると題名)": "The question to decide (defaults to the title)"
 , "判断材料: 前提・比較・影響": "Background: assumptions, comparison, impact"
+, "「{title}」は中にボックスを持つので、分岐にできません": "\"{title}\" has boxes inside, so it cannot become a branch"
+, "「{title}」はすでに分岐です": "\"{title}\" is already a branch"
+, "「{title}」は分岐にできません": "\"{title}\" cannot become a branch"
+, "分岐に変更: 「{title}」(id: {id})。道 (出力): {options}。今の出力は「{first}」の道になりました": "Made a branch: \"{title}\" (id: {id}). Paths (outputs): {options}. The existing output is now the \"{first}\" path"
+, "題名 (新しく足すとき)": "Title (when adding a new branch)"
+, "分岐に変える今あるボックス (指定すると新しくは足さない。今の出力は 1 つ目の選択肢の道になる)": "An existing box to turn into a branch (no new box is added; its output becomes the first option's path)"
 };

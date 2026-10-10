@@ -152,3 +152,31 @@ describe("答えの文面を直したとき", () => {
     expect(chosenOption(p.blocks[br.blockId])).toBe("GraphQL");
   });
 });
+
+describe("今あるボックスを分岐に変える", () => {
+  it("今の出力は 1 つ目の選択肢の道になり、つながっている線は残る。2 つ目以降の道が足される", async () => {
+    const { convertToBranch, canConvertToBranch } = await import("./branch");
+    let p = createProject("変換");
+    const parent = defaultTaskParent(p);
+    const a = addBlock(p, { parentId: parent, title: "公開先", outputName: "決めた公開先" }); p = a.project;
+    const next = addBlock(p, { parentId: parent, title: "置く" }); p = next.project;
+    const nIn = addPort(p, { blockId: next.blockId, direction: "in", name: "決めた公開先" }); p = nIn.project;
+    p = connect(p, { portId: portsOf(p, a.blockId, "out")[0].id, side: "outer" }, { portId: nIn.portId, side: "outer" }).project;
+    expect(canConvertToBranch(p, a.blockId).ok).toBe(true);
+    const r = convertToBranch(p, a.blockId, { question: "公開先は?", options: ["静的ホスティング", "自前のサーバー"], actor: "human" });
+    p = r.project;
+    expect(p.blocks[a.blockId].branch?.decisionId).toBe(r.decisionId);
+    const outs = portsOf(p, a.blockId, "out");
+    expect(outs.map((o) => [o.name, o.branchOption])).toEqual([["静的ホスティング", "静的ホスティング"], ["自前のサーバー", "自前のサーバー"]]);
+    // 元の線は 1 つ目の道に残り、その先の箱は分岐待ちになる
+    expect(Object.values(p.edges).some((e) => e.from.portId === outs[0].id && e.to.portId === nIn.portId)).toBe(true);
+    expect(branchState(p).pending.has(next.blockId)).toBe(true);
+    // もう分岐なので、もう一度は変えられない
+    expect(canConvertToBranch(p, a.blockId)).toEqual({ ok: false, reason: "already" });
+  });
+  it("中にボックスを持つボックスは、分岐にできない", async () => {
+    const { canConvertToBranch } = await import("./branch");
+    const { p, y } = fixture();
+    expect(canConvertToBranch(p, y)).toEqual({ ok: false, reason: "children" });
+  });
+});

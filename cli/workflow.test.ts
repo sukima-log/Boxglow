@@ -203,6 +203,25 @@ describe("分岐 (branch)",()=>{
     const outs=Object.values(p.ports as Record<string,{direction:string;branchOption?:string}>).filter(q=>q.branchOption!==undefined).map(q=>q.branchOption);
     expect(outs).toEqual(["A|B 案","C 案"]);
   });
+  it("branch --box で今あるボックスを分岐に変えられる (今の出力は 1 つ目の選択肢の道、線は残る)",()=>{
+    const {cli,read}=fixture();
+    expect(cli("add","公開先","--out","決めた公開先").status).toBe(0);
+    expect(cli("add","置く","--out","URL").status).toBe(0);
+    expect(cli("connect","公開先.決めた公開先","置く").status).toBe(0);
+    const made=cli("branch","--box","公開先","--options","静的ホスティング|自前のサーバー","--question","公開先は?");
+    expect(made.status,made.stderr).toBe(0);
+    const p=read();
+    const box=Object.values(p.blocks as Record<string,{id:string;title:string;branch?:{decisionId:string}}>).find(b=>b.title==="公開先")!;
+    expect(box.branch).toBeTruthy();
+    const outs=Object.values(p.ports as Record<string,{id:string;blockId:string;direction:string;name:string;branchOption?:string}>).filter(q=>q.blockId===box.id&&q.direction==="out");
+    expect(outs.map(q=>q.branchOption)).toEqual(["静的ホスティング","自前のサーバー"]);
+    // 元の線 (置くへの線) は 1 つ目の道に残る
+    expect(Object.values(p.edges as Record<string,{from:{portId:string}}>).some(e=>e.from.portId===outs[0].id)).toBe(true);
+    // 同じボックスを、もう一度は変えられない
+    const again=cli("branch","--box","公開先","--options","A|B");
+    expect(again.status).not.toBe(0);
+    expect(again.stderr).toContain("すでに分岐");
+  });
   it("選択肢が 1 つしか無い branch は止める",()=>{
     const {cli}=fixture();
     const r=cli("branch","方式","--options","REST");
