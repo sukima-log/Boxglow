@@ -154,4 +154,5 @@ export const gui: Record<string, string> = {
   "見当 (パスや題名) も書きます": "Also give a path or title",
   "完了条件": "Acceptance",
   "何をどう確かめれば完了か (例: 配信先の URL でアプリが開く)": "What is checked and how (e.g. the app opens at the published URL)",
+  "着手の前に、出力の予定成果物 (expect) と完了条件を決めます (押すと状態タブ)": "Before starting, set the output's planned deliverable (expect) and the acceptance criteria (click to open Status)",
 };
