@@ -111,6 +111,20 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
     await page.locator('.panel.right .seg__btn', { hasText: '状態' }).click(); await page.waitForTimeout(200); // 前の確認で入出力タブを開いたまま (タブは保たれる)
     const roughList = await page.locator('.panel.right .unprepared-list li').allInnerTexts();
     check('要具体化: 右パネルに不足 (expect / acceptance) が並ぶ', roughList.some((x) => x.includes('expect')) && roughList.some((x) => x.includes('acceptance')), JSON.stringify(roughList));
+    // 理由を押すと直す場所へ (予定成果物 → 入出力タブ)。出力の詳細で予定成果物を入力すると保存され、空にすると消える
+    await page.locator('.panel.right .unprepared-list__item').first().click(); await page.waitForTimeout(300);
+    check('要具体化: 理由を押すと入出力タブが開く', (await page.locator('.panel.right .seg__btn[data-on="true"]').innerText()).includes('入出力'));
+    const roughId = await page.evaluate(() => window.boxglow.store.getState().selection.blockId);
+    await page.locator('.panel.right button[title="形式・制約などの設定"]').last().click(); await page.waitForTimeout(300);
+    await page.locator('.panel.right .expect-field select').selectOption('file');
+    await page.locator('.panel.right .expect-field input').fill('src/api/rest.ts'); await page.locator('.panel.right .expect-field input').blur(); await page.waitForTimeout(800);
+    const savedExpect = await page.evaluate((id) => { const s = window.boxglow.store.getState(); return Object.values(s.project.ports).find((q) => q.blockId === id && q.direction === 'out')?.expect; }, roughId);
+    check('要具体化: 画面から予定成果物を入力すると保存される', !!savedExpect && savedExpect.kind === 'file' && savedExpect.hint === 'src/api/rest.ts', JSON.stringify(savedExpect));
+    await page.locator('.panel.right .seg__btn', { hasText: '状態' }).click(); await page.waitForTimeout(200);
+    check('要具体化: 予定成果物を書くと、その理由は消える (完了条件の理由は残る)', !(await page.locator('.panel.right .unprepared-list li').allInnerTexts()).some((x) => x.includes('expect')));
+    await page.locator('.panel.right .seg__btn', { hasText: '入出力' }).click(); await page.waitForTimeout(200);
+    await page.locator('.panel.right .expect-field select').selectOption(''); await page.waitForTimeout(500);
+    check('要具体化: 種類を空にすると予定成果物が消える', (await page.evaluate((id) => { const s = window.boxglow.store.getState(); return Object.values(s.project.ports).find((q) => q.blockId === id && q.direction === 'out')?.expect; }, roughId)) === undefined);
 
     check('分岐: 実行時のエラーが無い', errors.length === 0, errors.join(' | '));
   } finally {

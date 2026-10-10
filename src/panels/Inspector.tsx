@@ -321,7 +321,11 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           return (
             <div className="text-[12px] flex flex-col gap-1" style={{ color: "var(--text-muted)" }}>
               {reasons.length > 0 && <ul className="unprepared-list" title={t("着手の前に、出力の予定成果物 (expect) と完了条件を決めます")}>
-                {reasons.map((r, i) => <li key={i}>{reasonText(project, r)}</li>)}
+                {/* 理由を押すと直す場所へ: 予定成果物・出力の担当は入出力タブ、完了条件は作業範囲の編集 */}
+                {reasons.map((r, i) => <li key={i}>
+                  <button type="button" className="unprepared-list__item" onClick={() => { if (r.kind === "missing-acceptance") setScopeEditing(true); else setTab("io"); }}
+                    title={r.kind === "missing-acceptance" ? t("作業範囲を編集") : t("入出力")}>{reasonText(project, r)}</button>
+                </li>)}
               </ul>}
               {missing.length > 0 && <div>{t("待ち: {names}", { names: missing.join(", ") })}</div>}
             </div>

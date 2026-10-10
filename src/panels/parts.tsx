@@ -4,7 +4,7 @@
  */
 import { useEffect, useRef, useState } from "react";
 import { addPort, createArtifact, inputGroupsOf, isInputNameLocked, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort } from "../model/graph";
-import type { Artifact, Project } from "../model/types";
+import type { Artifact, ExpectKind, Project } from "../model/types";
 import { setInputAnyOf } from "../model/branch";
 import { ROOT_ID } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
@@ -63,6 +63,24 @@ export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add
 
 /** 詳細を開いた入出力の id (ページを開いている間、タブやボックスを移っても開いたままにするための記憶) */
 const OPEN_PORTS = new Set<string>();
+
+/** 予定成果物の種類 (CLI の port --expect と同じ一覧) */
+const EXPECT_KINDS: ExpectKind[] = ["file", "dir", "url", "doc", "note", "decision", "result"];
+
+/**
+ * 出力の予定成果物を書く / 消す
+ * Input : p = 計画, portId = 出力ポート, kind = 種類 ("" なら消す), hint = 見当 (空なら種類だけ覚える。種類が無ければ消す)
+ * Output: 更新した計画。種類が空なら expect を消す (ボックスは「要具体化」に戻る)
+ */
+function setExpect(p: Project, portId: string, kind: ExpectKind | "", hint: string): Project {
+  const port = p.ports[portId];
+  if (!port) return p;
+  if (!kind) {
+    const { expect: _drop, ...rest } = port; void _drop;
+    return { ...p, ports: { ...p.ports, [portId]: rest as typeof port } };
+  }
+  return updatePort(p, portId, { expect: { kind, hint: hint.trim() } });
+}
 
 /**
  * ブロックの入力 (または出力) ポートの一覧
@@ -151,6 +169,18 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                 ) : (
                   <DebouncedText className="input" placeholder={t("形式・制約 (任意。例: Markdown、PNG 1920x1080、API は OpenAPI 3)")} value={q.description} disabled={readonly}
                     onCommit={(v) => apply((p) => updatePort(p, q.id, { description: v }))} />
+                )}
+                {/* 予定成果物 (expect): 出力だけ。着手の前に「何ができるか」を種類と見当 (パスや題名) で決める。空にすると消え、ボックスは「要具体化」に戻る */}
+                {direction === "out" && !q.branchOption && (
+                  <div className="flex items-center gap-2 text-[12px] expect-field" title={t("着手の前に、出力の予定成果物 (expect) と完了条件を決めます")}>
+                    <select className="input input-plain" style={{ width: 96, fontSize: 11 }} aria-label={t("予定成果物の種類")} value={q.expect?.kind ?? ""} disabled={readonly}
+                      onChange={(e) => apply((p) => setExpect(p, q.id, e.target.value as ExpectKind | "", q.expect?.hint ?? ""))}>
+                      <option value="">{t("予定成果物")}</option>
+                      {EXPECT_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+                    </select>
+                    <DebouncedText className="input input-plain flex-1" placeholder={t("パスの見当や題名 (例: src/auth/callback.ts)")} value={q.expect?.hint ?? ""} disabled={readonly || !q.expect?.kind}
+                      onCommit={(v) => apply((p) => setExpect(p, q.id, q.expect?.kind ?? "", v))} />
+                  </div>
                 )}
                 {direction === "in" && !q.promotedFrom && (
                   <div className="flex items-center gap-2 text-[12px]">

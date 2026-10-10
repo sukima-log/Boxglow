@@ -90,4 +90,7 @@ export const parts: Record<string, string> = {
 , "AI がまだ読んでいない回答。読まれるまでここに残ります": "Answers the AI has not read yet. They stay here until it does"
 , "作業中のボックスはありません": "No boxes are being worked on"
 , "未着手のボックス (着手できるものから)": "Boxes not started (ready ones first)"
+, "予定成果物の種類": "Deliverable kind"
+, "予定成果物": "Deliverable"
+, "パスの見当や題名 (例: src/auth/callback.ts)": "A path or title (e.g. src/auth/callback.ts)"
 };

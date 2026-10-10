@@ -1802,4 +1802,6 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 /* 右パネルの要具体化の一覧 (着手の前に決めること)。注意色の点で区切る */
 .unprepared-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; color: var(--accent); }
 .unprepared-list li::before { content: "\25CF"; font-size: 8px; margin-right: 6px; vertical-align: 2px; }
+.unprepared-list__item { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.unprepared-list__item:hover { text-decoration-style: solid; }
 .task-table__unprepared { color: var(--accent); font-weight: 600; }
