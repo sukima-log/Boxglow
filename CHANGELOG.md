@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased (next: 0.6.1 / extension 0.5.1)
+
+_Fixes and small improvements found after 0.6.0 go here._
+
 ## 0.6.0 (2026-10-11)
 
 Goes with the VS Code extension 0.5.0. Update the CLI, `serve` and the extension together. The hosted sync server was updated on 2026-10-08 (plan list, deletion and restore); older clients keep working with it.

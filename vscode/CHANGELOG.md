@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased (next: 0.5.1)
+
+_Fixes found after 0.5.0 go here._
+
 ## 0.5.0
 
 - Follows boxglow 0.6.0. Update together with the CLI and `serve`.
