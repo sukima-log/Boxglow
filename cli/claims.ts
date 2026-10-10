@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { t } from "../src/i18n/core";
 import { fromJSON, toJSON, findBlock, isHumanActor } from "../src/model/graph";
 import type { Project } from "../src/model/types";
-import { rejectForeignClaim, activeClaim, covers, acquireClaim, checkClaimWrite, claimFootprint, claimsEnabled, claimToken, releaseClaim, renewClaims, requireClaim, validateClaims, type ClaimIdentity } from "../src/model/claims";
+import { rejectForeignClaim, activeClaim, covers, acquireClaim, checkClaimWrite, claimFootprintDetail, claimsEnabled, claimToken, releaseClaim, renewClaims, requireClaim, validateClaims, type ClaimIdentity } from "../src/model/claims";
 
 /** rootは受け持ちの操作だけで明示的に参照する。一般の検索対象は増やさない。 */
 export const findClaimBlock=(p:Project,ref:string)=>ref==="root"?{block:p.blocks.root,candidates:[]}:findBlock(p,ref);
@@ -59,7 +59,12 @@ export function prepareClaimSave(current: string|null, proposed: string, request
     proof.tokens=proof.tokens.filter(token=>{try{return JSON.parse(token)[0]!==id;}catch{return true;}});
     if(!inherited) proof.tokens.push(claimToken(id,checked.claims![id]));
   }
-  const ids=claimFootprint(before,after);
+  const { ids, layoutOnly } = claimFootprintDetail(before,after);
+  // 自動の配置 (重なりの解消) で押されただけのボックスを他の実行が受け持っているときは、何が原因で保存できないかを説明する
+  for (const pushed of layoutOnly) {
+    const held = Object.entries(before.claims??{}).find(([root,c]) => activeClaim(c,now) && !(c.instanceId===who.instanceId && c.actor===who.actor) && covers(before,root,c,pushed));
+    if (held) throw new Error(t("「{title}」の変更で大きさが変わり、自動の配置が {pushed} を動かします。{pushed} は他の実行 ({actor} / {instance}) が受け持っているため保存できません。相手が解放するまで待つか、別のボックスへ進んでください (他者の受領証は使わないでください)", { title: id ? before.blocks[id]?.title ?? id : "", pushed: before.blocks[pushed]?.key ?? pushed, actor: held[1].actor, instance: held[1].instanceId }));
+  }
   // no-opでも完了・解除・延長は必ず世代と期限を照合する。
   if(id && ["start","claim","done","leave","checkpoint","claim-renew","set","port","artifact","ask","answer","ack","reopen","decision","blocked","review","scope","split","split-ok","box-ok","remove","move","layout","tidy"].includes(command)) ids.add(id);
   const result=checkClaimWrite(checked,ids,proof,now);

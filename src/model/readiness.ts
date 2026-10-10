@@ -43,6 +43,8 @@ export interface Readiness {
   unprepared: UnpreparedReason[];
   /** 入力待ち・分岐待ちの理由 (既存の waitingFor。空ならそろっている) */
   waiting: string[];
+  /** 見送り中の案内 (選ばなかった道。今は作業不要。選択が変われば準備を確かめ直す) */
+  advice?: string;
   /**
    * まとめ: skipped = 見送り, branch-waiting = 分岐待ち, unprepared = 要具体化, waiting = 入力待ち, ready = 着手できる,
    * none = 判定の対象外 (最上位・プロジェクトのボックス・分岐・合流)
@@ -130,6 +132,8 @@ export function readiness(p: Project, blockId: string): Readiness {
     else if (waiting.length > 0) state = "waiting";
     else state = "ready";
   }
+  // 見送り (選ばなかった道) のボックスは今は作業不要。具体化の理由や次の一手を出して作業を誘わない
+  if (state === "skipped") return { outputs, own, unprepared: [], waiting: [], state, advice: t("見送り中 (選ばなかった分岐の道) です。今は作業不要です。分岐の答えが変われば、準備を確かめ直してください") };
   return { outputs, own, unprepared, waiting, state };
 }
 

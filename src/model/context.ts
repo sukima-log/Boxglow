@@ -4,6 +4,7 @@
  * 入出力の条件・成果物・引き継ぎメモを集める。CLI の context と、確認トークン (cli/context.ts) の元になる
  */
 import { ancestorsOf, incomingEdges, isInputReady, isSourceReady, portsOf } from "./graph";
+import { branchState } from "./branch";
 import { freshnessText, descriptionReminder } from "./workflow";
 
 import { t } from "../i18n/core";
@@ -136,6 +137,7 @@ export function briefContext(p: Project, blockId: string) {
   const shownPorts = new Set<string>();
   // 並びは画面と同じ (portsOf の順)。id 順だと、毎回の並びが作った順と合わない
   const targetPorts = [...portsOf(p, blockId, "in"), ...portsOf(p, blockId, "out")];
+  const gone = branchState(p).rejectedInputs;
   const inputs = targetPorts.filter((port) => port.direction === "in").map((port) => {
     // 供給元をさかのぼる。親の入力 (境界) を通ってくる線は中継なので、その先の、実際に出力を持つボックスまでたどる
     // (中継の先に線が無ければ、その親の入力そのものが供給元。外から渡された資料が付いていることがある)
@@ -186,10 +188,13 @@ export function briefContext(p: Project, blockId: string) {
     trace(port.id, "outer", new Set([port.id]));
     // 用意できているかは、画面の印・着手の判定 (missingRequiredInputs) と同じ関数で決める
     const ready = isInputReady(p, port.id);
+    // 見送りの道 (選ばなかった分岐) から来る入力は、もう届かない。合流の入力なら「不足」に数えない (着手の判定 waitingFor と同じ扱い)
+    const skippedPath = gone.has(port.id);
     return {
       name: port.name, description: port.description, required: port.required, artifacts: port.artifacts, sources, ready
-      // 不足: 必須の入力なのに、用意できていない (供給元が未完了・つながっていない・資料が付いていない)
-    , missing: !!port.required && !ready
+      // 不足: 必須の入力なのに、用意できていない (供給元が未完了・つながっていない・資料が付いていない)。見送りの道からの入力は除く
+    , missing: !!port.required && !ready && !skippedPath
+    , ...(skippedPath ? { skippedPath: true } : {})
     };
   });
   const outputs = targetPorts.filter((port) => port.direction === "out").map((port) => ({ name: port.name, description: port.description, artifacts: port.artifacts }));

@@ -267,9 +267,10 @@ export const cli: Record<string, string> = {
 , "根拠: 何を確認したか": "Basis: what you checked"
 , "着手準備": "readiness"
 , "着手準備を評価したと申告し、根拠を残す。材料や上流の分岐の答えが変わると古くなる": "Record that you reviewed the box's readiness, with your basis. It goes stale when the material or an upstream branch answer changes"
-, "答えで後の作業が分かれるなら --branch で分岐にできます": "If the answer changes the work that follows, --branch turns the box into a branch"
 , "検査: 必ず直す {errors} 件 / 着手の前に {later} 件 / 見直し候補 {reviews} 件": "Lint: must fix {errors} / before starting {later} / review {reviews}"
 , "着手の前に埋める (まだ始めていないボックス。今回着手する分だけでよい)": "Fill in before starting (boxes not started yet; only the ones you start now)"
 , "検査: 必ず直す {errors} 件 / 着手の前に {later} 件 / 見直し候補 {reviews} 件 (boxglow lint で確認)": "Lint: must fix {errors} / before starting {later} / review {reviews} (see boxglow lint)"
 , "追加: {key} 「{title}」(id: {id})": "Added: {key} \"{title}\" (id: {id})"
+, "答えで後の作業が排他的に分かれるなら --branch で分岐にできます (優先順位や好みを聞くだけなら、このままでよい)": "If the answer splits the following work into exclusive paths, --branch turns the box into a branch (asking about priority or preference needs no branch)"
+, "元の出力「{name}」は 1 つ目の道「{option}」になりました (線は残ります)。成果物の意味の出力は、各道の先のボックスで持ちます": "The original output \"{name}\" became the first path \"{option}\" (its wires stay). The deliverable-type output now belongs to the boxes on each path"
 };

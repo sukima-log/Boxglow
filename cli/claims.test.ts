@@ -158,8 +158,9 @@ it("overview: 拡大の押し出しも受け持ち判定に含み、範囲外な
   const before = readFileSync(f.file, "utf8");
   const changed = f.cli("set", "alpha", "--title", "long title ".repeat(16), ...actor, "--claim-token", receipt(own.stdout).token);
   expect(changed.status).toBe(1);
-  expect(changed.stderr).toContain("Another instance holds this claim:");
-  expect(changed.stderr).toContain("(claude-code)");
+  // 押し出しが原因で保存できないことを、何が何を動かすかまで説明する
+  expect(changed.stderr).toMatch(/would move|動かします/);
+  expect(changed.stderr).toContain("claude-code");
   expect(readFileSync(f.file, "utf8")).toBe(before);
 });
 

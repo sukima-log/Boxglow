@@ -53,4 +53,5 @@ export const claims: Record<string,string> = {
   ,"ほかの AI は、受け持ち中のボックスを書き換えません。解除はボックスの「担当」タブから": "Other agents leave a claimed box alone. To release a claim, open the box's Owner tab"
   ,"残り {min} 分": "{min} min left"
   ,"同じ名前の別の実行です。自分の再起動前の実行とは限りません。他者の実行IDや受領証は使わないでください。": " This is a different instance of the same actor. It is not necessarily your own instance from before a restart. Do not use another instance's ID or receipt."
+  ,"「{title}」の変更で大きさが変わり、自動の配置が {pushed} を動かします。{pushed} は他の実行 ({actor} / {instance}) が受け持っているため保存できません。相手が解放するまで待つか、別のボックスへ進んでください (他者の受領証は使わないでください)": "The change to \"{title}\" resizes it, and automatic layout would move {pushed}. {pushed} is held by another instance ({actor} / {instance}), so this cannot be saved. Wait until it is released, or move on to another box (never use another instance's receipt)"
 };

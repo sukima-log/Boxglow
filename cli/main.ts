@@ -234,6 +234,7 @@ function readinessSummary(p: Project, blockId: string) {
   const parent = b?.parentId ? p.blocks[b.parentId] : undefined;
   return {
     state: r.state
+  , ...(r.advice ? { advice: r.advice } : {})
   , ...(b?.splitBy ? { splitBy: b.splitBy } : {})
   , ...(parent?.splitBy ? { parentSplitBy: parent.splitBy } : {})
   , unprepared: r.unprepared.map((x) => reasonText(p, x))
@@ -1099,7 +1100,8 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
           if (!used.has(`${q.id}:outer`) && !q.promotedFrom) warnings.push(t(q.direction === "in" ? "{key} 「{title}」の入力「{name}」がどこにもつながっていません" : "{key} 「{title}」の出力「{name}」がどこにもつながっていません", { key: b.key ?? "", title: b.title, name: q.name })); // 入力 / 出力で文を分ける (訳しやすくするため)
           if (hasKids && !used.has(`${q.id}:inner`)) warnings.push(t(q.direction === "in" ? "{key} 「{title}」の入力「{name}」が中のボックスとつながっていません" : "{key} 「{title}」の出力「{name}」が中のボックスとつながっていません", { key: b.key ?? "", title: b.title, name: q.name }));
         }
-        if (b.status === "white" && !hasKids && portsOf(p, b.id, "out").every((q) => q.artifacts.length === 0)) warnings.push(t("{key} 「{title}」は Done ですが成果物がありません (--artifact で付けてください)", { key: b.key ?? "", title: b.title }));
+        // 分岐のボックスは判断の答えが根拠なので、成果物なしの警告は出さない (合流の部品も作業ではない)
+        if (b.status === "white" && !hasKids && !b.branch && !b.merge && portsOf(p, b.id, "out").every((q) => q.artifacts.length === 0)) warnings.push(t("{key} 「{title}」は Done ですが成果物がありません (--artifact で付けてください)", { key: b.key ?? "", title: b.title }));
       }
       const lines = [problems.length === 0 ? t("問題ありません") : problems.map((x) => "- " + x).join("\n")];
       if (warnings.length > 0) lines.push("", t("注意 ({count} 件。計画の穴):", { count: warnings.length }), ...warnings.map((x) => "- " + x));
@@ -1442,14 +1444,16 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
         if (!can.ok) throw new Error(can.reason === "already" ? t("「{title}」はすでに分岐です", { title: b.title }) : can.reason === "children" ? t("中にボックスを持つボックスは、分岐にできません") : t("プロジェクトのボックスは分岐にできません"));
         const r = convertToBranch(p, b.id, { question, options: opts, context: str(options.context), actor });
         save(path, r.project);
-        out(t("分岐にしました: 「{title}」 {question} (道: {options})。各道の最初のボックスへ connect してください", { title: b.title, question, options: opts.join(" / ") }));
+        const firstOut = portsOf(p, b.id, "out")[0]?.name ?? "";
+        out(t("分岐にしました: 「{title}」 {question} (道: {options})。各道の最初のボックスへ connect してください", { title: b.title, question, options: opts.join(" / ") })
+          + (firstOut && firstOut !== opts[0] ? "\n" + t("元の出力「{name}」は 1 つ目の道「{option}」になりました (線は残ります)。成果物の意味の出力は、各道の先のボックスで持ちます", { name: firstOut, option: opts[0] }) : ""));
         return;
       }
       const r = askDecision(p, b.id, actor, question, opts, str(options.context) ?? "");
       save(path, r.project);
       out(t("判断待ち: 「{title}」 {question} (decision: {id})", { title: b.title, question, id: String(r.decisionId) }));
       // 選択肢が 2 つ以上で、分岐ではないボックスへの問いなら 1 行だけ案内する (毎回は出さない)
-      if (opts.length >= 2 && !b.branch && canConvertToBranch(p, b.id).ok) out(t("答えで後の作業が分かれるなら --branch で分岐にできます"));
+      if (opts.length >= 2 && !b.branch && canConvertToBranch(p, b.id).ok) out(t("答えで後の作業が排他的に分かれるなら --branch で分岐にできます (優先順位や好みを聞くだけなら、このままでよい)"));
       return;
     }
     case "decision": {

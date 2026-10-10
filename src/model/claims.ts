@@ -109,7 +109,16 @@ export function releaseClaim(p: Project, id: string, reason: string, now: number
  * ログ・接続中エージェント・採番は操作の付随記録なので個別に受け持たない。
  */
 export function claimFootprint(before: Project, after: Project): Set<string> {
+  return claimFootprintDetail(before, after).ids;
+}
+
+/**
+ * claimFootprint の詳細版: 位置・畳みだけが変わった (自動の配置で押された) ボックスの id も分けて返す
+ * Input : before / after / Output: { ids = 受け持ちの照合の対象, layoutOnly = 押されただけで、他の実行が受け持っているため対象に入ったもの }
+ */
+export function claimFootprintDetail(before: Project, after: Project): { ids: Set<string>; layoutOnly: Set<string> } {
   const ids = new Set<string>();
+  const layoutOnly = new Set<string>();
   const owner = (id: string | null | undefined) => {
     const seen = new Set<string>();
     while (id && !before.blocks[id] && !seen.has(id)) { seen.add(id); id = after.blocks[id]?.parentId; }
@@ -123,7 +132,7 @@ export function claimFootprint(before: Project, after: Project): Set<string> {
   for (const id of new Set([...Object.keys(before.blocks),...Object.keys(after.blocks)])) {
     const a=before.blocks[id], b=after.blocks[id];
     if (same(a,b)) continue;
-    if (same(content(a),content(b)) && !held(id)) continue;
+    if (same(content(a),content(b))) { if (!held(id)) continue; layoutOnly.add(id); }
     owner(id);
     if (!a || !b || a.parentId !== b.parentId) { owner(a?.parentId); owner(b?.parentId); }
   }
@@ -152,7 +161,7 @@ export function claimFootprint(before: Project, after: Project): Set<string> {
   for (const id of new Set([...Object.keys(before.handoffs??{}),...Object.keys(after.handoffs??{})])) if (!same(before.handoffs?.[id],after.handoffs?.[id])) owner(id);
   const excluded=new Set(["blocks","ports","edges","handoffs","claims","claimPolicy","log","agents","nextKey","updatedAt","version"]);
   for (const k of new Set([...Object.keys(before),...Object.keys(after)])) if (!excluded.has(k) && !same((before as unknown as Record<string,unknown>)[k],(after as unknown as Record<string,unknown>)[k])) ids.add("root");
-  return ids;
+  return { ids, layoutOnly };
 }
 
 /** 入力: 検査対象の範囲と取得済みの受け持ち。出力: 使用した根と警告。拒否時は例外で保存を止める。 */
