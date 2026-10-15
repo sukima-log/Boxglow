@@ -28,7 +28,7 @@ afterEach(() => {
   }
   rmSync(root, { recursive: true, force: true });
 });
-it.each(["http://boxglow-sync.sukima945.workers.dev", "http://BOXGLOW-SYNC.SUKIMA945.WORKERS.DEV:443/", "https://boxglow-sync.sukima945.workers.dev../", "https://boxglow-sync.sukima945.workers.dev.../"])("製品の別表記 %s は未指定の環境トークンを使わない", server => {
+it.each(["http://sync.boxglow.app", "http://SYNC.BOXGLOW.APP:443/", "http://boxglow-sync.sukima945.workers.dev", "http://BOXGLOW-SYNC.SUKIMA945.WORKERS.DEV:443/", "https://boxglow-sync.sukima945.workers.dev../", "https://boxglow-sync.sukima945.workers.dev.../"])("製品の別表記 %s は未指定の環境トークンを使わない", server => {
   expect(isDefaultSyncServer(server)).toBe(true); expect(environmentTokenAllowed(server)).toBe(false);
 });
 it.each(["http://boxglow-sync.sukima945.workers.dev", "http://custom.example", "http://192.168.1.10", "ftp://custom.example", "not-a-url"])("同期と一覧は通信より前に拒否: %s", async server => {

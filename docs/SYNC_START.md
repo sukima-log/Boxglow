@@ -4,7 +4,7 @@
 
 ## 送り先と無効設定
 
-送り先の優先順は、CLI の `--server` / VS Code の `boxglow.sync.server`、環境変数 `BOXGLOW_SERVER`、ファイルの既存の結び付け、製品の既定値です。既定値は `https://boxglow-sync.sukima945.workers.dev` です。VS Code の `null` は未指定、空文字と `off` は明示無効です。環境変数の空文字は未指定です。環境変数で入口を無効にする場合は `BOXGLOW_SERVER=off` を使います。
+送り先の優先順は、CLI の `--server` / VS Code の `boxglow.sync.server`、環境変数 `BOXGLOW_SERVER`、ファイルの既存の結び付け、製品の既定値です。既定値は `https://sync.boxglow.app` です。VS Code の `null` は未指定、空文字と `off` は明示無効です。環境変数の空文字は未指定です。環境変数で入口を無効にする場合は `BOXGLOW_SERVER=off` を使います。
 
 ```sh
 boxglow serve --open                         # 明示開始の入口（初回の送信なし）
@@ -57,7 +57,7 @@ B（boxglow-cloud）の一覧APIを作者が配置してからAを配布する�
 
 製品の同期サーバーには、`--server`・`BOXGLOW_SERVER`・既存の結び付け・既定へのフォールバックのどの経路でも、送り先未指定の `BOXGLOW_TOKEN` を使いません。そのサーバーでサインインして保存した資格情報を使います。URLのホスト名の大文字小文字・既定ポート・末尾スラッシュを正規化して判断し、製品のホストはHTTP表記・パス違いでも保護します。ホスト名末尾のドットはすべて除いて判定します。同期の送信・一覧取得もHTTPSまたはlocalhostのHTTPに限定し、リダイレクト先へ認証情報を送りません。
 
-CIなどで製品サーバーへ環境トークンを使う場合は、`BOXGLOW_TOKEN` と一緒に `BOXGLOW_TOKEN_SERVER=https://boxglow-sync.sukima945.workers.dev` を指定します。`BOXGLOW_TOKEN_SERVER` は同期先を選ぶ設定ではなく、トークンを渡してよい送り先です。同期先URLと正規化後に一致するときだけ、保存済みサインインより優先します。空・不正・不一致なら環境トークンを使わず、保存済みサインインへ戻ります。
+CIなどで製品サーバーへ環境トークンを使う場合は、`BOXGLOW_TOKEN` と一緒に `BOXGLOW_TOKEN_SERVER=https://sync.boxglow.app` を指定します。`BOXGLOW_TOKEN_SERVER` は同期先を選ぶ設定ではなく、トークンを渡してよい送り先です。同期先URLと正規化後に一致するときだけ、保存済みサインインより優先します。空・不正・不一致なら環境トークンを使わず、保存済みサインインへ戻ります。
 
 自分のサーバーは、`BOXGLOW_TOKEN_SERVER` が未指定なら従来どおり環境トークンを使えます。これを指定した場合は、自分のサーバーでも一致を要求します。サインアウトは保存済みサインインを取り消す操作で、環境変数そのものは削除しません。
 
@@ -70,7 +70,7 @@ CIなどで製品サーバーへ環境トークンを使う場合は、`BOXGLOW_
 Windowsネイティブではサインインの保存は未対応です。通常はWSLのCLIかLinuxのVS Code拡張ホストでサインインしてください。すでに有効なトークンを安全に入手している場合は、WindowsのCLIでも、PowerShellの同じセッションに送り先とトークンを設定できます。
 
 ```powershell
-$env:BOXGLOW_TOKEN_SERVER = "https://boxglow-sync.sukima945.workers.dev"
+$env:BOXGLOW_TOKEN_SERVER = "https://sync.boxglow.app"
 $env:BOXGLOW_TOKEN = [System.Net.NetworkCredential]::new("", (Read-Host "発行済みトークン" -AsSecureString)).Password
 boxglow whoami --server $env:BOXGLOW_TOKEN_SERVER
 boxglow sync --server $env:BOXGLOW_TOKEN_SERVER --actor human

@@ -1,6 +1,12 @@
 import { t } from "../../src/i18n/core";
 /** 認証情報の送り先をURLで判定する。選択経路や過去のbindingを許可の根拠にしない。 */
-export const DEFAULT_SYNC_SERVER = "https://boxglow-sync.sukima945.workers.dev";
+export const DEFAULT_SYNC_SERVER = "https://sync.boxglow.app";
+/**
+ * 製品の同期サーバーの以前のホスト。
+ * 2026-10-15 に独自ドメイン sync.boxglow.app に切り替えた。以前の workers.dev は同じサーバーに届き、
+ * 既に結び付けた計画や保存したサインインはそのまま使えるので、製品のホストとしての扱い (環境トークンを送らない、招待制の案内) を残す
+ */
+export const LEGACY_SYNC_HOSTS: readonly string[] = ["boxglow-sync.sukima945.workers.dev"];
 /** 入力: サーバーURL。出力: ホスト名・既定ポート・末尾スラッシュを正規化したURL、不正ならnull。 */
 export function serverIdentity(server: string): string | null {
   try {
@@ -17,7 +23,9 @@ export function isDefaultSyncServer(server: string): boolean {
     url.hostname = url.hostname.replace(/\.+$/, "");
     const product = new URL(DEFAULT_SYNC_SERVER);
     const port = (u: URL) => ["80", "443"].includes(u.port) ? "" : u.port;
-    return url.hostname === product.hostname && port(url) === port(product);
+    // 既定のホストはポートまで一致で判定 (テストでは既定を手元の http サーバーに置き換えるため)。以前のホストは通常のポートだけ
+    if (url.hostname === product.hostname) return port(url) === port(product);
+    return LEGACY_SYNC_HOSTS.includes(url.hostname) && port(url) === "";
   }
   catch { return false; }
 }

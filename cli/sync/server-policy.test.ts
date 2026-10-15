@@ -9,7 +9,7 @@ import { join } from "node:path";
 let root: string;
 beforeEach(() => { root = mkdtempSync(join(tmpdir(), "boxglow-token-policy-")); process.env.BOXGLOW_CONFIG_DIR = root; process.env.BOXGLOW_TOKEN = "foreign-test-token"; delete process.env.BOXGLOW_TOKEN_SERVER; });
 afterEach(() => { delete process.env.BOXGLOW_TOKEN; delete process.env.BOXGLOW_TOKEN_SERVER; delete process.env.BOXGLOW_CONFIG_DIR; rmSync(root, { recursive: true, force: true }); });
-it.each([DEFAULT_SYNC_SERVER, DEFAULT_SYNC_SERVER + "/", DEFAULT_SYNC_SERVER + ".", "HTTPS://BOXGLOW-SYNC.SUKIMA945.WORKERS.DEV:443/", DEFAULT_SYNC_SERVER + "/other", DEFAULT_SYNC_SERVER + "?q=1"])("製品URL %s は未指定トークンを使わない", server => {
+it.each([DEFAULT_SYNC_SERVER, DEFAULT_SYNC_SERVER + "/", DEFAULT_SYNC_SERVER + ".", "HTTPS://SYNC.BOXGLOW.APP:443/", "https://boxglow-sync.sukima945.workers.dev", "https://boxglow-sync.sukima945.workers.dev/", DEFAULT_SYNC_SERVER + "/other", DEFAULT_SYNC_SERVER + "?q=1"])("製品URL %s は未指定トークンを使わない", server => {
   expect(isDefaultSyncServer(server)).toBe(true);
   expect(environmentTokenAllowed(server)).toBe(false);
   expect(resolveToken(server)?.source).not.toBe("env");
@@ -17,7 +17,7 @@ it.each([DEFAULT_SYNC_SERVER, DEFAULT_SYNC_SERVER + "/", DEFAULT_SYNC_SERVER + "
 it("送り先が一致する専用指定だけで製品サーバーに環境トークンを使える", () => {
   saveCredentials({ server: DEFAULT_SYNC_SERVER, account: "stored", login: "stored", token: "saved-token", createdAt: new Date().toISOString() });
   expect(resolveToken(DEFAULT_SYNC_SERVER)?.source).toBe("file");
-  process.env.BOXGLOW_TOKEN_SERVER = "HTTPS://BOXGLOW-SYNC.SUKIMA945.WORKERS.DEV:443/";
+  process.env.BOXGLOW_TOKEN_SERVER = "HTTPS://SYNC.BOXGLOW.APP:443/", "https://boxglow-sync.sukima945.workers.dev", "https://boxglow-sync.sukima945.workers.dev/";
   expect(resolveToken(DEFAULT_SYNC_SERVER)?.source).toBe("env");
   for (const scope of ["", "off", "invalid", "https://other.example", DEFAULT_SYNC_SERVER + "/other", DEFAULT_SYNC_SERVER + "?q=1"]) {
     process.env.BOXGLOW_TOKEN_SERVER = scope;

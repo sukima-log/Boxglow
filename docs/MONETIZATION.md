@@ -25,7 +25,7 @@ What we will not do: features already published under MIT will not be moved behi
 
 Decided 2026-10-03: the free scope above is fixed. The paid features are still being designed (what exactly each one does and what is missing is being worked out), and nothing is sold yet.
 
-If you want to be told when Boxglow Cloud opens, leave your email here: https://boxglow.pages.dev/waitlist/ (one message when it opens, nothing else). Questions and wishes are welcome as GitHub issues too.
+If you want to be told when Boxglow Cloud opens, leave your email here: https://boxglow.app/waitlist/ (one message when it opens, nothing else). Questions and wishes are welcome as GitHub issues too.
 
 ---
 
@@ -41,4 +41,4 @@ Boxglow はオープンコアです。手元の計画ファイルで完結する
 
 約束: MIT で公開した機能を後から有料にはしません。有料版でも預かるのは boxglow.json (計画・状態・参照) だけで、ソースや文書は預かりません。
 
-案内を受け取る: https://boxglow.pages.dev/waitlist/
+案内を受け取る: https://boxglow.app/waitlist/

@@ -48,6 +48,6 @@ The diagram follows the file: when the CLI or an agent writes it, the view updat
 - Everything stays in your repository: the extension reads and writes `boxglow.json`. Nothing is uploaded unless you choose **Start syncing** (experimental sync between machines, off by default).
 - Works without an agent too: you can build and track a plan by hand.
 - The plan format, the CLI, the MCP server and the web app are open source (MIT): https://github.com/sukima-log/Boxglow
-- Web version: https://boxglow.pages.dev/
+- Web version: https://boxglow.app/
 
 Questions and bug reports: https://github.com/sukima-log/Boxglow/issues
