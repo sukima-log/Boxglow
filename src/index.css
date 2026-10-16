@@ -1115,6 +1115,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .sync-startup__signin p { margin: 0 0 8px; }
 .sync-startup__buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .home-receive .sync-startup { margin-top: 8px; }
+.home-receive__who { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; }
 /* 同期パネルのサインインの手段 (付いているものは記号、無い方は + ボタン) */
 .sync-panel__identities { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; }
 .sync-panel__identity[data-on="true"] { color: var(--text-muted); padding: 0 4px; }

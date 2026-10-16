@@ -65,7 +65,7 @@ export function SyncStartup({ status, act, unsaved, receive = false }: {
           ? <label>{t("同じフォルダ内のファイル名")}<input className="input" aria-label={t("保存ファイル名")} value={name} onChange={e => setName(e.target.value)} maxLength={128}/></label>
           : <p>{t("計画を選んだ後、保存ダイアログを開きます。")}</p>)}
    </fieldset>}
-   <p>{receive ? t("受け取る計画を選んでください。このファイルに保存して開きます。") : destination === "current" ? t("開く計画を選んでください。手元と内容が違う場合は、比較してから進みます。") : t("開く計画を選んでください。")}</p>
+   <p>{receive ? t("受け取る計画を選んでください。ここに保存して開きます。") : destination === "current" ? t("開く計画を選んでください。手元と内容が違う場合は、比較してから進みます。") : t("開く計画を選んでください。")}</p>
    {op.unsupported && <p>{t("このサーバーは計画一覧に対応していません。計画IDを指定してください。")}</p>}
    {op.projects?.map(p => <div key={p.id} className="sync-panel__row"><button className="sync-project-row btn" disabled={unsaved} onClick={() => void act({ kind: "openProject", operationId: op.operationId, projectId: p.id, destination, name })}>
     <strong>{p.name || p.id}</strong><span>{p.updatedAt ? new Date(p.updatedAt).toLocaleString() : t("更新日時不明")} · {Math.ceil(p.bytes / 1024)} KB</span>

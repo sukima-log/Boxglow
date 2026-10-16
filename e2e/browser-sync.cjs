@@ -94,6 +94,13 @@ const ROOT = path.resolve(__dirname, '..');
     check('ブラウザ同期: 別のブラウザの Home からサインインして受け取ると、その計画が開く', await page2.evaluate(() => window.boxglow.store.getState().project?.name === 'ブラウザで改名'));
     await page2.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'synced', null, { timeout: 20000 });
     check('ブラウザ同期: 受け取った計画は同期が有効で「同期済み」', (await page2.locator('.sync-chip').getAttribute('data-state')) === 'synced');
+    // Home に戻ると、サインイン中の利用者とサインアウトが出て、サインアウトできる
+    await page2.evaluate(() => window.boxglow.store.getState().closeProject());
+    await page2.locator('.home-receive__who').waitFor({ timeout: 10000 });
+    check('ブラウザ同期: Home にサインイン中の利用者が出る', (await page2.locator('.home-receive__who').textContent()).includes('browser-user'));
+    await page2.locator('.home-receive__who').getByRole('button', { name: 'サインアウト', exact: true }).click();
+    await page2.waitForFunction(() => document.querySelector('.home-receive__who') === null, null, { timeout: 10000 });
+    check('ブラウザ同期: Home からサインアウトできる', await page2.evaluate(() => window.boxglow.store.getState().syncStatus?.credentials.source === 'none'));
     await context2.close();
     // サインアウト: 印が「未サインイン」、サーバーでトークンが失効
     await page.locator('.sync-panel__details > summary').click();

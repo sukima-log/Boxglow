@@ -181,7 +181,7 @@ export const gui: Record<string, string> = {
   "別の端末で同期した計画を、ここに保存して開きます。": "Saves a plan synced from another device here and opens it.",
   "サーバーの計画を受け取る": "Receive a plan from the server",
   "サインインすると、サーバーにある自分の計画を選べます。": "Sign in to choose one of your plans on the server.",
-  "受け取る計画を選んでください。このファイルに保存して開きます。": "Choose the plan to receive. It is saved into this file and opened.",
+  "受け取る計画を選んでください。ここに保存して開きます。": "Choose the plan to receive. It is saved here and opened.",
   "ファイルを作れませんでした: {error}": "Could not create the file: {error}",
   "このアカウントのサインインの手段。もう一方を足すと、どちらでサインインしても同じアカウントになります": "Sign-in methods of this account. Add the other one and either method signs in to the same account",
   "GitHub でもサインインできるようにする": "Also allow signing in with GitHub",
