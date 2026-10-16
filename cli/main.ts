@@ -17,7 +17,8 @@ import { commitFile, describeLock, FileConflict, inspectLock, lockTokenOf, remov
 import { briefReceipt, contextReceipt, isCurrentToken, requireContext } from "./context";
 import { setupAgent } from "./setup-agent";
 import { runSyncCommand, runWatchCommand } from "./sync/command";
-import { runLogin, runLogout, runWhoami } from "./sync/login";
+import { runLinkIdentity, runLogin, runLogout, runWhoami } from "./sync/login";
+import { resolveToken } from "./sync/credentials";
 import { projectProblem } from "../src/model/validate-file";
 import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
 import { resumeSummary, resumeReport } from "../src/model/resume";
@@ -422,7 +423,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  --account <利用者の ID> = 利用者の記録が無い結び付けを、表示された利用者のものとして続ける
   sync --reconnect-restored <印> --actor human   削除記録の復元先へ結び直し、手元の未送信編集と比較する
   remote trash | delete|restore <ID> [--server URL]  削除済み一覧 / 削除・復元の確認。確定は --confirm <印> --actor human
-  login [--server <URL>] [--name <端末の名前>]   (試験中) 同期サーバーにサインインする (GitHub のアカウント。表示されたコードを、ブラウザで入力する)
+  login [--server <URL>] [--name <端末の名前>] [--add github|google]   (試験中) 同期サーバーにサインインする (GitHub のアカウント。表示されたコードを、ブラウザで入力する)。--add は、サインイン済みのアカウントに 2 つ目の手段を足す
   logout [--server <URL>] / whoami [--server <URL>]  サインアウトする (サーバー側のトークンも取り消す) / 今の利用者・端末・保存量を出す
   unlock [--remove --lock-token <印> --actor human]  残った保存ロックの状態 (持ち主・判定) を出す (読むだけ。AI も使える)。--remove は人が解除する:
                                                  この計画を開いている Boxglow を止めてから、表示された印を付けて実行する。持ち主が動いているロックは解除できない
@@ -534,7 +535,7 @@ Usage (npx boxglow <command> ...):
                                                  --account <account id> = continue a binding that has no account recorded, as the account shown
   sync --reconnect-restored <token> --actor human  Reconnect the original file to its restored plan and compare unsent edits
   remote trash | delete|restore <ID> [--server URL]  List trash / preview delete or restore; confirm with --confirm <token> --actor human
-  login [--server <URL>] [--name <device name>]  (experimental) Sign in to a sync server (GitHub account; enter the code shown in your browser)
+  login [--server <URL>] [--name <device name>] [--add github|google]  (experimental) Sign in to a sync server (GitHub account; enter the code shown in your browser). --add links a second sign-in method to the signed-in account
   logout [--server <URL>] / whoami [--server <URL>]  Sign out (also revokes the token on the server) / show the current account, devices and storage
   unlock [--remove --lock-token <token> --actor human]  Show a leftover save lock (owner and verdict; read-only, agents may use it). --remove is for a person:
                                                  stop every Boxglow that has this plan open, then run it with the token shown. A lock whose owner is running cannot be removed
@@ -1601,7 +1602,7 @@ if (argv[0] === "mcp") {
   const { options } = parseArgs(argv.slice(1));
   (async () => {
     setLang(explicitLang(options) ?? "ja");
-    const known = new Set(["server", "lang", "file", "name"]);
+    const known = new Set(["server", "lang", "file", "name", "add"]);
     const unknown = Object.keys(options).filter((k) => !known.has(k));
     if (unknown.length > 0) { console.log(t("boxglow {cmd} が知らない指定です: {list}", { cmd: argv[0], list: unknown.map((k) => "--" + k).join(", ") })); process.exitCode = 1; return; }
     // サーバー: 指定 > 環境変数 > 計画のファイルの結び付け (1 つだけのとき)
@@ -1610,6 +1611,15 @@ if (argv[0] === "mcp") {
     const { server } = selectSyncServer(file,str(options.server)?.trim() || undefined);
     if (!server) { console.log(t("サーバーが決まっていません。--server <URL> を指定してください")); process.exitCode = 1; return; }
     const out = (text: string) => console.log(text);
+    // login --add github|google: サインイン済みのアカウントに 2 つ目の手段を足す (保存したサインインのトークンで本人を確かめる)
+    const add = str(options.add);
+    if (argv[0] === "login" && add !== undefined) {
+      if (add !== "github" && add !== "google") { console.log(t("--add には github か google を指定してください")); process.exitCode = 1; return; }
+      const resolved = resolveToken(server, false);
+      if (!resolved) { console.log(t("サインインしていません。先に boxglow login でサインインしてください")); process.exitCode = 1; return; }
+      process.exitCode = await runLinkIdentity({ server, out, provider: add, token: resolved.token });
+      return;
+    }
     process.exitCode = argv[0] === "login" ? await runLogin({ server, out, deviceName: str(options.name) })
       : argv[0] === "logout" ? await runLogout({ server, out }) : await runWhoami({ server, out });
   })().catch((e) => { console.error(`[boxglow ${argv[0]}] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });

@@ -20,7 +20,7 @@ import { inspectLock } from "../file-store";
 import { syncOnce, SyncConfigurationError, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
 import { haltView, type SyncAction } from "./command";
 import { credentialsPath, readCredentials, resolveToken } from "./credentials";
-import { runGoogleLogin, runLogin, runLogout, serverProblem } from "./login";
+import { runGoogleLogin, runLinkIdentity, runLogin, runLogout, serverProblem } from "./login";
 import { bindingsOf, hashOf, normalizeServer, realFile, SyncStateUnreadable } from "./state-store";
 import { lockWatch, SyncWatcher, type WatchEvent } from "./watch";
 
@@ -319,6 +319,36 @@ export class SyncHost {
     this.emit();
   }
   /** 進行中のサインインを中止する (遅れて許可されても、トークンは保存しない) */
+  /**
+   * 2 つ目のサインイン手段を足す (本人の明示操作)。コードや URL は signIn と同じ欄に出す (link の印つき)。終わったら利用者の情報を読み直す
+   * Input : provider = 足す手段
+   * Output: なし (進み具合は status に出る)
+   */
+  linkIdentity(provider: "github" | "google"): void {
+    const resolved = this.resolveCredentials();
+    // 保存したサインイン (環境変数のトークンではない) があるときだけ。環境変数のトークンは CI 用で、手段を足す相手ではない
+    if (this.signingIn || this.support !== "ok" || !resolved || resolved.source === "env") { this.emit(); return; }
+    const token = resolved.token;
+    const entry: SignIn = { provider, cancelled: false, done: Promise.resolve(1) };
+    this.signingIn = entry;
+    this.message = undefined;
+    const lines: string[] = [];
+    entry.done = runLinkIdentity({ server: this.server, provider, token, allowEnvironmentToken: false, out: (line: string) => lines.push(line), fetch: this.doFetch, sleep: this.options.sleep
+      , cancelled: () => entry.cancelled
+      , onCode: (code) => { entry.code = { provider: "github", ...code, link: true }; this.emit(); }
+      , onUrl: (info) => { entry.code = { provider: "google", ...info, link: true }; this.emit(); } }).then((code) => {
+      if (this.signingIn === entry) {
+        this.signingIn = null;
+        // 失敗の理由 (他のアカウントで使われている等) は、サインインと同じ場所に出す。成功は、手段の一覧が変わることで分かる
+        this.message = code !== 0 && !entry.cancelled ? lines.filter((l) => !l.startsWith("  ")).at(-1) : undefined;
+      }
+      this.account = null; // 手段の一覧を読み直す
+      void this.refreshAccount().then(() => this.emit());
+      this.emit();
+      return code;
+    });
+    this.emit();
+  }
   cancelSignIn(): void {
     if (this.signingIn) this.signingIn.cancelled = true;
     this.emit();
@@ -384,7 +414,14 @@ export class SyncHost {
     if (this.credentialsGeneration() !== credentials) return;
     if (!me || typeof me.account !== "string") { this.account = { credentials, problem: problem ?? "me" }; return; }
     const signedInWith = me.signedInWith === "google" || me.signedInWith === "github" ? me.signedInWith : "github";
-    this.account = { credentials, account: { accountId: me.account, display: typeof me.login === "string" && me.login ? me.login : me.account, signedInWith } };
+    // 付いている手段の一覧 (2 つ目を足す操作の表示に使う。古いサーバーや失敗時は無し)
+    let identities: ("github" | "google")[] | undefined;
+    try {
+      const res = await this.doFetch(`${this.server}/v1/identities`, { headers: { authorization: `Bearer ${this.resolveCredentials()!.token}`, "x-boxglow-version": APP_VERSION }, redirect: "error" });
+      if (res.ok) { const list = (await res.json() as { identities?: unknown }).identities; if (Array.isArray(list)) identities = list.filter((x): x is "github" | "google" => x === "github" || x === "google"); }
+    } catch { /* 一覧は無くてもよい */ }
+    if (this.credentialsGeneration() !== credentials) return;
+    this.account = { credentials, account: { accountId: me.account, display: typeof me.login === "string" && me.login ? me.login : me.account, signedInWith, ...(identities ? { identities } : {}) } };
   }
 
   /** 計画ごとの開始操作。IDは画面の古いクリックを拒否するための印。認証情報は入れない。 */
@@ -641,6 +678,7 @@ export class SyncHost {
       case "enable": if (real) this.enable(real); break;
       case "disable": if (real) this.disable(real); break;
       case "signIn": this.signIn(action.provider, real ?? undefined); break;
+      case "linkIdentity": this.linkIdentity(action.provider); break;
       case "cancelSignIn": if (!this.signingIn?.owner || this.signingIn.owner.file === real) this.cancelSignIn(); break;
       case "signOut": await this.signOut(); break;
       case "pause": this.paused = true; break;
@@ -850,6 +888,7 @@ export function parseHostAction(text: string): HostAction | null {
     case "resume":
       return { kind: o.kind };
     case "signIn": return o.provider === "github" || o.provider === "google" ? { kind: "signIn", provider: o.provider } : null;
+    case "linkIdentity": return o.provider === "github" || o.provider === "google" ? { kind: "linkIdentity", provider: o.provider } : null;
     case "resolveGroups": {
       const resolution = parseConflictResolution(o.resolution);
       return resolution && typeof o.choiceId === "string" && o.choiceId.length <= 128

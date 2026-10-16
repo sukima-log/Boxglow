@@ -43,18 +43,22 @@ export class TestSyncServer {
   /** サインインの手順: device_code → 状態 ("pending" / "slow_down" / "denied" / "not-invited"、または許可された利用者) */
   deviceCodes = new Map<string, "pending" | "slow_down" | "denied" | "not-invited" | { account: string; login: string }>();
   /** Google の取引: id → 状態。試験が approveGoogle(id, user) で「許可された」ことにする */
-  googleTx = new Map<string, { claimHash: string; status: "pending" | "ready" | "denied"; token?: string; account?: string }>();
+  googleTx = new Map<string, { claimHash: string; status: "pending" | "ready" | "denied"; token?: string; account?: string; link?: string }>();
   /** Google のサインインを許可したことにする (トークンを発行して取引に置く) */
   approveGoogle(id: string, user: { account: string; login: string } | "denied"): void {
     const tx = this.googleTx.get(id);
     if (!tx) return;
     if (user === "denied") { tx.status = "denied"; return; }
+    // 結び付けの取引: トークンは発行せず、手段を足すだけ (link = 結び付け先の利用者)
+    if (tx.link) { const list = this.identities.get(tx.link) ?? ["github"]; if (!list.includes("google")) list.push("google"); this.identities.set(tx.link, list); tx.status = "ready"; tx.account = tx.link; return; }
     const token = `tok-${user.account}-${this.issued.size + 1}`;
     this.issued.set(token, user);
     tx.status = "ready"; tx.token = token; tx.account = user.account;
   }
   /** 発行したトークン → 利用者 (発行していないトークンは、文字列そのものを利用者の ID として扱う) */
   issued = new Map<string, { account: string; login: string }>();
+  /** 利用者 → 付いているサインインの手段 (結び付けの試験用。無ければ ["github"]) */
+  identities = new Map<string, ("github" | "google")[]>();
   /** 取り消したトークン */
   revoked = new Set<string>();
   private codes = 0;
@@ -102,9 +106,14 @@ export class TestSyncServer {
     if (req.method === "POST" && req.url === "/v1/auth/google/start") {
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(chunk as Buffer);
-      const claimHash = String((JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { claimHash?: unknown }).claimHash ?? "");
+      const startBody = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { claimHash?: unknown; link?: unknown };
+      const claimHash = String(startBody.claimHash ?? "");
       const id = `tx-${++this.codes}`;
-      this.googleTx.set(id, { claimHash, status: "pending" });
+      // 結び付け (link: true): サインイン済みのトークンの利用者を取引に控える
+      const linkBearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
+      const linkTo = startBody.link === true ? (linkBearer ? this.issued.get(linkBearer)?.account : undefined) : undefined;
+      if (startBody.link === true && !linkTo) { plain(401, { code: "unauthorized" }); return; }
+      this.googleTx.set(id, { claimHash, status: "pending", ...(linkTo ? { link: linkTo } : {}) });
       plain(200, { id, url: `https://accounts.google.com/o/oauth2/v2/auth?state=${id}`, expiresAt: new Date(Date.now() + 600_000).toISOString() });
       return;
     }
@@ -118,14 +127,21 @@ export class TestSyncServer {
       if (req.url.endsWith("cancel")) { this.googleTx.delete(String(body.id)); if (tx.status === "ready") this.revoked.add(tx.token!); plain(200, { status: tx.status === "pending" ? "cancelled" : "aborting" }); return; }
       if (tx.status === "pending") plain(200, { status: "pending" });
       else if (tx.status === "denied") { this.googleTx.delete(String(body.id)); plain(403, { code: "not-invited" }); }
+      else if (tx.link) { this.googleTx.delete(String(body.id)); plain(200, { status: "ok", linked: "google", account: tx.account }); }
       else { this.googleTx.delete(String(body.id)); plain(200, { status: "ok", token: tx.token, account: tx.account }); }
       return;
     }
     if (req.method === "POST" && req.url === "/v1/auth/device/token") {
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(chunk as Buffer);
-      const state = this.deviceCodes.get(String((JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { device_code?: unknown }).device_code));
-      if (state === undefined) plain(400, { code: "incorrect_device_code" });
+      const tokenBody = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { device_code?: unknown; link?: unknown };
+      const state = this.deviceCodes.get(String(tokenBody.device_code));
+      // 結び付け (link: true): サインイン済みの利用者に GitHub を足す (トークンは発行しない)
+      const linkBearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
+      const linkTo = tokenBody.link === true ? (linkBearer ? this.issued.get(linkBearer)?.account : undefined) : undefined;
+      if (tokenBody.link === true && !linkTo) plain(401, { code: "unauthorized" });
+      else if (linkTo && typeof state === "object") { const list = this.identities.get(linkTo) ?? ["google"]; if (!list.includes("github")) list.push("github"); this.identities.set(linkTo, list); plain(200, { status: "ok", linked: "github", login: state.login }); }
+      else if (state === undefined) plain(400, { code: "incorrect_device_code" });
       else if (state === "pending") plain(200, { status: "pending" });
       else if (state === "slow_down") plain(200, { status: "slow_down", interval: 2 });
       else if (state === "denied") plain(400, { code: "access_denied" });
@@ -146,6 +162,10 @@ export class TestSyncServer {
       res.writeHead(status, { "x-boxglow-epoch": this.epoch, "x-boxglow-account": account, "content-type": "application/json; charset=utf-8", ...headers });
       res.end(body);
     };
+    if (req.method === "GET" && req.url === "/v1/identities") {
+      send(200, JSON.stringify({ account, identities: this.identities.get(account) ?? ["github"] }));
+      return;
+    }
     if (req.method === "GET" && req.url === "/v1/me") {
       send(200, JSON.stringify({ account, login: this.issued.get(bearer ?? "")?.login ?? account, devices: [{ name: "this", current: true }]
       , usage: { projects: projects.size, contentBytes: 1_500_000 }, limits: { projects: 10, contentBytes: 200_000_000 } }));

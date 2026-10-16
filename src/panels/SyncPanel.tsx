@@ -330,6 +330,14 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
           {account ? (
             <>
               <span className="sync-panel__who">{account.display}</span>
+              {/* サインインの手段: 付いているものを記号で示し、無い方は「+」で足せる (本人の明示操作。保存したサインインのときだけ) */}
+              {account.identities && status.credentials.source === "stored" && !status.signIn && (
+                <span className="sync-panel__identities" title={t("このアカウントのサインインの手段。もう一方を足すと、どちらでサインインしても同じアカウントになります")}>
+                  {(["github", "google"] as const).map((p) => account.identities!.includes(p)
+                    ? <span key={p} className="sync-panel__identity" data-on="true">{p === "github" ? "GitHub" : "Google"} ✓</span>
+                    : <button key={p} className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "linkIdentity", provider: p })} title={p === "github" ? t("GitHub でもサインインできるようにする") : t("Google でもサインインできるようにする")}>+ {p === "github" ? "GitHub" : "Google"}</button>)}
+                </span>
+              )}
               <button className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "signOut" })}>
                 {t("サインアウト")}
               </button>
@@ -550,7 +558,7 @@ export function SignInCode({ code, onCancel }: { code: NonNullable<SyncStatus["s
   if (code.provider === "google") {
     return (
       <div className="sync-panel__signin">
-        <div>{t("ブラウザで次のページを開き、Google のアカウントで許可してください")}</div>
+        <div>{code.link ? t("Google を足す: ブラウザで次のページを開き、Google のアカウントで許可してください") : t("ブラウザで次のページを開き、Google のアカウントで許可してください")}</div>
         <a href={code.url} target="_blank" rel="noreferrer">
           {t("Google のサインインのページを開く")}
         </a>
@@ -562,7 +570,7 @@ export function SignInCode({ code, onCancel }: { code: NonNullable<SyncStatus["s
   }
   return (
     <div className="sync-panel__signin">
-      <div>{t("ブラウザで次のページを開き、コードを入力してください")}</div>
+      <div>{code.link ? t("GitHub を足す: ブラウザで次のページを開き、コードを入力してください") : t("ブラウザで次のページを開き、コードを入力してください")}</div>
       <button className="btn btn-primary btn-sm" onClick={()=>{
         // クリック内で開く。コピーできない環境でもコードを残し、認可を代行しない。
         window.open(code.verificationUrl,"_blank","noopener,noreferrer");

@@ -12,7 +12,7 @@ import { setLang } from "../../src/i18n/core";
 import { syncOnce, SyncAuthError } from "./client";
 import { runSyncCommand } from "./command";
 import { credentialsPath, CredentialsSaveFailed, CredentialsUnsafe, inspectCredentials, modeOf, readCredentials, resolveToken, saveCredentials, withCredentialsLock } from "./credentials";
-import { runLogin, runLogout, runWhoami, serverProblem } from "./login";
+import { runLinkIdentity, runLogin, runLogout, runWhoami, serverProblem } from "./login";
 import { TestSyncServer } from "./test-server";
 
 let server: TestSyncServer, root: string, lines: string[];
@@ -35,6 +35,35 @@ function login(onPoll: (n: number, code: string) => void, name = "test-pc") {
 }
 const approve = (user: { account: string; login: string }, at = 1) => (n: number, code: string) => { if (n === at) server.deviceCodes.set(code, user); };
 const ALICE = { account: "acc-alice", login: "alice" }, BOB = { account: "acc-bob", login: "bob" };
+
+describe("boxglow login --add (2 つ目のサインイン手段)", () => {
+  it("GitHub でサインイン済みのアカウントに Google を足す: 取引を link で始め、許可されると linked を受け取る。資格情報は変わらない。手段の一覧に両方が出る", async () => {
+    expect(await login(approve(ALICE))).toBe(0);
+    const before = readCredentials(server.url)!;
+    let polls = 0;
+    const code = await runLinkIdentity({ server: server.url, out, provider: "google", token: before.token, sleep: async () => {
+      // 1 回目の照会の前に、利用者が許可したことにする (取引は link つき)
+      if (++polls === 1) server.approveGoogle([...server.googleTx.keys()].at(-1)!, ALICE);
+    } });
+    expect(code).toBe(0);
+    expect(lines.join("\n")).toContain("Google を、このアカウントのサインインの手段に足しました");
+    expect(readCredentials(server.url)).toEqual(before);              // トークンは発行されず、保存も変わらない
+    expect(server.identities.get("acc-alice")).toEqual(["github", "google"]);
+    expect(server.issued.size).toBe(1);
+  });
+  it("Google のアカウントに GitHub を足す: 端末向けの手順を link で引き換える。本人確認なし (トークン無し) は 401 で失敗", async () => {
+    // Google でサインインした状態を作る (試験サーバーの issued に直接置く)
+    server.issued.set("tok-google-1", { account: "acc-g", login: "g@example.com" }); server.identities.set("acc-g", ["google"]);
+    const code = await runLinkIdentity({ server: server.url, out, provider: "github", token: "tok-google-1", sleep: async () => { server.deviceCodes.set([...server.deviceCodes.keys()].at(-1)!, { account: "ignored", login: "carol" }); } });
+    expect(code).toBe(0);
+    expect(server.identities.get("acc-g")).toEqual(["google", "github"]);
+    expect(lines.join("\n")).toContain("carol");
+    lines = [];
+    const denied = await runLinkIdentity({ server: server.url, out, provider: "github", token: "tok-unknown", sleep: async () => { server.deviceCodes.set([...server.deviceCodes.keys()].at(-1)!, { account: "x", login: "x" }); } });
+    expect(denied).toBe(1);
+    expect(lines.join("\n")).toContain("サインインが確かめられませんでした");
+  });
+});
 
 describe("boxglow login", () => {
   it("コードを表示し、許可されるまで待って、資格情報を保存する (本人だけが読める)。トークンは表示しない", async () => {

@@ -271,8 +271,18 @@ const ROOT = path.resolve(__dirname, '..');
     check('同期E2: ファイルが無い状態から画面で計画を作ると、そのファイルに保存されて開く', fs.existsSync(fileF) && JSON.parse(fs.readFileSync(fileF,'utf8')).name==='新しい端末の計画' && await pageF.evaluate(()=>window.boxglow.store.getState().source==='serve'));
     await pageF.close(); childD.kill(); childD=null;
 
-    // サインアウト → 未サインイン、資格情報が消える
+    const issuedBefore = server.issued.size;
+    // 2 つ目のサインイン手段: 欄の「+ Google」→ 許可の URL が出る → (サーバー側で許可) → 一覧に Google ✓
     await page.locator('.sync-panel__details > summary').click();
+    check('同期F: 付いている手段が記号で出て、無い方は + で足せる', (await page.locator('.sync-panel__identities').textContent()).includes('GitHub ✓') && await page.getByRole('button',{name:'+ Google',exact:true}).count()===1);
+    await page.getByRole('button',{name:'+ Google',exact:true}).click();
+    await page.getByRole('link',{name:'Google のサインインのページを開く',exact:true}).waitFor();
+    check('同期F: 足すときの案内は「Google を足す」', (await page.locator('.sync-panel__signin').textContent()).includes('Google を足す'));
+    server.approveGoogle([...server.googleTx.keys()].at(-1), { account: 'acc-e2e', login: 'e2e-user' });
+    await page.waitForFunction(() => document.querySelector('.sync-panel__identities')?.textContent.includes('Google ✓'), null, { timeout: 15000 });
+    check('同期F: 足した後は両方に記号が付き、トークンは増えない', (await page.locator('.sync-panel__identities').textContent()).includes('Google ✓') && server.issued.size === issuedBefore && await chipText('同期済み'));
+
+    // サインアウト → 未サインイン、資格情報が消える
     await page.getByRole('button', { name: 'サインアウト', exact: true }).click();
     check('同期: サインアウトで、印が「未サインイン」', await chipText('未サインイン'));
     check('同期: サインアウトで、トークンがサーバー側で取り消される', server.revoked.has(token));

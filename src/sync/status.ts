@@ -43,7 +43,9 @@ export interface SyncStatus {
   /** この環境で、サインインを保存できるか (Windows で動く裏方は、まだ保存できない) */
   support: "ok" | "unsupported-platform";
   /** 資格情報の出どころと、確かめた利用者 (トークンの値は入れない) */
-  credentials: { source: "env" | "stored" | "none"; account?: { accountId: string; display: string; signedInWith: "github" | "google" | "unknown" } };
+  credentials: { source: "env" | "stored" | "none"; account?: { accountId: string; display: string; signedInWith: "github" | "google" | "unknown"
+    /** このアカウントに付いているサインインの手段 (サーバーが答えたときだけ。2 つ目を足す操作の表示に使う) */
+    identities?: ("github" | "google")[] } };
   /** 常駐の同期の所有者: self = この裏方 / external = 別のプロセス / unknown = ロックの持ち主を判定できない / none = まだ取っていない */
   owner: "self" | "external" | "unknown" | "none";
   /** 今の画面のファイル (開いていなければ null) */
@@ -56,8 +58,8 @@ export interface SyncStatus {
   /** 選べる操作の無い問題と、直す場所 */
   problem?: { kind: "configuration" | "auth" | "network" | "rejected" | "state-unreadable" | "busy"; text: string; fix: "server-setting" | "credentials" | "wait" | "local-file" | "sync-state" | "rerun" };
   /** サインインの途中 (コードを表示している間) */
-  signIn?: { provider: "github"; userCode: string; verificationUrl: string; expiresAt: string }
-         | { provider: "google"; url: string; expiresAt: string };
+  signIn?: ({ provider: "github"; userCode: string; verificationUrl: string; expiresAt: string }
+         | { provider: "google"; url: string; expiresAt: string }) & { link?: boolean };
   /** 送信先は開始前にも表示する。省略は旧ホスト。 */
   server?: string;
   isDefaultServer?: boolean;
@@ -101,6 +103,8 @@ export type HostAction =
   | {kind:"confirmLifecycle";choiceId:string}
   | { kind: "enable" } | { kind: "disable" }
   | { kind: "signIn"; provider: "github" | "google" } | { kind: "cancelSignIn" } | { kind: "signOut" }
+  /** 2 つ目のサインイン手段を、サインイン済みのアカウントに足す (コードや URL は signIn と同じ欄に出る) */
+  | { kind: "linkIdentity"; provider: "github" | "google" }
   | { kind: "bind" } | { kind: "syncNow" }
   | { kind: "choose"; choiceId: string }
   | { kind: "resolveGroups"; choiceId: string; resolution: ConflictResolution }

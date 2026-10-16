@@ -115,6 +115,91 @@ export async function runGoogleLogin(o: Omit<LoginOptions, "onCode"> & { onUrl?:
   }
 }
 
+/**
+ * 2 つ目のサインイン手段を、サインイン済みのアカウントに足す (本人の明示操作。トークンは発行されず、保存済みの資格情報はそのまま)
+ *   GitHub: 端末向けの手順 (コードを表示) を、サインイン済みのトークンを添えて link: true で引き換える
+ *   Google: 認可の URL を link: true で始め、claim で「足した」結果を受け取る
+ * Input : o = 送り先・表示・通信・中止の合図 (LoginOptions と同じ) + provider = 足す手段 + token = サインイン済みのトークン
+ * Output: 終了コード (0 = 足した。既に付いていても 0)。失敗の理由は out に出る
+ */
+export async function runLinkIdentity(o: LoginOptions & { provider: "github" | "google"; token: string; onUrl?: (info: { url: string; expiresAt: string }) => void }): Promise<number> {
+  const { out } = o;
+  const doFetch = o.fetch ?? fetch;
+  const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const problem = serverProblem(o.server);
+  if (problem) { out(problem); return 1; }
+  const server = normalizeServer(o.server);
+  const auth = headers(o.token);
+  // 共通の失敗の表示 (409 = 他のアカウントに付いている手段)
+  const failed = (status: number, code: string): number => {
+    if (status === 409 && code === "identity-in-use") out(t("その {provider} のアカウントは、別の Boxglow のアカウントで使われています。結び付けられません", { provider: o.provider === "google" ? "Google" : "GitHub" }));
+    else if (status === 401) out(t("サインインが確かめられませんでした。サインインし直してから、もう一度実行してください"));
+    else if (status === 503) out(t("サーバーは保守中です。しばらくしてから、もう一度実行してください"));
+    else out(t("結び付けられませんでした (サーバーの応答: {status} {code})", { status, code }));
+    return 1;
+  };
+  try {
+    if (o.provider === "github") {
+      let started: { device_code: string; user_code: string; verification_uri: string; interval: number; expires_in: number };
+      try {
+        const res = await doFetch(`${server}/v1/auth/device`, { method: "POST", headers: headers(), redirect: "error" });
+        if (!res.ok) return failed(res.status, "");
+        started = await res.json() as typeof started;
+        if (typeof started.device_code !== "string" || typeof started.user_code !== "string") throw new Error("bad response");
+      } catch (e) { out(t("サーバーと通信できませんでした: {message}", { message: e instanceof Error ? e.message : String(e) })); return 1; }
+      out(t("ブラウザで次のページを開き、コードを入力してください (GitHub のアカウントで許可します):"));
+      out(`  ${started.verification_uri}`);
+      out(t("  コード: {code}", { code: started.user_code }));
+      let interval = Math.max(1, Number(started.interval) || 5);
+      const deadline = Date.now() + Math.max(1, Number(started.expires_in) || 900) * 1000;
+      o.onCode?.({ userCode: started.user_code, verificationUrl: started.verification_uri, expiresAt: new Date(deadline).toISOString() });
+      for (;;) {
+        await sleep(interval * 1000);
+        if (o.cancelled?.()) { out(t("結び付けを中止しました")); return 1; }
+        if (Date.now() > deadline) { out(t("コードの期限が切れました。もう一度実行してください")); return 1; }
+        let res: Response;
+        try { res = await doFetch(`${server}/v1/auth/device/token`, { method: "POST", headers: auth, redirect: "error", body: JSON.stringify({ device_code: started.device_code, link: true }) }); } catch { continue; }
+        if (res.status === 429 || res.status === 502) continue;
+        const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+        if (res.status === 200 && body.status === "pending") continue;
+        if (res.status === 200 && body.status === "slow_down") { interval = Math.max(interval, Number(body.interval) || interval + 5); continue; }
+        if (res.status === 200 && body.status === "ok" && body.linked === "github") { out(t("GitHub を、このアカウントのサインインの手段に足しました: {login}", { login: String(body.login ?? "") })); return 0; }
+        if (res.status === 400 && (body.code === "authorization_pending")) continue;
+        return failed(res.status, String(body.code ?? ""));
+      }
+    }
+    // Google
+    const { randomBytes, createHash } = await import("node:crypto");
+    const claimSecret = randomBytes(32).toString("base64url");
+    const claimHash = createHash("sha256").update(claimSecret).digest("hex");
+    let started: { id: string; url: string; expiresAt: string };
+    try {
+      const res = await doFetch(`${server}/v1/auth/google/start`, { method: "POST", headers: auth, redirect: "error", body: JSON.stringify({ claimHash, link: true }) });
+      if (!res.ok) return failed(res.status, String(((await res.json().catch(() => ({}))) as { code?: string }).code ?? ""));
+      started = await res.json() as typeof started;
+      if (typeof started.id !== "string" || typeof started.url !== "string") throw new Error("bad response");
+    } catch (e) { out(t("サーバーと通信できませんでした: {message}", { message: e instanceof Error ? e.message : String(e) })); return 1; }
+    out(t("ブラウザで次のページを開き、Google のアカウントで許可してください:"));
+    out(`  ${started.url}`);
+    o.onUrl?.({ url: started.url, expiresAt: started.expiresAt });
+    const deadline = Date.parse(started.expiresAt) || Date.now() + 600_000;
+    const cancel = async () => { try { await doFetch(`${server}/v1/auth/google/cancel`, { method: "POST", headers: headers(), redirect: "error", body: JSON.stringify({ id: started.id, claimSecret }) }); } catch { /* 中止の通知は最善努力 */ } };
+    for (;;) {
+      await sleep(3000);
+      if (o.cancelled?.()) { await cancel(); out(t("結び付けを中止しました")); return 1; }
+      if (Date.now() > deadline) { out(t("期限が切れました。もう一度実行してください")); return 1; }
+      let res: Response;
+      try { res = await doFetch(`${server}/v1/auth/google/claim`, { method: "POST", headers: headers(), redirect: "error", body: JSON.stringify({ id: started.id, claimSecret }) }); } catch { continue; }
+      if (res.status === 429 || res.status === 502 || res.status === 503) continue;
+      const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+      if (res.status === 200 && body.status === "pending") continue;
+      if (res.status === 200 && body.status === "ok" && body.linked === "google") { out(t("Google を、このアカウントのサインインの手段に足しました")); return 0; }
+      if (res.status === 403 && body.code === "identity-in-use") return failed(409, "identity-in-use");
+      return failed(res.status, String(body.code ?? ""));
+    }
+  } catch (e) { out(t("サーバーと通信できませんでした: {message}", { message: e instanceof Error ? e.message : String(e) })); return 1; }
+}
+
 export { serverProblem } from "./server-policy";
 
 const headers = (token?: string): Record<string, string> => ({ ...(token ? { authorization: `Bearer ${token}` } : {}), "content-type": "application/json", "x-boxglow-version": APP_VERSION });

@@ -182,5 +182,10 @@ export const gui: Record<string, string> = {
   "サーバーの計画を受け取る": "Receive a plan from the server",
   "サインインすると、サーバーにある自分の計画を選べます。": "Sign in to choose one of your plans on the server.",
   "受け取る計画を選んでください。このファイルに保存して開きます。": "Choose the plan to receive. It is saved into this file and opened.",
-  "ファイルを作れませんでした: {error}": "Could not create the file: {error}"
+  "ファイルを作れませんでした: {error}": "Could not create the file: {error}",
+  "このアカウントのサインインの手段。もう一方を足すと、どちらでサインインしても同じアカウントになります": "Sign-in methods of this account. Add the other one and either method signs in to the same account",
+  "GitHub でもサインインできるようにする": "Also allow signing in with GitHub",
+  "Google でもサインインできるようにする": "Also allow signing in with Google",
+  "Google を足す: ブラウザで次のページを開き、Google のアカウントで許可してください": "Add Google: open the page below in your browser and allow with your Google account",
+  "GitHub を足す: ブラウザで次のページを開き、コードを入力してください": "Add GitHub: open the page below in your browser and enter the code"
 };
