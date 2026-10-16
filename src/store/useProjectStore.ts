@@ -159,6 +159,13 @@ interface State {
   vscodeFile: { state: "waiting" | "empty" | "invalid" | "timeout"; name: string; error?: string } | null;
   /** VS Code の中: 空のファイルに、名前を付けて計画を作る (作った計画は、そのファイルに保存される) */
   createInVsCode: (name: string) => void;
+  /**
+   * serve (?serve=1) で、ファイルがまだ無いとき (未作成のファイル名で起動した)。Home が「計画を作る / サーバーの計画を受け取る」を出す。
+   * ファイルができたら (作った・受け取った・外から置かれた) 自動で開いて null に戻る
+   */
+  serveFile: { state: "missing"; name: string } | null;
+  /** serve でファイルがまだ無いとき: 名前を付けて計画を作り、そのファイルに保存して開く */
+  createInServe: (name: string) => Promise<void>;
   /** 保存の衝突 (editorDirty = VS Code のエディタに未保存の編集があるときに受け取った。画面の基準がエディタの中身まで進んでいるので、画面では統合しない。R49-02) */
   conflict: { text: string; revision: string; paths: string[]; editorDirty?: boolean } | null;
   previewConflict: () => MergeResult | null;
@@ -765,6 +772,20 @@ export const useProjectStore = create<State>((set, get) => {
       // すぐに保存する (保存できるまでは Unsaved のまま。失敗したら、いつもの保存の失敗の帯が出る)
       void persist();
     }
+  , serveFile: null
+  , createInServe: async (name) => {
+      // ファイルがまだ無いときだけ作る (If-None-Match: *)。できたら、いつもの serve の読み込みで開く
+      if (get().serveFile?.state !== "missing") return;
+      const text = toJSON(createProject(name || t("無題のプロジェクト"))) + "\n";
+      try {
+        const response = await fetch(serveApi("api/project"), { method: "PUT", headers: { "content-type": "application/json", "if-none-match": "*" }, body: text });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      } catch (e) {
+        set({ toast: t("ファイルを作れませんでした: {error}", { error: e instanceof Error ? e.message : String(e) }) });
+        return;
+      }
+      await get().openFromServer();
+    }
   , saveError: null
   , conflict: null
   , previewConflict: () => {
@@ -1015,6 +1036,19 @@ export const useProjectStore = create<State>((set, get) => {
       let name = "boxglow.json";
       try {
         const r = await fetch(serveApi("api/project"), { cache: "no-store" });
+        if (r.status === 404 && r.headers.get("content-type")?.includes("application/json") && ((await r.clone().json().catch(() => null)) as { code?: string } | null)?.code === "no-file") {
+          // ファイルがまだ無い: Home に「計画を作る / サーバーの計画を受け取る」を出す。
+          // ファイルができたら (作った・受け取った・外から置かれた) serve が change を流すので、そのとき開き直す。同期の状態も受け取っておく (受け取りの手順に要る)
+          stopWatching();
+          const fileName = decodeURIComponent(r.headers.get("x-boxglow-file") ?? name);
+          set({ project: null, source: "serve", serveFile: { state: "missing", name: fileName }, peerVersion: { app: r.headers.get("x-boxglow-version"), protocol: r.headers.has("x-boxglow-protocol") ? Number(r.headers.get("x-boxglow-protocol")) : null } });
+          const generation = epoch;
+          serveEvents = new EventSource(serveApi("api/events"));
+          serveEvents.addEventListener("change", () => { if (generation === epoch) void get().openFromServer(); });
+          serveEvents.addEventListener("sync", (e) => { try { get().acceptSyncStatus(JSON.parse((e as MessageEvent).data) as SyncStatus); } catch { /* 読めない通知は捨てる */ } });
+          void fetch(serveApi("api/sync"), { cache: "no-store" }).then(async (response) => { if (generation === epoch && response.ok) get().acceptSyncStatus(await response.json() as SyncStatus); }).catch(() => { /* --sync なしなら 404。受け取りの入口は出ない */ });
+          return false;
+        }
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         text = await r.text();
         revision = r.headers.get("etag") ?? "";
@@ -1033,7 +1067,7 @@ export const useProjectStore = create<State>((set, get) => {
       }
       stopWatching();
       baseText = text; serveRevision = revision;
-      set({ project: p, ephemeral: false, source: "serve", peerVersion, readonly: (new URLSearchParams(location.search).get("readonly") === "1" || new URLSearchParams(location.search).get("view") === "article"), fileName: name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+      set({ project: p, ephemeral: false, source: "serve", serveFile: null, peerVersion, readonly: (new URLSearchParams(location.search).get("readonly") === "1" || new URLSearchParams(location.search).get("view") === "article"), fileName: name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(null);
       const generation = epoch;
       let sequence = 0;

@@ -236,6 +236,41 @@ const ROOT = path.resolve(__dirname, '..');
     check('同期D: 開き直しても操作なしで同じ結び付けを再開', await pageD.evaluate(id=>window.boxglow.store.getState().syncStatus?.file?.binding?.remoteId===id,remoteId));
     await pageD.close(); childD.kill(); childD=null;
 
+    // 段階E: ファイルの無い端末で始める (未作成のファイル名で serve --sync を起動 → Home の「サーバーの計画を受け取る」→ 一覧 → そのファイルに保存して開く)
+    const fileE = path.join(tmp,'device-e','boxglow.json'); fs.mkdirSync(path.dirname(fileE));
+    childD = spawn(process.execPath,[path.join(tmp,'serve.mjs'),fileE,dist,'0',server.url],{env:{...process.env,BOXGLOW_CONFIG_DIR:path.join(tmp,'config-e'),BOXGLOW_TOKEN:token},stdio:['ignore','pipe','pipe']});
+    let logE='';childD.stdout.on('data',d=>{logE+=d;});childD.stderr.on('data',d=>{logE+=d;});
+    let portE=0; for(let i=0;i<80&&!portE;i++){portE=Number(/localhost:(\d+)\//.exec(logE)?.[1]??0);if(!portE)await page.waitForTimeout(100);}
+    if(!portE)throw new Error('serve (no file) failed: '+logE);
+    check('同期E: ファイルが無くても serve が起動し、その旨を出力する', logE.includes('ファイルはまだありません'));
+    const pageE=await browser.newPage({viewport:{width:1280,height:900}});
+    await pageE.goto(`http://localhost:${portE}/?serve=1&lang=ja`);
+    await pageE.getByRole('heading',{name:'このファイルは、まだありません',exact:true}).waitFor();
+    check('同期E: Home に「まだありません」と、作る欄・受け取る入口が出る', await pageE.getByRole('button',{name:'Create',exact:true}).count()===1 && await pageE.getByRole('button',{name:'サーバーの計画を受け取る',exact:true}).count()===1);
+    await pageE.getByRole('button',{name:'サーバーの計画を受け取る',exact:true}).click();
+    await pageE.locator('.sync-project-row').first().waitFor();
+    check('同期E: 選ぶ段階を飛ばして一覧に進み、保存先の選択は出ない', (await pageE.locator('.sync-project-row').first().textContent()).includes('同期の画面の検査') && await pageE.getByRole('radio',{name:'新しいファイル',exact:true}).count()===0);
+    if(process.env.BOXGLOW_E2E_SHOTS)await pageE.screenshot({path:path.join(process.env.BOXGLOW_E2E_SHOTS,'serve-receive-no-file.png')});
+    await pageE.locator('.sync-project-row').first().click();
+    await pageE.waitForFunction(()=>!!window.boxglow?.store.getState().project && window.boxglow.store.getState().serveFile===null,null,{timeout:15000});
+    check('同期E: 受け取った計画がそのファイルに保存され、そのまま開く', fs.existsSync(fileE) && JSON.parse(fs.readFileSync(fileE,'utf8')).id===p.id && await pageE.evaluate(()=>window.boxglow.store.getState().project.name==='同期の画面の検査'));
+    await pageE.waitForFunction(()=>window.boxglow?.store.getState().syncStatus?.file?.enabled,null,{timeout:10000});
+    check('同期E: 受け取ったファイルは同期が有効で、同じ計画に結び付く', await pageE.evaluate(id=>window.boxglow.store.getState().syncStatus?.file?.binding?.remoteId===id,remoteId));
+    await pageE.close(); childD.kill(); childD=null;
+
+    // 段階E2: ファイルが無い状態から、画面で新しい計画を作る (If-None-Match: * で作成)
+    const fileF = path.join(tmp,'device-f','plan.json'); fs.mkdirSync(path.dirname(fileF));
+    childD = spawn(process.execPath,[path.join(tmp,'serve.mjs'),fileF,dist,'0',server.url],{env:{...process.env,BOXGLOW_CONFIG_DIR:path.join(tmp,'config-f'),BOXGLOW_TOKEN:''},stdio:['ignore','pipe','pipe']});
+    let logF='';childD.stdout.on('data',d=>{logF+=d;});childD.stderr.on('data',d=>{logF+=d;});
+    let portF=0; for(let i=0;i<80&&!portF;i++){portF=Number(/localhost:(\d+)\//.exec(logF)?.[1]??0);if(!portF)await page.waitForTimeout(100);}
+    const pageF=await browser.newPage({viewport:{width:1280,height:900}});
+    await pageF.goto(`http://localhost:${portF}/?serve=1&lang=ja`);
+    await pageF.getByPlaceholder('新しい計画の名前').fill('新しい端末の計画');
+    await pageF.getByRole('button',{name:'Create',exact:true}).click();
+    await pageF.waitForFunction(()=>!!window.boxglow?.store.getState().project,null,{timeout:15000});
+    check('同期E2: ファイルが無い状態から画面で計画を作ると、そのファイルに保存されて開く', fs.existsSync(fileF) && JSON.parse(fs.readFileSync(fileF,'utf8')).name==='新しい端末の計画' && await pageF.evaluate(()=>window.boxglow.store.getState().source==='serve'));
+    await pageF.close(); childD.kill(); childD=null;
+
     // サインアウト → 未サインイン、資格情報が消える
     await page.locator('.sync-panel__details > summary').click();
     await page.getByRole('button', { name: 'サインアウト', exact: true }).click();

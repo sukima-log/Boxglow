@@ -62,6 +62,11 @@ export function startServe(opts: { file: string; port: number; dist: string; ope
 ; sync?: { server: string; host?: SyncHost; autoEnable?: boolean; restoreEnabled?: boolean; allowEnvironmentToken?: boolean } }): ReturnType<typeof createServer> {
   const { file, dist, log } = opts;
   if (!existsSync(join(dist, "index.html"))) throw new Error(t("Web アプリが見つかりません: {dist} (npm run build で dist/ を作ってください)", { dist }));
+  // ファイルがまだ無くても起動する (画面から計画を作るか、サーバーの計画を受け取って、このファイルに保存する)。置き場のフォルダは要る
+  if (!existsSync(file)) {
+    if (!existsSync(dirname(file))) throw new Error(t("フォルダがありません: {dir}", { dir: dirname(file) }));
+    log(t("ファイルはまだありません: {file} (画面から計画を作るか、サーバーの計画を受け取ると、ここに保存します)", { file }));
+  }
   const children: ReturnType<typeof createServer>[] = [];
   const clients = new Set<ServerResponse>();
   // 画面 (SSE でつながっている全員) に「ファイルが変わった」と知らせる
@@ -121,6 +126,8 @@ export function startServe(opts: { file: string; port: number; dist: string; ope
       const url = new URL(req.url ?? "/", `http://${req.headers.host}`);
       if (url.pathname === "/api/project") {
         if (req.method === "GET") {
+          // ファイルがまだ無い (未作成のファイル名で起動した): 画面は Home に「計画を作る / サーバーの計画を受け取る」を出す
+          if (!existsSync(file)) { send(404, JSON.stringify({ code: "no-file", file: basename(file) }), "application/json; charset=utf-8", { "x-boxglow-file": encodeURIComponent(basename(file)), "x-boxglow-version": APP_VERSION, "x-boxglow-protocol": String(SAVE_PROTOCOL) }); return; }
           // 中身と一緒にリビジョン (etag) を返す。画面は保存のときにこれを If-Match で送り返す
           const text = readFileSync(file, "utf8");
           send(200, text, "application/json; charset=utf-8", {
@@ -134,8 +141,10 @@ export function startServe(opts: { file: string; port: number; dist: string; ope
         if (req.method !== "PUT") throw new HttpError(405, t("このメソッドは使えません"));
         if (req.headers["content-type"]?.split(";")[0].trim().toLowerCase() !== "application/json") throw new HttpError(415, t("application/json で送ってください"));
         if (Number(req.headers["content-length"]) > MAX_BODY) throw new HttpError(413, t("計画が大きすぎます (上限 5 MiB)"));
-        const expected = req.headers["if-match"];
-        if (typeof expected !== "string") throw new HttpError(428, t("先に計画を読み、その ETag を If-Match で送ってください"));
+        // 新規作成は If-None-Match: * (ファイルがまだ無いときだけ書く)。更新は If-Match に読んだときの ETag
+        const create = req.headers["if-none-match"] === "*";
+        const expected = create ? null : req.headers["if-match"];
+        if (expected === undefined || Array.isArray(expected)) throw new HttpError(428, t("先に計画を読み、その ETag を If-Match で送ってください"));
         const text = await readBody(req);
         // 正規化の前に検査する (壊れた参照を黙って落として保存しない)。詳細は返さず、不正とだけ伝える
         try { validateProjectText(text); } catch { throw new HttpError(400, t("Boxglow の計画として正しくありません (形式・参照・つなぎ方)")); }

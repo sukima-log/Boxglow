@@ -1111,6 +1111,9 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 
 /* VS Code の中の Home: 開いているファイルのための案内だけ。長い理由 (読めない理由・閲覧専用の理由) は、折り返して全部見せる */
 .home-vscode p { overflow-wrap: anywhere; }
+/* Home の「サーバーの計画を受け取る」節 (ファイルがまだ無い / 空のとき) */
+.home-receive { margin-top: 24px; padding-top: 16px; border-top: 2px dashed var(--line); }
+.home-receive h3 { font-size: 16px; margin: 0 0 4px; }
 .home-vscode__note { padding: 8px 12px; border: 2px solid var(--line-soft); border-radius: 8px; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
 
 /* 採用デザイン: タイトル、状態、判断待ちを優先。寸法と接続点は通常/俯瞰で共通。 */

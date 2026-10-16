@@ -281,4 +281,6 @@ export const cli: Record<string, string> = {
 , "true で、そのボックスを今ここから外す": "true removes that box from now"
 , "今ここから外しました: {key} 「{title}」": "Removed from now: {key} \"{title}\""
 , "ボックス。none で消す。省略すると今の値を見る": "The box. none clears it. Omit to show the current value"
+, "ファイルはまだありません: {file} (画面から計画を作るか、サーバーの計画を受け取ると、ここに保存します)": "The file does not exist yet: {file} (create a plan from the page, or receive one from the server, and it is saved here)"
+, "フォルダがありません: {dir}": "The folder does not exist: {dir}"
 };

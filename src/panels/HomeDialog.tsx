@@ -11,6 +11,7 @@ import { useProjectStore } from "../store/useProjectStore";
 import { copyText, pickTextFile } from "../lib/download";
 import { canOpenLocalFile, lastLocalFile, pickLocalFile } from "../lib/localfile";
 import { getLang, setLang, t, useLang } from "../i18n";
+import { SyncStartup } from "./SyncStartup";
 
 /**
  * Home 画面
@@ -35,6 +36,12 @@ export function HomeDialog() {
   const createInVsCode = useProjectStore((s) => s.createInVsCode);
   const readonlyReason = useProjectStore((s) => s.readonlyReason);
   const reload = useProjectStore((s) => s.reload);
+  // serve でファイルがまだ無いとき (未作成のファイル名で起動した): 名前を付けて作るか、サーバーの計画を受け取る
+  const serveFile = useProjectStore((s) => s.serveFile);
+  const createInServe = useProjectStore((s) => s.createInServe);
+  // サーバーの計画を受け取る入口 (serve --sync / VS Code 拡張で、同期先があるときだけ出る)
+  const syncStatus = useProjectStore((s) => s.syncStatus);
+  const canReceive = !!syncStatus && syncStatus.support === "ok" && !!syncStatus.server && !!syncStatus.file && !syncStatus.file.binding;
   // VS Code の拡張の中で動いているか (一覧の計画がファイルとは別のコピーであることを明示するため)
   const inVsCode = typeof window !== "undefined" && !!window.acquireVsCodeApi;
   const [name, setName] = useState("");
@@ -97,7 +104,21 @@ export function HomeDialog() {
         {/* VS Code の中では、開いているファイルのための案内だけを出す。
             ブラウザ向けの案内 (サンプル・ブラウザ内の計画・ファイルを開く・serve) は出さない: VS Code の中の「ブラウザ内」は、
             ファイルとは別の、VS Code の中だけのコピーで、編集しても boxglow.json には保存されないため */}
-        {inVsCode ? (
+        {serveFile ? (
+          <section className="home-welcome home-vscode" aria-live="polite">
+            <h2>{t("このファイルは、まだありません")}</h2>
+            <p>{t("計画の名前を入力すると、このファイル ({file}) に計画を作ります。", { file: serveFile.name })}</p>
+            <div className="home-create">
+              <label className="sr-only" htmlFor="home-serve-name">{t("新しい計画の名前")}</label>
+              <input id="home-serve-name" className="input" autoFocus placeholder={t("新しい計画の名前")} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing && e.keyCode !== 229 && name.trim()) void createInServe(name.trim());
+              }} />
+              <button className="btn btn-primary" disabled={!name.trim()} onClick={() => void createInServe(name.trim())}>Create</button>
+            </div>
+            {canReceive && <ReceiveSection />}
+            {!canReceive && <p className="home-description">{t("サーバーにある計画を受け取るには、npx boxglow serve --sync で起動します。")}</p>}
+          </section>
+        ) : inVsCode ? (
           <section className="home-welcome home-vscode" aria-live="polite">
             {(!vscodeFile || vscodeFile.state === "waiting") && <p>{t("ファイルを読み込んでいます…")}</p>}
             {vscodeFile?.state === "empty" && <>
@@ -112,6 +133,8 @@ export function HomeDialog() {
                   <button className="btn btn-primary" disabled={!name.trim()} onClick={() => createInVsCode(name.trim())}>Create</button>
                 </div>
               )}
+              {/* サーバーにある自分の計画を、このファイルに受け取る (手元にファイルの無い端末で始めるとき) */}
+              {canReceive && !readonlyReason && <ReceiveSection />}
             </>}
             {vscodeFile?.state === "invalid" && <>
               <h2>{t("このファイルは、Boxglow の計画として読めません")}</h2>
@@ -195,5 +218,23 @@ export function HomeDialog() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * サーバーにある自分の計画を、今のファイル (まだ無い / 空) に受け取る節
+ * Input : なし (同期の状態と操作は store から取る)
+ * Output: 見出しと、受け取りの手順 (SyncStartup の受け取り専用モード) の JSX
+ */
+function ReceiveSection() {
+  const status = useProjectStore((s) => s.syncStatus);
+  const act = useProjectStore((s) => s.syncAct);
+  if (!status) return null;
+  return (
+    <section className="home-receive" aria-labelledby="home-receive">
+      <h3 id="home-receive">{t("または、サーバーの計画を受け取る")}</h3>
+      <p className="home-description">{t("別の端末で同期した計画を、このファイルに保存して開きます。")}</p>
+      <SyncStartup status={status} act={act} unsaved={false} receive />
+    </section>
   );
 }

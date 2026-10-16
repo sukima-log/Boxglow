@@ -545,7 +545,7 @@ function RestoreEntry() {
 
 /** 入力: SyncStatus の signIn (プロバイダー別の公開案内情報) と取消コールバック。
  * 出力: 認可ページへのリンク、必要ならユーザーコード、取消ボタン。トークン保存・認可の監視はホストに任せる。 */
-function SignInCode({ code, onCancel }: { code: NonNullable<SyncStatus["signIn"]>; onCancel: () => void }) {
+export function SignInCode({ code, onCancel }: { code: NonNullable<SyncStatus["signIn"]>; onCancel: () => void }) {
   const [copyFailed,setCopyFailed] = useState(false);
   if (code.provider === "google") {
     return (

@@ -371,7 +371,9 @@ export async function syncOnce(options: SyncOptions): Promise<SyncResult> {
     };
     for (let round = 0; round < 12; round++) {
       // ---- 読む: 手元のファイル ----
-      const localText = existsSync(file) ? readFileSync(file, "utf8") : null;
+      // 空 (空白だけ) のファイルは「まだ無い」と同じに扱う (空のファイルを作って開き、サーバーの計画を受け取る入口のため)
+      const rawLocal = existsSync(file) ? readFileSync(file, "utf8") : null;
+      const localText = rawLocal !== null && rawLocal.trim() === "" ? null : rawLocal;
       const local: Content | null = localText === null ? null : { hash: hashOf(localText), text: localText };
       const planId = localText === null ? null : planIdOf(localText);
       lastLocal = local?.hash ?? null;
