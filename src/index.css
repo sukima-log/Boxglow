@@ -9,6 +9,14 @@
 
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
+/* スクロールバー: 配色に合わせた細いバー (Windows の既定の灰色の太いバーを出さない)。Chrome 121+ / Firefox は標準の指定、古い WebKit は下の指定 */
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb { background: var(--line); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background-color: var(--text-muted); }
+*::-webkit-scrollbar-corner { background: transparent; }
+
 :root {
   --bg-paper: #eceef0;
   --bg-card: #fbfbfb;
@@ -1102,7 +1110,9 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 }
 @media (prefers-reduced-motion: reduce) { .btn, .bg-block { transition: none; } }
 
-.modal-backdrop:has(.home-dialog) { background: radial-gradient(ellipse at top, var(--primary-soft), var(--bg-paper) 70%); }
+.modal-backdrop:has(.home-dialog) { background: radial-gradient(ellipse at top, var(--primary-soft), var(--bg-paper) 70%); overflow: auto; align-items: flex-start; padding: 32px 16px; }
+/* (カードは切らずに全体を伸ばし、背景がスクロールする) */
+.modal-backdrop:has(.home-dialog) .home-dialog { max-height: none; overflow: visible; margin: auto; }
 
 /* 手動の更新ボタン: 読み直している間だけ、矢印を回す (動きを減らす設定では回さない) */
 @keyframes spin { to { transform: rotate(360deg); } }
