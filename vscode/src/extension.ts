@@ -10,7 +10,7 @@
  * 保存の要求には必ず requestId 付きで成功か失敗かを返す (画面は応答を待ってから「保存済み」にする)。手順の本体は save.ts
  */
 import * as vscode from "vscode";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { saveDocument, diskAccess, conflictSnapshot, saveFailureBase } from "./save";
 import { FileConflict } from "../../cli/file-store";
@@ -54,7 +54,9 @@ class BoxglowEditorProvider implements vscode.CustomTextEditorProvider {
 
   async resolveCustomTextEditor(document: vscode.TextDocument, panel: vscode.WebviewPanel): Promise<void> {
     const media = vscode.Uri.joinPath(this.context.extensionUri, "media");
-    panel.webview.options = { enableScripts: true, localResourceRoots: [media] };
+    // メモの画像の置き場 (計画のファイルの隣の boxglow.assets/)。webview から読めるように許可し、URI を画面へ渡す
+    const assetsDir = vscode.Uri.joinPath(document.uri, "..", "boxglow.assets");
+    panel.webview.options = { enableScripts: true, localResourceRoots: [media, assetsDir] };
     const html = readFileSync(join(this.context.extensionPath, "media", "index.html"), "utf8");
     const nonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
     panel.webview.html = rewriteIndexHtml(html, (rel) => panel.webview.asWebviewUri(vscode.Uri.joinPath(media, rel)).toString(), panel.webview.cspSource, nonce);
@@ -87,7 +89,22 @@ class BoxglowEditorProvider implements vscode.CustomTextEditorProvider {
     };
     const sub = vscode.workspace.onDidChangeTextDocument((e) => { if (e.document.uri.toString() === document.uri.toString() && !saving) send("update"); });
     const messages = panel.webview.onDidReceiveMessage(async (msg) => {
-      if (msg?.type === "ready") { send("load"); return; }
+      if (msg?.type === "ready") { send("load"); void panel.webview.postMessage({ type: "asset-base", base: panel.webview.asWebviewUri(assetsDir).toString() + "/" }); return; }
+      // メモに貼り付けた画像を boxglow.assets/ に保存する (名前は 1 段のファイル名だけ。同じ名前は上書きしない)
+      if (msg?.type === "save-asset") {
+        const name = typeof msg.name === "string" ? msg.name : "";
+        const reply = (path: string | null, error?: string) => { void panel.webview.postMessage({ type: "asset-saved", requestId: msg.requestId, path, error }); };
+        if (!/^[^/\\]+$/.test(name) || name.startsWith(".") || !/\.(png|jpe?g|gif|webp|svg)$/i.test(name) || typeof msg.base64 !== "string") { reply(null, t("この名前の画像は扱えません: {name}", { name })); return; }
+        try {
+          const dir = assetsDir.fsPath;
+          const target = join(dir, name);
+          if (existsSync(target)) { reply(null, t("同じ名前の画像があります: {name}", { name })); return; }
+          mkdirSync(dir, { recursive: true });
+          writeFileSync(target, Buffer.from(msg.base64, "base64"));
+          reply(`boxglow.assets/${name}`);
+        } catch (e) { reply(null, e instanceof Error ? e.message : String(e)); }
+        return;
+      }
       // 形の合わない要求は無視する (応答に使う requestId が無いものを含む)
       if (msg?.type !== "save" || typeof msg.requestId !== "string" || typeof msg.text !== "string" || typeof msg.baseText !== "string" || !Number.isInteger(msg.version)) return;
       // 失敗の文言は計画の言語で出す

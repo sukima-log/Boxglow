@@ -444,6 +444,12 @@ export function TreePanel({ project, filter, onClose }: { project: Project; filt
                   ) : null}
                 </svg>
               </span>
+              {/* 記録を開く (Obsidian / VS Code でノートを開くように、行から 1 操作で記録タブへ) */}
+              <button className="tree-row__log tree-tool" tabIndex={-1} aria-label={t("{title} の記録を開く", { title: b.title })} title={t("記録を開く")}
+                onClick={(e) => { e.stopPropagation(); select({ blockId: b.id, panelTab: "log" }); }}>
+                <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 3h10M3 6.5h10M3 10h7M3 13.5h5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                {(b.log?.length ?? 0) > 0 && <span className="tree-row__log-count">{b.log!.length}</span>}
+              </button>
               {!readonly && (
                 <button
                   className="tree-row__menu tree-tool"

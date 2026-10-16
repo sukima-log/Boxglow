@@ -16,7 +16,8 @@ import { WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
 import { isAcked as decisionIsAcked } from "../model/graph";
 import { useEffect, useState } from "react";
-import { isNow, setNow, addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, removeBlock, setCategory, setProgress, setSchedule, updateBlock, waitingFor } from "../model/graph";
+import { Markdown } from "./Markdown";
+import { addLogEntry, removeLogEntry, isNow, setNow, addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, removeBlock, setCategory, setProgress, setSchedule, updateBlock, waitingFor } from "../model/graph";
 import { saveTemplate } from "../lib/templates";
 import { actorLabel, ACTIVITY_LABEL, agoText } from "../model/report";
 import { DecisionCard, Timeline } from "./Timeline";
@@ -150,11 +151,27 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   const [scopeEditing, setScopeEditing] = useState(false);
   const [showPrompt, setShowPrompt] = useState<"plan" | "decompose" | "review" | null>(null);
   const [more, setMore] = useState(true);
+  // Notes (Markdown) を編集中か (表示を押すと編集に切り替わり、欄を離れると表示に戻る)
+  const [notesEditing, setNotesEditing] = useState(false);
+  const saveAsset = useProjectStore((s) => s.saveAsset);
+  /**
+   * 貼り付け・ドロップされた画像を boxglow.assets/ に保存し、メモの末尾に ![](boxglow.assets/...) を足す (serve / VS Code)
+   * Input : files = 貼り付け・ドロップのファイル, e = 元のイベント (画像があれば既定の動作を止める)
+   * Output: なし (保存できなければ通知が出る)
+   */
+  const pasteImages = async (files: FileList | null, e: { preventDefault: () => void }) => {
+    const images = files ? [...files].filter((f) => f.type.startsWith("image/")) : [];
+    if (images.length === 0) return;
+    e.preventDefault();
+    const lines: string[] = [];
+    for (const f of images) { const path = await saveAsset(f); if (path) lines.push(`![${f.name.replace(/\.[^.]+$/, "") || "image"}](${path})`); }
+    if (lines.length > 0) apply((p) => { const cur = p.blocks[blockId]?.description ?? ""; return updateBlock(p, blockId, { description: (cur ? cur.replace(/\n*$/, "\n\n") : "") + lines.join("\n") + "\n" }); });
+  };
   const [menu, setMenu] = useState(false);
   // 分岐に変えるダイアログを開いているか
   const [branching, setBranching] = useState(false);
   const [ownerQuery, setOwnerQuery] = useState("");
-  const [tab, setTab] = useState<"status" | "io" | "owner" | "dates" | "more">("status");
+  const [tab, setTab] = useState<"status" | "io" | "owner" | "dates" | "more" | "log">("status");
   const b = project.blocks[blockId];
   const ownerHits = ownerQuery.trim()
     ? project.members.filter((m) => m.name.toLowerCase().includes(ownerQuery.trim().toLowerCase()) && !b.assigneeIds.includes(m.id)).slice(0, 8)
@@ -218,6 +235,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   , owner: t("担当")
   , dates: t("開始日・期日・時間")
   , more: t("AI に渡す・メモ・資料")
+  , log: t("作業記録 (日付つきの Markdown。進捗・気づき・経緯)")
   };
 
   return (
@@ -261,13 +279,14 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       {descriptionReminder(b) && <p className="text-[12px] description-reminder" style={{ color: "var(--accent)" }}>{descriptionReminder(b)}</p>}
 
       {/* タブ: 一度に 1 項目だけ見せる */}
-      <div className="seg" style={{ gridTemplateColumns: "repeat(5, 1fr)" }}>
-        {([["status", t("状態")], ["io", t("入出力")], ["owner", t("担当")], ["dates", t("日程")], ["more", t("その他")]] as const).map(([id, label]) => (
+      <div className="seg" style={{ gridTemplateColumns: "repeat(6, 1fr)" }}>
+        {([["status", t("状態")], ["io", t("入出力")], ["owner", t("担当")], ["dates", t("日程")], ["log", t("記録")], ["more", t("その他")]] as const).map(([id, label]) => (
           <button key={id} className="seg__btn" data-on={tab === id} onClick={() => setTab(id)} style={{ padding: "6px 2px", fontSize: 12 }}
             title={TAB_HELP[id]}>
             {label}
             {id === "status" && (pending.length > 0 || unread.length > 0) && <span className="dot decision" style={{ marginLeft: 4, display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "var(--accent)" }} />}
             {id === "io" && <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.7 }}>{portsOf(project, blockId, "in").length}/{portsOf(project, blockId, "out").length}</span>}
+            {id === "log" && (b.log?.length ?? 0) > 0 && <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.7 }}>{b.log!.length}</span>}
           </button>
         ))}
       </div>
@@ -471,6 +490,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       </>)}
 
       {/* AI */}
+      {tab === "log" && <WorkLog project={project} blockId={blockId} readonly={readonly} apply={apply} />}
       {tab === "more" && (<>
       {/* 操作: 以前は ⋯ メニューにあったもの。見つけやすいようにタブの先頭に並べる */}
       {!readonly && (
@@ -525,8 +545,16 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           <div className="flex flex-col gap-2">
             {/* 説明が状態の変更より前のものだと分かったときだけ注記する */}
             {b.description && freshnessText(b, b.descriptionUpdatedAt, "older") && <p className="text-[11px]">{freshnessText(b, b.descriptionUpdatedAt, "older")}</p>}
-            <DebouncedText multiline className="input" placeholder={t("メモ (入力から出力をどう作るか)")} value={b.description} disabled={readonly}
-              onCommit={(v) => apply((p) => updateBlock(p, blockId, { description: v }))} />
+            {/* Markdown のメモ: 書いてあれば整形して表示し、押すと編集 (素の Markdown)。空なら最初から入力欄 */}
+            {b.description && !notesEditing && !readonly ? (
+              <div className="md-view" role="button" tabIndex={0} title={t("押すと編集")} onClick={() => setNotesEditing(true)} onKeyDown={(e) => { if (e.key === "Enter") setNotesEditing(true); }}>
+                <Markdown text={b.description} />
+              </div>
+            ) : b.description && readonly ? <Markdown text={b.description} className="md-view" /> : (
+              <DebouncedText multiline className="input md-edit" placeholder={t("メモ (Markdown で書けます: 見出し・箇条書き・表・リンク・画像)")} value={b.description} disabled={readonly} autoFocus={notesEditing}
+                onCommit={(v) => apply((p) => updateBlock(p, blockId, { description: v }))} onBlur={() => setNotesEditing(false)}
+                onPaste={(e) => void pasteImages(e.clipboardData.files, e)} onDrop={(e) => void pasteImages(e.dataTransfer.files, e)} />
+            )}
             <ArtifactsEditor artifacts={b.artifacts} readonly={readonly} addLabel="Link" onChange={(next) => apply((p) => updateBlock(p, blockId, { artifacts: next }))} />
           </div>
         )}
@@ -536,4 +564,53 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   );
 }
 
+/**
+ * 作業記録 (記録タブ): 日付・書き手つきの Markdown の項目を新しい順に並べ、下 (入力欄は上) から足す。引き継ぎメモ (handoffs) があれば先頭に出す
+ * Input : project, blockId, readonly, apply
+ * Output: 記録の一覧と入力欄の JSX
+ */
+function WorkLog({ project, blockId, readonly, apply }: { project: Project; blockId: string; readonly: boolean; apply: (fn: (p: Project) => Project) => void }) {
+  const b = project.blocks[blockId];
+  const meId = useProjectStore((s) => s.meId);
+  const me = project.members.find((m) => m.id === meId)?.name ?? "human";
+  const [draft, setDraft] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  const handoff = project.handoffs?.[blockId];
+  const entries = [...(b.log ?? [])].reverse();
+  const add = () => { const text = draft.trim(); if (!text) return; apply((p) => addLogEntry(p, blockId, me, text)); setDraft(""); };
+  const when = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(); };
+  return (
+    <section className="sec worklog" aria-label={t("作業記録")}>
+      {!readonly && (
+        <div className="worklog__new">
+          <textarea className="input md-edit" style={{ minHeight: 72 }} placeholder={t("記録を書く (Markdown 可。Ctrl+Enter で追記)")} value={draft} onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); add(); } }} />
+          <div className="worklog__actions"><button className="btn btn-primary btn-sm" disabled={!draft.trim()} onClick={add}>{t("追記")}</button></div>
+        </div>
+      )}
+      {handoff && (
+        <article className="worklog__entry worklog__entry--handoff">
+          <header className="worklog__head"><span className="worklog__by">{handoff.actor}</span><span className="worklog__at">{when(handoff.at)}</span><span className="worklog__kind">{t("引き継ぎ")}</span></header>
+          <Markdown text={handoff.note} />
+        </article>
+      )}
+      {entries.length === 0 && !handoff && <p className="muted">{t("まだ記録はありません。進捗や気づきを、日付つきで残せます (AI は boxglow log で足します)")}</p>}
+      {entries.map((e) => (
+        <article key={e.id} className="worklog__entry">
+          <header className="worklog__head">
+            <span className="worklog__by">{e.by}</span><span className="worklog__at">{when(e.at)}</span>
+            {!readonly && <span className="worklog__tools">
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditing(editing === e.id ? null : e.id)} title={t("編集")}>✎</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => { if (confirm(t("この記録を消しますか?"))) apply((p) => removeLogEntry(p, blockId, e.id)); }} title={t("削除")}>×</button>
+            </span>}
+          </header>
+          {editing === e.id ? (
+            <DebouncedText multiline className="input md-edit" value={e.text} autoFocus onBlur={() => setEditing(null)}
+              onCommit={(v) => apply((p) => { const blk = p.blocks[blockId]; if (!blk?.log) return p; return { ...p, blocks: { ...p.blocks, [blockId]: { ...blk, log: blk.log.map((x) => x.id === e.id ? { ...x, text: v } : x) } } }; })} />
+          ) : <Markdown text={e.text} />}
+        </article>
+      ))}
+    </section>
+  );
+}
 

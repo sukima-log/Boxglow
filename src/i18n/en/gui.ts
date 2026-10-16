@@ -187,5 +187,19 @@ export const gui: Record<string, string> = {
   "GitHub でもサインインできるようにする": "Also allow signing in with GitHub",
   "Google でもサインインできるようにする": "Also allow signing in with Google",
   "Google を足す: ブラウザで次のページを開き、Google のアカウントで許可してください": "Add Google: open the page below in your browser and allow with your Google account",
-  "GitHub を足す: ブラウザで次のページを開き、コードを入力してください": "Add GitHub: open the page below in your browser and enter the code"
+  "GitHub を足す: ブラウザで次のページを開き、コードを入力してください": "Add GitHub: open the page below in your browser and enter the code",
+  "メモ (Markdown で書けます: 見出し・箇条書き・表・リンク・画像)": "Notes (Markdown: headings, lists, tables, links, images)",
+  "押すと編集": "Click to edit",
+  "この種類の画像は扱えません": "This kind of image is not supported",
+  "画像を保存できませんでした: {error}": "Could not save the image: {error}",
+  "画像の保存は、npx boxglow serve か VS Code の画面でだけ使えます (URL の画像はどこでも表示できます)": "Saving images works only in npx boxglow serve or the VS Code view (images by URL show anywhere)",
+  "作業記録 (日付つきの Markdown。進捗・気づき・経緯)": "Work log (dated Markdown entries: progress, findings, context)",
+  "記録": "Log",
+  "作業記録": "Work log",
+  "記録を書く (Markdown 可。Ctrl+Enter で追記)": "Write an entry (Markdown; Ctrl+Enter to add)",
+  "追記": "Add",
+  "まだ記録はありません。進捗や気づきを、日付つきで残せます (AI は boxglow log で足します)": "No entries yet. Keep dated notes on progress and findings here (agents add them with boxglow log)",
+  "この記録を消しますか?": "Delete this entry?",
+  "{title} の記録を開く": "Open the log of {title}",
+  "記録を開く": "Open log"
 };

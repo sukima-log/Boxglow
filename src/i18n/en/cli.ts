@@ -293,4 +293,11 @@ export const cli: Record<string, string> = {
 , "Google を、このアカウントのサインインの手段に足しました": "Added Google as a sign-in method of this account"
 , "--add には github か google を指定してください": "--add takes github or google"
 , "サインインしていません。先に boxglow login でサインインしてください": "Not signed in. Run boxglow login first"
+, "この名前の画像は扱えません: {name}": "This image name is not accepted: {name}"
+, "画像がありません: {name}": "No such image: {name}"
+, "同じ名前の画像があります: {name}": "An image with this name already exists: {name}"
+, "画像が大きすぎます (上限 10 MiB)": "The image is too large (limit 10 MiB)"
+, "記録の本文を指定してください: log <block> \"<本文>\" (または --note)": "Give the entry text: log <block> \"<text>\" (or --note)"
+, "記録しました: {key} 「{title}」({by})": "Logged: {key} \"{title}\" ({by})"
+, "作業記録を 1 件足す (Markdown 可。日付と書き手が付く。進捗・気づき・経緯を自由に)": "Add a work-log entry (Markdown; dated and signed; progress, findings, context)"
 };

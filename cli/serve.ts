@@ -13,7 +13,7 @@
 import { rememberSync, syncWasEnabled } from "./sync/server-config";
 import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { existsSync, readFileSync, realpathSync, statSync, watch, type FSWatcher } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { commitFile, FileBusy, FileConflict, revisionOf } from "./file-store";
@@ -41,6 +41,21 @@ class HttpError extends Error {
  * Input : req = HTTP リクエスト
  * Output: 本文の文字列 (UTF-8)。上限超過・中断は HttpError で reject
  */
+/** メモの画像の置き場のフォルダ名 (計画のファイルの隣) と、扱う種類、1 枚の上限 */
+export const ASSETS_DIR = "boxglow.assets";
+const ASSET_MIME: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml" };
+const MAX_ASSET = 10 * 1024 * 1024;
+/** 本文をバイト列のまま読む (画像の保存用) */
+function readRawBody(req: IncomingMessage, limit: number): Promise<Buffer> {
+  return new Promise((ok, fail) => {
+    let size = 0;
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => { size += chunk.length; if (size > limit) { fail(new HttpError(413, t("画像が大きすぎます (上限 10 MiB)"))); chunks.length = 0; } else chunks.push(chunk); });
+    req.on("end", () => ok(Buffer.concat(chunks)));
+    req.on("error", fail);
+    req.on("aborted", () => fail(new HttpError(400, t("リクエストが中断されました"))));
+  });
+}
 function readBody(req: IncomingMessage, limit = MAX_BODY): Promise<string> {
   return new Promise((ok, fail) => {
     let size = 0;
@@ -177,6 +192,29 @@ export function startServe(opts: { file: string; port: number; dist: string; ope
         const ping = setInterval(() => res.write(": ping\n\n"), 25000);
         res.on("close", () => { clearInterval(ping); clients.delete(res); });
         return;
+      }
+      // ---- メモの画像の置き場: 計画のファイルの隣の boxglow.assets/ (GET で配信、PUT で保存。フォルダの外には出ない) ----
+      if (url.pathname.startsWith("/api/assets/")) {
+        const assetsDir = join(dirname(file), ASSETS_DIR);
+        const name = decodeURIComponent(url.pathname.slice("/api/assets/".length)).replace(/^boxglow\.assets\//, "");
+        // 名前はファイル名 1 段だけ (フォルダ・.. ・隠しファイルは不可)
+        if (!/^[^/\\]+$/.test(name) || name.startsWith(".") || !ASSET_MIME[extname(name).toLowerCase()]) throw new HttpError(400, t("この名前の画像は扱えません: {name}", { name }));
+        const target = join(assetsDir, name);
+        if (req.method === "GET" || req.method === "HEAD") {
+          if (!existsSync(target) || !statSync(target).isFile()) throw new HttpError(404, t("画像がありません: {name}", { name }));
+          send(200, req.method === "HEAD" ? "" : readFileSync(target), ASSET_MIME[extname(name).toLowerCase()], { "cache-control": "no-cache" });
+          return;
+        }
+        if (req.method === "PUT") {
+          const bytes = await readRawBody(req, MAX_ASSET);
+          mkdirSync(assetsDir, { recursive: true });
+          // 同じ名前があれば上書きしない (貼り付けのたびに新しい名前を付ける前提)
+          if (existsSync(target)) throw new HttpError(409, t("同じ名前の画像があります: {name}", { name }));
+          writeFileSync(target, bytes);
+          send(200, JSON.stringify({ ok: true, path: `${ASSETS_DIR}/${name}` }));
+          return;
+        }
+        throw new HttpError(405, t("このメソッドは使えません"));
       }
       // 静的ファイル (dist/)。無いパスは index.html (アプリは 1 画面)。dist の外 (.. やリンク先) は出さない
       if (req.method !== "GET" && req.method !== "HEAD") throw new HttpError(405, t("このメソッドは使えません"));

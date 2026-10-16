@@ -66,7 +66,7 @@ export function prepareClaimSave(current: string|null, proposed: string, request
     if (held) throw new Error(t("「{title}」の変更で大きさが変わり、自動の配置が {pushed} を動かします。{pushed} は他の実行 ({actor} / {instance}) が受け持っているため保存できません。相手が解放するまで待つか、別のボックスへ進んでください (他者の受領証は使わないでください)", { title: id ? before.blocks[id]?.title ?? id : "", pushed: before.blocks[pushed]?.key ?? pushed, actor: held[1].actor, instance: held[1].instanceId }));
   }
   // no-opでも完了・解除・延長は必ず世代と期限を照合する。
-  if(id && ["start","claim","done","leave","checkpoint","claim-renew","set","port","artifact","ask","answer","ack","reopen","decision","blocked","review","scope","split","split-ok","box-ok","remove","move","layout","tidy"].includes(command)) ids.add(id);
+  if(id && ["start","claim","done","leave","checkpoint","claim-renew","set","port","artifact","ask","answer","ack","reopen","decision","blocked","review","scope","split","split-ok","box-ok","remove","move","layout","tidy","log"].includes(command)) ids.add(id);
   const result=checkClaimWrite(checked,ids,proof,now);
   if(command==="claim-renew" && !result.used.size) throw new Error(t("受け持ちがありません。"));
   for(const warning of result.warnings) emit(t("受け持ちの警告: {message}",{message:warning}));

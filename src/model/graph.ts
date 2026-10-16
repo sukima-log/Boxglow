@@ -541,6 +541,24 @@ export function addBlock(
 }
 
 /** ブロックの属性を更新する (title / description / status / assigneeIds / artifacts / collapsed) */
+/**
+ * 作業記録を 1 件足す (末尾に。表示は新しい順)
+ * Input : p, blockId, by = 書き手 (人の名前 / AI の actor), text = Markdown
+ * Output: 更新した計画 (ボックスが無ければそのまま)
+ */
+export function addLogEntry(p: Project, blockId: string, by: string, text: string): Project {
+  const b = p.blocks[blockId];
+  if (!b || !text.trim()) return p;
+  const entry = { id: newId(), at: new Date().toISOString(), by, text };
+  return { ...p, blocks: { ...p.blocks, [blockId]: { ...b, log: [...(b.log ?? []), entry] } } };
+}
+/** 作業記録を 1 件消す */
+export function removeLogEntry(p: Project, blockId: string, entryId: string): Project {
+  const b = p.blocks[blockId];
+  if (!b?.log) return p;
+  const log = b.log.filter((e) => e.id !== entryId);
+  return { ...p, blocks: { ...p.blocks, [blockId]: { ...b, ...(log.length ? { log } : { log: undefined }) } } };
+}
 export function updateBlock(p: Project, blockId: string, patch: Partial<Omit<Block, "id" | "parentId" | "position">>): Project {
   const q = touch(p);
   const b = q.blocks[blockId];

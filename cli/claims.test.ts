@@ -303,3 +303,13 @@ it("今ここは start で足され、複数付けられ、done / --off / leave 
  expect(f.cli("now","none","--actor","codex").status).toBe(0);expect(f.read().now).toBeUndefined(); // none で全部消す
  expect(f.cli("start","beta","--actor","codex").status).toBe(0);expect(ids()).toEqual([beta.id]);
  expect(f.cli("leave","beta","--actor","codex").status).toBe(0);expect(f.read().now).toBeUndefined();});
+
+// ---- 作業記録 (log): 日付・書き手つきで積み上がる。--note でも本文でも ----
+it("log は日付と書き手つきの記録を積み上げる (本文の引数でも --note でも)",()=>{const f=fixture(false);
+ expect(f.cli("log","alpha","最初の記録 **太字**","--actor","codex").status).toBe(0);
+ expect(f.cli("log","alpha","--note","2 件目\n- 箇条書き","--actor","human").status).toBe(0);
+ const alpha=Object.values(f.read().blocks).find((b:any)=>b.title==="alpha") as any;
+ expect(alpha.log.map((e:any)=>[e.by,e.text])).toEqual([["codex","最初の記録 **太字**"],["human","2 件目\n- 箇条書き"]]);
+ expect(alpha.log.every((e:any)=>typeof e.id==="string" && !Number.isNaN(Date.parse(e.at)))).toBe(true);
+ expect(f.cli("log","alpha","--actor","codex").status).toBe(1); // 本文なしは失敗
+});

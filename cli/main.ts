@@ -49,7 +49,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { childrenOf, setNow, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, isInputNameLocked, normalizeInputNames, ackDecisions, isHumanActor } from "../src/model/graph";
+import { addLogEntry, childrenOf, setNow, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, isInputNameLocked, normalizeInputNames, ackDecisions, isHumanActor } from "../src/model/graph";
 import { checkStart, checkDone, descriptionReminder, scopeEntries } from "../src/model/workflow";
 import type { WorkScope, WorkflowPolicy } from "../src/model/types";
 import type { Artifact } from "../src/model/types";
@@ -408,6 +408,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   context <block> [--brief]                      ボックスのコンテキスト (親と入力元の説明・判断・入出力の条件・引き継ぎ) と確認トークン contextToken を JSON で出す
                                                  --brief = 短い形: 対象の情報は全部、親・上流は題名・状態・有効な判断・対象につながる出力だけ。省いたものの件数と取り方を出す (確認トークンは同じ)
   checkpoint <block> --note <メモ>               引き継ぎメモ (分かったこと・次の手順・未解決の点) を計画に残す。中断や引き継ぎの前に使う
+  log <block> "<本文>"                            作業記録を 1 件足す (Markdown 可。日付と書き手が付く。進捗・気づき・経緯を自由に。画面の「記録」タブと同じ)
   guard on|off                                   確認トークンの要求を有効 / 無効にする (setup-agent は有効にする)。有効な間、AI の start / done / set / split / artifact / ack /
                                                  blocked / review / leave / checkpoint は --context-token <context で得た contextToken> が要る (読んだ後に指示・回答・引き継ぎが変わっていたら拒否)。
                                                  人 (--actor human) には要求しない。AI が off にするときは --context-token が要る
@@ -520,6 +521,7 @@ Usage (npx boxglow <command> ...):
   context <block> [--brief]                      Print a box's context (descriptions, decisions, input/output contracts and handoff notes of its parents and input providers) and its contextToken as JSON
                                                  --brief = short form: everything about the box itself; parents and input providers reduced to title, status, answered decisions and the outputs feeding it; says what was left out (same contextToken)
   checkpoint <block> --note <note>               Save a handoff note (findings, next steps, unresolved questions) in the plan. Use it before an interruption or a handoff
+  log <block> "<text>"                            Add a work-log entry (Markdown; dated and signed). Progress, findings, context; same as the Log tab in the UI
   guard on|off                                   Turn the context-token requirement on / off (setup-agent turns it on). While on, an AI's start / done / set / split / artifact / ack /
                                                  blocked / review / leave / checkpoint need --context-token <contextToken from context> (rejected if instructions, answers or handoff notes changed after reading).
                                                  People (--actor human) are not asked for it. An AI needs --context-token to turn it off
@@ -927,6 +929,15 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       p.contextGuard = rest[0] === "on";
       save(path, p);
       out(t("確認トークンの要求 (guard): {state}", { state: rest[0] }));
+      return;
+    }
+    case "log": {
+      // 作業記録: 日付・書き手つきの Markdown を、ボックスに積む (進捗・気づき・経緯。引き継ぎメモとは別に残る)
+      const b = mustFind(p, rest[0]);
+      const text = (str(options.note) ?? rest.slice(1).join(" ")).trim();
+      if (!text) throw new Error(t("記録の本文を指定してください: log <block> \"<本文>\" (または --note)"));
+      save(path, addLogEntry(p, b.id, actor, text));
+      out(t("記録しました: {key} 「{title}」({by})", { key: b.key ?? "", title: b.title, by: actor }));
       return;
     }
     case "checkpoint": {

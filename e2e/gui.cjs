@@ -108,6 +108,20 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('今ここ: もう一度押すとそのボックスだけ外れ、元の今ここは残る',await page.locator('.bg-block.working-now').count()===1 && (await page.locator('.bg-block.working-now .bg-block__title').first().innerText())==='トークンを保存する');
     await page.evaluate(()=>{const s=window.boxglow.store.getState();s.select({});s.setViewScope(null);});await page.waitForTimeout(800);
 
+    // 記録タブ: Tree の行の「記録を開く」で記録タブが開き、追記すると日付・書き手つきで並ぶ。Notes は Markdown で整形される
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();const b=Object.values(s.project.blocks).find(x=>x.title==='バックエンド');s.select({blockId:b.id,panelTab:'log'});});await page.waitForTimeout(400);
+    check('記録: タブが開き、引き継ぎメモ (handoff) が先頭に出る',await page.locator('.worklog__entry--handoff').count()===1 && (await page.locator('.worklog__entry--handoff .worklog__kind').textContent())==='引き継ぎ');
+    await page.locator('.worklog__new textarea').fill('進捗: **半分**まで\n- 残り: テスト');
+    await page.locator('.worklog__new textarea').press('Control+Enter');await page.waitForTimeout(400);
+    check('記録: Ctrl+Enter で追記され、Markdown で整形されて書き手が付く',await page.locator('.worklog__entry:not(.worklog__entry--handoff)').count()===1 && await page.locator('.worklog__entry:not(.worklog__entry--handoff) strong').count()===1 && (await page.locator('.worklog__entry:not(.worklog__entry--handoff) .worklog__by').first().textContent()||'').length>0);
+    check('記録: タブに件数が出る',(await page.locator('.seg__btn[data-on="true"]').textContent()).includes('1'));
+    // Notes (その他タブ) の Markdown の表示と、押して編集
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();const b=Object.values(s.project.blocks).find(x=>x.title==='バックエンド');s.apply(p=>({...p,blocks:{...p.blocks,[b.id]:{...p.blocks[b.id],description:'# 見出し\n\n- [x] 済み\n- [ ] まだ\n\n`code`'}}}));s.select({blockId:b.id,panelTab:'more'});});await page.waitForTimeout(400);
+    check('メモ: Markdown で整形される (見出し・チェック・コード)',await page.locator('.md-view h1').count()===1 && await page.locator('.md-view li.md-task[data-done="true"]').count()===1 && await page.locator('.md-view code').count()===1);
+    await page.locator('.md-view').click();await page.waitForTimeout(300);
+    check('メモ: 押すと素の Markdown の編集欄になる',await page.locator('textarea.md-edit').count()===1 && (await page.locator('textarea.md-edit').inputValue()).startsWith('# 見出し'));
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.select({});});await page.waitForTimeout(300);
+
     // Activity の検査 (lint) のタブ: 3 組に分かれ、行を押すとボックスが選ばれる。タブの数字は必ず直すの件数
     await page.evaluate(()=>window.boxglow.store.getState().select({timeline:true}));await page.waitForTimeout(300);
     await page.locator('.panel.right .seg__btn',{hasText:'Lint'}).click();await page.waitForTimeout(300);

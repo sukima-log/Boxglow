@@ -46,7 +46,7 @@ export interface Selection {
   /** タイムライン (活動・判断・ログ) を開いているとき */
   timeline: boolean;
   /** 右パネルで開いてほしいタブ (図の札を押したときなど)。パネルが読んだら消す */
-  panelTab?: "status" | "io" | "owner" | "dates" | "more";
+  panelTab?: "status" | "io" | "owner" | "dates" | "more" | "log";
 }
 
 /** 何も選んでいない状態 */
@@ -98,6 +98,17 @@ interface State {
    * 同期の印は「接続なし」にする (古い「同期済み」を出し続けない)。つながり直すと false に戻り、状態を取り直す
    */
   syncLost: boolean;
+  /**
+   * メモの中の相対パスの画像 (boxglow.assets/...) の置き場の URL (末尾 /)。serve = api/assets/、VS Code = 拡張が渡す webview の URI。
+   * ブラウザだけ・閲覧専用のファイルでは null (相対パスの画像は代替文だけ)
+   */
+  assetBase: string | null;
+  /**
+   * メモに貼り付けた画像を、計画のファイルの隣の boxglow.assets/ に保存する (serve / VS Code のときだけ)
+   * Input : file = 画像 (Blob と名前の元)
+   * Output: Markdown に書く相対パス (boxglow.assets/<名前>)。保存できない環境・失敗なら null (通知を出す)
+   */
+  saveAsset: (file: File) => Promise<string | null>;
   /** 同期の操作を裏方へ送る (serve は POST /api/sync、VS Code は postMessage、ブラウザだけなら中の裏方)。応答の状態で syncStatus を更新する */
   syncAct: (action: HostAction) => Promise<void>;
   /** ブラウザだけの画面で、同期の裏方を作る (serve / VS Code が無いとき。App の起動時に 1 回) */
@@ -288,6 +299,8 @@ function focusBrowserSync(id: string | null): void {
 }
 /** 退避の応答を待つ (requestId → 受け取る関数) */
 const evacuateWaiters = new Map<string, (result: { hash: string; path: string; editorVersion: number | null } | null, detail: string) => void>();
+/** 画像の保存の応答待ち (VS Code。requestId → 相対パスを受け取る関数) */
+const assetWaiters = new Map<string, (path: string | null, error?: string) => void>();
 /** 文字列の SHA-256 (16 進) */
 async function sha256(text: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -667,6 +680,7 @@ export const useProjectStore = create<State>((set, get) => {
   , reloading: false
   , syncStatus: null
   , syncLost: false
+  , assetBase: null
   , editorBehind: null
   , evacuated: null
   , contentHash: async () => { const p = get().project; return p ? await sha256(toJSON(p)) : ""; }
@@ -767,6 +781,32 @@ export const useProjectStore = create<State>((set, get) => {
         const file = source === "idb" && p && !get().ephemeral ? p.id : HOME_SYNC_FILE;
         get().acceptSyncStatus(await browserHost.act(file, action));
       }
+    }
+  , saveAsset: async (file) => {
+      const { source } = get();
+      const ext = (file.name.match(/\.[A-Za-z0-9]+$/)?.[0] ?? (file.type === "image/png" ? ".png" : file.type === "image/jpeg" ? ".jpg" : file.type === "image/gif" ? ".gif" : file.type === "image/webp" ? ".webp" : "")).toLowerCase();
+      if (!ext) { set({ toast: t("この種類の画像は扱えません") }); return null; }
+      // 名前は日時 + 乱数 (貼り付けのたびに新しい名前。元の名前は残さない: 文字種の問題を避ける)
+      const name = `${new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14)}-${Math.random().toString(36).slice(2, 6)}${ext}`;
+      if (source === "serve") {
+        try {
+          const response = await fetch(serveApi(`api/assets/${name}`), { method: "PUT", headers: { "content-type": file.type || "application/octet-stream" }, body: file });
+          if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { error?: string }).error ?? `HTTP ${response.status}`);
+          return ((await response.json()) as { path: string }).path;
+        } catch (e) { set({ toast: t("画像を保存できませんでした: {error}", { error: e instanceof Error ? e.message : String(e) }) }); return null; }
+      }
+      if (source === "vscode" && vscodeApi) {
+        const requestId = `asset-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        let binary = ""; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+        return new Promise<string | null>((resolve) => {
+          assetWaiters.set(requestId, (path, error) => { if (!path) set({ toast: t("画像を保存できませんでした: {error}", { error: error ?? "" }) }); resolve(path); });
+          vscodeApi!.postMessage({ type: "save-asset", requestId, name, base64: btoa(binary) });
+          setTimeout(() => { if (assetWaiters.delete(requestId)) resolve(null); }, 60_000);
+        });
+      }
+      set({ toast: t("画像の保存は、npx boxglow serve か VS Code の画面でだけ使えます (URL の画像はどこでも表示できます)") });
+      return null;
     }
   , initBrowserSync: (server) => {
       if (browserHost) return;
@@ -1010,6 +1050,7 @@ export const useProjectStore = create<State>((set, get) => {
       stopWatching();
       baseText = toJSON(p) + "\n";
       focusBrowserSync(ephemeral ? null : p.id);
+      set({ assetBase: null });
       set({ readonlyReason: null, project: p, ephemeral, source: "idb", readonly: (new URLSearchParams(location.search).get("readonly") === "1" || new URLSearchParams(location.search).get("view") === "article"), fileName: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: ephemeral ? "none" : "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(ephemeral ? null : p.id);
       // 手動の更新: ブラウザ内の計画は、このブラウザの保存先から読み直す (別のタブで変えた内容を取り込む)。
@@ -1108,7 +1149,7 @@ export const useProjectStore = create<State>((set, get) => {
       }
       stopWatching();
       baseText = text; serveRevision = revision;
-      set({ project: p, ephemeral: false, source: "serve", serveFile: null, peerVersion, readonly: (new URLSearchParams(location.search).get("readonly") === "1" || new URLSearchParams(location.search).get("view") === "article"), fileName: name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+      set({ project: p, ephemeral: false, source: "serve", serveFile: null, assetBase: serveApi("api/assets/"), peerVersion, readonly: (new URLSearchParams(location.search).get("readonly") === "1" || new URLSearchParams(location.search).get("view") === "article"), fileName: name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(null);
       const generation = epoch;
       let sequence = 0;
@@ -1212,6 +1253,9 @@ export const useProjectStore = create<State>((set, get) => {
         if ((msg.type !== "load" && msg.type !== "update") || typeof msg.text !== "string") return;
         // 確認用の中身 (VS Code のエディタが、ディスクの最新に追い付いていない間)。編集用の基準は進めず、「エディタ待ち」として持つ
         if (msg.type === "update" && msg.fromDisk === true) { set({ editorBehind: { text: msg.text }, evacuated: null }); return; }
+        // 画像の置き場 (拡張が webview 用の URI を渡す) と、画像の保存の応答
+        if (msg.type === "asset-base") { set({ assetBase: typeof msg.base === "string" ? msg.base : null }); return; }
+        if (msg.type === "asset-saved") { const w = assetWaiters.get(msg.requestId); assetWaiters.delete(msg.requestId); w?.(typeof msg.path === "string" ? msg.path : null, typeof msg.error === "string" ? msg.error : undefined); return; }
         // エディタ待ちは、エディタの中身が受け取った最新 (R) と同じになったと確かめたときだけ解く (load / update 共通。古い版の update では解かない。R39-07)
         if (get().editorBehind) {
           if (editorCaughtUp(get().editorBehind!.text, msg.text)) set({ editorBehind: null });

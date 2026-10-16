@@ -282,7 +282,7 @@ export function DebouncedText({ value, onCommit, multiline = false, delay = 400,
   const common = {
     value: text
   , onFocus: () => { focused.current = true; }
-  , onBlur: () => { focused.current = false; commit(text); }
+  , onBlur: (e: React.FocusEvent<HTMLInputElement & HTMLTextAreaElement>) => { focused.current = false; commit(text); (rest as { onBlur?: (e: React.FocusEvent<HTMLInputElement & HTMLTextAreaElement>) => void }).onBlur?.(e); }
   , onKeyDown: (e: React.KeyboardEvent<HTMLInputElement & HTMLTextAreaElement>) => {
       if (!multiline && (e.key === "Enter" || e.key === "Escape")) { commit(text); (e.target as HTMLElement).blur(); }
       onKeyDown?.(e);

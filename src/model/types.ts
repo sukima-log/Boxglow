@@ -239,6 +239,11 @@ export interface Block {
   /** ボックスの着手準備のレビューの記録 (box-ok)。上流の分岐の答えが変わっても古くなる */
   boxReview?: { by: string; at: string; note: string; sig: string; parts: Record<string, string> };
   /** いまの活動 (無ければ null) */
+  /**
+   * 作業記録 (Redmine の注記のようなもの): 日付・書き手つきの Markdown の項目。人は画面の「記録」タブ、AI は CLI の log で足す。
+   * 進捗・気づき・経緯など、自由に書く (引き継ぎメモ handoffs は 1 つを上書きするが、こちらは積み上がる)
+   */
+  log?: { id: string; at: string; by: string; text: string }[];
   activity: Activity | null;
   /** 人間への質問と回答 (古い順) */
   decisions: Decision[];
