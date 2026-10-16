@@ -30,7 +30,7 @@ export function isDefaultSyncServer(server: string): boolean {
   catch { return false; }
 }
 /** 入力: 送り先と任意のトークン専用送り先。出力: 環境トークンを使えるか。通信・保存はしない。 */
-export function environmentTokenAllowed(server: string, tokenServer = process.env.BOXGLOW_TOKEN_SERVER): boolean {
+export function environmentTokenAllowed(server: string, tokenServer = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.BOXGLOW_TOKEN_SERVER): boolean {
   const destination = serverIdentity(server);
   if (!destination || serverProblem(server)) return false;
   // 専用送り先を指定したら、自分のサーバーも含め一致しない先には送らない。
