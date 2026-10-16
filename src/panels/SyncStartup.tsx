@@ -31,7 +31,7 @@ export function SyncStartup({ status, act, unsaved, receive = false }: {
   const filename = status.file?.path.split(/[\\/]/).pop();
   const busy = op.stage === "working";
   return <section className="sync-startup" aria-label={t("同期を始める")}>
-  <p>{t("送り先")}: <span className="break-all">{status.isDefaultServer ? t("Boxglow の同期サーバー") : status.server}</span></p>
+  {!(receive && status.isDefaultServer) && <p>{t("送り先")}: <span className="break-all">{status.isDefaultServer ? t("Boxglow の同期サーバー") : status.server}</span></p>}
   {op.stage !== "list" && op.stage !== "opened" && !receive && <p>{t("今開いているファイル")}: <span className="break-all">{filename}</span></p>}
   {op.error && <p role="alert">{op.error}</p>}
   {/* 招待されていないときは、やり直しではなく順番待ちを案内する */}
@@ -44,10 +44,12 @@ export function SyncStartup({ status, act, unsaved, receive = false }: {
   {/* 受け取り専用のときは、サインインの手段とコードをここに出す (同期パネルが無い Home から使うため) */}
   {op.stage === "signin" && receive && (status.signIn
     ? <SignInCode code={status.signIn} onCancel={() => void act({ kind: "cancelSignIn" })} />
-    : <div className="sync-panel__choices">
+    : <div className="sync-startup__signin">
         <p>{t("サインインすると、サーバーにある自分の計画を選べます。")}</p>
-        <button className="btn btn-primary btn-sm" onClick={() => void act({ kind: "signIn", provider: "github" })}>{t("GitHub でサインイン")}</button>
-        <button className="btn btn-sm" onClick={() => void act({ kind: "signIn", provider: "google" })}>{t("Google でサインイン")}</button>
+        <div className="sync-startup__buttons">
+          <button className="btn btn-primary btn-sm" onClick={() => void act({ kind: "signIn", provider: "github" })}>{t("GitHub でサインイン")}</button>
+          <button className="btn btn-sm" onClick={() => void act({ kind: "signIn", provider: "google" })}>{t("Google でサインイン")}</button>
+        </div>
       </div>)}
   {busy && <p role="status">{t("処理しています…")}</p>}
   {op.stage === "opened" && op.opened && <>
@@ -78,6 +80,7 @@ export function SyncStartup({ status, act, unsaved, receive = false }: {
     <button className="btn btn-sm" disabled={!id.trim() || unsaved} onClick={() => void act({ kind: "openProject", operationId: op.operationId, projectId: id.trim(), destination, name })}>{t("開く")}</button>
    </details>
   </>}
-  <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void act({ kind: "cancelBegin" })}>{t("中止")}</button>
+  {/* コードや URL を出している間は、その欄の「中止」だけにする (同じ画面に 2 つ出さない) */}
+  {!(receive && status.signIn) && <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void act({ kind: "cancelBegin" })}>{t("中止")}</button>}
  </section>;
 }

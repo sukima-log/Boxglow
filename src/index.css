@@ -1111,6 +1111,10 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 
 /* VS Code の中の Home: 開いているファイルのための案内だけ。長い理由 (読めない理由・閲覧専用の理由) は、折り返して全部見せる */
 .home-vscode p { overflow-wrap: anywhere; }
+/* 開始の手順 (受け取り専用) のサインイン: 文の下にボタンを 1 行で並べる */
+.sync-startup__signin p { margin: 0 0 8px; }
+.sync-startup__buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.home-receive .sync-startup { margin-top: 8px; }
 /* 同期パネルのサインインの手段 (付いているものは記号、無い方は + ボタン) */
 .sync-panel__identities { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; }
 .sync-panel__identity[data-on="true"] { color: var(--text-muted); padding: 0 4px; }
@@ -1175,7 +1179,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .sync-panel__choices { display: flex; gap: 6px; flex-wrap: wrap; }
 .sync-panel__details { font-size: 12px; color: var(--text-muted); white-space: pre-wrap; word-break: break-all; }
 .sync-panel__id { font-family: var(--font-mono, monospace); font-size: 11px; }
-.sync-panel__signin { display: flex; flex-direction: column; gap: 4px; }
+.sync-panel__signin { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .sync-panel__signin a { word-break: break-all; }
 .sync-panel__code { font-family: var(--font-mono, monospace); font-size: 20px; letter-spacing: 2px; }
 .sync-panel__close { position: absolute; top: 6px; right: 6px; }
