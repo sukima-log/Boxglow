@@ -36,7 +36,8 @@ export function TreePanel({ project, filter, onClose }: { project: Project; filt
     const startX = e.clientX, startW = width;
     const target = e.currentTarget;
     target.setPointerCapture(e.pointerId);
-    const move = (ev: PointerEvent) => { const w = Math.min(560, Math.max(180, Math.round(startW + ev.clientX - startX))); setWidth(w); };
+    // (幅は App にも知らせる: 右パネルの幅の上限が、ツリーに被らないように追従する)
+    const move = (ev: PointerEvent) => { const w = Math.min(560, Math.max(180, Math.round(startW + ev.clientX - startX))); setWidth(w); window.dispatchEvent(new CustomEvent("boxglow:tree-width", { detail: w })); };
     const up = () => { target.removeEventListener("pointermove", move); target.removeEventListener("pointerup", up); target.removeEventListener("pointercancel", up); setWidth((w) => { try { localStorage.setItem("boxglow:treeWidth", String(w)); } catch { /* 保存できなくてもよい */ } return w; }); };
     target.addEventListener("pointermove", move); target.addEventListener("pointerup", up); target.addEventListener("pointercancel", up);
   };
@@ -272,7 +273,7 @@ export function TreePanel({ project, filter, onClose }: { project: Project; filt
     >
       {/* 幅を変えるつまみ (右端)。ダブルクリックで既定の幅に戻す */}
       <div className="tree-panel__grip" role="separator" aria-orientation="vertical" aria-label={t("ツリーの幅")} title={t("ドラッグで幅を変える (ダブルクリックで元に戻す)")} onPointerDown={startDrag}
-        onDoubleClick={() => { setWidth(260); try { localStorage.setItem("boxglow:treeWidth", "260"); } catch { /* 保存できなくてもよい */ } }} />
+        onDoubleClick={() => { setWidth(260); window.dispatchEvent(new CustomEvent("boxglow:tree-width", { detail: 260 })); try { localStorage.setItem("boxglow:treeWidth", "260"); } catch { /* 保存できなくてもよい */ } }} />
       <div className="tree-panel__head">
         <strong>{t("ブロック")}</strong>
         {filtered && (

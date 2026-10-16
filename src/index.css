@@ -1907,7 +1907,7 @@ button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent)
 .md > :first-child { margin-top: 0; } .md > :last-child { margin-bottom: 0; }
 .md h1, .md h2, .md h3, .md h4 { font-weight: 700; margin: 12px 0 4px; line-height: 1.4; }
 .md h1 { font-size: 16px; } .md h2 { font-size: 15px; } .md h3 { font-size: 14px; } .md h4 { font-size: 13px; }
-.md p { margin: 4px 0; } .md ul, .md ol { margin: 4px 0; padding-left: 20px; } .md li { margin: 2px 0; }
+.md p { margin: 4px 0; } .md ul, .md ol { margin: 4px 0; padding-left: 20px; } .md ul { list-style: disc; } .md ol { list-style: decimal; } .md li { margin: 2px 0; }
 .md li.md-task { list-style: none; margin-left: -16px; } .md li.md-task::before { content: "\2610"; margin-right: 6px; } .md li.md-task[data-done="true"]::before { content: "\2611"; }
 .md li.md-task[data-done="true"] { color: var(--text-muted); text-decoration: line-through; }
 .md code { font-family: var(--font-mono, monospace); font-size: 12px; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
@@ -1939,4 +1939,13 @@ button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent)
 /* ノートタブ: 自由に書く欄は広く (最低 240px。パネルの幅を広げれば本文の幅もそれに従う) */
 .md-view--notes { min-height: 240px; }
 .md-edit--notes { min-height: 320px; }
+/* タブの記号 + 英語 (記号は上、文字は下) */
+.seg__btn--tab { gap: 2px; } .seg__btn--tab svg { display: block; }
+/* 節の 1 行の説明 (その他タブ: 何のための欄か) */
+.sec__hint { font-size: 11px; line-height: 1.5; color: var(--text-muted); margin: 0 0 4px; }
+/* ノートの編集: 入力欄の下にリアルタイムの見た目 */
+.notes-editor { display: flex; flex-direction: column; gap: 8px; }
+.notes-editor__preview { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; }
+/* 狭い画面 (スマホ) では、タブは記号だけにして帯を低くする (説明はツールチップのまま) */
+@media (max-width: 480px) { .seg__btn--tab .seg__btn-label { display: none; } .seg__btn--tab { padding: 8px 0 !important; } }
 

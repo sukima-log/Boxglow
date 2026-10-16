@@ -79,7 +79,7 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
     // ---- 今あるボックスを分岐に変える (詳細パネルの「その他」タブ →「分岐にする」) ----
     await page.locator('.react-flow__pane').click({ position: { x: 20, y: 20 } }); await page.waitForTimeout(200);
     await box('設計する').click(); await page.waitForTimeout(400);
-    await page.locator('.panel.right .seg__btn', { hasText: 'その他' }).click(); await page.waitForTimeout(200);
+    await page.locator('.panel.right .seg__btn', { hasText: 'More' }).click(); await page.waitForTimeout(200);
     await page.locator('.panel.right .more-actions').getByRole('button', { name: /分岐にする/ }).click();
     const convert = page.getByRole('dialog', { name: '分岐にする' });
     check('分岐にする: 変えるときは題名の欄を出さない', await convert.getByPlaceholder('例: API の方式を決める').count() === 0);
@@ -92,7 +92,7 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
 
     // ---- 入出力の詳細 (▾) は、いくつでも同時に開けて、自分で閉じるまで開いたまま ----
     await box('API の方式を決める').click(); await page.waitForTimeout(400);
-    await page.locator('.panel.right .seg__btn', { hasText: '入出力' }).click(); await page.waitForTimeout(300);
+    await page.locator('.panel.right .seg__btn', { hasText: 'I/O' }).click(); await page.waitForTimeout(300);
     const toggles = page.locator('.panel.right button[title="形式・制約などの設定"]');
     const nToggle = await toggles.count();
     for (let i = 0; i < nToggle; i++) await toggles.nth(i).click();
@@ -109,7 +109,7 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
     check('要具体化: 予定成果物・完了条件の無いボックスに「要具体化」の札が付く', await roughBox.count() === 1);
     // 図の「要具体化」の札を押すと、右パネルが状態タブで開く (前の確認で入出力タブを開いたままでも)
     await roughBox.locator('.meta-chip.unprepared').click(); await page.waitForTimeout(400);
-    check('要具体化: 図の札を押すと状態タブが開く', (await page.locator('.panel.right .seg__btn[data-on="true"]').first().innerText()).includes('状態'));
+    check('要具体化: 図の札を押すと状態タブが開く', (await page.locator('.panel.right .seg__btn[data-on="true"]').first().innerText()).includes('Status'));
     const roughList = await page.locator('.panel.right .readiness-fields__label').allInnerTexts();
     check('要具体化: 右パネルに不足 (予定成果物 / 完了条件) の欄が並ぶ', roughList.some((x) => x.includes('予定成果物')) && roughList.some((x) => x.includes('完了条件')), JSON.stringify(roughList));
     // 状態タブの「着手の前に決めること」で、その場で予定成果物と完了条件を埋められる。埋まると行が消える
@@ -124,13 +124,13 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
     check('要具体化: 完了条件を書くと欄が消え、図の札も消える', await page.locator('.panel.right .readiness-fields').count() === 0 && await page.locator(`.react-flow__node[data-id="${roughId}"] .meta-chip.unprepared:not(.below)`).count() === 0, `fields=${await page.locator('.panel.right .readiness-fields').count()} chip=${await page.locator(`.react-flow__node[data-id="${roughId}"] .meta-chip.unprepared:not(.below)`).count()} acc=${await page.evaluate((id) => window.boxglow.store.getState().project.blocks[id].scope?.acceptance, roughId)}`);
     // 別のタブを開いていると「要具体化 →」の案内が出る (別の要具体化のボックスで)
     const rough2 = page.locator('.react-flow__node-block .bg-block', { has: page.locator('.meta-chip.unprepared:not(.below)') }).first();
-    await rough2.click(); await page.waitForTimeout(300); await page.locator('.panel.right .seg__btn', { hasText: '入出力' }).click(); await page.waitForTimeout(200);
+    await rough2.click(); await page.waitForTimeout(300); await page.locator('.panel.right .seg__btn', { hasText: 'I/O' }).click(); await page.waitForTimeout(200);
     check('要具体化: 別のタブでも「要具体化 →」の案内が出て、押すと状態タブへ', await page.locator('.panel.right .inspector-attention', { hasText: '要具体化' }).count() === 1);
     await page.locator('.panel.right .inspector-attention', { hasText: '要具体化' }).click(); await page.waitForTimeout(200);
-    check('要具体化: 案内から状態タブに移る', (await page.locator('.panel.right .seg__btn[data-on="true"]').first().innerText()).includes('状態'));
+    check('要具体化: 案内から状態タブに移る', (await page.locator('.panel.right .seg__btn[data-on="true"]').first().innerText()).includes('Status'));
     // 入出力タブの出力の詳細 (▾) にも同じ欄があり、種類を空にすると予定成果物が消える (元のボックスで)
     await page.evaluate((id) => window.boxglow.store.getState().select({ blockId: id }), roughId); await page.waitForTimeout(300);
-    await page.locator('.panel.right .seg__btn', { hasText: '入出力' }).click(); await page.waitForTimeout(200);
+    await page.locator('.panel.right .seg__btn', { hasText: 'I/O' }).click(); await page.waitForTimeout(200);
     await page.locator('.panel.right button[title="形式・制約などの設定"]').last().click(); await page.waitForTimeout(300);
     await page.locator('.panel.right .expect-field select').selectOption(''); await page.waitForTimeout(500);
     check('要具体化: 入出力タブで種類を空にすると予定成果物が消え、要具体化に戻る', (await page.evaluate((id) => { const s = window.boxglow.store.getState(); return Object.values(s.project.ports).find((q) => q.blockId === id && q.direction === 'out')?.expect; }, roughId)) === undefined && await page.locator(`.react-flow__node[data-id="${roughId}"] .meta-chip.unprepared:not(.below)`).count() === 1);

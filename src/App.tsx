@@ -41,7 +41,7 @@ function saveWidth(key: string, w: number): void {
 /** 右パネルと引き出しの幅の範囲 (px) */
 const RIGHT_W = { min: 260, max: 760, def: 320 };
 /** 右パネルの幅の上限: 画面の幅に応じて広げられる (図は 240px 残す)。ノートをメインに見たいときのため */
-const rightMax = (): number => Math.max(RIGHT_W.max, (typeof window !== "undefined" ? window.innerWidth : 0) - 240);
+const rightMax = (treeW = 0, drawerW = 0): number => Math.max(RIGHT_W.min, Math.max(RIGHT_W.max, (typeof window !== "undefined" ? window.innerWidth : 0) - 240) - treeW - drawerW);
 const DRAWER_W = { min: 220, max: 640, def: 280 };
 import { applyTheme } from "./lib/theme";
 import { HomeDialog } from "./panels/HomeDialog";
@@ -99,8 +99,18 @@ export function App() {
     return !prev;
   });
   // パネルの幅 (境界のつまみで変えられる。ブラウザに記憶)
+  // ツリーの幅 (TreePanel が持つ。ドラッグ中はイベントで知らせてくる)。右パネルの上限は、開いているツリー・引き出しの幅を除いた値
+  const [treeW, setTreeW] = useState(() => loadWidth("boxglow:treeWidth", 260, 180, 560));
+  useEffect(() => {
+    const on = (e: Event) => setTreeW((e as CustomEvent<number>).detail);
+    window.addEventListener("boxglow:tree-width", on);
+    return () => window.removeEventListener("boxglow:tree-width", on);
+  }, []);
   const [rightW, setRightW] = useState(() => loadWidth("boxglow:rightW", RIGHT_W.def, RIGHT_W.min, rightMax()));
   const [drawerW, setDrawerW] = useState(() => loadWidth("boxglow:drawerW", DRAWER_W.def, DRAWER_W.min, DRAWER_W.max));
+  // 右パネルの幅の上限: 左に出ているツリー・引き出しに被らない (境界で止まる)。上限が縮んだら、今の幅もそこまで追従する
+  const rightLimit = rightMax(treeOpen && !embed ? treeW : 0, drawerOpen && !embed ? drawerW : 0);
+  useEffect(() => { if (rightW > rightLimit) setRightW(rightLimit); }, [rightLimit, rightW]);
   const onRightW = useCallback((w: number) => { setRightW(w); saveWidth("boxglow:rightW", w); }, []);
   const onDrawerW = useCallback((w: number) => { setDrawerW(w); saveWidth("boxglow:drawerW", w); }, []);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -355,7 +365,7 @@ export function App() {
       </main>
 
       <aside className={`panel right ${hasSelection ? "" : "hidden-panel"}`}>
-        {project && hasSelection && <ResizeHandle side="left" width={rightW} min={RIGHT_W.min} max={rightMax()} onWidth={onRightW} />}
+        {project && hasSelection && <ResizeHandle side="left" width={rightW} min={RIGHT_W.min} max={rightLimit} onWidth={onRightW} />}
         {project && hasSelection && <Inspector project={project} onOpenDrawer={openDrawer} />}
       </aside>
 

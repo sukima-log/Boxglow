@@ -57,14 +57,14 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.getByRole('button',{name:'静的ホスティング',exact:true}).click();
     await page.getByText('AI 未読',{exact:true}).waitFor();
     check('詳細パネル: 回答は AI が確認するまで残る',await page.getByText('静的ホスティング',{exact:true}).isVisible());
-    await page.getByRole('button',{name:'その他',exact:true}).click();
+    await page.getByRole('button',{name:'More',exact:true}).click();
     const attention=page.locator('.inspector-attention');
     check('詳細パネル: 別タブでもAI未確認の件数に気づける',await attention.isVisible() && (await attention.innerText()).includes('AI 未読 1') && !(await attention.innerText()).includes('未回答'));
     await attention.click();
     check('詳細パネル: 案内から回答を確認できる',await page.getByText('AI 未読',{exact:true}).isVisible());
-    await page.getByRole('button',{name:'その他',exact:true}).click();
+    await page.getByRole('button',{name:'More',exact:true}).click();
     await search.fill('B4');await search.press('Enter');
-    check('詳細パネル: 別のボックスを選んでも開いているタブ (More) を保つ',await page.locator('.panel.right .seg__btn').filter({hasText:/^その他$/}).getAttribute('data-on')==='true');
+    check('詳細パネル: 別のボックスを選んでも開いているタブ (More) を保つ',await page.locator('.panel.right .seg__btn').filter({hasText:/^More$/}).getAttribute('data-on')==='true');
     await page.locator('.summary-chip').click();
     await page.getByRole('button',{name:/^Resume/}).click();
     check('Resume タブ: AI 未確認の回答が残り、サンプルの引き継ぎメモ (バックエンド) が出る',await page.getByText(/ノートの一覧・作成・削除の API まで実装済み/).first().isVisible() && await page.getByText('静的ホスティング',{exact:true}).isVisible());
@@ -119,7 +119,9 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.evaluate(()=>{const s=window.boxglow.store.getState();const b=Object.values(s.project.blocks).find(x=>x.title==='バックエンド');s.apply(p=>({...p,blocks:{...p.blocks,[b.id]:{...p.blocks[b.id],description:'# 見出し\n\n- [x] 済み\n- [ ] まだ\n\n`code`'}}}));s.select({blockId:b.id,panelTab:'log'});});await page.waitForTimeout(400);
     check('メモ: Markdown で整形される (見出し・チェック・コード)',await page.locator('.md-view h1').count()===1 && await page.locator('.md-view li.md-task[data-done="true"]').count()===1 && await page.locator('.md-view code').count()===1);
     await page.locator('.md-view').click();await page.waitForTimeout(300);
-    check('メモ: 押すと素の Markdown の編集欄になる',await page.locator('textarea.md-edit--notes').count()===1 && (await page.locator('textarea.md-edit--notes').inputValue()).startsWith('# 見出し'));
+    check('メモ: 押すと素の Markdown の編集欄になり、下に見た目がリアルタイムで出る',await page.locator('textarea.md-edit--notes').count()===1 && (await page.locator('textarea.md-edit--notes').inputValue()).startsWith('# 見出し') && await page.locator('.notes-editor__preview h1').count()===1);
+    await page.locator('textarea.md-edit--notes').fill('- aaaaaa\n* bbbbbb');await page.waitForTimeout(200);
+    check('メモ: - と * の箇条書きが点つきで表示される',await page.locator('.notes-editor__preview li').count()===2 && (await page.locator('.notes-editor__preview ul').first().evaluate((el)=>getComputedStyle(el).listStyleType))==='disc');
     await page.evaluate(()=>{const s=window.boxglow.store.getState();s.select({});});await page.waitForTimeout(300);
 
     // Activity の検査 (lint) のタブ: 3 組に分かれ、行を押すとボックスが選ばれる。タブの数字は必ず直すの件数
@@ -136,7 +138,7 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
 
     // レビューの記録の状態 (右パネル): 子を持つボックスは分解と着手準備の 2 行。なし → 確認で済 (human) → 子の説明を変えると古い (変わった部分)
     await page.evaluate(()=>{const s=window.boxglow.store.getState();const blk=Object.values(s.project.blocks).find(x=>x.title==='バックエンド');s.select({blockId:blk.id});});await page.waitForTimeout(400);
-    await page.locator('.panel.right .seg__btn',{hasText:'状態'}).click();await page.waitForTimeout(200);
+    await page.locator('.panel.right .seg__btn',{hasText:'Status'}).click();await page.waitForTimeout(200);
     const reviewRows=page.locator('.panel.right .review-state__row');
     check('レビュー: 子を持つボックスには分解と着手準備の 2 行、記録が無ければ「なし」',await reviewRows.count()===2 && (await reviewRows.first().locator('.meta-chip').innerText())==='なし');
     await reviewRows.first().getByRole('button',{name:'確認'}).click();

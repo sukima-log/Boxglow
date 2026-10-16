@@ -38,7 +38,7 @@ const path = require("path");
         // 分類欄は「状態」だけに閉じ込めず、「その他」の説明を読んでいる間も出す。
         await page
           .locator(".panel.right .seg__btn")
-          .filter({ hasText: lang === "ja" ? "その他" : "More" })
+          .filter({ hasText: "More" })
           .first()
           .click();
         check(`${theme}/${lang}: 説明のタブでもカテゴリを確認できる`, await field.isVisible());

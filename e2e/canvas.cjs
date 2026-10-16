@@ -31,7 +31,7 @@ async function drag(page, from, to) {
    await p.getByRole('button',{name:'+ Block',exact:true}).click();
    await p.getByRole('menuitem',{name:/^Block/}).click();
    const newId=await idOf(p,'新しいブロック');
-   await p.getByRole('button',{name:'入出力 0/1',exact:true}).click();
+   await p.getByRole('button',{name:'I/O',exact:true}).click();
    await p.getByRole('button',{name:'＋ 入力を追加',exact:true}).click();
    await p.locator('.panel.right button[title="閉じる (Esc)"]').click();
    await p.getByRole('button',{name:'Fit',exact:true}).click();await pause(p);

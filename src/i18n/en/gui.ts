@@ -204,5 +204,16 @@ export const gui: Record<string, string> = {
   "記録を開く": "Open log",
   "ノート": "Notes",
   "ノート (Markdown のメモ) と作業記録 (日付つき)": "Notes (Markdown) and the dated work log",
-  "AI に渡す・操作・Issue・資料": "AI text, actions, issue, links"
+  "AI に渡す・操作・Issue・資料": "AI text, actions, issue, links",
+  "操作・Issue・AI に渡す文・資料": "Actions, issue, AI text, links",
+  "このボックスに対する操作: 範囲の編集、今回の対象、部品として保存、AI に渡す文、分岐への変換": "Actions on this box: edit scope, set as focus, save as part, AI text, make it a branch",
+  "部品として保存": "Save as Part",
+  "AI に渡す文": "AI text",
+  "このボックスの入出力と位置づけを Markdown にして表示する (コピーして AI に渡す)": "Shows this box's inputs, outputs and position as Markdown (copy it to an AI)",
+  "外部の課題 (JIRA / Redmine / GitHub Issue) の URL。ボックスに札が出て、押すと開きます": "URL of the external issue (JIRA / Redmine / GitHub). The box shows a tag that opens it",
+  "コピーする文を選ぶ": "Choose what to copy",
+  "このボックスの入出力と位置づけを文にしてコピーし、AI (Claude / Codex など) に貼って渡します": "Copies this box's inputs, outputs and position as text to paste into an AI (Claude, Codex, ...)",
+  "成果物や参考資料のリンク (URL やファイルのパス)": "Links to deliverables and references (URLs or file paths)",
+  "見た目": "Preview",
+  "見た目 (打つと同時に反映)": "Preview (updates as you type)"
 };

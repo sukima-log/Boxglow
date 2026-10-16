@@ -15,7 +15,7 @@ import { CloseButton } from "./CloseButton";
 import { WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
 import { isAcked as decisionIsAcked } from "../model/graph";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
 import { addLogEntry, removeLogEntry, isNow, setNow, addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, removeBlock, setCategory, setProgress, setSchedule, updateBlock, waitingFor } from "../model/graph";
 import { saveTemplate } from "../lib/templates";
@@ -232,7 +232,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   , io: t("入力と出力 (成果物)")
   , owner: t("担当")
   , dates: t("開始日・期日・時間")
-  , more: t("AI に渡す・操作・Issue・資料")
+  , more: t("操作・Issue・AI に渡す文・資料")
   , log: t("ノート (Markdown のメモ) と作業記録 (日付つき)")
   };
 
@@ -278,10 +278,12 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
 
       {/* タブ: 一度に 1 項目だけ見せる */}
       <div className="seg" style={{ gridTemplateColumns: "repeat(6, 1fr)" }}>
-        {([["status", t("状態")], ["io", t("入出力")], ["owner", t("担当")], ["dates", t("日程")], ["log", t("ノート")], ["more", t("その他")]] as const).map(([id, label]) => (
-          <button key={id} className="seg__btn" data-on={tab === id} onClick={() => setTab(id)} style={{ padding: "6px 2px", fontSize: 12 }}
-            title={TAB_HELP[id]}>
-            {label}
+        {/* タブは記号 + 短い英語 (言語に依らず分かるように)。日本語の説明はツールチップ (TAB_HELP) */}
+        {([["status", "Status"], ["io", "I/O"], ["owner", "Owner"], ["dates", "Dates"], ["log", "Note"], ["more", "More"]] as const).map(([id, label]) => (
+          <button key={id} className="seg__btn seg__btn--tab" data-on={tab === id} onClick={() => setTab(id)} style={{ padding: "6px 2px", fontSize: 11 }}
+            title={TAB_HELP[id]} aria-label={label}>
+            <TabIcon id={id} />
+            <span className="seg__btn-label">{label}</span>
             {id === "status" && (pending.length > 0 || unread.length > 0) && <span className="dot decision" style={{ marginLeft: 4, display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "var(--accent)" }} />}
             {id === "io" && <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.7 }}>{portsOf(project, blockId, "in").length}/{portsOf(project, blockId, "out").length}</span>}
             {id === "log" && (b.log?.length ?? 0) > 0 && <span style={{ marginLeft: 4, fontSize: 10, opacity: 0.7 }}>{b.log!.length}</span>}
@@ -497,9 +499,9 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
               <Markdown text={b.description} />
             </div>
           ) : b.description && readonly ? <Markdown text={b.description} className="md-view md-view--notes" /> : (
-            <DebouncedText multiline className="input md-edit md-edit--notes" placeholder={t("メモ (Markdown で書けます: 見出し・箇条書き・表・リンク・画像)")} value={b.description} disabled={readonly} autoFocus={notesEditing}
-              onCommit={(v) => apply((p) => updateBlock(p, blockId, { description: v }))} onBlur={() => setNotesEditing(false)}
-              onPaste={(e) => void pasteImages(e.clipboardData.files, e)} onDrop={(e) => void pasteImages(e.dataTransfer.files, e)} />
+            <NotesEditor value={b.description} autoFocus={notesEditing} placeholder={t("メモ (Markdown で書けます: 見出し・箇条書き・表・リンク・画像)")}
+              onCommit={(v) => apply((p) => updateBlock(p, blockId, { description: v }))} onDone={() => setNotesEditing(false)}
+              onFiles={(files, e) => void pasteImages(files, e)} />
           )}
         </section>
         <div className="sec__head"><span className="label">{t("記録")}</span></div>
@@ -510,12 +512,13 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       {!readonly && (
       <section className="sec">
         <div className="sec__head"><span className="label">{t("操作")}</span></div>
+        <p className="sec__hint">{t("このボックスに対する操作: 範囲の編集、今回の対象、部品として保存、AI に渡す文、分岐への変換")}</p>
         <div className="more-actions">
           {/* 開いている間はもう一度押すと閉じる (✓ が付く) */}
           <button className="btn btn-sm" data-on={scopeEditing} onClick={() => setScopeEditing(!scopeEditing)} title={t("今回達成すること・扱わないこと・完了条件・相談する条件")}>{t("作業範囲を編集")}</button>
           <button className="btn btn-sm" data-on={project.focusBlockId === blockId} onClick={() => apply(p => ({ ...p, focusBlockId: p.focusBlockId === blockId ? undefined : blockId }))} title={t("このボックスと配下を、次の候補の先頭にする")}>{project.focusBlockId === blockId ? t("今回の範囲を解除") : t("今回の範囲にする")}</button>
-          {!isProject && <button className="btn btn-sm" onClick={saveAsTemplate} title={t("ほかの計画でも使い回せる部品として保存する")}>Save as Part</button>}
-          <button className="btn btn-sm" data-on={showPrompt !== null} onClick={() => setShowPrompt(showPrompt ? null : "plan")} title={t("このボックスの入出力と位置づけを Markdown にしてコピーして AI に渡す")}>Show AI text</button>
+          {!isProject && <button className="btn btn-sm" onClick={saveAsTemplate} title={t("ほかの計画でも使い回せる部品として保存する")}>{t("部品として保存")}</button>}
+          <button className="btn btn-sm" data-on={showPrompt !== null} onClick={() => setShowPrompt(showPrompt ? null : "plan")} title={t("このボックスの入出力と位置づけを Markdown にして表示する (コピーして AI に渡す)")}>{t("AI に渡す文")}</button>
           {!isProject && !b.branch && (() => {
             const can = canConvertToBranch(project, blockId);
             return <button className="btn btn-sm" disabled={!can.ok} onClick={() => setBranching(true)}
@@ -526,6 +529,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       )}
       <section className="sec">
         <div className="sec__head"><span className="label">Issue</span></div>
+        <p className="sec__hint">{t("外部の課題 (JIRA / Redmine / GitHub Issue) の URL。ボックスに札が出て、押すと開きます")}</p>
         {/* 外部の課題 (JIRA / Redmine / GitHub Issue) の URL。ボックスにはキー (PROJ-123, #45) の札が出て、押すと開く */}
         <input className="input" placeholder={t("JIRA / Redmine / GitHub Issue の URL")} value={b.issue ?? ""} disabled={readonly}
           onChange={(e) => apply((p) => updateBlock(p, blockId, { issue: e.target.value }), { history: false })}
@@ -534,8 +538,9 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       </section>
       <section className="sec">
         <div className="sec__head"><span className="label">AI</span>
-        <button className="btn btn-sm" data-on={aiOpen} onClick={() => setAiOpen(!aiOpen)} title={t("このボックスの入出力と位置づけを Markdown にしてコピーして AI に渡す")}>Copy for AI {aiOpen ? "▴" : "▾"}</button>
+        <button className="btn btn-sm" data-on={aiOpen} onClick={() => setAiOpen(!aiOpen)} title={t("このボックスの入出力と位置づけを Markdown にしてコピーして AI に渡す")}>{t("コピーする文を選ぶ")} {aiOpen ? "▴" : "▾"}</button>
         </div>
+        <p className="sec__hint">{t("このボックスの入出力と位置づけを文にしてコピーし、AI (Claude / Codex など) に貼って渡します")}</p>
       {aiOpen && (
         <div className="flex flex-col pl-2" style={{ borderLeft: "3px solid var(--line-soft)" }}>
           <button className="btn btn-ghost btn-sm justify-start" onClick={() => copyPrompt("plan")}>{t("手順案")}</button>
@@ -554,6 +559,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       {/* 資料 (リンク)。メモ本文は「ノート」タブへ移した */}
       <section className="sec">
         <div className="sec__head"><span className="label">Links{b.artifacts.length > 0 ? " *" : ""}</span></div>
+        <p className="sec__hint">{t("成果物や参考資料のリンク (URL やファイルのパス)")}</p>
         <ArtifactsEditor artifacts={b.artifacts} readonly={readonly} addLabel="Link" onChange={(next) => apply((p) => updateBlock(p, blockId, { artifacts: next }))} />
       </section>
       </>)}
@@ -608,6 +614,50 @@ function WorkLog({ project, blockId, readonly, apply }: { project: Project; bloc
         </article>
       ))}
     </section>
+  );
+}
+
+/** タブの記号 (線画の小さな SVG。言語に依らず意味が伝わるように) */
+function TabIcon({ id }: { id: "status" | "io" | "owner" | "dates" | "log" | "more" }) {
+  const common = { width: 16, height: 16, viewBox: "0 0 16 16", fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
+  switch (id) {
+    case "status": return <svg {...common}><circle cx="8" cy="8" r="5.5" /><path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none" /></svg>;
+    case "io": return <svg {...common}><path d="M2 5.5h8M8 3l2.5 2.5L8 8M14 10.5H6M8 8 5.5 10.5 8 13" /></svg>;
+    case "owner": return <svg {...common}><circle cx="8" cy="5.5" r="2.5" /><path d="M3 13.5c0-2.5 2.2-4 5-4s5 1.5 5 4" /></svg>;
+    case "dates": return <svg {...common}><rect x="2.5" y="3.5" width="11" height="10" rx="1.5" /><path d="M2.5 7h11M5.5 2v3M10.5 2v3" /></svg>;
+    case "log": return <svg {...common}><path d="M4 2.5h6l3 3v8H4z" /><path d="M10 2.5v3h3M6 8h4M6 10.5h4" /></svg>;
+    default: return <svg {...common}><circle cx="3.5" cy="8" r="1" fill="currentColor" /><circle cx="8" cy="8" r="1" fill="currentColor" /><circle cx="12.5" cy="8" r="1" fill="currentColor" /></svg>;
+  }
+}
+
+/**
+ * ノートの編集欄: 素の Markdown の入力欄と、その下にリアルタイムの見た目 (Obsidian のライブプレビューに相当。打つたびに描き直す)
+ * Input : value = 今の本文, onCommit = 保存 (少し待ってまとめる + 欄を離れたとき), onDone = 編集を終えた (表示に戻す), onFiles = 画像の貼り付け・ドロップ
+ * Output: 入力欄 + プレビューの JSX
+ */
+function NotesEditor({ value, placeholder, autoFocus, onCommit, onDone, onFiles }: { value: string; placeholder: string; autoFocus?: boolean; onCommit: (v: string) => void; onDone: () => void; onFiles: (files: FileList | null, e: { preventDefault: () => void }) => void }) {
+  const [draft, setDraft] = useState(value);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latest = useRef(value); latest.current = value;
+  const focused = useRef(false);
+  // 外から本文が変わった (画像の貼り付けで末尾に足した、AI が書き換えた) ときは、保存待ちが無ければ取り込む
+  useEffect(() => { if (!focused.current || !timer.current) setDraft(value); }, [value]);
+  const commit = (v: string) => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } if (v !== latest.current) onCommit(v); };
+  const change = (v: string) => { setDraft(v); if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => { timer.current = null; if (v !== latest.current) onCommit(v); }, 400); };
+  return (
+    <div className="notes-editor">
+      <textarea className="input md-edit md-edit--notes" placeholder={placeholder} value={draft} autoFocus={autoFocus}
+        onChange={(e) => change(e.target.value)}
+        onFocus={() => { focused.current = true; }}
+        onBlur={() => { focused.current = false; commit(draft); onDone(); }}
+        onPaste={(e) => onFiles(e.clipboardData.files, e)} onDrop={(e) => onFiles(e.dataTransfer.files, e)} />
+      {draft.trim() && (
+        <div className="notes-editor__preview" aria-label={t("見た目")}>
+          <span className="sec__hint">{t("見た目 (打つと同時に反映)")}</span>
+          <Markdown text={draft} />
+        </div>
+      )}
+    </div>
   );
 }
 

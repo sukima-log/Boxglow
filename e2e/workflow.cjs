@@ -43,7 +43,7 @@ const {chromium,open,check,result}=require('./lib.cjs');
       await scope.locator('summary').click();
       check(theme+' 範囲: 4項目の内容を読める',(await scope.innerText()).includes('課金は扱わない')&&(await scope.innerText()).includes('API仕様の変更'));
       await page.screenshot({path:'/tmp/boxglow-scope-'+theme+'.png'});
-      await page.locator('.panel.right .seg__btn',{hasText:'その他'}).click();await page.waitForTimeout(200);
+      await page.locator('.panel.right .seg__btn',{hasText:'More'}).click();await page.waitForTimeout(200);
       await page.locator('.panel.right .more-actions').getByRole('button',{name:'作業範囲を編集',exact:true}).click();
       const goal=page.getByLabel('今回達成すること',{exact:true});await goal.fill('APIと画面の接続');await goal.blur();
       await page.waitForFunction(()=>Object.values(window.boxglow.store.getState().project.blocks).find(b=>b.key==='B8').scope.goal==='APIと画面の接続');
@@ -53,7 +53,7 @@ const {chromium,open,check,result}=require('./lib.cjs');
       check(theme+' 範囲: 「作業範囲を編集」をもう一度押すと閉じる',await page.locator('.work-scope__editor').count()===0);
       await page.locator('.panel.right .more-actions').getByRole('button',{name:'作業範囲を編集',exact:true}).click();await page.waitForTimeout(200);
       await page.locator('.work-scope__done').click(); // 編集の下の「閉じる」(上の × も同じ)
-      await page.locator('.panel.right .seg__btn',{hasText:'状態'}).click();await page.waitForTimeout(200); // Done のボタンは状態タブ
+      await page.locator('.panel.right .seg__btn',{hasText:'Status'}).click();await page.waitForTimeout(200); // Done のボタンは状態タブ
       await page.locator('.panel.right button[title^="Done:"]').click();
       check(theme+' 人の操作: rejectでも成果物なしのDoneを拒否しない',await page.evaluate(()=>Object.values(window.boxglow.store.getState().project.blocks).find(b=>b.key==='B8').status==='white'));
       const search=page.getByRole('textbox',{name:'ブロックを検索'});
@@ -61,7 +61,7 @@ const {chromium,open,check,result}=require('./lib.cjs');
       check(theme+' 範囲: 内容がないボックスには新しい欄を出さない',await page.locator('.work-scope').count()===0);
       await search.fill('B2');await search.press('Enter');
       check(theme+' 鮮度: Done後も古い説明を消さず見直しを促す',await page.locator('.description-reminder').isVisible());
-      await page.getByRole('button',{name:'ノート',exact:true}).click();
+      await page.getByRole('button',{name:'Note',exact:true}).click();
       check(theme+' 鮮度: 説明の記録日時と状態変更より前という表示がある',(await page.locator('.panel.right').innerText()).includes('2026-10-01')&&(await page.locator('.panel.right').innerText()).includes('状態の変更より前'));
       await page.locator('.summary-chip').click();await page.getByRole('button',{name:/^Resume/}).click();
       check(theme+' Resume: 完了した引き継ぎは本文を隠し件数だけ出す',await page.getByRole('button',{name:'Done (1)',exact:true}).isVisible()&&await page.getByText('以前の公開状況',{exact:true}).count()===0);

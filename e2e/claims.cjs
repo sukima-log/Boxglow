@@ -34,7 +34,7 @@ const fs=require('node:fs'),path=require('node:path');
    check(`${lang}/${theme}: 暗いボックスでも札の文字が4.5:1以上`,contrast>=4.5,String(contrast));
    check(`${lang}/${theme}: ボックスで担当名、活動バッジと重複しない`,(await node.locator('.claim-mark').innerText()).includes('codex')&&await node.locator('.meta-chip.activity').count()===0);
    // (受け持ちの詳細は「担当」タブの先頭にある)
-   await page.locator('.panel.right .seg__btn').filter({hasText:/^(担当|Owner)$/}).click();
+   await page.locator('.panel.right .seg__btn').filter({hasText:/^Owner$/}).click();
    await page.locator('.claim-details summary').click();const details=page.locator('.claim-details');
    check(`${lang}/${theme}: 実行IDと期限を詳細で確認`,(await details.innerText()).includes('review-session-1')&&(await details.innerText()).includes(lang==='ja'?'期限:':'Expires:'));
    await page.evaluate(()=>window.boxglow.rf.fitView({duration:0,padding:0.12}));
