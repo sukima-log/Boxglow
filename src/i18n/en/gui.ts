@@ -178,7 +178,7 @@ export const gui: Record<string, string> = {
   "このファイルは、まだありません": "This file does not exist yet",
   "サーバーにある計画を受け取るには、npx boxglow serve --sync で起動します。": "To receive a plan from the server, start with npx boxglow serve --sync.",
   "または、サーバーの計画を受け取る": "Or receive a plan from the server",
-  "別の端末で同期した計画を、このファイルに保存して開きます。": "Saves a plan synced from another device into this file and opens it.",
+  "別の端末で同期した計画を、ここに保存して開きます。": "Saves a plan synced from another device here and opens it.",
   "サーバーの計画を受け取る": "Receive a plan from the server",
   "サインインすると、サーバーにある自分の計画を選べます。": "Sign in to choose one of your plans on the server.",
   "受け取る計画を選んでください。このファイルに保存して開きます。": "Choose the plan to receive. It is saved into this file and opened.",

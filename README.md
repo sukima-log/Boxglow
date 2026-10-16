@@ -7,7 +7,7 @@ Tasks are boxes with inputs and outputs; a box goes New (BlackBox: output decide
 
 **計画と進捗を、ボックスと線で。AI エージェントとチームが今どこを作っていて、何が終わり、どこで判断を待っているかが一目でわかる。**
 
-- Web app: https://boxglow.app/ (no sign-in; data stays in your browser, or opens a local `boxglow.json`)
+- Web app: https://boxglow.app/ (works without sign-in: data stays in your browser, or opens a local `boxglow.json`. Sign in to sync plans across devices)
 - CLI for agents: `npx boxglow` (status / start / done / split / ask / answer ...)
 - License: MIT
 

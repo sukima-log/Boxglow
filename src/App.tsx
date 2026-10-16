@@ -14,6 +14,7 @@ import { FlowCanvas } from "./canvas/FlowCanvas";
 import { addBlock, computeProgress, disconnect, pendingDecisions, portsOf, removeBlock } from "./model/graph";
 import { ROOT_ID } from "./model/types";
 import { majorBlocks, parentForNewBlock, useProjectStore, useShownProject } from "./store/useProjectStore";
+import { DEFAULT_SYNC_SERVER } from "../cli/sync/server-policy";
 import { scopePath, wireNetTabs } from "./model/graph";
 import { ResizeHandle } from "./panels/parts";
 import { t, useLang } from "./i18n";
@@ -150,6 +151,12 @@ export function App() {
     } else {
       const m = window.location.hash.match(/p=([\w-]+)/);
       if (m) void openProject(m[1]);
+      // ブラウザだけ (serve / VS Code / 記事の埋め込みではない): 同期の裏方を中に作る。送り先は ?server= (開発用の localhost) か製品のサーバー
+      // (Cookie のセッションは同じサイト = boxglow.app でだけ送られる。pages.dev などの別の配信先では、開発用の ?server= が無い限り裏方を作らない)
+      const explicit = params.get("server")?.trim();
+      // (手元の localhost / 127.0.0.1 で製品のサーバーにはつながない: 検査やプレビューで本番へ要求を出さない。?server= を明示したときだけ)
+      const sameSite = /(^|\.)boxglow\.app$/.test(window.location.hostname);
+      if (!isEmbed && !window.acquireVsCodeApi && (explicit || sameSite)) useProjectStore.getState().initBrowserSync(explicit || DEFAULT_SYNC_SERVER);
     }
     return () => observer?.disconnect();
   }, [setMode, openSample, openExample, openProject, openFromServer, openFromVsCode]);

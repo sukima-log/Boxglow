@@ -94,8 +94,27 @@ export class TestSyncServer {
   }
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    // ---- サインインの手順 (認証なしで呼べる) ----
-    const plain = (status: number, body: unknown) => { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" }); res.end(JSON.stringify(body)); };
+    // ---- ブラウザだけの画面の検査用: CORS (試験ではどのオリジンでも許す) と、HttpOnly Cookie のセッション (本番の入口と同じ約束) ----
+    const origin = req.headers.origin;
+    const cors: Record<string, string> = origin ? { "access-control-allow-origin": origin, "access-control-allow-credentials": "true", vary: "origin", "access-control-expose-headers": "etag, x-boxglow-epoch, x-boxglow-account, x-boxglow-version, retry-after" } : {};
+    if (req.method === "OPTIONS") { res.writeHead(204, { ...cors, "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS", "access-control-allow-headers": req.headers["access-control-request-headers"] ?? "content-type, authorization", "access-control-max-age": "600" }); res.end(); return; }
+    const cookieToken = /(?:^|;\s*)bgl_session=([^;]+)/.exec(req.headers.cookie ?? "")?.[1];
+    // Authorization が無く Cookie があれば、Cookie の値をトークンとして扱う (本番と同じ。Origin の照合は試験では省く)
+    if (!req.headers.authorization && cookieToken) req.headers.authorization = `Bearer ${decodeURIComponent(cookieToken)}`;
+    const plain = (status: number, body: unknown, headers: Record<string, string> = {}) => { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...cors, ...headers }); res.end(JSON.stringify(body)); };
+    if (req.method === "POST" && req.url === "/v1/session") {
+      const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
+      const user = token ? this.issued.get(token) : undefined;
+      if (!token || !user || this.revoked.has(token)) { plain(401, { code: "unauthorized" }); return; }
+      plain(200, { account: user.account, login: user.login }, { "set-cookie": `bgl_session=${encodeURIComponent(token)}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=2592000` });
+      return;
+    }
+    if (req.method === "DELETE" && req.url === "/v1/session") {
+      const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
+      if (token) this.revoked.add(token);
+      plain(200, { signedOut: true }, { "set-cookie": "bgl_session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0" });
+      return;
+    }
     if (req.method === "POST" && req.url === "/v1/auth/device") {
       const code = "dc" + String(++this.codes).padStart(38, "0");
       this.deviceCodes.set(code, "pending");
@@ -155,11 +174,13 @@ export class TestSyncServer {
     }
     // 利用者: 発行したトークンなら、その利用者。それ以外は、トークンの文字列を、そのまま利用者の ID として扱う (試験用)
     const bearer = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
+    // ブラウザ (Origin あり) からトークンも Cookie も無しの要求は、本番と同じく 401 (匿名の "test" 利用者にしない)
+    if (origin && bearer === undefined) { plain(401, { code: "unauthorized" }); return; }
     if (bearer !== undefined && this.revoked.has(bearer)) { plain(401, { code: "unauthorized" }); return; }
     const account = bearer === undefined ? "test" : this.issued.get(bearer)?.account ?? bearer;
     const projects = this.space(account);
     const send = (status: number, body = "", headers: Record<string, string> = {}) => {
-      res.writeHead(status, { "x-boxglow-epoch": this.epoch, "x-boxglow-account": account, "content-type": "application/json; charset=utf-8", ...headers });
+      res.writeHead(status, { "x-boxglow-epoch": this.epoch, "x-boxglow-account": account, "content-type": "application/json; charset=utf-8", ...cors, ...headers });
       res.end(body);
     };
     if (req.method === "GET" && req.url === "/v1/identities") {

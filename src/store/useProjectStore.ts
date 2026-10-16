@@ -13,6 +13,7 @@ import type { ConflictChoices, MergeResult } from "../model/merge";
 import { useMemo } from "react";
 import { readingLayout } from "../model/readingLayout";
 import { create } from "zustand";
+import { BrowserSyncHost } from "../sync/browser-host";
 import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeCollapsed, normalizeInputNames, resolveChangedOverlaps, resolveAllOverlaps, scopeFor, toJSON, wireNetTabs, withIndex } from "../model/graph";
 export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
@@ -97,8 +98,10 @@ interface State {
    * 同期の印は「接続なし」にする (古い「同期済み」を出し続けない)。つながり直すと false に戻り、状態を取り直す
    */
   syncLost: boolean;
-  /** 同期の操作を裏方へ送る (serve は POST /api/sync、VS Code は postMessage)。応答の状態で syncStatus を更新する */
+  /** 同期の操作を裏方へ送る (serve は POST /api/sync、VS Code は postMessage、ブラウザだけなら中の裏方)。応答の状態で syncStatus を更新する */
   syncAct: (action: HostAction) => Promise<void>;
+  /** ブラウザだけの画面で、同期の裏方を作る (serve / VS Code が無いとき。App の起動時に 1 回) */
+  initBrowserSync: (server: string) => void;
   /** 裏方から届いた状態を受ける (古いセッションや古い通し番号の状態で、新しい状態を上書きしない) */
   acceptSyncStatus: (status: SyncStatus) => void;
   /**
@@ -266,6 +269,23 @@ let fileLastModified = 0;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 /** ローカルサーバ連携の状態: 自分が最後に書いた中身 (サーバからの変更通知と区別する) と、通知の接続 */
 let serveEvents: EventSource | null = null;
+/**
+ * ブラウザだけの画面 (boxglow.app) の同期の裏方 (serve / VS Code が無いとき)。App の起動時に initBrowserSync で作る。
+ * 画面の「ファイル」は、開いているブラウザ内の計画の id。計画を開いていない間は Home 用の仮の名前 (サーバーの計画を受け取る入口のため)
+ */
+let browserHost: BrowserSyncHost | null = null;
+const HOME_SYNC_FILE = "home";
+let syncFocus: string | null = null;
+/** ブラウザの裏方が見る計画を切り替える (前の計画を閉じ、次を開く。null = Home) */
+function focusBrowserSync(id: string | null): void {
+  if (!browserHost) return;
+  const next = id ?? HOME_SYNC_FILE;
+  if (syncFocus === next) return;
+  if (syncFocus) browserHost.closeFile(syncFocus);
+  syncFocus = next;
+  browserHost.openFile(next);
+  if (id) void browserHost.loadBinding(id);
+}
 /** 退避の応答を待つ (requestId → 受け取る関数) */
 const evacuateWaiters = new Map<string, (result: { hash: string; path: string; editorVersion: number | null } | null, detail: string) => void>();
 /** 文字列の SHA-256 (16 進) */
@@ -470,7 +490,7 @@ export const useProjectStore = create<State>((set, get) => {
           }
         } else if (source === "file") {
           throw new Error(t("共同編集は npx boxglow serve --open または VS Code 拡張で開いてください。"));
-        } else { await saveProject(project); void get().refreshList(); }
+        } else { await saveProject(project); void get().refreshList(); browserHost?.noteLocalContent(project.id, project); }
         if (generation !== epoch) return;
         // 保存応答を待つ間に届いた新しい版を、古い保存の応答で巻き戻さない。
         if (serial !== mergeSerial) continue;
@@ -741,7 +761,25 @@ export const useProjectStore = create<State>((set, get) => {
         } catch { /* 通信の失敗は、次の状態の通知で分かる */ }
       } else if (source === "vscode") {
         vscodeApi?.postMessage({ type: "sync-action", action });
+      } else if (browserHost) {
+        // ブラウザだけ: 開いている計画 (保存するもの) か、Home の仮の名前で操作する
+        const p = get().project;
+        const file = source === "idb" && p && !get().ephemeral ? p.id : HOME_SYNC_FILE;
+        get().acceptSyncStatus(await browserHost.act(file, action));
       }
+    }
+  , initBrowserSync: (server) => {
+      if (browserHost) return;
+      browserHost = new BrowserSyncHost({
+        server
+      , onStatus: (status) => get().acceptSyncStatus(status)
+        // サーバーの計画を受け取った: その計画を開く
+      , onOpened: (id) => { void get().openProject(id); }
+        // 同期で手元 (IndexedDB) が変わった: 開いている計画なら読み直す (serve の change 通知と同じ扱い)
+      , onLocalChanged: (id) => { const p = get().project; if (p && p.id === id && get().source === "idb" && refreshExternal) void refreshExternal(); }
+      });
+      const p = get().project;
+      focusBrowserSync(get().source === "idb" && p && !get().ephemeral ? p.id : null);
     }
   , reload: async () => {
       // 計画を開いていない・すでに読み直している最中なら、何もしない
@@ -971,6 +1009,7 @@ export const useProjectStore = create<State>((set, get) => {
       if (!canLeave()) return;
       stopWatching();
       baseText = toJSON(p) + "\n";
+      focusBrowserSync(ephemeral ? null : p.id);
       set({ readonlyReason: null, project: p, ephemeral, source: "idb", readonly: (new URLSearchParams(location.search).get("readonly") === "1" || new URLSearchParams(location.search).get("view") === "article"), fileName: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: ephemeral ? "none" : "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(ephemeral ? null : p.id);
       // 手動の更新: ブラウザ内の計画は、このブラウザの保存先から読み直す (別のタブで変えた内容を取り込む)。
@@ -983,6 +1022,8 @@ export const useProjectStore = create<State>((set, get) => {
         if (!stored) throw new Error(t("このブラウザの保存先に、計画が見つかりません"));
         acceptRemote(toJSON(stored) + "\n");
       };
+      // 同期 (ブラウザの裏方) が保存先を書き換えたときの、黙った読み直し (失敗は次の通知に任せる)
+      refreshExternal = async () => { try { await reloadNow?.(); } catch { /* 次の機会に */ } };
     }
 
   , openLocalFile: async (handle) => {
@@ -1259,6 +1300,7 @@ export const useProjectStore = create<State>((set, get) => {
   , closeProject: () => {
       if (!canLeave()) return;
       stopWatching();
+      focusBrowserSync(null);
       set({ project: null, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: null, saveState: "none", ephemeral: false, source: "idb", fileName: null });
       rememberInUrl(null);
     }

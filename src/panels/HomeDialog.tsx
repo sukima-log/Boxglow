@@ -193,6 +193,8 @@ export function HomeDialog() {
         </section>
 
         </details>
+        {/* ブラウザだけの画面でも、サインインしてサーバーの計画を受け取れる (受け取った計画はこのブラウザに保存され、同期が続く)。引き出しの外に置き、初回でも見える */}
+        {canReceive && <ReceiveSection />}
         <section aria-labelledby="home-projects">
           <h2 id="home-projects" className="label mb-1">{t("このブラウザに保存した計画")}</h2>
           {inVsCode && <p className="home-description">{t("VS Code の中では、この一覧は VS Code 内のコピーです。開いて編集しても boxglow.json には保存されず、AI にも届きません。")}</p>}
@@ -233,7 +235,7 @@ function ReceiveSection() {
   return (
     <section className="home-receive" aria-labelledby="home-receive">
       <h3 id="home-receive">{t("または、サーバーの計画を受け取る")}</h3>
-      <p className="home-description">{t("別の端末で同期した計画を、このファイルに保存して開きます。")}</p>
+      <p className="home-description">{t("別の端末で同期した計画を、ここに保存して開きます。")}</p>
       <SyncStartup status={status} act={act} unsaved={false} receive />
     </section>
   );
