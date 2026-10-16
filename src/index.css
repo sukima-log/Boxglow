@@ -1183,6 +1183,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .sync-panel__signin { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .sync-panel__signin a { word-break: break-all; }
 .sync-panel__code { font-family: var(--font-mono, monospace); font-size: 20px; letter-spacing: 2px; }
+.sync-panel__code-row { display: flex; align-items: center; gap: 8px; }
 .sync-panel__close { position: absolute; top: 6px; right: 6px; }
 .sync-panel .muted { color: var(--text-muted); }
 .restore-dialog { max-height: 70vh; overflow: auto; }

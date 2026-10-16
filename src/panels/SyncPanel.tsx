@@ -572,13 +572,18 @@ export function SignInCode({ code, onCancel }: { code: NonNullable<SyncStatus["s
     <div className="sync-panel__signin">
       <div>{code.link ? t("GitHub を足す: ブラウザで次のページを開き、コードを入力してください") : t("ブラウザで次のページを開き、コードを入力してください")}</div>
       <button className="btn btn-primary btn-sm" onClick={()=>{
-        // クリック内で開く。コピーできない環境でもコードを残し、認可を代行しない。
+        // クリック内で行う。コピーを先に始めてからページを開く (先に開くと、この画面の焦点が外れてコピーが断られる)。
+        // コピーできない環境でもコードを残し、認可を代行しない。
+        const copied = navigator.clipboard?.writeText(code.userCode);
+        if (copied) copied.then(()=>setCopyFailed(false)).catch(()=>setCopyFailed(true)); else setCopyFailed(true);
         window.open(code.verificationUrl,"_blank","noopener,noreferrer");
-        void navigator.clipboard?.writeText(code.userCode).then(()=>setCopyFailed(false)).catch(()=>setCopyFailed(true));
-        if (!navigator.clipboard) setCopyFailed(true);
       }}>{t("コードをコピーして許可のページを開く")}</button>
       {copyFailed&&<p role="status">{t("コピーできませんでした。下のコードを入力してください。")}</p>}
-      <div className="sync-panel__code">{code.userCode}</div>
+      <div className="sync-panel__code-row">
+        <span className="sync-panel__code">{code.userCode}</span>
+        {/* 貼り付けられなかったときのために、コードだけをコピーする手段も置く */}
+        <button className="btn btn-ghost btn-sm" onClick={()=>{ void navigator.clipboard?.writeText(code.userCode).then(()=>setCopyFailed(false)).catch(()=>setCopyFailed(true)); }}>{t("コピー")}</button>
+      </div>
       <button className="btn btn-ghost btn-sm" onClick={onCancel}>
         {t("中止")}
       </button>
