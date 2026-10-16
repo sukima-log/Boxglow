@@ -201,5 +201,8 @@ export const gui: Record<string, string> = {
   "まだ記録はありません。進捗や気づきを、日付つきで残せます (AI は boxglow log で足します)": "No entries yet. Keep dated notes on progress and findings here (agents add them with boxglow log)",
   "この記録を消しますか?": "Delete this entry?",
   "{title} の記録を開く": "Open the log of {title}",
-  "記録を開く": "Open log"
+  "記録を開く": "Open log",
+  "ノート": "Notes",
+  "ノート (Markdown のメモ) と作業記録 (日付つき)": "Notes (Markdown) and the dated work log",
+  "AI に渡す・操作・Issue・資料": "AI text, actions, issue, links"
 };

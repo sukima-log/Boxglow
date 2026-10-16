@@ -150,7 +150,6 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   const [aiOpen, setAiOpen] = useState(false);
   const [scopeEditing, setScopeEditing] = useState(false);
   const [showPrompt, setShowPrompt] = useState<"plan" | "decompose" | "review" | null>(null);
-  const [more, setMore] = useState(true);
   // Notes (Markdown) を編集中か (表示を押すと編集に切り替わり、欄を離れると表示に戻る)
   const [notesEditing, setNotesEditing] = useState(false);
   const saveAsset = useProjectStore((s) => s.saveAsset);
@@ -197,7 +196,6 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
     setAiOpen(false);
     setScopeEditing(false);
     setShowPrompt(null);
-    setMore(true);
     setMenu(false);
     setOwnerQuery("");
     // タブは保つ (別のボックスを選んでも I/O などを続けて見比べられるように。Status には戻さない)
@@ -234,8 +232,8 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   , io: t("入力と出力 (成果物)")
   , owner: t("担当")
   , dates: t("開始日・期日・時間")
-  , more: t("AI に渡す・メモ・資料")
-  , log: t("作業記録 (日付つきの Markdown。進捗・気づき・経緯)")
+  , more: t("AI に渡す・操作・Issue・資料")
+  , log: t("ノート (Markdown のメモ) と作業記録 (日付つき)")
   };
 
   return (
@@ -280,7 +278,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
 
       {/* タブ: 一度に 1 項目だけ見せる */}
       <div className="seg" style={{ gridTemplateColumns: "repeat(6, 1fr)" }}>
-        {([["status", t("状態")], ["io", t("入出力")], ["owner", t("担当")], ["dates", t("日程")], ["log", t("記録")], ["more", t("その他")]] as const).map(([id, label]) => (
+        {([["status", t("状態")], ["io", t("入出力")], ["owner", t("担当")], ["dates", t("日程")], ["log", t("ノート")], ["more", t("その他")]] as const).map(([id, label]) => (
           <button key={id} className="seg__btn" data-on={tab === id} onClick={() => setTab(id)} style={{ padding: "6px 2px", fontSize: 12 }}
             title={TAB_HELP[id]}>
             {label}
@@ -490,7 +488,23 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       </>)}
 
       {/* AI */}
-      {tab === "log" && <WorkLog project={project} blockId={blockId} readonly={readonly} apply={apply} />}
+      {tab === "log" && (<>
+        {/* ノート: 自由に書く広い欄 (Markdown)。書いてあれば整形して表示し、押すと編集。空なら最初から入力欄 */}
+        <section className="sec notes">
+          {b.description && freshnessText(b, b.descriptionUpdatedAt, "older") && <p className="text-[11px]">{freshnessText(b, b.descriptionUpdatedAt, "older")}</p>}
+          {b.description && !notesEditing && !readonly ? (
+            <div className="md-view md-view--notes" role="button" tabIndex={0} title={t("押すと編集")} onClick={() => setNotesEditing(true)} onKeyDown={(e) => { if (e.key === "Enter") setNotesEditing(true); }}>
+              <Markdown text={b.description} />
+            </div>
+          ) : b.description && readonly ? <Markdown text={b.description} className="md-view md-view--notes" /> : (
+            <DebouncedText multiline className="input md-edit md-edit--notes" placeholder={t("メモ (Markdown で書けます: 見出し・箇条書き・表・リンク・画像)")} value={b.description} disabled={readonly} autoFocus={notesEditing}
+              onCommit={(v) => apply((p) => updateBlock(p, blockId, { description: v }))} onBlur={() => setNotesEditing(false)}
+              onPaste={(e) => void pasteImages(e.clipboardData.files, e)} onDrop={(e) => void pasteImages(e.dataTransfer.files, e)} />
+          )}
+        </section>
+        <div className="sec__head"><span className="label">{t("記録")}</span></div>
+        <WorkLog project={project} blockId={blockId} readonly={readonly} apply={apply} />
+      </>)}
       {tab === "more" && (<>
       {/* 操作: 以前は ⋯ メニューにあったもの。見つけやすいようにタブの先頭に並べる */}
       {!readonly && (
@@ -537,27 +551,10 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       )}
       </section>
 
-      {/* メモ・資料 (必要なときだけ開く) */}
+      {/* 資料 (リンク)。メモ本文は「ノート」タブへ移した */}
       <section className="sec">
-        <div className="sec__head"><span className="label">Notes{b.description || b.artifacts.length > 0 ? " *" : ""}</span>
-          <button className="btn btn-ghost btn-sm" onClick={() => setMore(!more)}>{more ? "▴" : "▾"}</button></div>
-        {more && (
-          <div className="flex flex-col gap-2">
-            {/* 説明が状態の変更より前のものだと分かったときだけ注記する */}
-            {b.description && freshnessText(b, b.descriptionUpdatedAt, "older") && <p className="text-[11px]">{freshnessText(b, b.descriptionUpdatedAt, "older")}</p>}
-            {/* Markdown のメモ: 書いてあれば整形して表示し、押すと編集 (素の Markdown)。空なら最初から入力欄 */}
-            {b.description && !notesEditing && !readonly ? (
-              <div className="md-view" role="button" tabIndex={0} title={t("押すと編集")} onClick={() => setNotesEditing(true)} onKeyDown={(e) => { if (e.key === "Enter") setNotesEditing(true); }}>
-                <Markdown text={b.description} />
-              </div>
-            ) : b.description && readonly ? <Markdown text={b.description} className="md-view" /> : (
-              <DebouncedText multiline className="input md-edit" placeholder={t("メモ (Markdown で書けます: 見出し・箇条書き・表・リンク・画像)")} value={b.description} disabled={readonly} autoFocus={notesEditing}
-                onCommit={(v) => apply((p) => updateBlock(p, blockId, { description: v }))} onBlur={() => setNotesEditing(false)}
-                onPaste={(e) => void pasteImages(e.clipboardData.files, e)} onDrop={(e) => void pasteImages(e.dataTransfer.files, e)} />
-            )}
-            <ArtifactsEditor artifacts={b.artifacts} readonly={readonly} addLabel="Link" onChange={(next) => apply((p) => updateBlock(p, blockId, { artifacts: next }))} />
-          </div>
-        )}
+        <div className="sec__head"><span className="label">Links{b.artifacts.length > 0 ? " *" : ""}</span></div>
+        <ArtifactsEditor artifacts={b.artifacts} readonly={readonly} addLabel="Link" onChange={(next) => apply((p) => updateBlock(p, blockId, { artifacts: next }))} />
       </section>
       </>)}
     </div>

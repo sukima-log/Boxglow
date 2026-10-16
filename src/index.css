@@ -1926,4 +1926,7 @@ button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent)
 .tree-row__log { width: 18px; opacity: 0; display: inline-flex; align-items: center; gap: 2px; }
 .tree-row:hover .tree-row__log, .tree-row:focus-within .tree-row__log, .tree-row[data-selected="true"] .tree-row__log, .tree-row__log:has(.tree-row__log-count) { opacity: 1; }
 .tree-row__log-count { font-size: 10px; color: var(--text-muted); }
+/* ノートタブ: 自由に書く欄は広く (最低 240px。パネルの幅を広げれば本文の幅もそれに従う) */
+.md-view--notes { min-height: 240px; }
+.md-edit--notes { min-height: 320px; }
 

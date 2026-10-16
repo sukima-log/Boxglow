@@ -61,7 +61,7 @@ const {chromium,open,check,result}=require('./lib.cjs');
       check(theme+' 範囲: 内容がないボックスには新しい欄を出さない',await page.locator('.work-scope').count()===0);
       await search.fill('B2');await search.press('Enter');
       check(theme+' 鮮度: Done後も古い説明を消さず見直しを促す',await page.locator('.description-reminder').isVisible());
-      await page.getByRole('button',{name:'その他',exact:true}).click();
+      await page.getByRole('button',{name:'ノート',exact:true}).click();
       check(theme+' 鮮度: 説明の記録日時と状態変更より前という表示がある',(await page.locator('.panel.right').innerText()).includes('2026-10-01')&&(await page.locator('.panel.right').innerText()).includes('状態の変更より前'));
       await page.locator('.summary-chip').click();await page.getByRole('button',{name:/^Resume/}).click();
       check(theme+' Resume: 完了した引き継ぎは本文を隠し件数だけ出す',await page.getByRole('button',{name:'Done (1)',exact:true}).isVisible()&&await page.getByText('以前の公開状況',{exact:true}).count()===0);

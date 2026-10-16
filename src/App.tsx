@@ -40,6 +40,8 @@ function saveWidth(key: string, w: number): void {
 
 /** 右パネルと引き出しの幅の範囲 (px) */
 const RIGHT_W = { min: 260, max: 760, def: 320 };
+/** 右パネルの幅の上限: 画面の幅に応じて広げられる (図は 240px 残す)。ノートをメインに見たいときのため */
+const rightMax = (): number => Math.max(RIGHT_W.max, (typeof window !== "undefined" ? window.innerWidth : 0) - 240);
 const DRAWER_W = { min: 220, max: 640, def: 280 };
 import { applyTheme } from "./lib/theme";
 import { HomeDialog } from "./panels/HomeDialog";
@@ -97,7 +99,7 @@ export function App() {
     return !prev;
   });
   // パネルの幅 (境界のつまみで変えられる。ブラウザに記憶)
-  const [rightW, setRightW] = useState(() => loadWidth("boxglow:rightW", RIGHT_W.def, RIGHT_W.min, RIGHT_W.max));
+  const [rightW, setRightW] = useState(() => loadWidth("boxglow:rightW", RIGHT_W.def, RIGHT_W.min, rightMax()));
   const [drawerW, setDrawerW] = useState(() => loadWidth("boxglow:drawerW", DRAWER_W.def, DRAWER_W.min, DRAWER_W.max));
   const onRightW = useCallback((w: number) => { setRightW(w); saveWidth("boxglow:rightW", w); }, []);
   const onDrawerW = useCallback((w: number) => { setDrawerW(w); saveWidth("boxglow:drawerW", w); }, []);
@@ -353,7 +355,7 @@ export function App() {
       </main>
 
       <aside className={`panel right ${hasSelection ? "" : "hidden-panel"}`}>
-        {project && hasSelection && <ResizeHandle side="left" width={rightW} min={RIGHT_W.min} max={RIGHT_W.max} onWidth={onRightW} />}
+        {project && hasSelection && <ResizeHandle side="left" width={rightW} min={RIGHT_W.min} max={rightMax()} onWidth={onRightW} />}
         {project && hasSelection && <Inspector project={project} onOpenDrawer={openDrawer} />}
       </aside>
 
