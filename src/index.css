@@ -1126,7 +1126,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .sync-panel__danger { color: var(--danger, #c0392b); }
 .sync-panel__confirm-delete { display: grid; gap: 8px; padding: 8px; border: 1px solid var(--danger); border-radius: 8px; }
 /* 課金: プランの行 (契約が無いと注意色) と、申し込みの画面へのリンク */
-.sync-panel__billing { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; }
+.sync-panel__billing { width: 100%; }
 .sync-panel__plan[data-entitled="false"] { color: var(--danger); }
 .sync-panel__billing-link { display: flex; gap: 8px; align-items: center; }
 /* Home の「サーバーの計画を受け取る」節 (ファイルがまだ無い / 空のとき) */
@@ -1190,6 +1190,16 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .sync-panel__choices { display: flex; gap: 6px; flex-wrap: wrap; }
 .sync-panel__details { font-size: 12px; color: var(--text-muted); white-space: pre-wrap; word-break: break-all; }
 .sync-panel__id { font-family: var(--font-mono, monospace); font-size: 11px; }
+/* 詳細と設定の中の組: 見出し (小さく薄い) + 行。組の間は細い線で区切る。知らせの組は線なし */
+.sync-panel__group { display: grid; gap: 6px; padding: 8px 0 4px; border-top: 1px solid var(--line-soft); }
+.sync-panel__group--notes { border-top: 0; padding-top: 0; }
+.sync-panel__group-title { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--text-muted); }
+.sync-panel__facts { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0; }
+.sync-panel__facts > dt { color: var(--text-muted); white-space: nowrap; }
+.sync-panel__facts > dd { margin: 0; min-width: 0; }
+.sync-panel__group--danger { padding-bottom: 0; }
+/* details[open] > * の上の余白を、組には付けない (組の padding で間隔を取る) */
+.sync-popover details[open] > .sync-panel__group { margin-top: 0; }
 .sync-panel__signin { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 .sync-panel__signin a { word-break: break-all; }
 .sync-panel__code { font-family: var(--font-mono, monospace); font-size: 20px; letter-spacing: 2px; }
