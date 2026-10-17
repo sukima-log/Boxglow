@@ -79,6 +79,24 @@ const ROOT = path.resolve(__dirname, '..');
     const head = server.project(remoteId, 'acc-browser')?.head;
     const headName = head ? JSON.parse(head.text).name : null;
     check('ブラウザ同期: 画面の編集がサーバーに届く', headName === 'ブラウザで改名', JSON.stringify(Object.keys(head ?? {})));
+    // 履歴: 「サーバーの計画を管理」→ 履歴 → 1 つ前の版 (2 台目が改名) に戻す → 確認 → 画面が戻り、サーバーに新しい版として送られる
+    await page.locator('.sync-panel__management > summary').click();
+    await page.getByRole('button', { name: '履歴', exact: true }).click();
+    await page.locator('.sync-version-row').nth(1).waitFor({ timeout: 10000 });
+    const versionRows = await page.locator('.sync-version-row').count();
+    check('ブラウザ同期: 履歴に 3 つの版が出る (置いた・2 台目・ブラウザ)', versionRows === 3, String(versionRows));
+    await page.locator('.sync-version-row').nth(1).getByRole('button', { name: 'この版に戻す…', exact: true }).click();
+    await page.locator('.sync-lifecycle__confirm').waitFor({ timeout: 10000 });
+    check('ブラウザ同期: 戻す前の確認に計画名が出る', ((await page.locator('.sync-lifecycle__confirm').textContent()) ?? '').includes('2 台目が改名'));
+    await page.getByRole('button', { name: 'この版に戻す', exact: true }).click();
+    await page.waitForFunction(() => window.boxglow.store.getState().project?.name === '2 台目が改名', null, { timeout: 20000 });
+    await page.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'synced', null, { timeout: 20000 });
+    const reverted = server.project(remoteId, 'acc-browser');
+    check('ブラウザ同期: 戻した中身が新しい版としてサーバーに届き、履歴は消えない', reverted.versions.length === 4 && JSON.parse(reverted.head.text).name === '2 台目が改名', String(reverted.versions.length));
+    await page.locator('.sync-lifecycle').getByRole('button', { name: '閉じる', exact: true }).click();
+    await page.evaluate(() => window.boxglow.store.getState().apply((p) => ({ ...p, name: 'ブラウザで改名' })));
+    await page.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'synced', null, { timeout: 20000 });
+    await page.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved', null, { timeout: 10000 }).catch(() => {});
     // 別のブラウザ (新しいコンテキスト = 空の保存先) で、Home からサーバーの計画を受け取る
     const context2 = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page2 = await context2.newPage();

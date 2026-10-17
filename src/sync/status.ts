@@ -78,7 +78,11 @@ export interface SyncStatus {
     choiceId:string; busy:boolean; error?:string; message?:string;
     projects?:{id:string;name:string;revision:string;deletedAt:string;expiresAt:string;restoredId:string|null;restorable:boolean}[];
     nextCursor?:string|null;
-    preview?:{kind:"delete"|"restore";id:string;name:string;account:string;revision:string;expiresAt?:string;targetId?:string};
+    /** 履歴 (版の一覧。新しい順) と、その計画の ID */
+    versions?:{revision:string;at:string}[];
+    versionsOf?:string;
+    /** 確認中の操作 (revert = 履歴の版の中身を手元のファイルに戻す。サーバーの履歴は変えず、次の同期で新しい版として送られる) */
+    preview?:{kind:"delete"|"restore"|"revert";id:string;name:string;account:string;revision:string;expiresAt?:string;targetId?:string};
   };
   /** このホストで作成した、置き換え前のローカルファイルの控え。 */
   localBackup?: string;
@@ -99,6 +103,7 @@ export type HostAction =
   | { kind:"openProject"; operationId:string; projectId:string; destination?:"current"|"new"; name?:string }
 
   | { kind:"listTrash"; cursor?:string } | {kind:"cancelLifecycle"}
+  | { kind:"listVersions"; projectId:string } | { kind:"previewRevert"; projectId:string; revision:string }
   | {kind:"previewDelete"|"previewRestore";projectId:string}
   | {kind:"confirmLifecycle";choiceId:string}
   | { kind: "enable" } | { kind: "disable" }

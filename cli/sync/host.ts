@@ -9,7 +9,7 @@
  * 「別のプロセスが受け持っている」と表示して、自分が制御できるようには見せない。
  * 設計: docs/private/SYNC_GUI_DESIGN.md (第 4 版)
  */
-import { listTrash, previewLifecycle, commitLifecycle, type LifecyclePreview } from "./lifecycle";
+import { listTrash, previewLifecycle, commitLifecycle, listVersions, previewRevert, commitRevert, type LifecyclePreview } from "./lifecycle";
 import { isDefaultSyncServer } from "./server-policy";
 import { parseConflictResolution, type ConflictResolution } from "../../src/model/conflict-groups";
 import { randomUUID } from "node:crypto";
@@ -658,12 +658,26 @@ export class SyncHost {
     const o={server:this.server,fetch:this.doFetch,allowEnvironmentToken:this.options.allowEnvironmentToken};
     try {
       if(action.kind === "listTrash") Object.assign(entry.state,await listTrash(o,action.cursor));
+      // 履歴: 一覧と、戻す前の確認 (中身は控えに持ち、画面には名前と版だけ出す)
+      if(action.kind === "listVersions") { entry.state.versions=await listVersions(o,action.projectId); entry.state.versionsOf=action.projectId; }
+      if(action.kind === "previewRevert") {
+        entry.preview=await previewRevert(o,action.projectId,action.revision);
+        const {kind,id,name,account,revision}=entry.preview;
+        entry.state.preview={kind,id,name,account,revision};
+      }
       if(action.kind === "previewDelete" || action.kind === "previewRestore") {
         entry.preview=await previewLifecycle(o,action.kind === "previewDelete" ? "delete" : "restore",action.projectId);
         const {kind,id,name,account,revision,expiresAt,targetId}=entry.preview;
         entry.state.preview={kind,id,name,account,revision,expiresAt,targetId};
       }
-      if(action.kind === "confirmLifecycle") {
+      if(action.kind === "confirmLifecycle" && entry.preview!.kind === "revert") {
+        // 手元のファイルを版の中身で置き換え (控えつき)、すぐ同期して新しい版として送る
+        const {backup}=await commitRevert(o,file,entry.preview!);
+        const revision=entry.preview!.revision;
+        entry.state.preview=undefined;entry.preview=undefined;
+        entry.state.message=t("版 {rev} の中身に戻しました。置き換える前の控え: {path}。次の同期で新しい版として送られます。",{rev:revision,path:backup ?? "-"});
+        await this.syncFile(file,{});
+      } else if(action.kind === "confirmLifecycle") {
         const deletedId=entry.preview!.id;
         const result=await commitLifecycle(o,entry.preview!);
         entry.state.preview=undefined;entry.preview=undefined;
@@ -684,7 +698,7 @@ export class SyncHost {
   /** 操作を受ける (serve の POST /api/sync、拡張の sync-action)。結果は状態で返す */
   async act(file: string | null, action: HostAction): Promise<SyncStatus> {
     const real = file ? realFile(file) : null;
-    if (["listTrash","cancelLifecycle","previewDelete","previewRestore","confirmLifecycle"].includes(action.kind)) {
+    if (["listTrash","cancelLifecycle","previewDelete","previewRestore","confirmLifecycle","listVersions","previewRevert"].includes(action.kind)) {
       if(real) { const work=this.lifecycleAction(real,action);this.manual.add(work);try {await work;} finally {this.manual.delete(work);} }
       return this.status(file);
     }
@@ -897,6 +911,8 @@ export function parseHostAction(text: string): HostAction | null {
     case "previewDelete":
     case "previewRestore": return typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 ? {kind:o.kind,projectId:o.projectId} : null;
     case "confirmLifecycle": return typeof o.choiceId === "string" && o.choiceId.length <= 128 ? {kind:o.kind,choiceId:o.choiceId} : null;
+    case "listVersions": return typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 ? {kind:o.kind,projectId:o.projectId} : null;
+    case "previewRevert": return typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 && typeof o.revision === "string" && /^[A-Za-z0-9._-]{1,64}$/.test(o.revision) ? {kind:o.kind,projectId:o.projectId,revision:o.revision} : null;
     case "cancelLifecycle":
     case "beginSync":
     case "cancelBegin":

@@ -23,8 +23,8 @@ interface StoredProject {
   seq: number;
   /** 操作 ID → { 要求の印 (中身のハッシュと前提の版), 受理された版 } */
   ops: Map<string, { request: string; revision: string }>;
-  /** 受理した版の一覧 (履歴) */
-  versions: { revision: string; hash: string }[];
+  /** 受理した版の一覧 (履歴)。at は受理した時刻 */
+  versions: { revision: string; hash: string; text: string; at: string }[];
 }
 
 export class TestSyncServer {
@@ -244,6 +244,16 @@ export class TestSyncServer {
       send(200, JSON.stringify(done ? { revision: done.revision } : { revision: null, cancelled: true }));
       return;
     }
+    // 履歴: 版の一覧 (新しい順) と、その版の中身
+    const versionsMatch = /^\/v1\/projects\/([^/]+)\/versions(?:\/([^/]+))?$/.exec(req.url ?? "");
+    if (versionsMatch && req.method === "GET") {
+      const project = projects.get(decodeURIComponent(versionsMatch[1]));
+      if (!project || project.deleted) { send(404, JSON.stringify({ code: "absent" })); return; }
+      if (versionsMatch[2] === undefined) { send(200, JSON.stringify([...project.versions].reverse().map((v) => ({ revision: v.revision, hash: v.hash, at: v.at, opId: "" })))); return; }
+      const found = project.versions.find((v) => v.revision === decodeURIComponent(versionsMatch[2]!));
+      if (!found) { send(404, JSON.stringify({ code: "absent" })); return; }
+      send(200, found.text); return;
+    }
     // 操作の結果の問い合わせ: 受理されていれば、その版。受理されていなければ null
     const opMatch = /^\/v1\/projects\/([^/]+)\/ops\/([^/]+)$/.exec(req.url ?? "");
     if (opMatch && req.method === "GET") {
@@ -310,7 +320,7 @@ export class TestSyncServer {
     // (4) 確定する: 最新の版・履歴・操作の結果を一緒に
     const revision = `${this.epoch}.${++project.seq}`;
     project.head = { revision, text, updatedAt:new Date().toISOString() };
-    project.versions.push({ revision, hash });
+    project.versions.push({ revision, hash, text, at: project.head.updatedAt! });
     project.ops.set(op, { request, revision });
     projects.set(id, project);
     return { status: create ? 201 : 200, body: { revision }, revision };

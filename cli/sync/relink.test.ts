@@ -52,7 +52,7 @@ function restoreServer(epoch: string, text: string | null): void {
   if (text === null) { server.projects.delete("plan-1"); return; }
   const p = server.project("plan-1")!;
   p.head = { revision: `${epoch}.1`, text };
-  p.seq = 1; p.ops = new Map(); p.versions = [{ revision: `${epoch}.1`, hash: sha(text) }];
+  p.seq = 1; p.ops = new Map(); p.versions = [{ revision: `${epoch}.1`, hash: sha(text), text, at: new Date().toISOString() }];
 }
 
 /**

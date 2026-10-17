@@ -14,6 +14,7 @@ export function SyncLifecycle({status,act}:{status:SyncStatus;act:(a:HostAction)
   <div className="sync-panel__row">
    <button className="btn btn-sm" disabled={state?.busy} onClick={()=>void act({kind:"beginSync"})}>{t("サーバーの計画を開く")}</button>
    <button className="btn btn-sm" disabled={state?.busy} onClick={()=>void act({kind:"listTrash"})}>{t("削除済みの計画")}</button>
+   {status.file?.binding && <button className="btn btn-sm" disabled={state?.busy} onClick={()=>void act({kind:"listVersions",projectId:status.file!.binding!.remoteId})}>{t("履歴")}</button>}
    {status.file?.binding && <button className="btn btn-ghost btn-sm" disabled={state?.busy} onClick={()=>void act({kind:"previewDelete",projectId:status.file!.binding!.remoteId})}>{t("サーバーから削除…")}</button>}
   </div>
   {state && <div className="sync-lifecycle__body">
@@ -22,21 +23,30 @@ export function SyncLifecycle({status,act}:{status:SyncStatus;act:(a:HostAction)
    {state.message && <p role="status">{state.message}</p>}
    {preview && <div className="sync-lifecycle__confirm">
     {replaced && <p role="alert">{t("確認する対象が切り替わりました。名前と同期先をもう一度確認してください。")}</p>}
-    <strong>{preview.kind === "delete" ? t("この計画をサーバーから削除しますか？") : t("この計画を復元しますか？")}</strong>
+    <strong>{preview.kind === "delete" ? t("この計画をサーバーから削除しますか？") : preview.kind === "revert" ? t("この版の内容に戻しますか？") : t("この計画を復元しますか？")}</strong>
     <p>{preview.name}</p><p className="break-all">{t("送り先")}: {status.server}<br/>{t("利用者")}: {preview.account}<br/>ID: {preview.id}</p>
     {preview.kind === "delete" ? <>
      <p>{current ? t("このファイルの同期先です。削除すると、このファイルの同期が止まります。") : t("このファイルの同期先とは別の計画です。")}</p>
      <p>{t("削除から30日間は復元できます。手元のファイルと未送信の編集は残ります。")}</p>
+    </> : preview.kind === "revert" ? <>
+     <p>{t("版")}: {preview.revision}</p>
+     <p>{t("手元のファイルをこの版の内容で置き換えます (今の内容は控えに残ります)。サーバーの履歴は消えず、次の同期で新しい版として送られます。")}</p>
     </> : <p>{t("新しいIDに戻します。元のIDの端末は止まったままです。復元後に結び直して、未送信の編集と比較できます。")}</p>}
     {status.file && <p className="break-all">{t("今開いているファイル")}: {status.file.path}</p>}
     {preview.expiresAt && <p>{t("復元期限")}: {new Date(preview.expiresAt).toLocaleString(getLang() === "ja" ? "ja-JP" : "en-US")}</p>}
-    <button className={preview.kind === "delete" ? "btn btn-danger btn-sm" : "btn btn-primary btn-sm"} disabled={state.busy} onClick={()=>void act({kind:"confirmLifecycle",choiceId:state.choiceId})}>{preview.kind === "delete" ? t("削除を確定") : t("復元を確定")}</button>
+    <button className={preview.kind === "delete" ? "btn btn-danger btn-sm" : "btn btn-primary btn-sm"} disabled={state.busy} onClick={()=>void act({kind:"confirmLifecycle",choiceId:state.choiceId})}>{preview.kind === "delete" ? t("削除を確定") : preview.kind === "revert" ? t("この版に戻す") : t("復元を確定")}</button>
    </div>}
    {state.projects?.map(p=><div className="sync-project-row" key={p.id}>
     <strong>{p.name}</strong><small>{t("復元期限")}: {new Date(p.expiresAt).toLocaleString(getLang() === "ja" ? "ja-JP" : "en-US")}</small>
     <button className="btn btn-sm" disabled={!p.restorable || state.busy} onClick={()=>void act({kind:"previewRestore",projectId:p.id})}>{p.restoredId ? t("復元済み") : p.restorable ? t("復元…") : t("期限終了")}</button>
    </div>)}
    {state.projects?.length === 0 && <p>{t("削除済みの計画はありません。")}</p>}
+   {/* 履歴: 新しい順。いちばん上は今の版 (戻す対象にしない) */}
+   {state.versions?.map((v,i)=><div className="sync-project-row sync-version-row" key={v.revision}>
+    <strong>{v.at ? new Date(v.at).toLocaleString(getLang() === "ja" ? "ja-JP" : "en-US") : "-"}</strong><small>{v.revision}</small>
+    {i === 0 ? <small>{t("今の版")}</small> : <button className="btn btn-sm" disabled={state.busy} onClick={()=>void act({kind:"previewRevert",projectId:state.versionsOf!,revision:v.revision})}>{t("この版に戻す…")}</button>}
+   </div>)}
+   {state.versions?.length === 0 && <p>{t("履歴はまだありません。")}</p>}
    {state.nextCursor && <button className="btn btn-sm" disabled={state.busy} onClick={()=>void act({kind:"listTrash",cursor:state.nextCursor!})}>{t("次のページ")}</button>}
    <button className="btn btn-ghost btn-sm" disabled={state.busy} onClick={()=>void act({kind:"cancelLifecycle"})}>{t("閉じる")}</button>
   </div>}

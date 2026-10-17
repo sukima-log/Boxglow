@@ -2,7 +2,7 @@
  * 同期の裏方 (cli/sync/host.ts) の試験: 実際のファイル・設定フォルダ・試験用のサーバーを使い、画面の代わりに状態を読む
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addBlock, createProject, defaultTaskParent, fromJSON, toJSON, updateBlock } from "../../src/model/graph";
@@ -168,6 +168,46 @@ describe("サインインとサインアウト", () => {
     expect(host.status(file)).toMatchObject({ state: "signed-out", owner: "none", file: { enabled: false } });
     process.env.BOXGLOW_TOKEN = "env-user";
     expect(host.status(file)).toMatchObject({ state: "off", credentials: { source: "env" } });
+    await host.stop();
+  });
+
+  it("履歴: 版の一覧を読み、古い版の中身に戻す (控えを取って手元を置き換え、すぐ新しい版として送る)。サーバーの履歴は消えない", async () => {
+    const { file } = planFile("p1");
+    signedIn("acc-hist");
+    const { host } = make();
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    const remoteId = host.status(file).file!.binding!.remoteId;
+    // 2 つ目の版: 名前を変えて送る
+    const first = readFileSync(file, "utf8");
+    const p = fromJSON(first);
+    writeFileSync(file, toJSON({ ...p, name: "改名した" }) + "\n");
+    await host.act(file, { kind: "syncNow" });
+    expect(server.project(remoteId, "acc-hist")!.versions.length).toBe(2);
+    // 一覧 (新しい順)
+    let state = await host.act(file, { kind: "listVersions", projectId: remoteId });
+    expect(state.lifecycle?.versions?.map((v) => v.revision)).toEqual([`${server.epoch}.2`, `${server.epoch}.1`]);
+    expect(state.lifecycle?.versionsOf).toBe(remoteId);
+    // 戻す前の確認: 名前と版が出て、中身は状態に出ない。手元はまだ変わらない
+    state = await host.act(file, { kind: "previewRevert", projectId: remoteId, revision: `${server.epoch}.1` });
+    expect(state.lifecycle?.preview).toMatchObject({ kind: "revert", id: remoteId, name: "p1", revision: `${server.epoch}.1` });
+    expect(JSON.stringify(state)).not.toContain('"text"');
+    expect(fromJSON(readFileSync(file, "utf8")).name).toBe("改名した");
+    // 確定: 控えが隣にでき、手元が戻り、サーバーに 3 つ目の版として送られる (履歴は 3 つ)
+    state = await host.act(file, { kind: "confirmLifecycle", choiceId: state.lifecycle!.choiceId });
+    expect(state.lifecycle?.error).toBeUndefined();
+    expect(state.lifecycle?.message).toContain(`${server.epoch}.1`);
+    expect(fromJSON(readFileSync(file, "utf8")).name).toBe("p1");
+    expect(readdirSync(join(root, "p1")).some((n) => n.includes(".before-sync-"))).toBe(true);
+    const project = server.project(remoteId, "acc-hist")!;
+    expect(project.versions.length).toBe(3);
+    expect(fromJSON(project.head!.text).name).toBe("p1");
+    // 古い選択 ID では確定しない
+    state = await host.act(file, { kind: "previewRevert", projectId: remoteId, revision: `${server.epoch}.2` });
+    const stale = state.lifecycle!.choiceId;
+    await host.act(file, { kind: "cancelLifecycle" });
+    await host.act(file, { kind: "confirmLifecycle", choiceId: stale });
+    expect(server.project(remoteId, "acc-hist")!.versions.length).toBe(3);
     await host.stop();
   });
 

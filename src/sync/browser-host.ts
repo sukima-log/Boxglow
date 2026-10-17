@@ -14,6 +14,7 @@ import { loadProject, saveProject } from "../lib/storage";
 import { fromJSON, toJSON } from "../model/graph";
 import { parseConflictResolution, type ConflictResolution } from "../model/conflict-groups";
 import { browserSyncIO } from "./browser-io";
+import { applyRevert, parseVersionList, planNameOf } from "./versions";
 import { haltView } from "./halt-view";
 import { runSync, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncOptions, type SyncResult } from "./run";
 import type { HostAction, SyncAction, SyncStatus } from "./status";
@@ -59,6 +60,8 @@ export class BrowserSyncHost {
   private signingIn: SignInEntry | null = null;
   private message?: string;
   private notInvited?: SyncStatus["notInvited"];
+  /** 計画ごとの、サーバーの計画の管理 (ブラウザ版は履歴と「この版に戻す」だけ)。preview の中身 (text) は状態に出さない */
+  private readonly lifecycles = new Map<string, { state: NonNullable<SyncStatus["lifecycle"]>; credentials: number; text?: string }>();
   private busy = 0;
   private paused = false;
   private network: { at: number; message: string } | null = null;
@@ -385,10 +388,55 @@ export class BrowserSyncHost {
       case "bind": case "syncNow": if (file) await this.syncFile(file, {}); break;
       case "choose": await this.choose(action.choiceId, file); break;
       case "resolveGroups": await this.choose(action.choiceId, file, action.resolution); break;
-      case "listTrash": case "cancelLifecycle": case "previewDelete": case "previewRestore": case "confirmLifecycle":
+      case "listVersions": case "previewRevert": case "confirmLifecycle": case "cancelLifecycle": if (file) await this.lifecycleAction(file, action); break;
+      case "listTrash": case "previewDelete": case "previewRestore":
         this.message = t("サーバーの計画の削除と復元は、ブラウザ版ではまだ使えません (npx boxglow remote か、serve / VS Code の画面で)"); break;
     }
     return this.status(file);
+  }
+
+  /**
+   * 履歴の操作 (listVersions / previewRevert / confirmLifecycle / cancelLifecycle)。Node の host の lifecycleAction と同じ約束:
+   * 選択 ID と資格情報の世代が表示したときと同じときだけ確定する。戻すときは手元の計画を控えてから置き換え、画面に知らせ、すぐ同期する
+   */
+  private async lifecycleAction(file: string, action: HostAction): Promise<void> {
+    const old = this.lifecycles.get(file);
+    if (old?.state.busy) return;
+    if (action.kind === "cancelLifecycle") { this.lifecycles.delete(file); this.emit(); return; }
+    if (!this.signedIn()) { this.message = t("先にサインインしてください"); this.emit(); return; }
+    if (action.kind === "confirmLifecycle" && (!old?.state.preview || old.state.choiceId !== action.choiceId || old.credentials !== this.generation)) {
+      this.lifecycles.delete(file); this.message = t("表示したときから、状態が変わっています。選び直してください"); this.emit(); return;
+    }
+    const entry = action.kind === "confirmLifecycle" ? old! : { state: { choiceId: crypto.randomUUID(), busy: false } as NonNullable<SyncStatus["lifecycle"]>, credentials: this.generation };
+    this.lifecycles.set(file, entry); entry.state.busy = true; entry.state.error = undefined; this.emit();
+    try {
+      if (action.kind === "listVersions") {
+        const res = await this.doFetch(`${this.server}/v1/projects/${encodeURIComponent(action.projectId)}/versions`, { redirect: "error" });
+        if (!res.ok) throw new Error(t("履歴を読めませんでした (サーバーの応答: {status})", { status: res.status }));
+        entry.state.versions = parseVersionList(await res.json()); entry.state.versionsOf = action.projectId;
+      }
+      if (action.kind === "previewRevert") {
+        const res = await this.doFetch(`${this.server}/v1/projects/${encodeURIComponent(action.projectId)}/versions/${encodeURIComponent(action.revision)}`, { redirect: "error" });
+        if (!res.ok) throw new Error(t("履歴を読めませんでした (サーバーの応答: {status})", { status: res.status }));
+        const text = await res.text();
+        entry.text = text;
+        entry.state.preview = { kind: "revert", id: action.projectId, name: planNameOf(text, action.projectId), account: this.account?.account?.accountId ?? "", revision: action.revision };
+      }
+      if (action.kind === "confirmLifecycle") {
+        const preview = entry.state.preview!;
+        if (preview.kind !== "revert" || typeof entry.text !== "string") throw new Error(t("計画の操作を完了できませんでした。状態を確認してください。"));
+        await applyRevert(browserSyncIO(file, this.server), entry.text);
+        entry.state.preview = undefined; entry.text = undefined;
+        entry.state.message = t("版 {rev} の中身に戻しました。置き換える前の控え: {path}。次の同期で新しい版として送られます。", { rev: preview.revision, path: t("このブラウザの保存先") });
+        this.options.onLocalChanged?.(file);
+        await this.syncFile(file, {});
+      }
+    } catch (e) { entry.state.error = e instanceof Error ? e.message : String(e); }
+    finally {
+      entry.state.busy = false;
+      if (entry.credentials !== this.generation) this.lifecycles.delete(file);
+      this.emit();
+    }
   }
 
   /** 今の状態を組み立てる (file = 今の画面の計画 id) */
@@ -400,6 +448,7 @@ export class BrowserSyncHost {
     , owner: "self", server: this.server, isDefaultServer: isDefaultSyncServer(this.server)
     , ...(file && this.startups.has(file) ? { startup: (({ credentials: _c, ...safe }) => safe)(this.startups.get(file)!) } : {})
     , file: file ? { path: file, enabled: this.enabled.has(file), binding: this.bindingOf(file) } : null
+    , ...(file && this.lifecycles.has(file) ? { lifecycle: this.lifecycles.get(file)!.state } : {})
     , state: "off", revision: null
     , ...(this.signingIn?.code ? { signIn: this.signingIn.code } : {})
     , ...(this.message ? { message: this.message } : {})
