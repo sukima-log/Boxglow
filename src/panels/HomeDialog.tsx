@@ -234,9 +234,9 @@ function ReceiveSection() {
   const act = useProjectStore((s) => s.syncAct);
   if (!status) return null;
   return (
-    <section className="home-receive" aria-labelledby="home-receive">
-      <h3 id="home-receive">{t("または、サーバーの計画を受け取る")}</h3>
-      <p className="home-description">{t("別の端末で同期した計画を、ここに保存して開きます。")}</p>
+    <section className="home-section home-receive" aria-labelledby="home-receive">
+      <h3 id="home-receive">{t("サーバーから受け取る")}</h3>
+      <p className="home-description">{t("別の端末で同期した計画を、このブラウザに保存して開きます。")}</p>
       {/* サインイン中の利用者と、サインアウト (計画を開いていない Home からも抜けられるように) */}
       {status.credentials.account && (
         <p className="home-receive__who">

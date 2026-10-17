@@ -43,7 +43,7 @@ export function SyncStartup({ status, act, unsaved, receive = false }: {
       {!receive && <p className="muted">{t("次に、今の計画を送るか、サーバーの計画を受け取るか選びます")}</p>}
       {unsaved && <p className="muted">{t("先に保存してください")}</p>}
       {/* Boxglow の同期サーバーは招待制の試験中: 押す前に分かるよう 1 行だけ添える (自分のサーバーでは出さない) */}
-      {status.isDefaultServer && <p className="muted">{t("Boxglow の同期サーバーは招待制の試験中です")}</p>}
+      {status.isDefaultServer && !status.credentials.account && <p className="muted">{t("Boxglow の同期サーバーは招待制の試験中です")}</p>}
     </>;
   const filename = status.file?.path.split(/[\\/]/).pop();
   const busy = pending || op.stage === "working";

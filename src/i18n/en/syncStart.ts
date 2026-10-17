@@ -27,6 +27,8 @@ export const syncStart: Record<string, string> = {
   "サーバーの計画を管理": "Manage server plans",
   "削除済みの計画": "Deleted plans",
   "履歴": "History",
+  "サーバーから受け取る": "Receive from the server",
+  "別の端末で同期した計画を、このブラウザに保存して開きます。": "Save a plan synced on another device to this browser and open it.",
   "前の版に戻す": "Go back to a previous version",
   "閲覧専用のリンクを作る": "Create a read-only link",
   "ゴミ箱": "Trash",

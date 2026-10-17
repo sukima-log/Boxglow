@@ -1129,8 +1129,11 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .sync-panel__plan[data-entitled="false"] { color: var(--danger); }
 .sync-panel__billing-link { display: flex; gap: 8px; align-items: center; }
 /* Home の「サーバーの計画を受け取る」節 (ファイルがまだ無い / 空のとき) */
-.home-receive { margin-top: 24px; padding-top: 16px; border-top: 2px dashed var(--line); }
-.home-receive h3 { font-size: 16px; margin: 0 0 4px; }
+/* 受け取りの欄: 他の欄 (home-section) と同じカード。見出しは他と同じ大きさ */
+.home-receive { margin-top: 16px; }
+.home-receive h3 { font-size: 15px; font-weight: 700; margin: 0; }
+.home-receive__who { flex-wrap: wrap; }
+.home-receive .sync-startup__buttons, .home-receive .signin-buttons { margin-top: 4px; }
 .home-vscode__note { padding: 8px 12px; border: 2px solid var(--line-soft); border-radius: 8px; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
 
 /* 採用デザイン: タイトル、状態、判断待ちを優先。寸法と接続点は通常/俯瞰で共通。 */

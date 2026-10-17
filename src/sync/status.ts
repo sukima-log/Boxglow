@@ -95,6 +95,8 @@ export interface SyncStatus {
   };
   /** このホストで作成した、置き換え前のローカルファイルの控え。 */
   localBackup?: string;
+  /** このホストで使えない機能 (省略 = 全部使える)。trash = ゴミ箱 (削除・復元) */
+  features?: { trash?: boolean };
   /** 1 行の補足 */
   message?: string;
   /**

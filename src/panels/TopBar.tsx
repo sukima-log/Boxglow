@@ -76,6 +76,8 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
     const bar = barRef.current;
     if (!bar) return;
     const onWheel = (e: WheelEvent) => {
+      // 帯から開いた開き物 (同期パネルなど) の上では、その中を縦にスクロールさせる (帯には渡さない)
+      if ((e.target as Element | null)?.closest?.(".sync-popover, .card, .add-menu__pop")) return;
       if (bar.scrollWidth <= bar.clientWidth) return;
       if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;   // 横の回転 (トラックパッド) は、そのまま横スクロールになる
       bar.scrollLeft += e.deltaY;

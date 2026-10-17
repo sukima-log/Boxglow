@@ -493,6 +493,7 @@ export class BrowserSyncHost {
       session: this.session, seq: ++this.seq, support: "ok"
     , credentials: { source: account ? "stored" : "none", ...(account ? { account } : {}) }
     , owner: "self", server: this.server, isDefaultServer: isDefaultSyncServer(this.server)
+    , features: { trash: false }   // サーバーの計画の削除と復元は、ブラウザ版ではまだ使えない
     , ...(file && this.startups.has(file) ? { startup: (({ credentials: _c, ...safe }) => safe)(this.startups.get(file)!) } : {})
     , file: file ? { path: file, enabled: this.enabled.has(file), binding: this.bindingOf(file) } : null
     , ...(file && this.lifecycles.has(file) ? { lifecycle: this.lifecycles.get(file)!.state } : {})
