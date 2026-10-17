@@ -355,19 +355,17 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
                 {t("サインアウト")}
               </button>
               {/* 課金: サーバーが契約の状態を返したときだけ。試用 (required = false) でも、契約があれば出す */}
-              {account.billing && (account.billing.required || account.billing.plan) && (
+              {account.billing && (account.billing.required || account.billing.plan || account.billing.checkout) && (
                 <div className="sync-panel__billing">
                   <span className="sync-panel__plan" data-entitled={account.billing.entitled ? "true" : "false"}>
                     {t("プラン")}: {planLabel(account.billing.plan)}{account.billing.plan === "team" && account.billing.seats > 0 ? ` × ${account.billing.seats}` : ""}
                     {account.billing.plan && account.billing.plan !== "comp" ? ` (${billingStatusLabel(account.billing.status)})` : ""}
                   </span>
-                  {account.billing.checkout && !account.billing.entitled && <>
+                  {/* 申し込み: 契約が無い (試用中を含む) か、契約が切れているとき。契約を求めていない試用中は、契約が無くても同期は止まらない */}
+                  {account.billing.checkout && (!account.billing.plan || !account.billing.entitled) && <>
                     <button className="btn btn-primary btn-sm" onClick={() => void act({ kind: "billingCheckout", plan: "personal" })}>{t("Personal を申し込む (月 500 円)")}</button>
                     <button className="btn btn-sm" onClick={() => void act({ kind: "billingCheckout", plan: "team", seats: 2 })}>{t("Team を申し込む (1 人 月 800 円)")}</button>
                   </>}
-                  {account.billing.checkout && account.billing.entitled && !account.billing.plan && (
-                    <button className="btn btn-sm" onClick={() => void act({ kind: "billingCheckout", plan: "personal" })}>{t("有料プランを申し込む")}</button>
-                  )}
                   {account.billing.portal && <button className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "billingPortal" })}>{t("契約の管理")}</button>}
                 </div>
               )}
