@@ -100,6 +100,14 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     if(expectStrip.pend.length){await page.locator('.goal-strip__decision').click();await page.waitForTimeout(300);
     check('Top の見出し行: 問いを押すと Activity が開く',await page.evaluate(()=>window.boxglow.store.getState().selection.timeline===true));}
     await page.evaluate(()=>window.boxglow.store.getState().select({}));await page.waitForTimeout(200);
+    // Top の見出し行: 今ここ (NOW) の箱が「NOW <題名> (<大項目> の中)」で出て、押すとその箱へ (図の枠と札は縮小で見えなくなるため)
+    const nowBefore=await page.evaluate(()=>window.boxglow.store.getState().project.now??[]); // サンプルの NOW は後の検査が使うので、終わったら戻す
+    const nowId=await page.evaluate(()=>{const s=window.boxglow.store.getState();const b=Object.values(s.project.blocks).find(x=>x.title==='バックエンド');s.apply(p=>({...p,now:[{blockId:b.id,by:'test',at:new Date().toISOString()}]}));return b.id;});await page.waitForTimeout(400);
+    const nowStrip=await page.locator('.goal-strip__now').innerText();
+    check('Top の見出し行: NOW の箱が題名と大項目つきで出る',nowStrip.includes('NOW') && nowStrip.includes('バックエンド') && nowStrip.includes('の中'),nowStrip);
+    await page.locator('.goal-strip__now').click();await page.waitForTimeout(500);
+    check('Top の見出し行: NOW を押すとその箱が選ばれる',await page.evaluate(()=>window.boxglow.store.getState().selection.blockId)===nowId);
+    await page.evaluate((prev)=>{const s=window.boxglow.store.getState();s.apply(p=>({...p,now:prev}));s.select({});s.setViewScope(null);},nowBefore);await page.waitForTimeout(400);
 
     // 出力の詳細に「使う箱」(下流) が並び、押すとその箱へ
     await page.evaluate(()=>{const s=window.boxglow.store.getState();const b=Object.values(s.project.blocks).find(x=>x.title==='設計する');s.select({blockId:b.id,panelTab:'io'});});await page.waitForTimeout(500);

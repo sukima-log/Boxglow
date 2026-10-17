@@ -303,10 +303,23 @@ export function App() {
           {project && path.length === 0 && !embed && (() => {
             const outs = portsOf(project, ROOT_ID, "out").map((q) => q.name).filter(Boolean);
             const pend = pendingDecisions(project);
-            if (!outs.length && !pend.length) return null;
+            // 今ここ (NOW) の箱: 図の中の枠と札は縮小で見えなくなるので、ここに固定の大きさで出す (押すとその箱へ)
+            const nows = (project.now ?? []).map((n) => project.blocks[n.blockId]).filter((b): b is NonNullable<typeof b> => !!b);
+            const sectionOf = (id: string): string | null => {
+              // 大項目 (プロジェクト直下の箱) の題名。自分が大項目なら null
+              let b = project.blocks[id]; let title: string | null = null;
+              while (b && b.parentId) { const parent = project.blocks[b.parentId]; if (!parent || parent.kind === "project") break; b = parent; title = parent.title; }
+              return title;
+            };
+            if (!outs.length && !pend.length && !nows.length) return null;
             return (
               <div className="goal-strip" style={{ left: drawerOpen ? 8 + drawerW + 8 : 8 }}>
                 {outs.length > 0 && <span className="goal-strip__item" title={t("最終成果物: {names}", { names: outs.join(", ") })}><span className="goal-strip__label">{t("最終成果物")}</span><span className="goal-strip__text">{outs.join(", ")}</span></span>}
+                {nows.length > 0 && (
+                  <button type="button" className="goal-strip__item goal-strip__now" onClick={() => { select({ blockId: nows[0].id }); focusBlock(nows[0].id); }} title={nows.map((b) => `${b.key ?? ""} ${b.title}`).join("\n")}>
+                    <span className="goal-strip__label">NOW</span><span className="goal-strip__text">{nows[0].title}{sectionOf(nows[0].id) ? ` (${sectionOf(nows[0].id)} ${t("の中")})` : ""}{nows.length > 1 ? ` +${nows.length - 1}` : ""}</span>
+                  </button>
+                )}
                 {pend.length > 0 && (
                   <button type="button" className="goal-strip__item goal-strip__decision" onClick={() => select({ timeline: true })} title={pend.map((x) => `${x.block.key ?? ""} ${x.decision.question}`).join("\n")}>
                     <span className="goal-strip__label">{t("判断待ち {n}", { n: pend.length })}</span><span className="goal-strip__text">{pend[0].decision.question}</span>

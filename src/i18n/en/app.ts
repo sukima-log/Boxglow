@@ -136,6 +136,7 @@ export const app: Record<string, string> = {
 , "アカウントの削除を受け付けました。保存データは {date} に消えます (それまでは support@boxglow.app への連絡で取り消せます)": "Account deletion accepted. Stored data is erased on {date} (until then, contact support@boxglow.app to cancel)"
 , "30 日後": "in 30 days"
 , "プラン": "Plan"
+, "の中": "inside"
 , "AI エージェントの接続": "AI agent access"
 , "この計画はまだサーバーに置かれていません (boxglow sync で結び付けてから)": "This plan is not on the server yet (bind it with boxglow sync first)"
 , "失効しました: {id}": "Revoked: {id}"
