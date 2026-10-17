@@ -28,6 +28,13 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
         return oneRow && canScroll && reachable;
       }));
     }
+    // マウスのホイール (縦) で帯が横に動く (幅 390 では帯がはみ出している)
+    await page.setViewportSize({width:390,height:844});
+    await page.evaluate(()=>{document.querySelector('header.topbar').scrollLeft=0;});
+    await page.mouse.move(200,30); await page.mouse.wheel(0,300);
+    check('上の帯: マウスのホイールで横に動く', await page.evaluate(()=>document.querySelector('header.topbar').scrollLeft>0));
+    await page.evaluate(()=>{document.querySelector('header.topbar').scrollLeft=0;});
+    await page.setViewportSize({width:1280,height:844});
     // Auto Layout はモードに関係なく ⋯ メニューにある (帯に出し入れすると帯の幅が変わり、折り返しが切り替わって揺れるため)
     const inBar=()=>page.evaluate(()=>[...document.querySelectorAll('.topbar-tools > button')].some(e=>e.textContent==='Auto Layout'&&e.getClientRects().length>0));
     check('閲覧時: Auto Layout は帯に出さない',!await inBar());

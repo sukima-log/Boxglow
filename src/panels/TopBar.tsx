@@ -66,6 +66,23 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   };
   /** 帯を横にスクロールしたら、開いている開き物を閉じる (入口が動くので、位置がずれたまま残さない) */
   const closeAll = () => { setMenu(false); setAddOpen(false); setSearchOpen(false); };
+  const barRef = useRef<HTMLElement>(null);
+  /**
+   * マウスのホイール (縦の回転) で帯を横に動かす (横スクロールバーを掴まなくても移動できるように。利用者の指定 2026-10-17)
+   *   帯がはみ出しているときだけ受け持ち、そのときはページ側の縦スクロールに渡さない (passive: false で登録する必要があるので React の onWheel は使わない)
+   */
+  useEffect(() => {
+    const bar = barRef.current;
+    if (!bar) return;
+    const onWheel = (e: WheelEvent) => {
+      if (bar.scrollWidth <= bar.clientWidth) return;
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;   // 横の回転 (トラックパッド) は、そのまま横スクロールになる
+      bar.scrollLeft += e.deltaY;
+      e.preventDefault();
+    };
+    bar.addEventListener("wheel", onWheel, { passive: false });
+    return () => bar.removeEventListener("wheel", onWheel);
+  }, []);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -177,7 +194,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   // 帯は 2 つのまとまり: 左 (topbar-identity) = 引き出し・Home・計画名・保存の札、右 (topbar-tools) = 状況・モード・検索・追加・メニュー。
   // 幅が狭いと右のまとまりが次の行へ折り返す (index.css の .topbar。検索やメニューが画面の外に出ないように)
   return (
-    <header className="topbar" data-editing={editMode} onScroll={closeAll}>
+    <header className="topbar" data-editing={editMode} onScroll={closeAll} ref={barRef}>
       <div className="topbar-identity">
       {/* 文字を置かない入口にも名前と制御先を与え、読み上げ・ツールチップで用途と現在の開閉を伝える。 */}
       <button className="tree-toggle btn btn-ghost btn-sm" onClick={onToggleTree} aria-pressed={treeOpen} aria-controls="project-tree" aria-label={treeOpen ? t("サイドバーを隠す") : t("サイドバーを表示")} title={treeOpen ? t("サイドバーを隠す") : t("サイドバーを表示")}><TreeIcon name="sidebar" /></button>
