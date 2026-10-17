@@ -1,4 +1,5 @@
 import type { Billing } from "./billing";
+import type { AgentTokenEntry } from "./agent";
 /**
  * 画面からの同期で、裏方 (cli/sync/host.ts) と画面 (src/store / src/panels) が共有する型
  * 画面は、この状態を表示し、操作を送るだけ (同期の判断・通信・資格情報は裏方にある。トークンの値は、この状態に入らない)
@@ -60,6 +61,8 @@ export interface SyncStatus {
   halt?: HaltView & { choiceIds: Record<string, string>; resolutionChoiceId?: string };
   /** 選べる操作の無い問題と、直す場所 */
   problem?: { kind: "configuration" | "auth" | "payment" | "network" | "rejected" | "state-unreadable" | "busy"; text: string; fix: "server-setting" | "credentials" | "billing" | "wait" | "local-file" | "sync-state" | "rerun" };
+  /** AI エージェント用トークン (ホスト型の MCP): 一覧と、今作ったトークン (このときだけ分かる) */
+  agent?: { busy: boolean; error?: string; tokens?: AgentTokenEntry[]; newToken?: { id: string; name: string; token: string; projectId: string; write: boolean } };
   /** 申し込み / 契約の管理の画面の URL (操作 billingCheckout / billingPortal の結果。画面はリンクとして出す。次の操作やサインアウトで消える) */
   billingLink?: { kind: "checkout" | "portal"; url: string; plan?: string };
   /** サインインの途中 (コードを表示している間) */
@@ -125,6 +128,8 @@ export type HostAction =
   | { kind: "deleteAccount" }
   /** 課金: 申し込みの画面 (Stripe Checkout) / 契約の管理 (Customer Portal) の URL をもらう (結果は status.billingLink) */
   | { kind: "billingCheckout"; plan: "personal" | "team"; seats?: number } | { kind: "billingPortal" } | { kind: "billingDismiss" }
+  /** AI エージェント用トークン: 一覧 / 作る (計画と権限) / 失効 / 作ったトークンの表示を消す */
+  | { kind: "listAgentTokens" } | { kind: "createAgentToken"; projectId: string; name: string; write: boolean } | { kind: "revokeAgentToken"; id: string } | { kind: "agentTokenDismiss" }
   /** 2 つ目のサインイン手段を、サインイン済みのアカウントに足す (コードや URL は signIn と同じ欄に出る) */
   | { kind: "linkIdentity"; provider: "github" | "google" }
   | { kind: "bind" } | { kind: "syncNow" }

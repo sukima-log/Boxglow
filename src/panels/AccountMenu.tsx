@@ -11,6 +11,7 @@ import { TEAM_PLAN_AVAILABLE, billingStatusLabel, planLabel } from "../sync/bill
 import { openBilling } from "./accountActions";
 import { SignInButtons, signInOneStep } from "./SignInButtons";
 import { SignInCode } from "./SyncPanel";
+import { claudeCodeCommand, codexConfig, mcpUrlOf } from "../sync/agent";
 
 /** 人型の印 (未サインイン) */
 function PersonIcon() {
@@ -29,6 +30,12 @@ export function AccountButton() {
   const ref = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ top: 60, right: 8 });
   const [confirmDelete, setConfirmDelete] = useState(false);
+  /** AI エージェントの接続: 欄の開閉、作るトークンの名前と権限、コピーしたもの */
+  const [agentOpen, setAgentOpen] = useState(false);
+  const [agentName, setAgentName] = useState("claude-code");
+  const [agentWrite, setAgentWrite] = useState(true);
+  const [copied, setCopied] = useState<string | null>(null);
+  useEffect(() => { if (agentOpen && status?.credentials.account && !status.agent) void act({ kind: "listAgentTokens" }); }, [agentOpen, !!status?.credentials.account]);
   const account = status?.credentials.account;
   const initial = account ? (account.display.trim()[0] ?? "?").toUpperCase() : null;
   useEffect(() => {
@@ -118,6 +125,54 @@ export function AccountButton() {
                         ? <span key={p} className="sync-panel__identity" data-on="true">{p === "github" ? "GitHub" : "Google"} ✓</span>
                         : <button key={p} className="btn btn-ghost btn-sm" onClick={() => void signInOneStep(act, p, true)} title={p === "github" ? t("GitHub でもサインインできるようにする") : t("Google でもサインインできるようにする")}>+ {p === "github" ? "GitHub" : "Google"}</button>)}
                     </div>}
+                </div>
+              )}
+              {/* AI エージェントの接続: 計画ごと・権限ごとのトークン。トークンは作ったときだけ表示 (サーバーはハッシュしか持たない) */}
+              {status.server && (
+                <div className="sync-panel__group">
+                  <button className="sync-action" data-open={agentOpen ? "true" : "false"} aria-expanded={agentOpen} onClick={() => setAgentOpen(!agentOpen)}>
+                    <span className="sync-action__icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4"/><circle cx="9" cy="13" r="1"/><circle cx="15" cy="13" r="1"/></svg></span>
+                    <span className="sync-action__text"><span className="sync-action__label">{t("AI エージェントの接続")}</span><span className="sync-action__hint">{t("Claude Code や Codex から、この計画をサーバー経由で読み書きする")}</span></span>
+                    <span className="sync-action__chev" aria-hidden="true">{agentOpen ? "▾" : "▸"}</span>
+                  </button>
+                  {agentOpen && (
+                    <div className="agent-tokens">
+                      {!status.file?.binding ? (
+                        <p className="muted">{t("今開いている計画をサーバーに置くと、その計画のトークンを作れます")}</p>
+                      ) : (
+                        <div className="agent-tokens__new">
+                          <input className="input" value={agentName} onChange={(e) => setAgentName(e.target.value)} maxLength={64} aria-label={t("トークンの名前")} placeholder={t("名前 (例: claude-code)")} />
+                          <label className="sync-switch" title={t("オフにすると、読む道具だけが使えます")}>
+                            <input type="checkbox" checked={agentWrite} onChange={(e) => setAgentWrite(e.target.checked)} />
+                            <span className="sync-switch__track" aria-hidden="true"><span className="sync-switch__knob" /></span>
+                            <span>{t("書き込みも許可")}</span>
+                          </label>
+                          <button className="btn btn-primary btn-sm" disabled={status.agent?.busy || !agentName.trim()} onClick={() => void act({ kind: "createAgentToken", projectId: status.file!.binding!.remoteId, name: agentName.trim(), write: agentWrite })}>{t("トークンを作る")}</button>
+                        </div>
+                      )}
+                      {status.agent?.error && <p role="alert" className="sync-panel__problem">{status.agent.error}</p>}
+                      {status.agent?.newToken && (
+                        <div className="agent-tokens__token">
+                          <strong>{t("トークンを作りました。この値は今だけ表示されます (控えてください)。")}</strong>
+                          <code className="agent-tokens__secret">{status.agent.newToken.token}</code>
+                          <div className="sync-panel__row">
+                            <button className="btn btn-sm" onClick={() => { void navigator.clipboard?.writeText(claudeCodeCommand(status.server!, status.agent!.newToken!.token)).then(() => setCopied("claude")).catch(() => setCopied(null)); }}>{copied === "claude" ? t("コピーしました") : t("Claude Code の登録コマンドをコピー")}</button>
+                            <button className="btn btn-sm" onClick={() => { void navigator.clipboard?.writeText(codexConfig(status.server!, status.agent!.newToken!.token)).then(() => setCopied("codex")).catch(() => setCopied(null)); }}>{copied === "codex" ? t("コピーしました") : t("Codex の設定をコピー")}</button>
+                            <button className="btn btn-ghost btn-sm" onClick={() => { setCopied(null); void act({ kind: "agentTokenDismiss" }); }}>{t("閉じる")}</button>
+                          </div>
+                          <p className="muted break-all">{t("MCP の URL")}: {mcpUrlOf(status.server!)}</p>
+                        </div>
+                      )}
+                      {status.agent?.tokens?.map((tk) => (
+                        <div className="sync-project-row agent-tokens__row" key={tk.id} data-off={tk.revoked ? "true" : "false"}>
+                          <strong>{tk.name}</strong>
+                          <small>{tk.write ? t("読み書き") : t("読み取り専用")} · {tk.projectId}{tk.requests > 0 ? ` · ${t("{n} 回", { n: String(tk.requests) })}` : ""}{tk.revoked ? ` · ${t("失効")}` : ""}</small>
+                          {!tk.revoked && <button className="btn btn-ghost btn-sm" disabled={status.agent?.busy} onClick={() => void act({ kind: "revokeAgentToken", id: tk.id })}>{t("失効")}</button>}
+                        </div>
+                      ))}
+                      {status.agent?.tokens?.length === 0 && <p className="muted">{t("トークンはまだありません。")}</p>}
+                    </div>
+                  )}
                 </div>
               )}
               <div className="sync-panel__group">

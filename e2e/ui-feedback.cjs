@@ -52,13 +52,15 @@ const { chromium, open, check, result } = require('./lib.cjs');
       await page.getByRole('button',{name:ja?'今すぐ同期':'Sync now',exact:true}).click();
       check(`${prefix}: 同期完了後に確認結果を通知`,(await page.locator('.toast').innerText()).includes(ja?'サーバーと最新':'Checked the latest'));
       check(`${prefix}: 操作の意味はsyncNowのまま`,await page.evaluate(()=>window.__uiCalls.length===2&&window.__uiCalls.every(a=>a.kind==='syncNow')));
-      check(`${prefix}: 詳細を開く前から契約プランが分かる`,(await page.locator('.sync-panel__plan-summary').innerText()).includes('Personal'));
+      check(`${prefix}: 詳細を開く前から契約プランが分かる`,(await page.locator('.sync-account__plan').innerText()).includes('Personal'));
       await page.evaluate(()=>window.boxglow.store.setState({syncAct:async a=>{window.__uiCalls.push(a);}}));
       await page.getByRole('button',{name:ja?'今すぐ同期':'Sync now',exact:true}).click();
       check(`${prefix}: 応答のない要求を古い同期済みで成功扱いしない`,(await page.locator('.toast').innerText()).includes(ja?'同期を要求しました':'Sync requested'));
       await page.locator('.account-button').click();
       check(`${prefix}: サインアウトは右上のアカウントから 1 回で、何が起きるかはツールチップで分かる`,((await page.locator('.account-menu').getByRole('button',{name:ja?'サインアウト':'Sign out',exact:true}).getAttribute('title'))||'').includes(ja?'手元の計画は残ります':'local plans remain'));
       await page.keyboard.press('Escape');
+      // アカウントのメニューを開いた時点で同期パネルは (外側の操作で) 閉じているので、開き直す
+      if ((await page.locator('.sync-popover').count()) === 0) await page.locator('.sync-chip').click();
       await page.evaluate(()=>window.boxglow.store.setState({syncStatus:{...window.boxglow.store.getState().syncStatus,state:'unbound',file:{path:'review.json',enabled:false,binding:null},startup:{operationId:'test',stage:'choose'}}}));
       check(`${prefix}: 送る・受け取るの違いを押す前に示す`,(await page.locator('.sync-startup__choices').innerText()).includes(ja?'ほかの端末':'another device') && (await page.locator('.sync-startup__choices').innerText()).includes(ja?'一覧':'list'));
       check(`${prefix}: 同期開始の選択肢は縦並びで折り返せる`,await page.locator('.sync-startup__choices').evaluate(e=>{const a=e.children[0].getBoundingClientRect(),b=e.children[1].getBoundingClientRect();return b.top>=a.bottom&&b.right<=innerWidth;}));

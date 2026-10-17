@@ -21,6 +21,7 @@ import { syncOnce, SyncConfigurationError, SyncAuthError, SyncNetworkError, Sync
 import { SyncPaymentError } from "../../src/sync/run";
 import { parseBilling } from "../../src/sync/billing";
 import { parseShareList, shareUrl } from "../../src/sync/shares";
+import { parseAgentTokens } from "../../src/sync/agent";
 import { haltView, type SyncAction } from "./command";
 import { credentialsPath, readCredentials, resolveToken } from "./credentials";
 import { runGoogleLogin, runLinkIdentity, runLogin, runLogout, serverProblem } from "./login";
@@ -385,6 +386,7 @@ export class SyncHost {
       await runLogout({ server: this.server, allowEnvironmentToken: this.options.allowEnvironmentToken, out: (line) => lines.push(line), fetch: this.doFetch });
       this.account = null;
       this.billingLink = undefined;
+      this.agent = undefined;
       this.results.clear();
       this.message = lines.at(-1);
     } finally {
@@ -419,6 +421,36 @@ export class SyncHost {
   }
   /** 申し込み / 契約の管理の URL (最新の 1 つ。サインアウトで消す) */
   private billingLink: SyncStatus["billingLink"];
+  /** AI エージェント用トークンの状態 (アカウントにつき 1 つ) */
+  private agent: NonNullable<SyncStatus["agent"]> | undefined;
+  /** エージェント用トークン: 一覧 / 作る / 失効 (本人のトークンで /v1/agent-tokens を呼ぶ)。結果は status.agent */
+  private async agentAction(action: HostAction): Promise<void> {
+    if (action.kind === "agentTokenDismiss") { if (this.agent) this.agent.newToken = undefined; this.emit(); return; }
+    const creds = this.resolveCredentials();
+    if (!creds) { this.message = t("先にサインインしてください"); this.emit(); return; }
+    if (this.agent?.busy) return;
+    const state = this.agent ?? { busy: false };
+    this.agent = state; state.busy = true; state.error = undefined; this.emit();
+    const headers = { authorization: `Bearer ${creds.token}`, "content-type": "application/json", "x-boxglow-version": APP_VERSION };
+    try {
+      if (action.kind === "createAgentToken") {
+        const res = await this.doFetch(`${this.server}/v1/agent-tokens`, { method: "POST", headers, redirect: "error", body: JSON.stringify({ name: action.name, projectId: action.projectId, write: action.write }) });
+        const body = await res.json().catch(() => ({})) as { id?: unknown; token?: unknown; code?: unknown; limit?: unknown };
+        if (res.status === 409 && body.code === "quota") throw new Error(t("エージェント用トークンは {n} 個までです。使わないものを失効させてください", { n: String(body.limit ?? "") }));
+        if (!res.ok || typeof body.id !== "string" || typeof body.token !== "string") throw new Error(t("トークンを作れませんでした (サーバーの応答: {status})", { status: res.status }));
+        state.newToken = { id: body.id, name: action.name, token: body.token, projectId: action.projectId, write: action.write };
+      }
+      if (action.kind === "revokeAgentToken") {
+        const res = await this.doFetch(`${this.server}/v1/agent-tokens/${encodeURIComponent(action.id)}`, { method: "DELETE", headers, redirect: "error" });
+        if (!res.ok) throw new Error(t("トークンを失効できませんでした (サーバーの応答: {status})", { status: res.status }));
+        if (state.newToken?.id === action.id) state.newToken = undefined;
+      }
+      const list = await this.doFetch(`${this.server}/v1/agent-tokens`, { headers, redirect: "error" });
+      if (!list.ok) throw new Error(t("トークンの一覧を読めませんでした (サーバーの応答: {status})", { status: list.status }));
+      state.tokens = parseAgentTokens(await list.json());
+    } catch (e) { state.error = e instanceof Error ? e.message : String(e); }
+    finally { state.busy = false; this.emit(); }
+  }
   /**
    * 課金の画面の URL をサーバーにもらう (Stripe Checkout / Customer Portal)。結果は status.billingLink (画面がリンクとして出す)
    * Input : kind = "checkout" | "portal", plan / seats = checkout のとき。Output: なし (失敗は message)
@@ -778,6 +810,7 @@ export class SyncHost {
       case "billingCheckout": await this.billingLinkFor("checkout", action.plan, action.seats); break;
       case "billingPortal": await this.billingLinkFor("portal"); break;
       case "billingDismiss": this.billingLink = undefined; this.emit(); break;
+      case "listAgentTokens": case "createAgentToken": case "revokeAgentToken": case "agentTokenDismiss": await this.agentAction(action); break;
       case "pause": this.paused = true; break;
       case "resume": this.paused = false; break;
       case "bind":
@@ -866,6 +899,7 @@ export class SyncHost {
       server: this.server, isDefaultServer: isDefaultSyncServer(this.server), destinationPicker:this.options.destinationPicker,
       ...(real && this.localBackups.get(real)?.credentials === this.credentialsGeneration() ? {localBackup:this.localBackups.get(real)!.path} : {}),
       ...(this.billingLink ? { billingLink: this.billingLink } : {}),
+      ...(this.agent ? { agent: this.agent } : {}),
       ...(real && this.lifecycles.get(real)?.credentials === this.credentialsGeneration() ? {lifecycle:this.lifecycles.get(real)!.state} : {}),
       ...(real && this.startups.has(real) ? {startup:(( {credentials:_,...safe} ) => safe)(this.startups.get(real)!)} : {})
     , file: real ? { path: real, enabled, binding } : null
@@ -989,12 +1023,16 @@ export function parseHostAction(text: string): HostAction | null {
     case "deleteAccount":
     case "billingPortal":
     case "billingDismiss":
+    case "listAgentTokens":
+    case "agentTokenDismiss":
     case "bind":
     case "syncNow":
     case "pause":
     case "resume":
       return { kind: o.kind };
     case "signIn": return o.provider === "github" || o.provider === "google" ? { kind: "signIn", provider: o.provider } : null;
+    case "createAgentToken": return typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 && typeof o.name === "string" && o.name.length <= 64 ? { kind: "createAgentToken", projectId: o.projectId, name: o.name, write: o.write === true } : null;
+    case "revokeAgentToken": return typeof o.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(o.id) ? { kind: "revokeAgentToken", id: o.id } : null;
     case "billingCheckout": return (o.plan === "personal" || o.plan === "team") && (o.seats === undefined || typeof o.seats === "number" && o.seats >= 1 && o.seats <= 100) ? { kind: "billingCheckout", plan: o.plan, ...(typeof o.seats === "number" ? { seats: o.seats } : {}) } : null;
     case "linkIdentity": return o.provider === "github" || o.provider === "google" ? { kind: "linkIdentity", provider: o.provider } : null;
     case "resolveGroups": {

@@ -242,6 +242,36 @@ describe("サインインとサインアウト", () => {
     await host.stop();
   });
 
+  it("AI エージェント用トークン: 作ると値が 1 度だけ状態に出る (一覧には無い)。失効すると一覧で失効。サインアウトで消える", async () => {
+    const { file } = planFile("p1");
+    signedIn("acc-agent");
+    const { host } = make();
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    const remoteId = host.status(file).file!.binding!.remoteId;
+    let state = await host.act(file, { kind: "listAgentTokens" });
+    expect(state.agent?.tokens).toEqual([]);
+    state = await host.act(file, { kind: "createAgentToken", projectId: remoteId, name: "claude-code", write: true });
+    expect(state.agent?.newToken?.token).toMatch(/^bga_acc[0-9a-f]{32}\./);
+    expect(state.agent?.newToken).toMatchObject({ name: "claude-code", projectId: remoteId, write: true });
+    expect(state.agent?.tokens?.length).toBe(1);
+    expect(state.agent?.tokens?.[0]).toMatchObject({ name: "claude-code", write: true, revoked: false, requests: 0 });
+    expect(JSON.stringify(state.agent?.tokens)).not.toContain("bga_");
+    const id = state.agent!.tokens![0].id;
+    state = await host.act(file, { kind: "agentTokenDismiss" });
+    expect(state.agent?.newToken).toBeUndefined();
+    state = await host.act(file, { kind: "revokeAgentToken", id });
+    expect(state.agent?.tokens?.[0]).toMatchObject({ id, revoked: true });
+    // 結び付いていない計画の ID は 404 → error
+    state = await host.act(file, { kind: "createAgentToken", projectId: "no-such", name: "x", write: false });
+    expect(state.agent?.error).toBeTruthy();
+    expect(parseHostAction(JSON.stringify({ kind: "createAgentToken", projectId: remoteId, name: "x".repeat(65), write: true }))).toBeNull();
+    expect(parseHostAction(JSON.stringify({ kind: "revokeAgentToken", id: "../x" }))).toBeNull();
+    await host.act(file, { kind: "signOut" });
+    expect(host.status(file).agent).toBeUndefined();
+    await host.stop();
+  });
+
   it("課金: /v1/me の billing が状態に出る。申し込み・契約の管理の URL は billingLink に入り、サインアウトで消える。契約が無いと同期は 402 → problem = payment", async () => {
     const { file } = planFile("p1");
     signedIn("acc-pay");

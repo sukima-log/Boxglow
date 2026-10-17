@@ -20,6 +20,8 @@ import { setupAgent } from "./setup-agent";
 import { runSyncCommand, runWatchCommand } from "./sync/command";
 import { runLinkIdentity, runLogin, runLogout, runWhoami } from "./sync/login";
 import { runBilling } from "./sync/billing";
+import { runAgentToken } from "./sync/agent-token";
+import { bindingsOf } from "./sync/state-store";
 import { resolveToken } from "./sync/credentials";
 import { projectProblem } from "../src/model/validate-file";
 import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
@@ -415,6 +417,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   remote trash | delete|restore <ID> [--server URL]  削除済み一覧 / 削除・復元の確認。確定は --confirm <印> --actor human
   remote versions <ID> | revert <ID> <版> --file <path> --actor human   履歴の一覧 / その版の中身を手元のファイルに戻す (控えを取る。次の同期で新しい版として送られる)
   billing [--checkout personal|team [--seats n] | --portal]   契約の状態 / 申し込みの画面 (Stripe) の URL / 契約の管理の URL
+  agent-token [list | create --name <名前> [--write] | revoke <id>]   AI エージェント用トークン (ホスト型の MCP。Claude Code / Codex がサーバー経由で計画を読み書きする)
   login [--server <URL>] [--name <端末の名前>] [--add github|google]   (試験中) 同期サーバーにサインインする (GitHub のアカウント。表示されたコードを、ブラウザで入力する)。--add は、サインイン済みのアカウントに 2 つ目の手段を足す
   logout [--server <URL>] / whoami [--server <URL>]  サインアウトする (サーバー側のトークンも取り消す) / 今の利用者・端末・保存量を出す
   unlock [--remove --lock-token <印> --actor human]  残った保存ロックの状態 (持ち主・判定) を出す (読むだけ。AI も使える)。--remove は人が解除する:
@@ -530,6 +533,7 @@ Usage (npx boxglow <command> ...):
   remote trash | delete|restore <ID> [--server URL]  List trash / preview delete or restore; confirm with --confirm <token> --actor human
   remote versions <ID> | revert <ID> <rev> --file <path> --actor human   List history / write that version into the local file (a backup is kept; the next sync sends it as a new version)
   billing [--checkout personal|team [--seats n] | --portal]   Subscription status / checkout URL (Stripe) / subscription management URL
+  agent-token [list | create --name <name> [--write] | revoke <id>]   AI agent tokens for the hosted MCP (Claude Code / Codex read and write the plan through the server)
   login [--server <URL>] [--name <device name>] [--add github|google]  (experimental) Sign in to a sync server (GitHub account; enter the code shown in your browser). --add links a second sign-in method to the signed-in account
   logout [--server <URL>] / whoami [--server <URL>]  Sign out (also revokes the token on the server) / show the current account, devices and storage
   unlock [--remove --lock-token <token> --actor human]  Show a leftover save lock (owner and verdict; read-only, agents may use it). --remove is for a person:
@@ -1604,6 +1608,23 @@ if (argv[0] === "mcp") {
     if(!server) throw new Error(t("サーバーが決まっていません。--server <URL> を指定してください"));
     process.exitCode=await runLifecycle({server,command:positional[0],id:positional[1],revision:positional[2],file:str(options.file),actor:str(options.actor),confirm:str(options.confirm),cursor:str(options.cursor)},console.log);
   })().catch(e=>{console.error(e.message);process.exitCode=1;});
+} else if (argv[0] === "agent-token") {
+  // AI エージェント用トークン (ホスト型の MCP)。通信するので、ほかのコマンドとは別扱い
+  const { positional, options } = parseArgs(argv.slice(1));
+  (async () => {
+    setLang(explicitLang(options) ?? "ja");
+    const known = new Set(["server", "lang", "file", "name", "write"]);
+    const unknown = Object.keys(options).filter((k) => !known.has(k));
+    if (unknown.length > 0) { console.log(t("boxglow {cmd} が知らない指定です: {list}", { cmd: "agent-token", list: unknown.map((k) => "--" + k).join(", ") })); process.exitCode = 1; return; }
+    let file: string | undefined;
+    try { file = locateFile(str(options.file)); } catch { /* 一覧・失効は計画なしでも可能 */ }
+    const { server } = selectSyncServer(file, str(options.server)?.trim() || undefined);
+    if (!server) { console.log(t("サーバーが決まっていません。--server <URL> を指定してください")); process.exitCode = 1; return; }
+    // 今の計画の結び付け (サーバー上の ID) を、create の対象にする
+    let projectId: string | undefined;
+    if (file) { try { projectId = bindingsOf(file).bindings.find((b) => b.server === server)?.remoteId; } catch { /* 結び付けが読めなければ create で案内する */ } }
+    process.exitCode = await runAgentToken({ server, out: (line) => console.log(line), command: positional[0] ?? "list", name: str(options.name), write: options.write === true || options.write === "true", id: positional[1], projectId });
+  })().catch((e) => { console.error(`[boxglow agent-token] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });
 } else if (argv[0] === "billing") {
   // 契約の状態と、申し込み / 契約の管理の画面の URL (通信するので、ほかのコマンドとは別扱い)
   const { options } = parseArgs(argv.slice(1));

@@ -170,6 +170,16 @@ Before removing, stop every Boxglow that has the plan open (CLI, `serve`, VS Cod
 
 The server finds `boxglow.json` like the CLI does (current directory upwards, or `--file` / `BOXGLOW_FILE`). The CLI and the MCP tools write the same file, so either can be used.
 
+### Hosted MCP (no local file)
+
+A plan placed on the sync server can also be reached over HTTP MCP at `https://sync.boxglow.app/mcp`, so an agent on another machine (or a cloud agent) works on it without a local `boxglow.json`. Create a token from the account menu ("AI agent access": per plan, read-only or read-write, up to 10 per account; shown once) or with `boxglow agent-token create --name claude-code --write`, then register it:
+
+```
+claude mcp add --transport http boxglow https://sync.boxglow.app/mcp --header "Authorization: Bearer bga_..."
+```
+
+Writes become new versions on the server and reach the synced devices on their next sync. Details: [docs/HOSTED_MCP.md](docs/HOSTED_MCP.md) (Japanese).
+
 ## VS Code extension
 
 Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.0 goes with boxglow 0.6.0).

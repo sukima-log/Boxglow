@@ -1192,6 +1192,15 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .sync-panel__choices { display: flex; gap: 6px; flex-wrap: wrap; }
 .sync-panel__details { font-size: 12px; color: var(--text-muted); white-space: pre-wrap; word-break: break-all; }
 .sync-panel__id { font-family: var(--font-mono, monospace); font-size: 11px; }
+/* AI エージェントの接続 (アカウントのメニュー) */
+.agent-tokens { display: grid; gap: 8px; padding: 4px 0 0 8px; }
+.agent-tokens__new { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.agent-tokens__new .input { flex: 1; min-width: 120px; }
+.agent-tokens__token { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--primary); border-radius: 8px; }
+.agent-tokens__secret { font-family: var(--font-mono, monospace); font-size: 11px; overflow-wrap: anywhere; user-select: all; }
+.agent-tokens__row { flex-direction: row; align-items: center; gap: 8px; }
+.agent-tokens__row > button { margin-left: auto; }
+.agent-tokens__row[data-off="true"] { opacity: 0.6; }
 /* 右上のアカウント: 丸いボタン (頭文字 / 人型) と、その下に開くメニュー */
 .account-wrap { position: relative; flex: none; }
 .account-button { position: relative; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg-card); color: var(--text-muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }

@@ -110,6 +110,20 @@ const ROOT = path.resolve(__dirname, '..');
     const revokedRead = await page.evaluate(async (u) => (await fetch(u)).status, server.url + '/v1/shares/' + decodeURIComponent(shareUrl.match(/share=([^&]+)/)[1]));
     check('ブラウザ同期: 失効した共有リンクは読めない', revokedRead === 404);
     await page.getByRole('button', { name: /^履歴/ }).click(); // 行をもう一度押して閉じる
+    // AI エージェントの接続: 右上のアカウントのメニュー → 「AI エージェントの接続」 → 作る → 値 (bga_) が 1 度だけ出て、貼る設定のコピーがある → 失効
+    await page.locator('.account-button').click();
+    await page.locator('.account-menu').getByRole('button', { name: /^AI エージェントの接続/ }).click();
+    await page.locator('.agent-tokens').waitFor({ timeout: 10000 });
+    await page.locator('.agent-tokens').getByRole('button', { name: 'トークンを作る', exact: true }).click();
+    await page.locator('.agent-tokens__secret').waitFor({ timeout: 10000 });
+    const agentToken = (await page.locator('.agent-tokens__secret').textContent()) ?? '';
+    check('ブラウザ同期: アカウントのメニューから AI エージェント用トークンを作ると値が出る', /^bga_acc[0-9a-f]{32}\./.test(agentToken), agentToken);
+    check('ブラウザ同期: Claude Code / Codex の設定をコピーするボタンがある', (await page.locator('.agent-tokens__token').getByRole('button', { name: 'Claude Code の登録コマンドをコピー', exact: true }).count()) === 1 && (await page.locator('.agent-tokens__token').getByRole('button', { name: 'Codex の設定をコピー', exact: true }).count()) === 1);
+    check('ブラウザ同期: トークンの一覧には値が無く、読み書きと計画の ID が出る', !((await page.locator('.agent-tokens__row').first().textContent()) ?? '').includes('bga_') && ((await page.locator('.agent-tokens__row').first().textContent()) ?? '').includes('読み書き'));
+    await page.locator('.agent-tokens__row').first().getByRole('button', { name: '失効', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.agent-tokens__row')?.getAttribute('data-off') === 'true', null, { timeout: 10000 });
+    check('ブラウザ同期: トークンを失効させると一覧で失効になる', [...server.agentTokens.values()][0]?.revoked === true);
+    await page.keyboard.press('Escape'); await page.waitForTimeout(200);
     await page.evaluate(() => window.boxglow.store.getState().apply((p) => ({ ...p, name: 'ブラウザで改名' })));
     await page.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'synced', null, { timeout: 20000 });
     await page.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved', null, { timeout: 10000 }).catch(() => {});

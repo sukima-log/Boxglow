@@ -65,6 +65,8 @@ export class TestSyncServer {
   deletedAccounts = new Set<string>();
   /** 共有リンク: id → { token, projectId, revoked, expiresAt } (利用者ごと) */
   shares = new Map<string, { id: string; token: string; account: string; projectId: string; revoked: boolean; expiresAt: string | null; createdAt: string }>();
+  /** AI エージェント用トークン (利用者ごと): id → { name, projectId, write, revoked, requests } */
+  agentTokens = new Map<string, { id: string; token: string; account: string; name: string; projectId: string; write: boolean; revoked: boolean; createdAt: string; requests: number }>();
   /** 課金の再現: required = 契約を求める (契約の無い利用者の同期は 402)、subscribed = 契約のある利用者、customers = 顧客のできた利用者 */
   billing = { required: false, subscribed: new Set<string>(), customers: new Set<string>(), calls: [] as { kind: string; account: string; body: unknown }[] };
   private codes = 0;
@@ -293,6 +295,28 @@ export class TestSyncServer {
       const done = projects.get(decodeURIComponent(opMatch[1]))?.ops.get(decodeURIComponent(opMatch[2]));
       send(200, JSON.stringify({ revision: done?.revision ?? null }));
       return;
+    }
+    // AI エージェント用トークン: 一覧・作る・失効 (本番と同じ形)
+    const agentsMatch = /^\/v1\/agent-tokens(?:\/([^/]+))?$/.exec(req.url ?? "");
+    if (agentsMatch) {
+      const nowAt = new Date().toISOString();
+      const list = () => [...this.agentTokens.values()].filter((a) => a.account === account).reverse().map((a) => ({ id: a.id, name: a.name, projectId: a.projectId, write: a.write, createdAt: a.createdAt, lastUsedAt: null, revoked: a.revoked, requests: a.requests }));
+      if (agentsMatch[1] === undefined && req.method === "GET") { send(200, JSON.stringify({ tokens: list() })); return; }
+      if (agentsMatch[1] === undefined && req.method === "POST") {
+        const chunks: Buffer[] = []; for await (const chunk of req) chunks.push(chunk as Buffer);
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { name?: string; projectId?: string; write?: boolean };
+        if (!body.projectId || !projects.get(body.projectId)?.head) { send(404, JSON.stringify({ code: "absent" })); return; }
+        const n = this.agentTokens.size + 1;
+        const id = "ag" + String(n).padStart(6, "0");
+        const token = `bga_acc${String(n).padStart(32, "0")}.${(id + "x".repeat(43)).slice(0, 43)}`;
+        this.agentTokens.set(id, { id, token, account, name: body.name || "agent", projectId: body.projectId, write: body.write === true, revoked: false, createdAt: nowAt, requests: 0 });
+        send(201, JSON.stringify({ id, token, name: body.name || "agent", projectId: body.projectId, write: body.write === true, createdAt: nowAt })); return;
+      }
+      if (agentsMatch[1] !== undefined && req.method === "DELETE") {
+        const a = this.agentTokens.get(decodeURIComponent(agentsMatch[1]));
+        if (a && a.account === account) a.revoked = true;
+        send(200, JSON.stringify({ revoked: true })); return;
+      }
     }
     // 共有リンク: 一覧・作る・失効 (本番と同じ形。トークンは bgs_<利用者>.<秘密> の見た目だけ合わせる)
     const sharesMatch = /^\/v1\/projects\/([^/]+)\/shares(?:\/([^/]+))?$/.exec(req.url ?? "");

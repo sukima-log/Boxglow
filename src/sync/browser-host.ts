@@ -17,6 +17,7 @@ import { browserSyncIO } from "./browser-io";
 import { applyRevert, parseVersionList, planNameOf } from "./versions";
 import { parseBilling } from "./billing";
 import { parseShareList, shareUrl } from "./shares";
+import { parseAgentTokens } from "./agent";
 import { SyncPaymentError } from "./run";
 import { haltView } from "./halt-view";
 import { runSync, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncOptions, type SyncResult } from "./run";
@@ -213,7 +214,7 @@ export class BrowserSyncHost {
   private async signOut(): Promise<void> {
     this.cancelSignIn();
     try { await this.doFetch(`${this.server}/v1/session`, { method: "DELETE", redirect: "error" }); } catch { /* Cookie が消えれば、サーバー側のトークンは期限で消える */ }
-    this.generation++; this.account = null; this.startups.clear(); this.choices.clear(); this.results.clear(); this.message = undefined; this.billingLink = undefined;
+    this.generation++; this.account = null; this.startups.clear(); this.choices.clear(); this.results.clear(); this.message = undefined; this.billingLink = undefined; this.agent = undefined;
     this.emit();
   }
 
@@ -389,6 +390,7 @@ export class BrowserSyncHost {
       case "billingCheckout": await this.billingLinkFor("checkout", action.plan, action.seats); break;
       case "billingPortal": await this.billingLinkFor("portal"); break;
       case "billingDismiss": this.billingLink = undefined; this.emit(); break;
+      case "listAgentTokens": case "createAgentToken": case "revokeAgentToken": case "agentTokenDismiss": await this.agentAction(action); break;
       case "pause": this.paused = true; break;
       case "resume": this.paused = false; break;
       case "bind": case "syncNow": if (file) await this.syncFile(file, {}); break;
@@ -466,6 +468,34 @@ export class BrowserSyncHost {
 
   /** 申し込み / 契約の管理の URL (最新の 1 つ。サインアウトで消す) */
   private billingLink: SyncStatus["billingLink"];
+  /** AI エージェント用トークンの状態 (アカウントにつき 1 つ) */
+  private agent: NonNullable<SyncStatus["agent"]> | undefined;
+  /** エージェント用トークン: 一覧 / 作る / 失効 (Cookie のセッション)。結果は status.agent */
+  private async agentAction(action: HostAction): Promise<void> {
+    if (action.kind === "agentTokenDismiss") { if (this.agent) this.agent.newToken = undefined; this.emit(); return; }
+    if (!this.signedIn()) { this.message = t("先にサインインしてください"); this.emit(); return; }
+    if (this.agent?.busy) return;
+    const state = this.agent ?? { busy: false };
+    this.agent = state; state.busy = true; state.error = undefined; this.emit();
+    try {
+      if (action.kind === "createAgentToken") {
+        const res = await this.doFetch(`${this.server}/v1/agent-tokens`, { method: "POST", redirect: "error", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: action.name, projectId: action.projectId, write: action.write }) });
+        const body = await res.json().catch(() => ({})) as { id?: unknown; token?: unknown; code?: unknown; limit?: unknown };
+        if (res.status === 409 && body.code === "quota") throw new Error(t("エージェント用トークンは {n} 個までです。使わないものを失効させてください", { n: String(body.limit ?? "") }));
+        if (!res.ok || typeof body.id !== "string" || typeof body.token !== "string") throw new Error(t("トークンを作れませんでした (サーバーの応答: {status})", { status: res.status }));
+        state.newToken = { id: body.id, name: action.name, token: body.token, projectId: action.projectId, write: action.write };
+      }
+      if (action.kind === "revokeAgentToken") {
+        const res = await this.doFetch(`${this.server}/v1/agent-tokens/${encodeURIComponent(action.id)}`, { method: "DELETE", redirect: "error" });
+        if (!res.ok) throw new Error(t("トークンを失効できませんでした (サーバーの応答: {status})", { status: res.status }));
+        if (state.newToken?.id === action.id) state.newToken = undefined;
+      }
+      const list = await this.doFetch(`${this.server}/v1/agent-tokens`, { redirect: "error" });
+      if (!list.ok) throw new Error(t("トークンの一覧を読めませんでした (サーバーの応答: {status})", { status: list.status }));
+      state.tokens = parseAgentTokens(await list.json());
+    } catch (e) { state.error = e instanceof Error ? e.message : String(e); }
+    finally { state.busy = false; this.emit(); }
+  }
   /** 課金の画面の URL をサーバーにもらう (Cookie のセッション)。結果は status.billingLink */
   private async billingLinkFor(kind: "checkout" | "portal", plan?: "personal" | "team", seats?: number): Promise<void> {
     if (!this.signedIn()) { this.message = t("先にサインインしてください"); this.emit(); return; }
@@ -502,6 +532,7 @@ export class BrowserSyncHost {
     , ...(this.message ? { message: this.message } : {})
     , ...(this.notInvited ? { notInvited: this.notInvited } : {})
     , ...(this.billingLink ? { billingLink: this.billingLink } : {})
+    , ...(this.agent ? { agent: this.agent } : {})
     };
     const unsafe = serverProblem(this.server);
     if (unsafe) { status.state = "problem"; status.problem = { kind: "configuration", text: unsafe, fix: "server-setting" }; return status; }
