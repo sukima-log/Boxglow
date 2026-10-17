@@ -18,7 +18,7 @@ import { planIO } from "./plan-io";
 import { briefReceipt, contextReceipt, isCurrentToken, requireContext } from "./context";
 import { setupAgent } from "./setup-agent";
 import { runSyncCommand, runWatchCommand } from "./sync/command";
-import { runLinkIdentity, runLogin, runLogout, runWhoami } from "./sync/login";
+import { runLinkIdentity, runLogin, runLogout, runWhoami, runGoogleLogin } from "./sync/login";
 import { runBilling } from "./sync/billing";
 import { runAgentToken } from "./sync/agent-token";
 import { runTeam } from "./sync/team";
@@ -422,7 +422,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   team [list | create <名前> | show <ID> | invite <ID> [--role viewer|editor] | join <リンク> | role <ID> <アカウント> <役割> | leave <ID>]   チーム (ワークスペース): 同じ計画をチームで同期する。sync --team <ID> で置く先をチームにする
   agent-token connect claude-code|codex [--read-only]   Claude Code / Codex がサーバー経由でこの計画を読み書きできるようにする (トークンを作り、設定ファイルに書く)
   agent-token [list | create --name <名前> [--write] | revoke <id>]   AI エージェント用トークンの一覧 / 値だけ作る / 失効
-  login [--server <URL>] [--name <端末の名前>] [--add github|google]   (試験中) 同期サーバーにサインインする (GitHub のアカウント。表示されたコードを、ブラウザで入力する)。--add は、サインイン済みのアカウントに 2 つ目の手段を足す
+  login [--server <URL>] [--name <端末の名前>] [--google] [--add github|google]   (試験中) 同期サーバーにサインインする (GitHub のアカウント。--google なら Google。表示されたコードを、ブラウザで入力する)。--add は、サインイン済みのアカウントに 2 つ目の手段を足す
   logout [--server <URL>] / whoami [--server <URL>]  サインアウトする (サーバー側のトークンも取り消す) / 今の利用者・端末・保存量を出す
   unlock [--remove --lock-token <印> --actor human]  残った保存ロックの状態 (持ち主・判定) を出す (読むだけ。AI も使える)。--remove は人が解除する:
                                                  この計画を開いている Boxglow を止めてから、表示された印を付けて実行する。持ち主が動いているロックは解除できない
@@ -540,7 +540,7 @@ Usage (npx boxglow <command> ...):
   team [list | create <name> | show <ID> | invite <ID> [--role viewer|editor] | join <link> | role <ID> <account> <role> | leave <ID>]   Teams (workspaces): sync the same plan as a team. sync --team <ID> puts the plan in a team
   agent-token connect claude-code|codex [--read-only]   Let Claude Code / Codex read and write this plan through the server (creates a token and writes the config file)
   agent-token [list | create --name <name> [--write] | revoke <id>]   List agent tokens / create a bare token / revoke
-  login [--server <URL>] [--name <device name>] [--add github|google]  (experimental) Sign in to a sync server (GitHub account; enter the code shown in your browser). --add links a second sign-in method to the signed-in account
+  login [--server <URL>] [--name <device name>] [--google] [--add github|google]  (experimental) Sign in to a sync server (GitHub account, or Google with --google; enter the code shown in your browser). --add links a second sign-in method to the signed-in account
   logout [--server <URL>] / whoami [--server <URL>]  Sign out (also revokes the token on the server) / show the current account, devices and storage
   unlock [--remove --lock-token <token> --actor human]  Show a leftover save lock (owner and verdict; read-only, agents may use it). --remove is for a person:
                                                  stop every Boxglow that has this plan open, then run it with the token shown. A lock whose owner is running cannot be removed
@@ -1672,7 +1672,7 @@ if (argv[0] === "mcp") {
   const { options } = parseArgs(argv.slice(1));
   (async () => {
     setLang(explicitLang(options) ?? "ja");
-    const known = new Set(["server", "lang", "file", "name", "add"]);
+    const known = new Set(["server", "lang", "file", "name", "add", "google"]);
     const unknown = Object.keys(options).filter((k) => !known.has(k));
     if (unknown.length > 0) { console.log(t("boxglow {cmd} が知らない指定です: {list}", { cmd: argv[0], list: unknown.map((k) => "--" + k).join(", ") })); process.exitCode = 1; return; }
     // サーバー: 指定 > 環境変数 > 計画のファイルの結び付け (1 つだけのとき)
@@ -1690,7 +1690,8 @@ if (argv[0] === "mcp") {
       process.exitCode = await runLinkIdentity({ server, out, provider: add, token: resolved.token });
       return;
     }
-    process.exitCode = argv[0] === "login" ? await runLogin({ server, out, deviceName: str(options.name) })
+    // login --google: Google でサインインする (URL をブラウザで開いて許可する。画面のサインインと同じ手順)
+    process.exitCode = argv[0] === "login" ? (options.google === true || options.google === "true" ? await runGoogleLogin({ server, out, deviceName: str(options.name) }) : await runLogin({ server, out, deviceName: str(options.name) }))
       : argv[0] === "logout" ? await runLogout({ server, out }) : await runWhoami({ server, out });
   })().catch((e) => { console.error(`[boxglow ${argv[0]}] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });
 } else if (argv[0] === "sync") {
