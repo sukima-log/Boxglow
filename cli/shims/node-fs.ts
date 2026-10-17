@@ -6,6 +6,7 @@ const unavailable = (name: string) => () => { throw new Error(`${name} is not av
 export const existsSync = (): boolean => false;
 export const readFileSync = unavailable("readFileSync");
 export const writeFileSync = unavailable("writeFileSync");
+export const appendFileSync = unavailable("appendFileSync");
 export const mkdirSync = (): string | undefined => undefined;
 export const mkdtempSync = unavailable("mkdtempSync");
 export const readdirSync = (): string[] => [];
