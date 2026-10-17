@@ -6,7 +6,7 @@
  * Output: 終了コード (0 = 表示できた)
  */
 import { t } from "../../src/i18n/core";
-import { parseBilling, planLabel } from "../../src/sync/billing";
+import { TEAM_PLAN_AVAILABLE, parseBilling, planLabel } from "../../src/sync/billing";
 import { resolveToken } from "./credentials";
 import { serverProblem } from "./login";
 import { normalizeServer } from "./state-store";
@@ -23,6 +23,7 @@ export async function runBilling(o: BillingOptions): Promise<number> {
   if (!credential) { out(t("先にサインインしてください")); return 1; }
   const headers = { authorization: `Bearer ${credential.token}`, "content-type": "application/json" };
   try {
+    if (o.checkout === "team" && !TEAM_PLAN_AVAILABLE) { out(t("Team プランは、チームの機能ができてから提供します。今は Personal を申し込めます")); return 1; }
     if (o.checkout || o.portal) {
       const kind = o.checkout ? "checkout" : "portal";
       const res = await doFetch(`${server}/v1/billing/${kind}`, { method: "POST", headers, redirect: "error", body: JSON.stringify(o.checkout ? { plan: o.checkout, seats: o.seats } : {}), signal: AbortSignal.timeout(30000) });
@@ -45,7 +46,7 @@ export async function runBilling(o: BillingOptions): Promise<number> {
     out(t("プラン") + `: ${planLabel(billing.plan)}` + (billing.plan === "team" ? ` × ${billing.seats}` : "") + (billing.plan && billing.plan !== "comp" ? ` (${billing.status})` : ""));
     out(billing.required ? (billing.entitled ? t("同期できます") : t("有料プランの契約が必要です")) : t("試用中 (契約は求められていません)"));
     if (billing.periodEnd) out(t("次の更新") + `: ${billing.periodEnd.slice(0, 10)}`);
-    if (billing.checkout) out(t("申し込み: boxglow billing --checkout personal | --checkout team --seats <人数>"));
+    if (billing.checkout) out(TEAM_PLAN_AVAILABLE ? t("申し込み: boxglow billing --checkout personal | --checkout team --seats <人数>") : t("申し込み: boxglow billing --checkout personal"));
     if (billing.portal) out(t("契約の管理 (支払い方法・解約): boxglow billing --portal"));
     return 0;
   } catch (e) {

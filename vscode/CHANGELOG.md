@@ -1,8 +1,16 @@
 # Changelog
 
-## Unreleased (next: 0.5.1)
+## Unreleased (next: 0.5.2)
 
-_Fixes found after 0.5.0 go here._
+_Fixes found after 0.5.1 go here._
+
+## 0.5.1
+
+- Follows boxglow 0.6.1. Update together with the CLI and `serve`.
+- Account menu at the top right (plan, subscription management, sign-in methods, sign out, delete account); the sync panel keeps only the sync state and the actions for the open plan (History, Share links, Trash, Open a server plan).
+- History (go back to a previous server version), share links (read-only), a second sign-in method, paid plans (Personal; not enforced yet).
+- Notes with live Markdown preview, a per-box work log, images pasted into Notes are saved next to the plan (`boxglow.assets/`), the Now marker, a resizable block tree.
+- Top bar scrolls horizontally instead of wrapping; the ⋯ menu stays pinned. Where a browser tab cannot be opened (the webview), sign-in and billing pages are offered as links.
 
 ## 0.5.0
 

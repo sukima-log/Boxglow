@@ -136,6 +136,8 @@ export const app: Record<string, string> = {
 , "アカウントの削除を受け付けました。保存データは {date} に消えます (それまでは support@boxglow.app への連絡で取り消せます)": "Account deletion accepted. Stored data is erased on {date} (until then, contact support@boxglow.app to cancel)"
 , "30 日後": "in 30 days"
 , "プラン": "Plan"
+, "Team プランは、チームの機能ができてから提供します。今は Personal を申し込めます": "The Team plan arrives with the team features. Personal is available now"
+, "申し込み: boxglow billing --checkout personal": "Subscribe: boxglow billing --checkout personal"
 , "アカウント: {name}": "Account: {name}"
 , "アカウント (サインインしていません)": "Account (not signed in)"
 , "このページではアカウントと同期を使えません (boxglow.app か、npx boxglow serve --sync、VS Code の拡張で使えます)": "Account and sync are not available on this page (use boxglow.app, npx boxglow serve --sync, or the VS Code extension)"

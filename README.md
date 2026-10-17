@@ -11,6 +11,22 @@ Tasks are boxes with inputs and outputs; a box goes New (BlackBox: output decide
 - CLI for agents: `npx boxglow` (status / start / done / split / ask / answer ...)
 - License: MIT
 
+## What's new in 0.6.1
+
+- **Sync in the browser alone** at [boxglow.app](https://boxglow.app): sign in with GitHub or Google, put a plan on the server or receive one, and it syncs while the tab is open. `serve` and the VS Code extension sync the same way with a local file.
+- **Account menu** (top right): plan and subscription management, sign-in methods, sign out, delete account. **History** (go back to a previous server version) and **share links** (read-only, no sign-in needed) live in the sync panel.
+- **Paid plans**: Personal 500 JPY / month (Stripe). Billing is not enforced during the invited beta. Plan contents are encrypted at rest with a per-account key.
+- **Notes with live Markdown preview**, a per-box work log, pasted images, the Now marker, a resizable block tree.
+
+Details: [CHANGELOG.md](CHANGELOG.md). Update the CLI, `serve` and the VS Code extension (0.5.1) together.
+
+### 日本語: 0.6.1 の要点
+
+- **ブラウザだけで同期**: [boxglow.app](https://boxglow.app) で GitHub か Google でサインインし、計画をサーバーに置く・受け取る。タブを開いている間は自動で同期します。`serve` と VS Code 拡張は手元のファイルで同じように同期します。
+- **右上のアカウントのメニュー**: プランと契約の管理、サインインの手段、サインアウト、アカウントの削除。**履歴** (サーバーの前の版に戻す) と **共有リンク** (閲覧専用、サインイン不要) は同期パネルから。
+- **有料プラン**: Personal 月 500 円 (Stripe)。招待制の試用の間は請求しません。計画の中身はアカウントごとの鍵で暗号化して保存します。
+- **メモのライブプレビュー (Markdown)**、ボックスごとの作業記録、画像の貼り付け、NOW の印、幅を変えられるツリー。
+
 ## What's new in 0.6.0
 
 - **A diagram you can read at a glance**: boxes are cards (category, title, state, then inputs on the left and outputs on the right) with a header colored by state. In View mode boxes are laid out in dependency order as numbered stages; a vertical, top-to-bottom view is one click away. Your own layout in the file is untouched and is used in Edit mode.
@@ -235,7 +251,7 @@ An English example lives in `examples/notes-app/boxglow.json` (a small notes app
 
 ## Free and paid
 
-Boxglow is open core: everything that works with the one file on your machine (web app, CLI, Git workflow, members, parts, categories, dates, the VS Code extension) is MIT and stays free. Cloud sync, share links, team workspaces, Slack / JIRA connectors, a hosted MCP endpoint and a self-hosted edition are the paid product in preparation. The exact line is written down in [docs/MONETIZATION.md](docs/MONETIZATION.md); features already released under MIT will not move behind a paywall, and the paid product never stores your source or documents. To hear when it opens: https://boxglow.pages.dev/waitlist/
+Boxglow is open core: everything that works with the one file on your machine (web app, CLI, Git workflow, members, parts, categories, dates, the VS Code extension) is MIT and stays free. Cloud sync, share links, team workspaces, Slack / JIRA connectors, a hosted MCP endpoint and a self-hosted edition are the paid product in preparation. The Personal plan (cloud sync, history, share links) is 500 JPY per month, tax included, with no free tier and no trial; the Team plan (800 JPY per person per month) follows with the team features. During the invited beta nothing is charged. The exact line is written down in [docs/MONETIZATION.md](docs/MONETIZATION.md); features already released under MIT will not move behind a paywall, and the paid product never stores your source or documents. To hear when it opens: https://boxglow.pages.dev/waitlist/
 
 ## Development
 
