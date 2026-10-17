@@ -150,6 +150,8 @@ export const app: Record<string, string> = {
 , "トークンを作りました。この値は今だけ表示されます (控えてください)。": "Token created. It is shown only now (copy it)."
 , "Claude Code の登録コマンドをコピー": "Copy the Claude Code command"
 , "Codex の設定をコピー": "Copy the Codex config"
+, ".mcp.json の設定をコピー": "Copy the .mcp.json config"
+, "VS Code 拡張やデスクトップアプリの Claude Code 向け。作業フォルダの直下に .mcp.json として保存する": "For Claude Code in VS Code or the desktop app: save it as .mcp.json at the root of the working folder"
 , "MCP の URL": "MCP URL"
 , "読み書き": "read-write"
 , "読み取り専用": "read-only"

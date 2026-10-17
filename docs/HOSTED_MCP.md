@@ -8,6 +8,10 @@
 2. アカウントのメニュー (右上のアイコン) → 「AI エージェントの接続」 → 名前 (例: claude-code) と「書き込みも許可」を決めて「トークンを作る」。
 3. トークンの値 (`bga_...`) は作った直後だけ表示されます (サーバーはハッシュしか持ちません)。「Claude Code の登録コマンドをコピー」か「Codex の設定をコピー」で、そのまま貼れる形になります。
    - Claude Code: `claude mcp add --transport http boxglow https://sync.boxglow.app/mcp --header "Authorization: Bearer bga_..."`
+   - Claude Code の VS Code 拡張・デスクトップアプリ (CLI の `claude` コマンドが無いとき): 「.mcp.json の設定をコピー」を押し、作業フォルダの直下に `.mcp.json` として保存する。Claude Code を開き直すと、初回に「このプロジェクトの MCP サーバーを使うか」の確認が出るので許可する。トークンを含むので、このファイルは共有・コミットしない (`.gitignore` に入れる)
+     ```json
+     { "mcpServers": { "boxglow": { "type": "http", "url": "https://sync.boxglow.app/mcp", "headers": { "Authorization": "Bearer bga_..." } } } }
+     ```
    - Codex (`~/.codex/config.toml`):
      ```toml
      [mcp_servers.boxglow]

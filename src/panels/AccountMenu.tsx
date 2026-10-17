@@ -11,7 +11,7 @@ import { TEAM_PLAN_AVAILABLE, billingStatusLabel, planLabel } from "../sync/bill
 import { openBilling } from "./accountActions";
 import { SignInButtons, signInOneStep } from "./SignInButtons";
 import { SignInCode } from "./SyncPanel";
-import { claudeCodeCommand, codexConfig, mcpUrlOf } from "../sync/agent";
+import { claudeCodeCommand, claudeCodeMcpJson, codexConfig, mcpUrlOf } from "../sync/agent";
 
 /** 人型の印 (未サインイン) */
 function PersonIcon() {
@@ -157,6 +157,7 @@ export function AccountButton() {
                           <code className="agent-tokens__secret">{status.agent.newToken.token}</code>
                           <div className="sync-panel__row">
                             <button className="btn btn-sm" onClick={() => { void navigator.clipboard?.writeText(claudeCodeCommand(status.server!, status.agent!.newToken!.token)).then(() => setCopied("claude")).catch(() => setCopied(null)); }}>{copied === "claude" ? t("コピーしました") : t("Claude Code の登録コマンドをコピー")}</button>
+                            <button className="btn btn-sm" title={t("VS Code 拡張やデスクトップアプリの Claude Code 向け。作業フォルダの直下に .mcp.json として保存する")} onClick={() => { void navigator.clipboard?.writeText(claudeCodeMcpJson(status.server!, status.agent!.newToken!.token)).then(() => setCopied("mcpjson")).catch(() => setCopied(null)); }}>{copied === "mcpjson" ? t("コピーしました") : t(".mcp.json の設定をコピー")}</button>
                             <button className="btn btn-sm" onClick={() => { void navigator.clipboard?.writeText(codexConfig(status.server!, status.agent!.newToken!.token)).then(() => setCopied("codex")).catch(() => setCopied(null)); }}>{copied === "codex" ? t("コピーしました") : t("Codex の設定をコピー")}</button>
                             <button className="btn btn-ghost btn-sm" onClick={() => { setCopied(null); void act({ kind: "agentTokenDismiss" }); }}>{t("閉じる")}</button>
                           </div>

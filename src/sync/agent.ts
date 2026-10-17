@@ -24,6 +24,10 @@ export const mcpUrlOf = (server: string): string => `${server.replace(/\/$/, "")
 export const claudeCodeCommand = (server: string, token: string): string =>
   `claude mcp add --transport http boxglow ${mcpUrlOf(server)} --header "Authorization: Bearer ${token}"`;
 
+/** Claude Code の設定ファイル (.mcp.json。作業フォルダの直下に置く。CLI の claude コマンドが無い VS Code 拡張・デスクトップアプリ向け) */
+export const claudeCodeMcpJson = (server: string, token: string): string =>
+  JSON.stringify({ mcpServers: { boxglow: { type: "http", url: mcpUrlOf(server), headers: { Authorization: `Bearer ${token}` } } } }, null, 2) + "\n";
+
 /** Codex の設定 (~/.codex/config.toml に貼る) */
 export const codexConfig = (server: string, token: string): string =>
   `[mcp_servers.boxglow]\nurl = "${mcpUrlOf(server)}"\nhttp_headers = { Authorization = "Bearer ${token}" }\n`;

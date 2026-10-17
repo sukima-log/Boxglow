@@ -6,7 +6,7 @@
  * Input : o = { server, out, fetch?, command, name?, write?, id?, projectId }。Output: 終了コード
  */
 import { t } from "../../src/i18n/core";
-import { claudeCodeCommand, codexConfig, mcpUrlOf, parseAgentTokens } from "../../src/sync/agent";
+import { claudeCodeCommand, claudeCodeMcpJson, codexConfig, mcpUrlOf, parseAgentTokens } from "../../src/sync/agent";
 import { resolveToken } from "./credentials";
 import { serverProblem } from "./login";
 import { normalizeServer } from "./state-store";
@@ -33,6 +33,8 @@ export async function runAgentToken(o: AgentTokenOptions): Promise<number> {
       out("");
       out(t("MCP の URL") + ": " + mcpUrlOf(server));
       out("Claude Code: " + claudeCodeCommand(server, body.token));
+      out("Claude Code (.mcp.json。作業フォルダの直下。CLI が無いとき):");
+      out(claudeCodeMcpJson(server, body.token).trimEnd());
       out("Codex (~/.codex/config.toml):");
       out(codexConfig(server, body.token).trimEnd());
       return 0;
