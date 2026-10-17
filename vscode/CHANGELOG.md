@@ -1,9 +1,8 @@
 # Changelog
 
-## Unreleased (next: 0.5.2)
+## Unreleased
 
-- Sign-in can be stored on Windows itself (not only WSL): the token is encrypted with Windows DPAPI via Windows PowerShell under `%APPDATA%\boxglow\credentials\`.
-- New command "Boxglow: Self-check sign-in storage (Windows DPAPI)" runs the storage round trip in the extension host and copies the result to the clipboard.
+_Changes after 0.5.1 go here._
 
 ## 0.5.1
 
@@ -12,6 +11,14 @@
 - History (go back to a previous server version), share links (read-only), a second sign-in method, paid plans (Personal; not enforced yet).
 - Notes with live Markdown preview, a per-box work log, images pasted into Notes are saved next to the plan (`boxglow.assets/`), the Now marker, a resizable block tree.
 - Top bar scrolls horizontally instead of wrapping; the ⋯ menu stays pinned. Where a browser tab cannot be opened (the webview), sign-in and billing pages are offered as links.
+- Sign-in can be stored on Windows itself (not only WSL): the token is encrypted with Windows DPAPI via Windows PowerShell under `%APPDATA%\boxglow\credentials\`.
+- New command "Boxglow: Self-check sign-in storage (Windows DPAPI)" runs the storage round trip in the extension host and copies the result to the clipboard.
+- Workspaces (teams) in the account menu: create, invite with a link, roles, Team subscription per workspace; "Put it in" / "Receive from" chooses the workspace when starting sync.
+- "Connect Claude Code / Connect Codex" writes the agent config for the hosted MCP (`.mcp.json` next to the plan, or `~/.codex/config.toml` merged safely and verified as TOML before writing).
+- Sync panel: "Stop syncing / Resume syncing" buttons (a grey "Stopped" state while stopped; a separate `boxglow sync --watch` skips the plan too), and "Disconnect this plan on this device (keep the server copy)" under Other.
+- Constraints field under the outputs in the I/O tab (what the output must respect); "Edit scope and constraints" in More.
+- Usability: the account menu scrolls on small screens; account settings, revoke, leave / delete are outlined buttons; hints on the collapsed Handoff / AI work checks / AI claims sections; the canvas toolbar's "Display" disclosure and short labels on the flow / vertical / table switches; the folded done tab reads "Done n".
+- Combine / split plan files and your own plan templates (⋯ menu); the In-charge table shows NOW; zooming out fully centers the diagram; the heading strip shows NOW.
 
 ## 0.5.0
 

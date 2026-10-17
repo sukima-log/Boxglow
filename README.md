@@ -17,6 +17,9 @@ Tasks are boxes with inputs and outputs; a box goes New (BlackBox: output decide
 - **Account menu** (top right): plan and subscription management, sign-in methods, sign out, delete account. **History** (go back to a previous server version) and **share links** (read-only, no sign-in needed) live in the sync panel.
 - **Paid plans**: Personal 500 JPY / month (Stripe). Billing is not enforced during the invited beta. Plan contents are encrypted at rest with a per-account key.
 - **Notes with live Markdown preview**, a per-box work log, pasted images, the Now marker, a resizable block tree.
+- **Workspaces (teams)**: invite people with a link and sync the same plan; Team subscription per workspace. **Hosted MCP**: Claude Code / Codex use a plan on the server with no local file ("Connect Claude Code / Connect Codex" writes the config).
+- **Install as an app (PWA)**, your own **plan templates**, **combine / split** plan files, **edit a file opened directly in the browser**, sign-in stored on **Windows** itself.
+- **Sync you can stop** ("Stop syncing / Resume syncing", "Disconnect this plan on this device"), a **Constraints** field under the outputs, and a usability pass (fewer steps, clearer buttons and labels).
 
 Details: [CHANGELOG.md](CHANGELOG.md). Update the CLI, `serve` and the VS Code extension (0.5.1) together.
 
@@ -26,6 +29,9 @@ Details: [CHANGELOG.md](CHANGELOG.md). Update the CLI, `serve` and the VS Code e
 - **右上のアカウントのメニュー**: プランと契約の管理、サインインの手段、サインアウト、アカウントの削除。**履歴** (サーバーの前の版に戻す) と **共有リンク** (閲覧専用、サインイン不要) は同期パネルから。
 - **有料プラン**: Personal 月 500 円 (Stripe)。招待制の試用の間は請求しません。計画の中身はアカウントごとの鍵で暗号化して保存します。
 - **メモのライブプレビュー (Markdown)**、ボックスごとの作業記録、画像の貼り付け、NOW の印、幅を変えられるツリー。
+- **ワークスペース (チーム)**: 招待リンクで人を招き、同じ計画を同期。契約はワークスペースごと (人数分)。**ホスト型 MCP**: Claude Code / Codex が手元にファイルの無い計画をサーバー経由で読み書き (「Claude Code に接続 / Codex に接続」が設定を書く)。
+- **アプリとしてインストール (PWA)**、自分の**テンプレート**、計画ファイルの**結合 / 分割**、**ブラウザで直接開いたファイルの編集**、**Windows** でのサインインの保存。
+- **止められる同期** (「同期を止める / 再開する」「この端末の結び付けを解除する」)、出力の下の**制約**の欄、使いやすさの見直し (手数・ボタンの見た目・ラベル)。
 
 ## What's new in 0.6.0
 
@@ -186,7 +192,7 @@ Writes become new versions on the server and reach the synced devices on their n
 
 ## VS Code extension
 
-Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.0 goes with boxglow 0.6.0).
+Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.1 goes with boxglow 0.6.1).
 
 `vscode/` holds the extension's source. It opens `boxglow.json` as the same diagram inside the editor (custom editor "Boxglow"; right-click the file or use the editor title button / command *Boxglow: Open boxglow.json as a diagram*). The diagram follows the file when the CLI or an agent writes it, edits in the diagram are written back, and light / dark follow the VS Code theme. To build it yourself: `npm run build:vscode` (bundles the web app into `vscode/media/`), then `cd vscode && npm run package` (`.vsix`, install via *Extensions: Install from VSIX...*).
 
