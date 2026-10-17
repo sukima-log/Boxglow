@@ -21,10 +21,13 @@ export function SyncLifecycle({status,act,unsaved=false}:{status:SyncStatus;act:
  // 「サーバーの計画を開く」は同期の開始の流れ (status.startup)。結び付いた計画では、この行の下に出す
  const startupHere=!!status.startup && !!remoteId;
  const [pressed,setPressed]=useState<RowId|null>(null);
- // その行の内容が消えたら (閉じた・終わった)、押した行の記憶も消す
+ // その行の内容が「あった → 無くなった」ときだけ、押した行の記憶を消す
+ // (押した直後は内容がまだ届いていないので、「無い」だけで消すと記憶が消えて末尾に出てしまう)
+ const had=useRef({state:false,startup:false});
  useEffect(()=>{
-  if(pressed==="open" && !startupHere) setPressed(null);
-  if(pressed && pressed!=="open" && !state) setPressed(null);
+  if(had.current.state && !state && pressed && pressed!=="open") setPressed(null);
+  if(had.current.startup && !startupHere && pressed==="open") setPressed(null);
+  had.current={state:!!state,startup:startupHere};
  },[!!state,startupHere,pressed]);
  const opened:RowId|null=pressed ?? (startupHere ? "open" : state?.versions ? "versions" : state?.shares ? "shares" : state?.projects ? "trash" : null);
  const Row=({id,icon,label,hint,onClick}:{id:RowId;icon:React.ReactNode;label:string;hint:string;onClick:()=>void})=>
