@@ -7,7 +7,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { gitignoreWithMcpJson, mergeCodexConfig, mergeMcpJson, type AgentTarget } from "../../src/sync/agent";
+import { gitignoreWithMcpJson, mergeMcpJson, type AgentTarget } from "../../src/sync/agent";
+import { mergeCodexConfig } from "../../src/sync/codex-config";
 
 export function writeAgentConfig(target: AgentTarget, server: string, token: string, dir: string): { path: string; gitignored: boolean } {
   if (target === "codex") {

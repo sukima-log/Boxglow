@@ -2,7 +2,9 @@
  * AI エージェントの接続 (src/sync/agent.ts) の試験: 設定ファイルの併合と .gitignore
  */
 import { describe, expect, it } from "vitest";
-import { gitignoreWithMcpJson, mergeCodexConfig, mergeMcpJson, parseAgentTokens } from "./agent";
+import { gitignoreWithMcpJson, mergeMcpJson, parseAgentTokens } from "./agent";
+import { mergeCodexConfig } from "./codex-config";
+import { parse as parseToml } from "smol-toml";
 
 const S = "https://sync.example";
 const T = "bga_x.y";
@@ -99,8 +101,33 @@ describe("Codex の config.toml の併合 (見出しの揺れと壊れた形。C
     const esc = `[mcp_servers.boxglow]\nurl = "https://old.invalid/mcp"\nlabel = "say \\"hi\\" # not comment"\n[mcp_servers.other]\ncommand = "keep"\n`;
     expect(mergeCodexConfig(esc, S, T)).toContain(`[mcp_servers.other]\ncommand = "keep"`);
   });
+  it("引用符付きのキー (\"mcp_servers\" = ... / 'mcp_servers' / [mcp_servers] の \"boxglow\" / \"mcp_servers\".boxglow.url) も拒む (Codex レビュー 29d R29d-01)", () => {
+    expect(() => mergeCodexConfig(`"mcp_servers" = { boxglow = { url = "https://old.invalid/mcp" } }\n`, S, T)).toThrow(/top level/);
+    expect(() => mergeCodexConfig(`'mcp_servers' = { boxglow = { url = "https://old.invalid/mcp" } }\n`, S, T)).toThrow(/top level/);
+    expect(() => mergeCodexConfig(`[mcp_servers]\n"boxglow" = { url = "https://old.invalid/mcp" }\n`, S, T)).toThrow(/inline/);
+    expect(() => mergeCodexConfig(`"mcp_servers".boxglow.url = "https://old.invalid/mcp"\n`, S, T)).toThrow(/top level/);
+  });
+  it("引用符の中に ] や . を含む見出し ([projects.\"/work/[demo]\"]) を表として読み、消さない (Codex レビュー 29d R29d-02)", () => {
+    const before = `[mcp_servers.boxglow]\nurl = "https://old.invalid/mcp"\n\n[projects."/work/[demo]"]\ntrust_level = "trusted"\n\n[projects."a.b"]\ntrust_level = "untrusted"\n`;
+    const out = mergeCodexConfig(before, S, T);
+    expect(out).toContain(`[projects."/work/[demo]"]\ntrust_level = "trusted"`);
+    expect(out).toContain(`[projects."a.b"]\ntrust_level = "untrusted"`);
+    expect(out).not.toContain("old.invalid");
+    const doc = parseToml(out) as { projects: Record<string, { trust_level: string }>; mcp_servers: { boxglow: { url: string } } };
+    expect(doc.projects["/work/[demo]"].trust_level).toBe("trusted");
+    expect(doc.mcp_servers.boxglow.url).toBe("https://sync.example/mcp");
+  });
+  it("成功した結果は TOML として読め、Boxglow 以外の値は前後で同じ (独立したパーサーで確認)", () => {
+    const before = `model = "x"\n[profiles.a]\nmcp_servers = "x"\n[mcp_servers.other]\ncommand = "y"\nargs = ["[a]", "# b"]\n[mcp_servers.boxglow]\nurl = "https://old.invalid/mcp"\n[projects."/w"]\ntrust_level = "trusted"\n`;
+    const out = mergeCodexConfig(before, S, T);
+    const strip = (d: Record<string, unknown>) => { const s = { ...(d.mcp_servers as Record<string, unknown>) }; delete s.boxglow; return JSON.stringify({ ...d, mcp_servers: s }); };
+    expect(strip(parseToml(out) as Record<string, unknown>)).toBe(strip(parseToml(before) as Record<string, unknown>));
+    expect((parseToml(out) as { mcp_servers: { boxglow: { url: string; http_headers: { Authorization: string } } } }).mcp_servers.boxglow).toEqual({ url: "https://sync.example/mcp", http_headers: { Authorization: "Bearer bga_x.y" } });
+    // 読めない設定は書き戻さない
+    expect(() => mergeCodexConfig(`model = \n`, S, T)).toThrow(/parsed/);
+  });
   it("同じ表が 2 つある / [mcp_servers] の中にインラインで書いてあるときは、書き戻さずに例外", () => {
-    expect(() => mergeCodexConfig(`[mcp_servers.boxglow]\nurl = "a"\n[mcp_servers.boxglow]\nurl = "b"\n`, S, T)).toThrow(/more than once/);
+    expect(() => mergeCodexConfig(`[mcp_servers.boxglow]\nurl = "a"\n[mcp_servers.boxglow]\nurl = "b"\n`, S, T)).toThrow(/more than once|parsed/);
     expect(() => mergeCodexConfig(`[mcp_servers]\nboxglow = { url = "a" }\n`, S, T)).toThrow(/inline/);
     // [mcp_servers] の中でも、別のサーバーのインラインなら足せる
     expect(mergeCodexConfig(`[mcp_servers]\nother = { command = "y" }\n`, S, T)).toContain("[mcp_servers.boxglow]");
