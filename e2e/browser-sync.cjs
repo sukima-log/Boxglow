@@ -144,6 +144,7 @@ const ROOT = path.resolve(__dirname, '..');
     check('ブラウザ同期: サインアウトで「未サインイン」に戻り、トークンが失効する', server.revoked.has(token));
     // アカウントの削除: もう一度サインインしてから、詳細の「アカウントを削除…」→ 確認 → サーバーが受け付け、トークンが全部失効し、未サインインに戻る
     // (右上のアカウントのメニューからサインインし直す。メニューは開いたままなので、終わったら Escape で閉じてから開き直す)
+    await page.locator('.account-button').click(); // サインアウトでメニューは閉じているので開き直す
     await page.locator('.account-menu').getByRole('button', { name: 'GitHub でサインイン', exact: true }).click();
     await page.locator('.sync-panel__code').waitFor({ timeout: 15000 });
     server.deviceCodes.set([...server.deviceCodes.keys()].at(-1), { account: 'acc-browser', login: 'browser-user' });
