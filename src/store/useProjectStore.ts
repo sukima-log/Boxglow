@@ -296,7 +296,8 @@ function loadEditMode(_p: Project): boolean {
 
 /** ローカルファイル連携の状態 (ハンドルは保存できないのでモジュール変数に持つ) */
 let fileHandle: FileSystemFileHandle | null = null;
-let fileLastModified = 0;
+// ファイル監視の世代。保存開始後に返る古い読み込みを反映しない。
+let fileReadSerial = 0;
 let watchTimer: ReturnType<typeof setInterval> | null = null;
 /** ローカルサーバ連携の状態: 自分が最後に書いた中身 (サーバからの変更通知と区別する) と、通知の接続 */
 let serveEvents: EventSource | null = null;
@@ -525,19 +526,22 @@ export const useProjectStore = create<State>((set, get) => {
           // 直接開いたファイルへの保存 (B155): 書く直前に読み直し、最後に読んだ / 書いた後に外 (CLI や AI) から変わっていたら、上書きせずに競合として扱う
           // (ブラウザは CLI・serve・VS Code の保存ロックに参加できないので、読み直しと書き込みの間の隙間は残る。同時に使う場面は serve か VS Code を案内する)
           if (!fileHandle) throw new Error(t("ファイルを開き直してください"));
-          const f = await fileHandle.getFile();
+          const handle = fileHandle;
+          // 監視が取得した時刻は、本文を取り込んだ証拠ではない。
+          // Input: 今回保存する本文 / Output: 基準と一致する場合だけ書き込み。
+          ++fileReadSerial;
+          const f = await handle.getFile();
           if (generation !== epoch) return;
-          if (f.lastModified !== fileLastModified) {
-            const theirs = await f.text();
-            if (generation !== epoch) return;
-            fileLastModified = f.lastModified;
-            if (theirs !== text && theirs !== baseText) {
-              attempts++;
-              if (markConflict(theirs, String(f.lastModified))) continue;
-              throw new Error(t("ファイルが外から変わりました。両方の変更を保持しているので、統合方法を選んでください。"));
-            }
+          const theirs = await f.text();
+          if (generation !== epoch) return;
+          if (theirs !== text && theirs !== baseText) {
+            attempts++;
+            if (markConflict(theirs, String(f.lastModified))) continue;
+            throw new Error(t("ファイルが外から変わりました。両方の変更を保持しているので、統合方法を選んでください。"));
           }
-          fileLastModified = await writeLocalFile(fileHandle, text);
+          // 書き込み後に取得した時刻は、既に外部の次の版かもしれない。
+          // その時刻を「自分が保存した版」の基準にはしない。
+          await writeLocalFile(handle, text);
         } else { await saveProject(project); void get().refreshList(); browserHost?.noteLocalContent(project.id, project); }
         if (generation !== epoch) return;
         // 保存応答を待つ間に届いた新しい版を、古い保存の応答で巻き戻さない。
@@ -1149,7 +1153,6 @@ export const useProjectStore = create<State>((set, get) => {
       try {
         const r = await readLocalFile(handle);
         text = r.text;
-        fileLastModified = r.lastModified;
       } catch (e) {
         set({ toast: t("ファイルを読めません: {error}", { error: String(e) }) });
         return false;
@@ -1167,18 +1170,24 @@ export const useProjectStore = create<State>((set, get) => {
       set({ project: p, ephemeral: false, source: "file", readonly: true, fileName: handle.name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(null);
       const generation = epoch;
-      watchTimer = setInterval(async () => {
-        if (!fileHandle) return;
-        try { const f = await fileHandle.getFile(); if (f.lastModified === fileLastModified) return; const text = await f.text(); if (generation !== epoch) return; acceptRemote(text); fileLastModified = f.lastModified; } catch { /* Try on the next poll. */ }
-      }, WATCH_INTERVAL);
-      // 手動の更新: 更新時刻に関係なく、今のファイルを読み直す
-      reloadNow = async () => {
-        if (!fileHandle) return;
-        const f = await fileHandle.getFile();
+      /**
+       * Input: 開いたファイルのハンドル。Output: 最新本文を反映 (読めなければ例外)。
+       * 保存中は保存前の検査に任せる。保存開始や後続の監視より古い応答は捨てる。
+       * 時刻だけでは内容の同一性を保証できないため、本文を比較する。
+       */
+      const readLatest = async () => {
+        if (generation !== epoch || inFlight) return;
+        const serial = ++fileReadSerial;
+        const f = await handle.getFile();
         const text = await f.text();
-        if (generation !== epoch) return;
-        acceptRemote(text); fileLastModified = f.lastModified;
+        if (generation !== epoch || serial !== fileReadSerial || inFlight) return;
+        acceptRemote(text, String(f.lastModified));
       };
+      const refresh = async () => { try { await readLatest(); } catch { /* 次の監視で再試行。 */ } };
+      watchTimer = setInterval(() => { return refresh(); }, WATCH_INTERVAL);
+      reloadNow = readLatest;
+      // 保存完了後も読み直す。close 後の外部更新を「確認済み」にしない。
+      refreshExternal = refresh;
       return true;
     }
 

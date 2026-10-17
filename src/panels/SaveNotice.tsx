@@ -126,7 +126,7 @@ export function SaveNotice() {
   // 直接開いたファイル: 編集を始めるまでは閲覧専用 (1 人で使うなら、そのファイルに直接保存できる。B155)
   if (project && source === "file" && readonly && !saveError && !readonlyReason) return (
     <div className="save-notice" role="status">
-      <span>{t("閲覧専用で開いています。1 人で使うなら、このファイルに直接保存できます (CLI や AI と同時に使うときは npx boxglow serve --open か VS Code 拡張で開いてください)")}</span>
+      <span>{t("閲覧専用で開いています。この画面だけで編集する場合は、ファイルに直接保存できます。同じファイルを別の画面・CLI・AI でも編集するときは、npx boxglow serve --open か VS Code 拡張で開いてください")}</span>
       <button className="btn btn-primary btn-sm" onClick={() => void enableLocalEdit()}>{t("このファイルを編集する")}</button>
     </div>
   );

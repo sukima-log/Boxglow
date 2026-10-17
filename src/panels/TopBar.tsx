@@ -197,7 +197,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   const saveIcon = readonly ? "◈" : ephemeral ? "○" : saveError ? "!" : saveState === "saving" ? "↻" : saveState === "unsaved" ? "○" : "✓";
   /** Input: なし。Output: 配置の編集モードと短い結果通知。ノートなどの編集可否とは区別する。 */
   const toggleMode = () => setEditMode(!editMode);
-  const saveTitle = readonly ? t("閲覧専用") : ephemeral ? t("サンプルは保存されません。Save で自分の計画のコピーを残せます") : fileName ? t("{file} に自動で保存します。Save で今すぐ書きます", { file: fileName }) : t("このブラウザに自動で保存します");
+  const saveTitle = readonly ? t("閲覧専用") : ephemeral ? t("サンプルは保存されません。Save で自分の計画のコピーを残せます") : source === "file" ? t("このファイルに直接保存します。別の画面・CLI・AI も同じファイルを編集するなら、serve か VS Code 拡張で開いてください") : fileName ? t("{file} に自動で保存します。Save で今すぐ書きます", { file: fileName }) : t("このブラウザに自動で保存します");
   const sum = summarize(project);
   const busy = sum.working.length; // 作業中の件数 (詰まり・確認待ちは別の札で数える)
 
