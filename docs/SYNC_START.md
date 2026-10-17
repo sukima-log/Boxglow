@@ -106,18 +106,9 @@ CLI: `boxglow team list | create <名前> | show <ID> | invite <ID> [--role view
 
 無効な計画を開いただけでは通信せず、保存済みの利用者名を表示します。有効化の記憶は同期成功後に保存し、未連携の計画をサーバーから開く場合は新しいファイルを初期選択にします。既存ファイルへの保存は選択を明示したうえで比較へ進みます。
 
-### Windows ネイティブで環境トークンを使う
+### Windows での保存 (VS Code のローカル拡張ホスト・Windows の serve)
 
-Windowsネイティブではサインインの保存は未対応です。通常はWSLのCLIかLinuxのVS Code拡張ホストでサインインしてください。すでに有効なトークンを安全に入手している場合は、WindowsのCLIでも、PowerShellの同じセッションに送り先とトークンを設定できます。
-
-```powershell
-$env:BOXGLOW_TOKEN_SERVER = "https://sync.boxglow.app"
-$env:BOXGLOW_TOKEN = [System.Net.NetworkCredential]::new("", (Read-Host "発行済みトークン" -AsSecureString)).Password
-boxglow whoami --server $env:BOXGLOW_TOKEN_SERVER
-boxglow sync --server $env:BOXGLOW_TOKEN_SERVER --actor human
-```
-
-トークンを持っていない場合、この例だけで取得はできません。WSL側のサインイン手順を利用してください。Windowsで保存に失敗したloginが発行したトークンは取り消され、画面にも表示されません。環境変数による指定はWindowsのGUIでの資格情報保存を有効にするものではありません。
+Windows でも画面からサインインして同期できます。トークンは `%APPDATA%\boxglow\credentials\` に、Windows の DPAPI (同じ Windows ユーザーだけが復号できる仕組み。Windows PowerShell 経由) で暗号化して置きます。ファイルの中身にトークンの平文は無く、別のユーザーや別の PC にコピーしても読めません。PowerShell が使えない環境では従来どおり保存せず、環境変数 `BOXGLOW_TOKEN` (製品のサーバー以外) を使います。WSL の中で動かす場合は Linux と同じ (`~/.config/boxglow/credentials/`、本人だけの権限) です。
 
 ### HTTPからHTTPSへの移行 / HTTP to HTTPS migration
 

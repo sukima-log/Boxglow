@@ -28,6 +28,7 @@ import { writeAgentConfig } from "./agent-config";
 import { dirname } from "node:path";
 import { haltView, type SyncAction } from "./command";
 import { credentialsPath, readCredentials, resolveToken } from "./credentials";
+import { dpapiAvailable } from "./dpapi";
 import { runGoogleLogin, runLinkIdentity, runLogin, runLogout, serverProblem } from "./login";
 import { bindingsOf, hashOf, normalizeServer, realFile, SyncStateUnreadable } from "./state-store";
 import { lockWatch, SyncWatcher, type WatchEvent } from "./watch";
@@ -106,7 +107,8 @@ export class SyncHost {
   }
 
   /** この環境で、サインインを保存できるか */
-  get support(): SyncStatus["support"] { return (this.options.platform ?? process.platform) === "win32" ? "unsupported-platform" : "ok"; }
+  // Windows は DPAPI (PowerShell) でトークンを暗号化して保存できるときだけ対応 (B187)。試験では platform を差し替えられる
+  get support(): SyncStatus["support"] { const platform = this.options.platform ?? process.platform; return platform === "win32" && !dpapiAvailable(platform) ? "unsupported-platform" : "ok"; }
 
   /** 送り先の選択根拠をすべての認証処理で維持する。 */
   private resolveCredentials() { return resolveToken(this.server, this.options.allowEnvironmentToken); }
