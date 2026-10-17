@@ -346,7 +346,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         {/* 完了のときの検査結果 (B160): done --checked / --not-checked / --limits で残したもの */}
         {b.verification && (
           <section className="sec verification">
-            <div className="sec__head"><span className="label">{b.status === "white" ? t("検査 (完了のとき)") : t("検査 (前回の完了のとき)")}</span><span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{b.verification.by} · {new Date(b.verification.at).toLocaleString()}</span></div>
+            <div className="sec__head"><span className="label">{b.status === "white" && (!b.statusChangedAt || Date.parse(b.verification.at) >= Date.parse(b.statusChangedAt)) ? t("検査 (完了のとき)") : t("検査 (前回の完了のとき)")}</span><span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{b.verification.by} · {new Date(b.verification.at).toLocaleString()}</span></div>
             <dl className="text-[12px] flex flex-col gap-1">
               <div><dt className="font-bold inline">{t("検査")}: </dt><dd className="inline whitespace-pre-wrap break-words">{b.verification.checked}</dd></div>
               {b.verification.notChecked && <div><dt className="font-bold inline">{t("未実施")}: </dt><dd className="inline whitespace-pre-wrap break-words">{b.verification.notChecked}</dd></div>}

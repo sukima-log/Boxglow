@@ -51,9 +51,12 @@ describe("stop", () => {
     expect(JSON.parse(runHook("stop", { "thread-id": "s1" }, started, "claude-code").stdout).decision).toBe("block");
     // 2 回目 (stop_hook_active) は止めない
     expect(runHook("stop", { session_id: "s1", stop_hook_active: true }, started, "claude-code").stdout).toBe("");
-    // 引き継ぎメモ (checkpoint) があれば止めない。サブエージェント (claude-code-xxx) の引き継ぎも自分の分
-    const withHandoff = { ...started, handoffs: { [id]: { note: "途中", actor: "claude-code-review", at: new Date(Date.now() + 1000).toISOString() } } };
+    // 引き継ぎメモ (checkpoint) があれば止めない
+    const withHandoff = { ...started, handoffs: { [id]: { note: "途中", actor: "claude-code", at: new Date(Date.now() + 1000).toISOString() } } };
     expect(unrecordedWork(withHandoff, "claude-code", "s1")).toEqual([]);
+    // 記録者は完全一致: サブエージェント (claude-code-review) の作業は親の Stop では見ない (子の session_id は親と同じ。R30b-05)
+    const childWork = { ...started, blocks: { ...started.blocks, [id]: { ...started.blocks[id], activity: { ...started.blocks[id].activity!, actor: "claude-code-review" } } } };
+    expect(unrecordedWork(childWork, "claude-code", "s1")).toEqual([]);
     // 作業記録 (log) は引き継ぎの代わりにならない (開始直後の 1 行で通らない。R30-06)
     const withLog = { ...started, blocks: { ...started.blocks, [id]: { ...started.blocks[id], log: [{ id: "l1", at: new Date(Date.now() + 1000).toISOString(), by: "claude-code", text: "確認" }] } } };
     expect(unrecordedWork(withLog, "claude-code", "s1")).toHaveLength(1);

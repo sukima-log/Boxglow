@@ -1375,9 +1375,15 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const note = [str(options.note), reason ? t("入力待ちで開始する理由: {reason}", { reason }) : ""].filter(Boolean).join("\n");
       // 今ここ (本当にいま作業しているボックス) は start したボックスに移る (now で手動でも切り替えられる)
       let started = setActivity(p, b.id, actor, "working", note);
-      // 始めたセッションの識別子を活動に残す (Stop フックが「このセッションの作業」だけを見るため。環境に無ければ付けない)
+      // 始めたセッションの識別子を活動に残す (Stop フックが「このセッションの作業」だけを見るため)。
+      // 前の start の識別子は必ず外す (識別子の無い別プロセスの再着手を、前のセッションの作業と取り違えない。Codex レビュー 30b R30b-01)
       const session = sessionIdFromEnv();
-      if (session && started.blocks[b.id].activity) started = { ...started, blocks: { ...started.blocks, [b.id]: { ...started.blocks[b.id], activity: { ...started.blocks[b.id].activity!, session } } } };
+      if (started.blocks[b.id].activity) {
+        const activity = { ...started.blocks[b.id].activity! };
+        delete activity.session;
+        if (session) activity.session = session;
+        started = { ...started, blocks: { ...started.blocks, [b.id]: { ...started.blocks[b.id], activity } } };
+      }
       save(path, setNow(started, b.id, actor));
       out(t("開始: 「{title}」({actor})", { title: b.title, actor }));
       return;

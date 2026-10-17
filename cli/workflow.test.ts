@@ -30,6 +30,33 @@ function fixture(guard=false) {
   return {file,id:r.blockId,cli,token,read};
 }
 
+describe("セッションの識別子と検査結果の日時 (Codex レビュー 30b)",()=>{
+  it("start は環境のセッションの識別子を活動に残し、識別子の無い再着手では前の値を残さない (R30b-01)",()=>{
+    const {file,id,read}=fixture();
+    const run=(env:Record<string,string>,...args:string[])=>spawnSync(process.execPath,[entry,...args,"--file",file,"--actor","codex"],{encoding:"utf8",env:{...process.env,CLAUDE_CODE_SESSION_ID:"",CODEX_THREAD_ID:"",CODEX_SESSION_ID:"",...env}});
+    expect(run({BOXGLOW_SESSION_ID:"session-A"},"start","対象").status).toBe(0);
+    expect(read().blocks[id].activity.session).toBe("session-A");
+    expect(run({},"start","対象","--note","別のプロセスから").status).toBe(0);
+    expect(read().blocks[id].activity.session).toBeUndefined();
+    expect(read().blocks[id].activity.note).toBe("別のプロセスから");
+  });
+  it("完了済みの箱に検査を追記しても、検査の日時は今の日時のまま (R30b-02)。やり直し中は前回の検査と分かる (R30b-03)",()=>{
+    const {cli,read,id}=fixture();
+    expect(cli("done","対象","--artifact","成果=docs/x.md","--checked","初回").status).toBe(0);
+    const first=read().blocks[id];
+    expect(first.verification.at).toBe(first.statusChangedAt);
+    expect(cli("done","対象","--checked","追加の検査").status).toBe(0);
+    const second=read().blocks[id];
+    expect(second.verification.checked).toBe("追加の検査");
+    expect(Date.parse(second.verification.at)).toBeGreaterThanOrEqual(Date.parse(first.verification.at));
+    expect(second.statusChangedAt).toBe(first.statusChangedAt);
+    expect(cli("show","対象").stdout).toContain("検査 (完了のとき)");
+    // やり直し (gray に戻す) と「前回の完了のとき」
+    expect(cli("set","対象","--status","gray").status).toBe(0);
+    expect(cli("show","対象").stdout).toContain("検査 (前回の完了のとき)");
+  });
+});
+
 describe("CLIの既定動作と選択できる拒否",()=>{
   it("既定の start と done は警告を出して成功し、理由は活動とログに残す",()=>{
     const {cli,read,id}=fixture();

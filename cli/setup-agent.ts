@@ -90,6 +90,15 @@ function mergeHooks(hooks: Record<string, unknown>, actor: "claude-code" | "code
   return changed;
 }
 
+/**
+ * hooks の matcher (正規表現) が、あるツール名・開始理由に合うか。無指定・空・"*" は全部に合う。不正な正規表現は合わない
+ * Input : matcher, value。Output: 合えば true
+ */
+export function matchesHookMatcher(matcher: string | undefined, value: string): boolean {
+  if (matcher === undefined || matcher.trim() === "" || matcher.trim() === "*") return true;
+  try { return new RegExp(matcher).test(value); } catch { return false; }
+}
+
 /** レビュー用のサブエージェントの説明と手順 (Claude Code の .md と Codex の .toml で同じ文) */
 function reviewAgentText(actor: "claude-code" | "codex"): { description: string; body: string } {
   return {
@@ -212,13 +221,14 @@ export function checkAgentSetup(root: string, agent: string): string[] {
   const claude = agent !== "codex";
   const lines: string[] = [];
   const has = (rel: string, test?: (text: string) => boolean) => { const p = join(root, rel); if (!existsSync(p)) return false; return test ? test(readFileSync(p, "utf8")) : true; };
-  // hooks の構造を見る: イベントごとに、期待する matcher (SessionStart は compact を含む、PreToolUse は編集のツール名) と、そのイベントの中に Boxglow のコマンドがあること
+  // hooks の構造を見る: イベントごとに、matcher (正規表現。無指定・空・* は全部) が期待する値 (SessionStart は compact、PreToolUse は編集のツール名) に合い、
+  // そのイベントの中に type: command で Boxglow のコマンドがあること (R30b-04)
   const hooksOk = (rel: string, actor: "claude-code" | "codex") => has(rel, (text) => {
     try {
-      const o = JSON.parse(text) as { hooks?: Record<string, { matcher?: string; hooks?: { command?: string }[] }[]> };
+      const o = JSON.parse(text) as { hooks?: Record<string, { matcher?: string; hooks?: { type?: string; command?: string }[] }[]> };
       const hooks = o.hooks ?? {};
-      const hasCmd = (event: string, name: string, matcherNeeds: string[]) => (hooks[event] ?? []).some((entry) =>
-        matcherNeeds.every((m) => (entry.matcher ?? "").includes(m)) && (entry.hooks ?? []).some((h) => new RegExp(`boxglow(\\.js)? hook ${name} --actor ${actor}`).test(h.command ?? "")));
+      const hasCmd = (event: string, name: string, values: string[]) => (hooks[event] ?? []).some((entry) =>
+        values.every((v) => matchesHookMatcher(entry.matcher, v)) && (entry.hooks ?? []).some((h) => (h.type ?? "command") === "command" && new RegExp(`boxglow(\\.js)? hook ${name} --actor ${actor}`).test(h.command ?? "")));
       return hasCmd("SessionStart", "session-start", ["compact"]) && hasCmd("Stop", "stop", []) && hasCmd("PreToolUse", "pre-tool", actor === "codex" ? ["apply_patch"] : ["Edit", "Write"]);
     } catch { return false; }
   });

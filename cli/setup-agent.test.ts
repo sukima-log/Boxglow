@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkAgentSetup, setupAgent } from "./setup-agent";
+import { checkAgentSetup, matchesHookMatcher, setupAgent } from "./setup-agent";
 
 const dirs: string[] = [];
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
@@ -136,5 +136,14 @@ describe("hooks・サブエージェント・Codex の設定 (利用者が仕組
     settings.hooks.PreToolUse[0].matcher = "^NeverThisTool$";
     writeFileSync(path, JSON.stringify(settings));
     expect(checkAgentSetup(opts.root, "claude-code").some((l) => l.startsWith("NG .claude/settings.json (hooks"))).toBe(true);
+    // 文字列を含んでいても正規表現として合わなければ NG (R30b-04)。* や無指定は全部に合う
+    settings.hooks.PreToolUse[0].matcher = "^(?!apply_patch|Edit|Write).*$";
+    writeFileSync(path, JSON.stringify(settings));
+    expect(checkAgentSetup(opts.root, "claude-code").some((l) => l.startsWith("NG .claude/settings.json (hooks"))).toBe(true);
+    settings.hooks.PreToolUse[0].matcher = "*";
+    writeFileSync(path, JSON.stringify(settings));
+    expect(checkAgentSetup(opts.root, "claude-code").some((l) => l.startsWith("OK .claude/settings.json (hooks"))).toBe(true);
+    expect(matchesHookMatcher(undefined, "Edit")).toBe(true);
+    expect(matchesHookMatcher("[", "Edit")).toBe(false);
   });
 });

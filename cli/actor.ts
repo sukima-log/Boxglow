@@ -20,9 +20,14 @@ export function actorOf(explicit?: string, env: Environment = process.env): stri
   return executionAgent(env) ?? named ?? "agent";
 }
 
-/** 入力: 環境。出力: 実行中のエージェントのセッションの識別子 (無ければ undefined)。Claude Code は CLAUDE_SESSION_ID、Codex は CODEX_THREAD_ID / CODEX_SESSION_ID。BOXGLOW_SESSION_ID で明示もできる */
+/**
+ * 入力: 環境。出力: 実行中のエージェントのセッションの識別子 (無ければ undefined)。
+ *   Claude Code は CLAUDE_CODE_SESSION_ID (公式。Bash の子プロセスと hook の入力の session_id が同じ値。/clear で変わる。常駐の MCP は起動時の値を保つ)。
+ *   Codex は CODEX_THREAD_ID / CODEX_SESSION_ID (hook の入力の session_id と同じ値かは公式に確約が無い。違えば Stop フックは何も止めない = 安全側)。
+ *   BOXGLOW_SESSION_ID は明示 (SessionStart フックが Claude Code の CLAUDE_ENV_FILE 経由で後続のシェルに渡す)
+ */
 export function sessionIdFromEnv(env: Environment = process.env): string | undefined {
-  return env.BOXGLOW_SESSION_ID || env.CLAUDE_SESSION_ID || env.CLAUDE_CODE_SESSION_ID || env.CODEX_THREAD_ID || env.CODEX_SESSION_ID || undefined;
+  return env.BOXGLOW_SESSION_ID || env.CLAUDE_CODE_SESSION_ID || env.CLAUDE_SESSION_ID || env.CODEX_THREAD_ID || env.CODEX_SESSION_ID || undefined;
 }
 
 /** 入力: 明示actorと環境。出力: 同期の案内先。操作権限は明示actorで別に判定する。 */

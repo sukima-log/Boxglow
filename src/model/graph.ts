@@ -1308,7 +1308,7 @@ export function finishBlock(
   if (q.blocks[blockId].status !== "white") q.blocks[blockId].statusChangedAt = now();
   q.blocks[blockId].status = "white";
   // 検査結果 (B160): 書かれたときだけ置き換える (書かれなければ前の完了の分を残す)。日時は状態の変更と同じにして「この完了のときの検査」と分かるようにする
-  if (args.verification) q.blocks[blockId].verification = { ...args.verification, at: q.blocks[blockId].statusChangedAt ?? args.verification.at };
+  if (args.verification) q.blocks[blockId].verification = { ...args.verification, at: b.status !== "white" ? (q.blocks[blockId].statusChangedAt ?? args.verification.at) : args.verification.at };   // (完了済みへの追記は今の日時のまま。R30b-02)
   const arts = (args.artifacts ?? []).map((a) => a.title).join(", ");
   appendLog(q, { actor, kind: "done", blockId, message: `${t("「{title}」完了", { title: b.title })}${arts ? " (" + arts + ")" : ""}${args.note ? ": " + args.note : ""}${args.verification ? " " + t("[検査: {checked}]", { checked: args.verification.checked }) : ""}` });
   return { project: q };
