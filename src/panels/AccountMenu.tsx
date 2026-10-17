@@ -167,7 +167,7 @@ export function AccountButton() {
                 <div className="sync-panel__group">
                   <button className="sync-action" data-open={agentOpen ? "true" : "false"} aria-expanded={agentOpen} onClick={() => setAgentOpen(!agentOpen)}>
                     <span className="sync-action__icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4"/><circle cx="9" cy="13" r="1"/><circle cx="15" cy="13" r="1"/></svg></span>
-                    <span className="sync-action__text"><span className="sync-action__label">{t("AI エージェントの接続")}</span><span className="sync-action__hint">{t("Claude Code や Codex から、この計画をサーバー経由で読み書きする")}</span></span>
+                    <span className="sync-action__text"><span className="sync-action__label">{t("AI エージェントの接続")}</span><span className="sync-action__hint">{t("手元にファイルが無い端末やクラウドの AI 向け。この計画をサーバー経由で読み書きさせる (手元で開いている計画には不要)")}</span></span>
                     <span className="sync-action__chev" aria-hidden="true">{agentOpen ? "▾" : "▸"}</span>
                   </button>
                   {agentOpen && (

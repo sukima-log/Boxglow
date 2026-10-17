@@ -140,7 +140,7 @@ export const app: Record<string, string> = {
 , "この計画はまだサーバーに置かれていません (boxglow sync で結び付けてから)": "This plan is not on the server yet (bind it with boxglow sync first)"
 , "失効しました: {id}": "Revoked: {id}"
 , "今サインインしているアカウントには、この計画がサーバー上にありません (別のアカウントで置いた計画かもしれません)。その計画を置いたアカウントでサインインし直すか、このアカウントで計画を置き直してください": "The account you are signed in with does not have this plan on the server (it may have been put there by another account). Sign in with the account that put it there, or put the plan on the server again with this account"
-, "Claude Code や Codex から、この計画をサーバー経由で読み書きする": "Let Claude Code or Codex read and write this plan through the server"
+, "手元にファイルが無い端末やクラウドの AI 向け。この計画をサーバー経由で読み書きさせる (手元で開いている計画には不要)": "For agents on a machine or cloud without the file: let them read and write this plan through the server (not needed where the plan is open locally)"
 , "今開いている計画をサーバーに置くと、その計画のトークンを作れます": "Put the open plan on the server first; then you can create a token for it"
 , "トークンの名前": "Token name"
 , "名前 (例: claude-code)": "Name (e.g. claude-code)"

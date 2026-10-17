@@ -1,5 +1,7 @@
 # ホスト型の MCP (Claude Code / Codex がサーバー経由で計画を読み書きする)
 
+**手元に boxglow.json がある端末では不要です。** VS Code や serve で開いている計画は、Claude Code / Codex が `npx boxglow mcp` (標準入出力の MCP) や CLI で手元のファイルを直接編集し、同期がサーバーへ送ります。ここで説明するのは、ファイルを持てない相手 (別の PC、クラウドのエージェント、CI) に、サーバー上の計画へ直接つながせる道です。
+
 手元に `boxglow.json` が無い環境 (別の PC、クラウドのエージェント、Claude Code の Web 版など) からでも、サーバー (https://sync.boxglow.app) に置いた計画を、AI エージェントが MCP で読み書きできます。手元の `npx boxglow mcp` (stdio) と同じ道具 (`boxglow_status`, `boxglow_show`, `boxglow_add`, `boxglow_start`, `boxglow_done`, ...) が、HTTP の MCP (`https://sync.boxglow.app/mcp`) で使えます。
 
 ## 使い方
