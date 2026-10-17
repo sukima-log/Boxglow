@@ -13,7 +13,7 @@ import { sha256Hex } from "../lib/sha256";
 import { loadProject, saveProject } from "../lib/storage";
 import { fromJSON, toJSON } from "../model/graph";
 import { parseConflictResolution, type ConflictResolution } from "../model/conflict-groups";
-import { browserSyncIO } from "./browser-io";
+import { browserSyncIO, removeBrowserSyncState } from "./browser-io";
 import { applyRevert, parseVersionList, planNameOf } from "./versions";
 import { parseBilling } from "./billing";
 import { parseShareList, shareUrl } from "./shares";
@@ -340,6 +340,18 @@ export class BrowserSyncHost {
 
   private enable(file: string): void { this.enabled.add(file); saveEnabled(this.enabled); void this.syncFile(file, {}); }
   private disable(file: string): void { this.enabled.delete(file); saveEnabled(this.enabled); this.emit(); }
+  /**
+   * この端末での同期をやめる: 止めたうえで、結び付け (IndexedDB の同期の状態) を消す。計画とサーバーの控えは残る
+   * Input : file = 計画の ID。Output: なし (状態を配る)。送受信の途中なら何もしない (次の emit で分かる)
+   */
+  private async unbind(file: string): Promise<void> {
+    if (this.busy > 0) { this.message = t("送受信が終わってから、もう一度押してください"); this.emit(); return; }
+    this.enabled.delete(file); saveEnabled(this.enabled);
+    try { await removeBrowserSyncState(file, this.server); } catch (e) { this.message = t("同期の状態を消せませんでした: {reason}", { reason: e instanceof Error ? e.message : String(e) }); this.emit(); return; }
+    this.knownBindings.delete(file); this.results.delete(file);
+    this.message = t("この端末での同期をやめました。サーバーの計画は「サーバーの計画を開く」で受け取り直せます");
+    this.emit();
+  }
   /** 常時の同期の 1 回 (開いていて有効な計画を順に)。file を渡すと、その計画だけ */
   private async tick(file?: string): Promise<void> {
     if (this.paused || (typeof document !== "undefined" && document.visibilityState === "hidden")) return;
@@ -404,6 +416,7 @@ export class BrowserSyncHost {
       case "openProject": if (file) await this.openProject(file, action); break;
       case "enable": if (file) this.enable(file); break;
       case "disable": if (file) this.disable(file); break;
+      case "unbind": if (file) await this.unbind(file); break;
       case "signIn": this.signIn(action.provider); break;
       case "linkIdentity": if (this.signedIn()) this.signIn(action.provider, true); break;
       case "cancelSignIn": this.cancelSignIn(); break;
@@ -579,6 +592,8 @@ export class BrowserSyncHost {
     if (!account) { status.state = "signed-out"; return status; }
     if (!file) { status.state = "off"; return status; }
     if (!status.file!.binding && !this.enabled.has(file)) { status.state = "unbound"; return status; }
+    // 結び付いているのに止めている = 利用者が「同期を止める」を押した (自動の一時停止 paused とは分ける)
+    if (status.file!.binding && !this.enabled.has(file)) { status.state = "disabled"; return status; }
     if (this.busy > 0) status.state = "syncing";
     const last = this.results.get(file);
     if (!last) { status.state = this.paused && this.busy === 0 ? "paused" : "syncing"; return status; }

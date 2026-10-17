@@ -17,7 +17,7 @@ import { commitFile, describeLock, FileConflict, inspectLock, lockTokenOf, remov
 import { planIO } from "./plan-io";
 import { briefReceipt, contextReceipt, isCurrentToken, requireContext } from "./context";
 import { setupAgent } from "./setup-agent";
-import { runSyncCommand, runWatchCommand } from "./sync/command";
+import { runSyncCommand, runUnbindCommand, runWatchCommand } from "./sync/command";
 import { runLinkIdentity, runLogin, runLogout, runWhoami, runGoogleLogin } from "./sync/login";
 import { runBilling } from "./sync/billing";
 import { runAgentToken } from "./sync/agent-token";
@@ -421,6 +421,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  --relink <印> [--prefer local|remote] = サーバーの履歴が変わって止まった後に、見比べて選んで結び直す
                                                  --account <利用者の ID> = 利用者の記録が無い結び付けを、表示された利用者のものとして続ける
   sync --reconnect-restored <印> --actor human   削除記録の復元先へ結び直し、手元の未送信編集と比較する
+  sync --unbind [--server <URL>]                 この端末での同期をやめる (結び付けを消す。計画のファイルとサーバーの控えは残る)
   remote trash | delete|restore <ID> [--server URL]  削除済み一覧 / 削除・復元の確認。確定は --confirm <印> --actor human
   remote versions <ID> | revert <ID> <版> --file <path> --actor human   履歴の一覧 / その版の中身を手元のファイルに戻す (控えを取る。次の同期で新しい版として送られる)
   billing [--checkout personal|team [--seats n] | --portal]   契約の状態 / 申し込みの画面 (Stripe) の URL / 契約の管理の URL
@@ -541,6 +542,7 @@ Usage (npx boxglow <command> ...):
                                                  --relink <token> [--prefer local|remote] = after the server's history changed: compare, choose and bind again
                                                  --account <account id> = continue a binding that has no account recorded, as the account shown
   sync --reconnect-restored <token> --actor human  Reconnect the original file to its restored plan and compare unsent edits
+  sync --unbind [--server <URL>]                 Stop syncing on this machine (removes the binding; the file and the server copy stay)
   remote trash | delete|restore <ID> [--server URL]  List trash / preview delete or restore; confirm with --confirm <token> --actor human
   remote versions <ID> | revert <ID> <rev> --file <path> --actor human   List history / write that version into the local file (a backup is kept; the next sync sends it as a new version)
   billing [--checkout personal|team [--seats n] | --portal]   Subscription status / checkout URL (Stripe) / subscription management URL
@@ -1754,9 +1756,10 @@ if (argv[0] === "mcp") {
     const file = locateFile(str(options.file));
     try { setLang(explicitLang(options) ?? load(file).lang ?? "ja"); } catch { /* 読めない計画でも、止まった理由は表示する */ }
     // 知らない指定 (まだ無い --watch など) を、黙って「1 回の同期」として実行しない
-    const known = new Set(["file", "lang", "actor", "watch", "server", "project", "team", "reconnect-restored", "adopt", "restore", "resolve", "link", "prefer", "recover", "applied", "not-applied", "account", "relink", "block", "settings", "choices-file"]);
+    const known = new Set(["file", "lang", "actor", "watch", "server", "project", "team", "reconnect-restored", "adopt", "restore", "resolve", "link", "prefer", "recover", "applied", "not-applied", "account", "relink", "block", "settings", "choices-file", "unbind"]);
     const unknown = Object.keys(options).filter((k) => !known.has(k));
     if (unknown.length > 0) { out(t("boxglow sync が知らない指定です: {list}", { list: unknown.map((k) => "--" + k).join(", ") })); process.exitCode = 1; return; }
+    if (options.unbind) { process.exitCode = runUnbindCommand({ file, server: str(options.server) }, out); return; }
     process.exitCode = await (options.watch ? runWatchCommand : runSyncCommand)({
       file
     , actor: str(options.actor)

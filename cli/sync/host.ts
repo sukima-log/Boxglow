@@ -13,7 +13,7 @@ import { listTrash, previewLifecycle, commitLifecycle, listVersions, previewReve
 import { isDefaultSyncServer } from "./server-policy";
 import { parseConflictResolution, type ConflictResolution } from "../../src/model/conflict-groups";
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
 import { APP_VERSION } from "../../src/model/version";
 import { t } from "../../src/i18n/core";
 import { inspectLock } from "../file-store";
@@ -30,7 +30,7 @@ import { haltView, type SyncAction } from "./command";
 import { credentialsPath, readCredentials, resolveToken } from "./credentials";
 import { dpapiAvailable } from "./dpapi";
 import { runGoogleLogin, runLinkIdentity, runLogin, runLogout, serverProblem } from "./login";
-import { bindingsOf, hashOf, normalizeServer, realFile, SyncStateUnreadable } from "./state-store";
+import { bindingDir, bindingsOf, hashOf, normalizeServer, realFile, SyncStateUnreadable } from "./state-store";
 import { lockWatch, SyncWatcher, type WatchEvent } from "./watch";
 
 import type { HostAction, SyncStatus } from "../../src/sync/status";
@@ -167,6 +167,20 @@ export class SyncHost {
     this.remembered.delete(realFile(file));
     this.options.onEnabled?.(realFile(file), false);
     this.applyTargets();
+    this.emit();
+  }
+  /**
+   * この端末での同期をやめる: 止めたうえで、結び付けのフォルダ (同期の状態) を消す。計画のファイルとサーバーの控えは残る
+   * Input : file = 計画のファイル。Output: なし (状態を配る)。送受信の途中なら消さない
+   */
+  unbind(file: string): void {
+    const real = realFile(file);
+    if (this.busy > 0) { this.message = t("送受信が終わってから、もう一度押してください"); this.emit(); return; }
+    this.disable(real);
+    try { rmSync(bindingDir(real, this.server), { recursive: true, force: true }); }
+    catch (e) { this.message = t("同期の状態を消せませんでした: {reason}", { reason: e instanceof Error ? e.message : String(e) }); this.emit(); return; }
+    this.results.delete(real);
+    this.message = t("この端末での同期をやめました。サーバーの計画は「サーバーの計画を開く」で受け取り直せます");
     this.emit();
   }
   /** 有効で、かつ開いている計画 = 見張る対象 */
@@ -868,6 +882,7 @@ export class SyncHost {
       case "openProject": if (real) await this.openProject(real,action); break;
       case "enable": if (real) this.enable(real); break;
       case "disable": if (real) this.disable(real); break;
+      case "unbind": if (real) this.unbind(real); break;
       case "signIn": this.signIn(action.provider, real ?? undefined); break;
       case "linkIdentity": this.linkIdentity(action.provider); break;
       case "cancelSignIn": if (!this.signingIn?.owner || this.signingIn.owner.file === real) this.cancelSignIn(); break;
@@ -990,6 +1005,8 @@ export class SyncHost {
     if (!real) { status.state = credentialsSource === "none" ? "signed-out" : "off"; return status; }
     // 資格情報が無い間は、サインインの途中でも「未サインイン」(途中で「オフ」に見せない。サインインの欄は signIn で出る。実機の VS Code で見つけた)
     if (credentialsSource === "none") { status.state = "signed-out"; return status; }
+    // 結び付いているのに止めている = 利用者が「同期を止める」を押した (自動の一時停止 paused とは分ける)
+    if (!enabled && binding) { status.state = "disabled"; return status; }
     if (!enabled) { status.state = "off"; return status; }
     if (this.owner === "external" || this.owner === "unknown") { status.state = "external"; status.message = this.owner === "external" ? t("別のプロセス (boxglow sync --watch など) が、このサーバーの同期を受け持っています。そちらを止めると、ここから同期できます") : t("同期のロックの持ち主を判定できません。boxglow unlock で確かめてください"); return status; }
     // 初回の比較は結び付けをまだ保存しないため、結果があれば先に表示する。
@@ -1091,6 +1108,7 @@ export function parseHostAction(text: string): HostAction | null {
     case "openProject": return typeof o.operationId === "string" && o.operationId.length <= 128 && typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 && (o.destination === undefined || o.destination === "current" || o.destination === "new") && (o.name === undefined || typeof o.name === "string" && o.name.length <= 128) ? { kind: o.kind, operationId: o.operationId, projectId: o.projectId, destination: o.destination as "current" | "new" | undefined, name: o.name as string | undefined } : null;
     case "enable":
     case "disable":
+    case "unbind":
     case "cancelSignIn":
     case "signOut":
     case "deleteAccount":

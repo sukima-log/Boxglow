@@ -2,7 +2,7 @@
  * 同期の裏方 (cli/sync/host.ts) の試験: 実際のファイル・設定フォルダ・試験用のサーバーを使い、画面の代わりに状態を読む
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { addBlock, createProject, defaultTaskParent, fromJSON, toJSON, updateBlock } from "../../src/model/graph";
@@ -13,6 +13,7 @@ import { SyncHost, type SyncStatus, parseHostAction } from "./host";
 import { lockWatch } from "./watch";
 import { TestSyncServer } from "./test-server";
 import { setDpapi } from "./dpapi";
+import { bindingDir } from "./state-store";
 
 let server: TestSyncServer;
 let root: string;
@@ -82,6 +83,33 @@ describe("状態の判定", () => {
     expect(host.status(file)).toMatchObject({ state: "synced", revision: "e1.2" });
     expect(statuses.every((s) => s.session === host.session)).toBe(true);
     expect(statuses.map((s) => s.seq)).toEqual([...statuses.map((s) => s.seq)].sort((x, y) => x - y));
+    await host.stop();
+  });
+
+  it("「同期を止める」で disabled (結び付けは残る)。「再開」で synced。「やめる」で結び付けのフォルダが消えて off に戻る", async () => {
+    const { file } = planFile("p1");
+    signedIn();
+    const { host } = make();
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    expect(host.status(file).state).toBe("synced");
+    const dir = bindingDir(file, server.url);
+    expect(existsSync(dir)).toBe(true);
+    // 止める: 問題ではなく「止めている」。結び付けはそのまま
+    await host.act(file, { kind: "disable" });
+    expect(host.status(file)).toMatchObject({ state: "disabled", file: { enabled: false, binding: { remoteId: expect.any(String) } } });
+    // 再開: 続きから
+    await host.act(file, { kind: "enable" });
+    await settle();
+    expect(host.status(file)).toMatchObject({ state: "synced", file: { enabled: true } });
+    // やめる: 結び付けのフォルダが消え、ファイルは残る。状態は「オフ」(結び付け無し・無効)
+    await host.act(file, { kind: "unbind" });
+    expect(existsSync(dir)).toBe(false);
+    expect(existsSync(file)).toBe(true);
+    expect(host.status(file)).toMatchObject({ state: "off", file: { enabled: false, binding: null } });
+    expect(host.status(file).message).toContain("やめました");
+    // 操作の解釈にも入っている
+    expect(parseHostAction(JSON.stringify({ kind: "unbind" }))).toEqual({ kind: "unbind" });
     await host.stop();
   });
 
@@ -170,7 +198,8 @@ describe("サインインとサインアウト", () => {
     expect(readCredentials(server.url)).toBeNull();
     expect(host.status(file)).toMatchObject({ state: "signed-out", owner: "none", file: { enabled: false } });
     process.env.BOXGLOW_TOKEN = "env-user";
-    expect(host.status(file)).toMatchObject({ state: "off", credentials: { source: "env" } });
+    // (環境変数のトークンがあると結び付けは見えるが、サインアウトで止めたままなので「止めている」(disabled)。再開のボタンで続けられる)
+    expect(host.status(file)).toMatchObject({ state: "disabled", credentials: { source: "env" } });
     await host.stop();
   });
 

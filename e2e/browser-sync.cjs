@@ -241,6 +241,19 @@ const ROOT = path.resolve(__dirname, '..');
     check('ブラウザ同期: 別のブラウザの Home からサインインして受け取ると、その計画が開く', await page2.evaluate(() => window.boxglow.store.getState().project?.name === 'ブラウザで改名'), 'opened=' + (await page2.evaluate(() => window.boxglow.store.getState().project?.name)) + ' personal=' + JSON.stringify([...(server.accounts.get('acc-browser')?.entries() ?? [])].map(([id, p]) => [id, JSON.parse(p.head?.text ?? '{}').name])));
     await page2.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'synced', null, { timeout: 20000 });
     check('ブラウザ同期: 受け取った計画は同期が有効で「同期済み」', (await page2.locator('.sync-chip').getAttribute('data-state')) === 'synced');
+    // 止める → 札が灰色の「停止中」(disabled) → 再開 → 同期済み → その他の「やめる」→ 結び付けが消えて「未接続」(unbound)
+    await page2.locator('.sync-chip').click();
+    await page2.getByRole('button', { name: '同期を止める', exact: true }).click();
+    await page2.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'disabled', null, { timeout: 15000 }).catch(() => {});
+    check('ブラウザ同期: 「同期を止める」で札が「停止中」(disabled) になり、問題の赤ではない', (await page2.locator('.sync-chip').getAttribute('data-state')) === 'disabled' && (await page2.locator('.sync-chip').getAttribute('class')).includes('tone-quiet'));
+    await page2.getByRole('button', { name: '同期を再開する', exact: true }).click();
+    await page2.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'synced', null, { timeout: 20000 }).catch(() => {});
+    check('ブラウザ同期: 「同期を再開する」で同期済みに戻る', (await page2.locator('.sync-chip').getAttribute('data-state')) === 'synced');
+    await page2.locator('.sync-panel__details > summary').click();
+    await page2.getByRole('button', { name: 'この計画の同期をやめる (サーバーの控えは残す)', exact: true }).click();
+    await page2.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'unbound', null, { timeout: 15000 }).catch(() => {});
+    check('ブラウザ同期: 「やめる」で結び付けが消えて未接続になり、サーバーの計画は残る', (await page2.locator('.sync-chip').getAttribute('data-state')) === 'unbound' && !!server.project(remoteId, 'acc-browser')?.head && (await page2.evaluate(() => window.boxglow.store.getState().syncStatus?.file?.binding)) === null);
+    await page2.keyboard.press('Escape');
     // Home に戻ると、サインイン中の利用者とサインアウトが出て、サインアウトできる
     await page2.evaluate(() => window.boxglow.store.getState().closeProject());
     await page2.locator('.home-receive__who').waitFor({ timeout: 10000 });

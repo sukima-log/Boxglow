@@ -6,6 +6,7 @@ import { isHumanActor } from "../../src/model/graph";
  * 使い方:
  *   boxglow sync --server <URL> [--project <サーバー側の計画の ID>]   初めて結び付ける (ID を省くと新しく作る)
  *   boxglow sync                                                      結び付け済みのサーバーとそろえる
+ *   boxglow sync --unbind [--server <URL>]                            この端末での同期をやめる (結び付けを消す。ファイルとサーバーの控えは残る)
  *   boxglow sync --adopt <印>                                         止まっていた「消えた設定の確認」で、その削除を採って送る
  *   boxglow sync --restore <印>                                       同じ場面で、消えた設定だけを手元に戻す
  *   boxglow sync --resolve <印> --prefer local|remote                 止まっていた競合を、表示した項目について手元 / サーバーの値に決める
@@ -20,9 +21,9 @@ import { isHumanActor } from "../../src/model/graph";
 import { blockResolutionKey, parseConflictResolution, type ConflictResolution, type ResolutionInput } from "../../src/model/conflict-groups";
 import { t } from "../../src/i18n/core";
 import { parseTeams } from "../../src/sync/teams";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { syncOnce, SyncConfigurationError, HumanSyncRequired, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
-import { bindingsOf, hashOf, SyncStateUnreadable } from "./state-store";
+import { SyncStateUnreadable, bindingDir, bindingsOf, hashOf, normalizeServer, realFile } from "./state-store";
 import { resolveToken } from "./credentials";
 import { authHint } from "./login";
 import { bindingsFor, lockWatch, SyncWatcher, type WatchEvent } from "./watch";
@@ -112,6 +113,22 @@ function humanRequired(o: SyncCommandOptions, out: (text: string) => void, selec
     out(humanSyncCommand(o, selection?.server ?? undefined));
   }
   return 2;
+}
+
+/**
+ * この端末での同期をやめる (boxglow sync --unbind): 結び付けのフォルダ (同期の状態) を消す。計画のファイルとサーバーの控えは残る
+ * Input : file = 計画のファイル, server = サーバー (省略時: 結び付けが 1 つならそれ。複数なら指定を求める), out = 出力
+ * Output: 終了コード (0 = 消した / 結び付けが無い、1 = サーバーを指定する必要がある)
+ */
+export function runUnbindCommand(o: { file: string; server?: string }, out: (text: string) => void): number {
+  const real = realFile(o.file);
+  const { bindings } = bindingsOf(real);
+  const targets = o.server ? bindings.filter((b) => normalizeServer(b.server) === normalizeServer(o.server!)) : bindings;
+  if (targets.length === 0) { out(t("この計画は結び付いていません (やめるものはありません)")); return 0; }
+  if (targets.length > 1) { out(t("結び付きが複数あります。--server で選んでください: {list}", { list: targets.map((b) => b.server).join(", ") })); return 1; }
+  rmSync(bindingDir(real, targets[0].server), { recursive: true, force: true });
+  out(t("この端末での同期をやめました ({server})。計画のファイルとサーバーの控えは残っています。受け取り直すには boxglow sync --project <ID> --actor human", { server: targets[0].server }));
+  return 0;
 }
 
 export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) => void): Promise<number> {

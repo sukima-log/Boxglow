@@ -57,7 +57,9 @@ export interface SyncStatus {
   owner: "self" | "external" | "unknown" | "none";
   /** 今の画面のファイル (開いていなければ null) */
   file: { path: string; enabled: boolean; binding: { server: string; remoteId: string; /** チームに置いた計画なら、そのチーム (B81)。myName = そのチームでの自分の表示名 (計画の担当者と照合して「自分」にする) */ team?: TeamRef & { myName?: string } } | null } | null;
-  state: "off" | "signed-out" | "unbound" | "synced" | "unsent" | "syncing" | "halted" | "problem" | "offline" | "paused" | "external" | "unsupported";
+  state: "off" | "signed-out" | "unbound" | "synced" | "unsent" | "syncing" | "halted" | "problem" | "offline" | "paused" | "external" | "unsupported"
+    /** 結び付いているが、利用者が「同期を止める」で止めている (手動。paused = 画面が隠れている間などの自動の一時停止) */
+    | "disabled";
   /** 最後にそろえたサーバーの版 (詳細の欄にだけ出す) */
   revision: string | null;
   /** 確認が要る場面 (選べる操作つき。choiceIds = 項目の id → 選択 ID) */
@@ -133,6 +135,8 @@ export type HostAction =
   | {kind:"previewDelete"|"previewRestore";projectId:string}
   | {kind:"confirmLifecycle";choiceId:string}
   | { kind: "enable" } | { kind: "disable" }
+  /** この端末での同期をやめる: 結び付け (同期の状態) を消す。サーバーの控えと手元の計画は残る。「サーバーの計画を開く」で受け取り直せる */
+  | { kind: "unbind" }
   | { kind: "signIn"; provider: "github" | "google" } | { kind: "cancelSignIn" } | { kind: "signOut" }
   /** 本人によるアカウントの削除 (サーバーが止めてトークンを全部失効させ、30 日後に保存データを消す。手元はサインアウトと同じ片付け) */
   | { kind: "deleteAccount" }

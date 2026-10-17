@@ -31,6 +31,9 @@ function chip(status: SyncStatus): {
       return { label: t("送受信中"), icon: "↻", tone: "busy" };
     case "halted":
       return { label: t("確認が必要"), icon: "!", tone: "attention" };
+    case "disabled":
+      // 利用者が止めた: 問題ではないので赤にしない
+      return { label: t("停止中"), icon: "Ⅱ", tone: "quiet" };
     case "problem":
     case "offline":
     case "paused":
@@ -57,6 +60,8 @@ function explanation(status: SyncStatus): string {
       return t("サーバーに接続できません。接続後に再試行してください。");
     case "paused":
       return t("同期を一時停止しています。");
+    case "disabled":
+      return t("同期を止めています。「同期を再開する」で続きから同期します。");
     case "external":
       return t("別のプロセスが同期を受け持っています。");
     case "unsupported":
@@ -251,11 +256,6 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
           {status.support === "ok" && !account && status.credentials.source !== "env" && (!status.server || file?.binding) && !status.startup && (
             <SignInButtons act={act} />
           )}
-          {file && ready && !file.enabled && !status.startup && (!status.server || file.binding) && (
-            <button className="btn btn-primary btn-sm" onClick={() => void act({ kind: "enable" })}>
-              {t("この計画を同期する")}
-            </button>
-          )}
           {file?.enabled && ready && !file.binding && !status.server && !status.startup && status.state === "unbound" && (
             <button className="btn btn-primary btn-sm" onClick={() => void act({ kind: "bind" })}>
               {t("サーバーに置く")}
@@ -356,13 +356,13 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
           )}
         </div>
       )}
-      {/* 3 段目: この計画の同期の切替 */}
-      {file && ready && (!status.server || file.binding) && (
-        <label className="sync-panel__toggle sync-switch">
-          <input type="checkbox" checked={file.enabled} onChange={(e) => void act({ kind: e.target.checked ? "enable" : "disable" })} />
-          <span className="sync-switch__track" aria-hidden="true"><span className="sync-switch__knob" /></span>
-          <span>{t("この計画を同期する")}</span>
-        </label>
+      {/* 3 段目: この計画の同期を止める / 再開する (小さなスイッチだと見つからない、と利用者の指摘 2026-10-18。はっきりしたボタンにする) */}
+      {file && ready && !status.startup && (!status.server || file.binding) && (
+        <div className="sync-panel__row sync-panel__stop">
+          {file.enabled
+            ? <button className="btn btn-sm" disabled={status.lifecycle?.busy} onClick={() => void act({ kind: "disable" })} title={t("この端末で、この計画の送受信を止めます (サーバーの控えは残ります)")}>{t("同期を止める")}</button>
+            : <button className="btn btn-primary btn-sm" disabled={status.lifecycle?.busy} onClick={() => void act({ kind: "enable" })} title={t("止める前の続きから同期します")}>{t("同期を再開する")}</button>}
+        </div>
       )}
       {/* 4 段目: 操作の一覧 (履歴・共有リンク・ゴミ箱・別の計画を開く)。押すと、その下に内容が開く */}
       {status.support === "ok" && status.credentials.source !== "none" && <SyncLifecycle status={status} act={act} unsaved={unsaved}/>}
@@ -381,6 +381,15 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
             {/* R39-06: 開き直した後の VS Code で退避を取り込む入口。 */}
             <RestoreEntry />
           </div>
+          {/* この端末での同期をやめる (結び付けを消す)。サーバーの控えは残るので、取り返しのつかない操作には入れない */}
+          {file?.binding && (
+            <div className="sync-panel__group">
+              <div className="sync-panel__group-title">{t("この端末での同期")}</div>
+              <div className="sync-panel__row">
+                <button className="btn btn-sm" disabled={status.lifecycle?.busy} onClick={() => void act({ kind: "unbind" })} title={t("結び付けを消します。計画とサーバーの控えは残り、「サーバーの計画を開く」で受け取り直せます")}>{t("この計画の同期をやめる (サーバーの控えは残す)")}</button>
+              </div>
+            </div>
+          )}
           {file?.binding && status.features?.trash !== false && (
             <div className="sync-panel__group sync-panel__group--danger">
               <div className="sync-panel__group-title">{t("削除 (元に戻せません)")}</div>

@@ -55,6 +55,15 @@ async function acquire(name: string): Promise<(() => void) | null> {
  * Input : projectId = ブラウザ内の計画の id, server = サーバーの URL (末尾のスラッシュは除いたもの)
  * Output: SyncIO
  */
+/**
+ * この計画とサーバーの結び付け (同期の状態) を消す (「同期をやめる」)。計画そのものと、サーバーの控えは消さない
+ * Input : projectId = ブラウザ内の計画の ID, server = サーバーの場所
+ * Output: なし
+ */
+export async function removeBrowserSyncState(projectId: string, server: string): Promise<void> {
+  await del(stateKey(projectId, server), db().state);
+}
+
 export function browserSyncIO(projectId: string, server: string): SyncIO {
   const key = stateKey(projectId, server);
   const { state, objects, backups } = db();
