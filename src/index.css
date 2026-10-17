@@ -1129,6 +1129,9 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 /* 同期パネルのサインインの手段 (付いているものは記号、無い方は + ボタン) */
 .sync-panel__identities { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; }
 .sync-panel__identity[data-on="true"] { color: var(--text-muted); padding: 0 4px; }
+/* アカウントの削除: 取り返しのつかない操作なので、目立たせず (ghost のまま) 色だけ注意色にする */
+.sync-panel__danger { color: var(--danger, #c0392b); }
+.sync-panel__confirm-delete { display: grid; gap: 8px; padding: 8px; border: 1px solid var(--danger); border-radius: 8px; }
 /* Home の「サーバーの計画を受け取る」節 (ファイルがまだ無い / 空のとき) */
 .home-receive { margin-top: 24px; padding-top: 16px; border-top: 2px dashed var(--line); }
 .home-receive h3 { font-size: 16px; margin: 0 0 4px; }

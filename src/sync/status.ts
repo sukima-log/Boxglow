@@ -103,6 +103,8 @@ export type HostAction =
   | {kind:"confirmLifecycle";choiceId:string}
   | { kind: "enable" } | { kind: "disable" }
   | { kind: "signIn"; provider: "github" | "google" } | { kind: "cancelSignIn" } | { kind: "signOut" }
+  /** 本人によるアカウントの削除 (サーバーが止めてトークンを全部失効させ、30 日後に保存データを消す。手元はサインアウトと同じ片付け) */
+  | { kind: "deleteAccount" }
   /** 2 つ目のサインイン手段を、サインイン済みのアカウントに足す (コードや URL は signIn と同じ欄に出る) */
   | { kind: "linkIdentity"; provider: "github" | "google" }
   | { kind: "bind" } | { kind: "syncNow" }

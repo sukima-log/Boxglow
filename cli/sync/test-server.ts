@@ -61,6 +61,8 @@ export class TestSyncServer {
   identities = new Map<string, ("github" | "google")[]>();
   /** 取り消したトークン */
   revoked = new Set<string>();
+  /** 本人の操作で削除を受け付けた利用者 (DELETE /v1/account) */
+  deletedAccounts = new Set<string>();
   private codes = 0;
   /** 中身の大きさの上限 (バイト)。超えた PUT は、操作の照合より前に 413 で断る (本番のサーバーと同じ順) */
   maxBytes = Infinity;
@@ -190,6 +192,18 @@ export class TestSyncServer {
     if (req.method === "GET" && req.url === "/v1/me") {
       send(200, JSON.stringify({ account, login: this.issued.get(bearer ?? "")?.login ?? account, devices: [{ name: "this", current: true }]
       , usage: { projects: projects.size, contentBytes: 1_500_000 }, limits: { projects: 10, contentBytes: 200_000_000 } }));
+      return;
+    }
+    if (req.method === "DELETE" && req.url === "/v1/account") {
+      // 本人によるアカウントの削除: confirm: true が無ければ 400。受け付けたら、その利用者に発行したトークンを全部失効させ、削除済みに印を付ける
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { confirm?: unknown };
+      if (body.confirm !== true) { send(400, JSON.stringify({ code: "confirmation-required" })); return; }
+      for (const [tok, user] of this.issued) if (user.account === account) this.revoked.add(tok);
+      if (bearer !== undefined) this.revoked.add(bearer);
+      this.deletedAccounts.add(account);
+      send(200, JSON.stringify({ deleted: true, wipeAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() }), { "set-cookie": "bgl_session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0" });
       return;
     }
     if (req.method === "DELETE" && req.url === "/v1/tokens/current") {

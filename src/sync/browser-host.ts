@@ -211,6 +211,26 @@ export class BrowserSyncHost {
     this.emit();
   }
 
+  /**
+   * アカウントの削除 (本人の操作): Cookie のセッションで DELETE /v1/account (confirm: true)。受け付けられたらサインアウトと同じ片付け
+   *   - サーバーはアカウントを止めてトークンを全部失効させ Cookie を消し、30 日後に保存データを消す (それまでは support@ への連絡で取り消せる)
+   * Input : なし。Output: なし (結果は message と状態に出す)
+   */
+  private async deleteAccount(): Promise<void> {
+    if (!this.signedIn()) { this.message = t("アカウントの削除は、サインインしてから行えます"); this.emit(); return; }
+    let accepted: { wipeAt?: string };
+    try {
+      const res = await this.doFetch(`${this.server}/v1/account`, { method: "DELETE", redirect: "error", headers: { "content-type": "application/json" }, body: JSON.stringify({ confirm: true }) });
+      if (!res.ok) { this.message = t("アカウントを削除できませんでした (サーバーの応答: {status})", { status: res.status }); this.emit(); return; }
+      accepted = (await res.json().catch(() => ({}))) as { wipeAt?: string };
+    } catch {
+      this.message = t("サーバーと通信できませんでした。アカウントは削除されていません"); this.emit(); return;
+    }
+    await this.signOut();
+    this.message = t("アカウントの削除を受け付けました。保存データは {date} に消えます (それまでは support@boxglow.app への連絡で取り消せます)", { date: accepted.wipeAt ? accepted.wipeAt.slice(0, 10) : t("30 日後") });
+    this.emit();
+  }
+
   // ---------------------------------------------------------------- 開始の手順 (同期を始める / サーバーの計画を受け取る)
 
   private beginSync(file: string): void {
@@ -359,6 +379,7 @@ export class BrowserSyncHost {
       case "linkIdentity": if (this.signedIn()) this.signIn(action.provider, true); break;
       case "cancelSignIn": this.cancelSignIn(); break;
       case "signOut": await this.signOut(); break;
+      case "deleteAccount": await this.deleteAccount(); break;
       case "pause": this.paused = true; break;
       case "resume": this.paused = false; break;
       case "bind": case "syncNow": if (file) await this.syncFile(file, {}); break;

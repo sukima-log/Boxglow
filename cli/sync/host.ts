@@ -388,6 +388,31 @@ export class SyncHost {
       this.emit();
     }
   }
+  /**
+   * アカウントの削除 (本人の操作): サーバーに DELETE /v1/account を送り (confirm: true)、受け付けられたらサインアウトと同じ片付けをする
+   *   - サーバーはアカウントを止めてトークンを全部失効させ、30 日後に保存データを消す (それまでは support@ への連絡で取り消せる)
+   *   - 環境変数のトークンだけの場面では行わない (保存済みの資格情報が対象)
+   * Input : なし (保存済みの資格情報を使う)。Output: なし (結果は message と状態に出す)
+   */
+  async deleteAccount(): Promise<void> {
+    if (this.signingOut) return this.signingOut;
+    const creds = this.resolveCredentials();
+    if (!creds || creds.source !== "file") { this.message = t("アカウントの削除は、サインインしてから行えます"); this.emit(); return; }
+    const unsafe = serverProblem(this.server);
+    if (unsafe) { this.message = unsafe; this.emit(); return; }
+    let accepted: { wipeAt?: string } | null = null;
+    try {
+      const res = await this.doFetch(`${this.server}/v1/account`, { method: "DELETE", redirect: "error", headers: { authorization: `Bearer ${creds.token}`, "content-type": "application/json", "x-boxglow-version": APP_VERSION }, body: JSON.stringify({ confirm: true }) });
+      if (!res.ok) { this.message = t("アカウントを削除できませんでした (サーバーの応答: {status})", { status: res.status }); this.emit(); return; }
+      accepted = (await res.json().catch(() => ({}))) as { wipeAt?: string };
+    } catch {
+      this.message = t("サーバーと通信できませんでした。アカウントは削除されていません"); this.emit(); return;
+    }
+    // 受け付けられた: トークンはサーバー側で失効済み。手元の資格情報と状態を片付ける (サインアウトと同じ排他的な期間)
+    await this.signOut();
+    this.message = t("アカウントの削除を受け付けました。保存データは {date} に消えます (それまでは support@boxglow.app への連絡で取り消せます)", { date: accepted.wipeAt ? accepted.wipeAt.slice(0, 10) : t("30 日後") });
+    this.emit();
+  }
   private message: string | undefined;
   /** 直前のサインインで「招待されていない」と言われたこと (画面に理由と順番待ちを出す。次のサインインで消す) */
   private notInvited: SyncStatus["notInvited"];
@@ -681,6 +706,7 @@ export class SyncHost {
       case "linkIdentity": this.linkIdentity(action.provider); break;
       case "cancelSignIn": if (!this.signingIn?.owner || this.signingIn.owner.file === real) this.cancelSignIn(); break;
       case "signOut": await this.signOut(); break;
+      case "deleteAccount": await this.deleteAccount(); break;
       case "pause": this.paused = true; break;
       case "resume": this.paused = false; break;
       case "bind":
@@ -882,6 +908,7 @@ export function parseHostAction(text: string): HostAction | null {
     case "disable":
     case "cancelSignIn":
     case "signOut":
+    case "deleteAccount":
     case "bind":
     case "syncNow":
     case "pause":

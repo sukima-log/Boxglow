@@ -166,6 +166,9 @@ export function SyncChip() {
 
 /** 入力: 最新の同期状態と閉じる操作。出力: 主操作、比較、折りたたんだ設定・詳細。 */
 function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => void }) {
+  /** アカウントの削除の確認を出しているか (サインアウトや閉じるで消える) */
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  useEffect(() => { if (status.credentials.source === "none") setConfirmDelete(false); }, [status.credentials.source]);
   const act = useProjectStore((s) => s.syncAct);
   const saveState = useProjectStore((s) => s.saveState);
   const file = status.file;
@@ -341,6 +344,18 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
               <button className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "signOut" })}>
                 {t("サインアウト")}
               </button>
+              {/* アカウントの削除: 欄の中で 2 段階の確認 (window.confirm は VS Code の webview で使えない)。猶予 (30 日) と取り消し方を先に示す */}
+              {confirmDelete ? (
+                <div className="sync-panel__confirm-delete" role="group" aria-label={t("アカウントの削除の確認")}>
+                  <div>{t("サーバーの計画は 30 日後に消えます (それまでは support@boxglow.app への連絡で取り消せます)。手元のファイルは残ります。")}</div>
+                  <div className="sync-panel__actions">
+                    <button className="btn btn-sm btn-danger" onClick={() => { setConfirmDelete(false); void act({ kind: "deleteAccount" }); }}>{t("アカウントを削除する")}</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(false)}>{t("やめる")}</button>
+                  </div>
+                </div>
+              ) : (
+                <button className="btn btn-ghost btn-sm sync-panel__danger" onClick={() => setConfirmDelete(true)}>{t("アカウントを削除…")}</button>
+              )}
             </>
           ) : (
             status.credentials.source === "env" && <span>{t("環境変数のトークンで同期しています")}</span>

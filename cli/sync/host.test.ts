@@ -171,6 +171,30 @@ describe("サインインとサインアウト", () => {
     await host.stop();
   });
 
+  it("アカウントの削除: サーバーに confirm 付きで送り、受け付けられたらサインアウトと同じ片付け (資格情報を消し、同期を止める)。失敗したら何も消さない", async () => {
+    const { file } = planFile("p1");
+    signedIn("acc-del");
+    const { host } = make();
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    await host.act(file, { kind: "deleteAccount" });
+    expect(server.deletedAccounts.has("acc-del")).toBe(true);
+    expect(server.revoked.has("acc-del")).toBe(true);
+    expect(readCredentials(server.url)).toBeNull();
+    expect(host.status(file)).toMatchObject({ state: "signed-out", file: { enabled: false } });
+    expect(host.status(file).message).toContain("アカウントの削除を受け付けました");
+    // サインインしていない状態で呼ばれても、何もしない (案内だけ)
+    await host.act(file, { kind: "deleteAccount" });
+    expect(host.status(file).message).toContain("サインインしてから");
+    // サーバーが断ったら (トークンが失効済み = 401)、資格情報は残る
+    signedIn("acc-keep"); server.revoked.add("acc-keep");
+    await host.act(file, { kind: "deleteAccount" });
+    expect(readCredentials(server.url)?.account).toBe("acc-keep");
+    expect(host.status(file).message).toContain("401");
+    expect(server.deletedAccounts.has("acc-keep")).toBe(false);
+    await host.stop();
+  });
+
   it("別の CLI の login / logout (資格情報ファイルの変化) を、次の同期から使う。古い資格情報で同期した結果を synced とみなさない", async () => {
     const { file } = planFile("p1");
     signedIn("test");
