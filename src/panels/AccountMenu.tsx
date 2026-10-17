@@ -182,7 +182,7 @@ export function AccountButton() {
                             <span>{t("書き込みも許可")}</span>
                           </label>
                           <div className="sync-panel__row">
-                            <button className="btn btn-primary btn-sm" disabled={status.agent?.busy} title={status.features?.agentConfig ? t("この計画のフォルダの .mcp.json に設定を書きます") : t("設定ファイルを作り、置き方を案内します")} onClick={() => { setCopied(null); setPicked(null); void act({ kind: "connectAgent", projectId: status.file!.binding!.remoteId, target: "claude-code", write: agentWrite }); }}>{t("Claude Code に接続")}</button>
+                            <button className="btn btn-primary btn-sm" disabled={status.agent?.busy} title={status.features?.agentConfig ? t("この計画のフォルダに、Claude Code が読む設定ファイル .mcp.json を作ります (あれば項目を足します)") : t("設定ファイルを作り、置き方を案内します")} onClick={() => { setCopied(null); setPicked(null); void act({ kind: "connectAgent", projectId: status.file!.binding!.remoteId, target: "claude-code", write: agentWrite }); }}>{t("Claude Code に接続")}</button>
                             <button className="btn btn-sm" disabled={status.agent?.busy} title={status.features?.agentConfig ? t("ホームフォルダの .codex/config.toml に設定を書きます") : t("設定を作り、置き方を案内します")} onClick={() => { setCopied(null); void act({ kind: "connectAgent", projectId: status.file!.binding!.remoteId, target: "codex", write: agentWrite }); }}>{t("Codex に接続")}</button>
                           </div>
                         </div>
@@ -206,7 +206,7 @@ export function AccountButton() {
                                     <li>
                                       {picked && "folder" in picked
                                         ? <span>{t("設定を書きました")}: {picked.folder}/.mcp.json{picked.gitignored ? ` (${t(".gitignore にも追加")})` : ""}</span>
-                                        : <><button className="btn btn-primary btn-sm" onClick={() => { void writeMcpJsonToFolder(status.server!, status.agent!.newToken!.token).then((r) => { if (r) setPicked(r); }).catch((e) => setPicked({ error: e instanceof Error ? e.message : String(e) })); }}>{t("フォルダを選んで設定を書く")}</button> <span className="muted">{t("Claude Code で開くフォルダ (プロジェクトの直下) を選ぶと、その中の .mcp.json に書きます")}</span></>}
+                                        : <><button className="btn btn-primary btn-sm" onClick={() => { void writeMcpJsonToFolder(status.server!, status.agent!.newToken!.token).then((r) => { if (r) setPicked(r); }).catch((e) => setPicked({ error: e instanceof Error ? e.message : String(e) })); }}>{t("フォルダを選んで設定を書く")}</button> <span className="muted">{t("Claude Code で開くフォルダ (プロジェクトの直下) を選ぶと、Claude Code が読む設定ファイル .mcp.json をそこに作ります (あれば boxglow の項目を足します)")}</span></>}
                                       {picked && "error" in picked && <span role="alert" className="sync-panel__problem"> {t("書けませんでした")}: {picked.error}</span>}
                                     </li>
                                     <li>{t("Claude Code を開き直す。初回に「このプロジェクトの MCP サーバーを使うか」と聞かれたら許可する")}</li>
