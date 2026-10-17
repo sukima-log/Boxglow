@@ -93,7 +93,8 @@ export function runHook(event: HookEvent, input: HookInput, p: Project | null, a
       // 開始・再開・圧縮の後に、計画の再開の概要を文脈として出す (両エージェントとも、SessionStart の stdout は文脈に加わる)
       // Claude Code: 後続のシェルにセッションの識別子を渡す (公式の CLAUDE_ENV_FILE)。start がこれを activity に残し、Stop フックの session_id と対応付く
       const envFile = process.env.CLAUDE_ENV_FILE;
-      if (envFile && input.session_id && /^[A-Za-z0-9._-]+$/.test(input.session_id)) { try { appendFileSync(envFile, `export BOXGLOW_SESSION_ID=${input.session_id}\n`); } catch { /* 渡せなくても、識別子が無い作業は止めないだけ */ } }
+      // (先頭にも改行を付ける: 他のフックが末尾改行なしで書いていても壊さない。R30c-01)
+      if (envFile && input.session_id && /^[A-Za-z0-9._-]+$/.test(input.session_id)) { try { appendFileSync(envFile, `\nexport BOXGLOW_SESSION_ID=${input.session_id}\n`); } catch { /* 渡せなくても、識別子が無い作業は止めないだけ */ } }
       const head = t("Boxglow: このリポジトリの計画 (boxglow.json) の再開の概要。作業の前に `npx boxglow context <ボックス>` を読み、記録は CLI か MCP で行う (ファイルを直接編集しない)。");
       return { stdout: head + "\n\n" + resumeReport(p) + "\n", exitCode: 0 };
     }

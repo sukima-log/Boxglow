@@ -33,7 +33,7 @@ function fixture(guard=false) {
 describe("セッションの識別子と検査結果の日時 (Codex レビュー 30b)",()=>{
   it("start は環境のセッションの識別子を活動に残し、識別子の無い再着手では前の値を残さない (R30b-01)",()=>{
     const {file,id,read}=fixture();
-    const run=(env:Record<string,string>,...args:string[])=>spawnSync(process.execPath,[entry,...args,"--file",file,"--actor","codex"],{encoding:"utf8",env:{...process.env,CLAUDE_CODE_SESSION_ID:"",CODEX_THREAD_ID:"",CODEX_SESSION_ID:"",...env}});
+    const run=(env:Record<string,string>,...args:string[])=>spawnSync(process.execPath,[entry,...args,"--file",file,"--actor","codex"],{encoding:"utf8",env:{...process.env,BOXGLOW_SESSION_ID:"",CLAUDE_SESSION_ID:"",CLAUDE_CODE_SESSION_ID:"",CODEX_THREAD_ID:"",CODEX_SESSION_ID:"",...env}});
     expect(run({BOXGLOW_SESSION_ID:"session-A"},"start","対象").status).toBe(0);
     expect(read().blocks[id].activity.session).toBe("session-A");
     expect(run({},"start","対象","--note","別のプロセスから").status).toBe(0);

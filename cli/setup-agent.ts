@@ -229,7 +229,9 @@ export function checkAgentSetup(root: string, agent: string): string[] {
       const hooks = o.hooks ?? {};
       const hasCmd = (event: string, name: string, values: string[]) => (hooks[event] ?? []).some((entry) =>
         values.every((v) => matchesHookMatcher(entry.matcher, v)) && (entry.hooks ?? []).some((h) => (h.type ?? "command") === "command" && new RegExp(`boxglow(\\.js)? hook ${name} --actor ${actor}`).test(h.command ?? "")));
-      return hasCmd("SessionStart", "session-start", ["compact"]) && hasCmd("Stop", "stop", []) && hasCmd("PreToolUse", "pre-tool", actor === "codex" ? ["apply_patch"] : ["Edit", "Write"]);
+      // Codex は apply_patch の別名として Edit / Write も使えるので、どれかに合えばよい (R30c-03)
+      const preTool = actor === "codex" ? ["apply_patch", "Edit", "Write"].some((tool) => hasCmd("PreToolUse", "pre-tool", [tool])) : hasCmd("PreToolUse", "pre-tool", ["Edit", "Write"]);
+      return hasCmd("SessionStart", "session-start", ["compact"]) && hasCmd("Stop", "stop", []) && preTool;
     } catch { return false; }
   });
   const row = (ok: boolean, label: string) => lines.push(`${ok ? "OK" : "NG"} ${label}`);
