@@ -26,6 +26,7 @@ function chip(status: SyncStatus): {
     case "synced":
       return { label: t("同期済み"), icon: "✓", tone: "ok" };
     case "unsent":
+      return { label: t("送信待ち"), icon: "◷", tone: "quiet" };
     case "syncing":
       return { label: t("送受信中"), icon: "↻", tone: "busy" };
     case "halted":
@@ -45,9 +46,9 @@ function chip(status: SyncStatus): {
 function explanation(status: SyncStatus): string {
   switch (status.state) {
     case "synced":
-      return t("保存されたファイルは、サーバーとそろっています。");
+      return t("手元に保存した計画は、サーバーとそろっています。");
     case "unsent":
-      return t("ファイルは保存済みです。サーバーへの送信を待っています。");
+      return t("手元には保存済みです。サーバーへの送信を待っています。");
     case "syncing":
       return t("サーバーと変更を送受信しています。");
     case "halted":
@@ -105,10 +106,14 @@ export function SyncChip() {
     };
     place();
     window.addEventListener("resize", place);
+    // 帯のスクロールに追従し、入口から離れた場所にパネルを残さない。
+    const bar = ref.current?.closest(".topbar-scroll");
+    bar?.addEventListener("scroll", place);
     document.addEventListener("mousedown", close);
     document.addEventListener("keydown", escape);
     return () => {
       window.removeEventListener("resize", place);
+      bar?.removeEventListener("scroll", place);
       document.removeEventListener("mousedown", close);
       document.removeEventListener("keydown", escape);
     };
@@ -185,6 +190,23 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
   const [confirmDelete, setConfirmDelete] = useState(false);
   useEffect(() => { if (status.credentials.source === "none") setConfirmDelete(false); }, [status.credentials.source]);
   const act = useProjectStore((s) => s.syncAct);
+  const [syncRequested, setSyncRequested] = useState(false);
+  const syncPending = useRef(false);
+  /** Input: なし。Output: 同期要求と確認結果の表示。成功を先取りせずホストの最終状態で通知する。 */
+  const syncNow = async () => {
+    if (syncPending.current) return;
+    syncPending.current = true;
+    setSyncRequested(true);
+    const before = useProjectStore.getState().syncStatus;
+    try {
+      await act({ kind: "syncNow" });
+      const latest = useProjectStore.getState();
+      const updated = latest.syncStatus && before && (latest.syncStatus.session !== before.session || latest.syncStatus.seq > before.seq);
+      // VS Code の postMessage は完了を待たず戻る。古い「同期済み」を今回の結果と取り違えない。
+      if (!latest.syncLost && updated && latest.syncStatus?.state === "synced") latest.setToast(t("サーバーと最新の内容を確認しました"));
+      else if (!updated) latest.setToast(t("同期を要求しました。結果は同期の状態で確認できます"));
+    } finally { syncPending.current = false; setSyncRequested(false); }
+  };
   const saveState = useProjectStore((s) => s.saveState);
   const file = status.file;
   const account = status.credentials.account;
@@ -206,13 +228,18 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
   const ready = status.support === "ok" && status.state !== "signed-out";
   return (
     <div className="sync-panel" role="dialog" aria-label={t("同期")}>
-      <div className={`sync-panel__heading tone-${c.tone}`}>
+      <div className={`sync-panel__heading tone-${c.tone}`} role="status" aria-live="polite">
         <span aria-hidden="true">{c.icon}</span>
         <strong>{status.startup ? t("同期を始める") : c.label}</strong>
       </div>
       {!status.startup && <div className="sync-panel__line">{explanation(status)}</div>}
       {/* サインインの状態は、いつも同じ場所に出す (サインインしているかどうかが一目で分かるように) */}
       {status.support === "ok" && status.server && <SignedInLine status={status} />}
+      {/* 契約の情報があるときだけ表示する。詳細を開かなくても、現在のプランと状態を確認できる。 */}
+      {account?.billing && (account.billing.required || account.billing.plan) && <div className="sync-panel__plan-summary">
+        <span>{t("プラン")}: {account.billing.plan ? planLabel(account.billing.plan) : t("未契約")}</span>
+        {account.billing.plan && account.billing.plan !== "comp" && <span>{billingStatusLabel(account.billing.status)}</span>}
+      </div>}
       {unsaved && file?.enabled && (
         <div className="sync-panel__line muted">{t("未保存の編集があります。保存すると送られます")}</div>
       )}
@@ -250,10 +277,10 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
             status.state !== "halted" && (
               <button
                 className="btn btn-sm"
-                disabled={status.state === "syncing"}
-                onClick={() => void act({ kind: "syncNow" })}
+                disabled={syncRequested || status.state === "syncing"} aria-busy={syncRequested || status.state === "syncing"}
+                onClick={() => void syncNow()}
               >
-                {t("今すぐ同期")}
+                {syncRequested || status.state === "syncing" ? t("送受信中…") : t("今すぐ同期")}
               </button>
             )}
         </div>
@@ -354,7 +381,8 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
                         : <button key={p} className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "linkIdentity", provider: p })} title={p === "github" ? t("GitHub でもサインインできるようにする") : t("Google でもサインインできるようにする")}>+ {p === "github" ? "GitHub" : "Google"}</button>)}
                     </span>
                   )}
-                  <button className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "signOut" })}>
+                  {/* サインアウトは 1 回で (取り消しのきく操作なので確認は挟まない。何が起きるかはツールチップで) */}
+                  <button className="btn btn-ghost btn-sm" title={t("この端末の同期を止めてサインアウトします。手元の計画は残ります")} onClick={() => void act({ kind: "signOut" })}>
                     {t("サインアウト")}
                   </button>
                 </>

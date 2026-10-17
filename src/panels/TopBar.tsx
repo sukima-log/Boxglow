@@ -26,6 +26,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   const readonly = useProjectStore((s) => s.readonly);
   const ephemeral = useProjectStore((s) => s.ephemeral);
   const saveState = useProjectStore((s) => s.saveState);
+  const saveError = useProjectStore((s) => s.saveError);
   const apply = useProjectStore((s) => s.apply);
   const undo = useProjectStore((s) => s.undo);
   const redo = useProjectStore((s) => s.redo);
@@ -56,7 +57,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   const addRef = useRef<HTMLDivElement>(null);
   /**
    * 開き物を、その入口の下に画面基準 (position: fixed) で置くためのスタイル
-   *   帯 (header.topbar) は横にスクロールする領域なので、絶対配置の開き物は領域の外で切れる。固定配置なら切れない
+   *   帯の中 (.topbar-scroll) は横にスクロールする領域なので、絶対配置の開き物は領域の外で切れる。固定配置なら切れない
    * Input : el = 入口の要素 (右端をそろえる)。Output: style (fixed, top, right)。入口が無ければ空
    */
   const below = (el: HTMLElement | null): React.CSSProperties => {
@@ -66,7 +67,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   };
   /** 帯を横にスクロールしたら、開いている開き物を閉じる (入口が動くので、位置がずれたまま残さない) */
   const closeAll = () => { setMenu(false); setAddOpen(false); setSearchOpen(false); };
-  const barRef = useRef<HTMLElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
   /**
    * マウスのホイール (縦の回転) で帯を横に動かす (横スクロールバーを掴まなくても移動できるように。利用者の指定 2026-10-17)
    *   帯がはみ出しているときだけ受け持ち、そのときはページ側の縦スクロールに渡さない (passive: false で登録する必要があるので React の onWheel は使わない)
@@ -111,8 +112,9 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
 
   useEffect(() => {
     const close = () => setMenu(false);
-    if (menu) window.addEventListener("click", close);
-    return () => window.removeEventListener("click", close);
+    const escape = (e: KeyboardEvent) => { if (e.key === "Escape") { setMenu(false); menuRef.current?.focus(); } };
+    if (menu) { window.addEventListener("click", close); window.addEventListener("keydown", escape); }
+    return () => { window.removeEventListener("click", close); window.removeEventListener("keydown", escape); };
   }, [menu]);
 
   const toggleTheme = () => {
@@ -131,7 +133,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
    * Auto Layout: 依存関係の順に全体を並べ直す (大項目は畳んだ前提。Ctrl+Z で戻せる)
    * Input / Output: なし (project を更新する)
    */
-  const autoLayout = () => apply((p) => layoutAll(normalizeCollapsed(p)));
+  const autoLayout = () => { apply((p) => layoutAll(normalizeCollapsed(p))); setToast(t("全体を並べ直しました。元に戻す操作で戻せます")); };
   // 合流の部品を足す: 今見ている階層 (選んでいる箱があればその中) に置き、選ぶ
   const addJoin = () => {
     const parentId = parentForNewBlock(project, selection, useProjectStore.getState().viewScope);
@@ -185,16 +187,21 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   const source = useProjectStore((s) => s.source);
   const reload = useProjectStore((s) => s.reload);
   const reloading = useProjectStore((s) => s.reloading);
+  // 既存の英語ラベルを維持し、記号と保存先を組み合わせる。
   // 保存状態: 常に見える札にする (ファイルを開いているときは「どこに保存されるか」と「保存済みか」が分かるように)
-  const saveLabel = readonly ? "Read only" : ephemeral ? "Sample (not saved)" : saveState === "saving" ? "Saving…" : saveState === "unsaved" ? "Unsaved" : "Saved";
-  const saveTitle = readonly ? t("閲覧専用") : ephemeral ? t("サンプルは保存されません。Save で自分のプロジェクトとして保存") : fileName ? t("{file} に自動で保存します (変更後)。Save で今すぐ書きます", { file: fileName }) : t("このブラウザに自動で保存します");
+  const saveLabel = readonly ? "Read only" : ephemeral ? "Sample (not saved)" : saveError ? "Save failed" : saveState === "saving" ? "Saving…" : saveState === "unsaved" ? "Unsaved" : "Saved";
+  const saveIcon = readonly ? "◈" : ephemeral ? "○" : saveError ? "!" : saveState === "saving" ? "↻" : saveState === "unsaved" ? "○" : "✓";
+  /** Input: なし。Output: 配置の編集モードと短い結果通知。ノートなどの編集可否とは区別する。 */
+  const toggleMode = () => setEditMode(!editMode);
+  const saveTitle = readonly ? t("閲覧専用") : ephemeral ? t("サンプルは保存されません。Save で自分の計画のコピーを残せます") : fileName ? t("{file} に自動で保存します。Save で今すぐ書きます", { file: fileName }) : t("このブラウザに自動で保存します");
   const sum = summarize(project);
   const busy = sum.working.length; // 作業中の件数 (詰まり・確認待ちは別の札で数える)
 
   // 帯は 2 つのまとまり: 左 (topbar-identity) = 引き出し・Home・計画名・保存の札、右 (topbar-tools) = 状況・モード・検索・追加・メニュー。
-  // 幅が狭いと右のまとまりが次の行へ折り返す (index.css の .topbar。検索やメニューが画面の外に出ないように)
+  // 1行の横スクロールを維持し、メニューだけは外に固定する (狭い画面でも追加や設定へ進めるように)
   return (
-    <header className="topbar" data-editing={editMode} onScroll={closeAll} ref={barRef}>
+    <header className="topbar" data-editing={editMode}>
+      <div className="topbar-scroll" onScroll={closeAll} ref={barRef}>
       <div className="topbar-identity">
       {/* 文字を置かない入口にも名前と制御先を与え、読み上げ・ツールチップで用途と現在の開閉を伝える。 */}
       <button className="tree-toggle btn btn-ghost btn-sm" onClick={onToggleTree} aria-pressed={treeOpen} aria-controls="project-tree" aria-label={treeOpen ? t("サイドバーを隠す") : t("サイドバーを表示")} title={treeOpen ? t("サイドバーを隠す") : t("サイドバーを表示")}><TreeIcon name="sidebar" /></button>
@@ -208,10 +215,11 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
         </svg>
       </button>}
       <button className="project-name" onClick={() => select({ project: true })} title={project.name}>{project.name}</button>
-      <span className={`save-chip ${saveState === "unsaved" ? "unsaved" : ""}`} title={saveTitle}>
-        {!ephemeral && <span className="save-chip__file">{fileName ?? t("ブラウザ内")}</span>}
+      <span className={`save-chip ${saveError ? "save-error" : saveState === "unsaved" ? "unsaved" : ""}`} title={saveError || saveTitle} role="status" aria-live="polite">
+        <span aria-hidden="true">{saveIcon}</span>
+        {!ephemeral && <span className="save-chip__file">{fileName ?? ""}</span>}
         {/* 保存先のファイルと同期先のサーバーを区別する。ローカル保存済みでも送信前のことがある。 */}
-        <span>{(source === "serve" || source === "vscode") && <span>{t("ファイル")}: </span>}{saveLabel}</span>
+        <span>{!ephemeral && !readonly && <span>{source === "idb" ? t("ブラウザ内") : t("ファイル")}: </span>}{saveLabel}</span>
       </span>
       {/* 手動の更新: 今すぐ読み直す (自動の更新を待たない)。どの計画でも、いつも同じ場所に出す (変更があるかどうかに関係なく)。
           ファイルにつながっている計画はファイルを、ブラウザ内の計画はこのブラウザの保存先を読み直す */}
@@ -242,7 +250,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
         {busy === 0 && sum.blocked.length === 0 && sum.decisions.length === 0 && sum.answered.length === 0 && <span>Activity</span>}
       </button>
         {!readonly && (
-          <button className="mode-toggle" data-on={editMode} onClick={() => setEditMode(!editMode)} title={editMode ? t("Edit モード: ドラッグで移動・結線・階層移動ができます。押すと View (閲覧) に") : t("View モード: ドラッグでの編集は効きません。押すと Edit に")}>
+          <button className="mode-toggle" data-on={editMode} aria-pressed={editMode} onClick={toggleMode} title={editMode ? t("配置編集: ドラッグで移動・結線できます。押すと配置を固定します") : t("配置固定: 押すとボックスの移動と結線ができます")}>
             <span className="mode-toggle__knob" />
             {/* 2 つの語を同じ升目に重ね、今のモードでないほうを見えなくする (幅は長いほうに固定)。
                 押すたびに札の幅が変わると、帯が折り返したり戻ったりして表示が揺れるため */}
@@ -298,13 +306,18 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
             <button className="btn btn-ghost btn-sm desktop-action" onClick={redo} disabled={future === 0} title={t("やり直す (Ctrl+Y)")} aria-label="Redo">↷</button>
           </>
         )}
+      </div>
+      </div>
+      {/* スクロール領域の外に固定し、画面幅に関係なく操作の入口を残す。 */}
+      <div className="topbar-pinned">
         <div className="relative">
-          <button ref={menuRef} className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setMenu(!menu); }} title="Menu" aria-expanded={menu} onKeyDown={(e) => { if (e.key === "Escape") setMenu(false); }}>⋯</button>
+          <button ref={menuRef} className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setMenu(!menu); }} title="Menu" aria-label="Menu" aria-expanded={menu} onKeyDown={(e) => { if (e.key === "Escape") setMenu(false); }}>⋯</button>
           {menu && (
             <div className="card p-1 flex flex-col z-30" style={{ ...below(menuRef.current), minWidth: 220, maxHeight: "min(480px, 65dvh)", overflowY: "auto" }}>
               {/* 編集の操作: 帯に出せない狭い幅 (760px 以下) のときだけ、ここに出す (通常の幅では帯のボタンを使う) */}
               {!readonly && <div className="menu-actions">
                 <button className="btn btn-primary btn-sm" onClick={addSibling}>+ Block</button>
+                <button className="btn btn-sm" aria-pressed={editMode} onClick={toggleMode}>{editMode ? "Lock layout" : "Edit layout"}</button>
                 <button className="btn btn-sm" onClick={() => setBranchOpen(true)}>+ Branch</button>
                 <button className="btn btn-sm" onClick={addJoin}>+ Merge</button>
                 <button className="btn btn-ghost btn-sm" onClick={undo} disabled={past === 0}>Undo</button>
@@ -327,12 +340,13 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
               <button className="btn btn-ghost btn-sm justify-start" onClick={onHelp}>Help</button>
               <button className="btn btn-ghost btn-sm justify-start" onClick={closeProject}>Home</button>
               <div style={{ borderTop: "1px solid var(--line-soft)", margin: "4px 0" }} />
+              <button className="btn btn-ghost btn-sm justify-start" onClick={toggleTheme}>{theme === "dark" ? "Light mode" : "Dark mode"}</button>
               {/* 言語の切替: 今と反対側の言語名を出す (日本語のとき「English」、英語のとき「日本語」) */}
               <button className="btn btn-ghost btn-sm justify-start" onClick={() => setLang(lang === "en" ? "ja" : "en")} title={t("画面の文言の言語を切り替える")}>{lang === "en" ? "日本語" : "English"}</button>
             </div>
           )}
         </div>
-        <button className="btn btn-ghost btn-sm" onClick={toggleTheme} title={theme === "dark" ? "Light mode" : "Dark mode"}>{theme === "dark" ? "☀" : "☾"}</button>
+        <button className="btn btn-ghost btn-sm theme-toggle" onClick={toggleTheme} aria-label={theme === "dark" ? "Light mode" : "Dark mode"} title={theme === "dark" ? "Light mode" : "Dark mode"}>{theme === "dark" ? "☀" : "☾"}</button>
       </div>
       {branchOpen && <BranchDialog onClose={() => setBranchOpen(false)} />}
     </header>

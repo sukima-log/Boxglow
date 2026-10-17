@@ -31,7 +31,7 @@ const { chromium, BASE, check, result } = require('./lib.cjs');
       check(`Home ${width}px: 日本語変換の確定の Enter では計画を作らない`, await page.getByRole('heading', { name: 'Create a new plan' }).isVisible());
       await name.press('Enter');
       await page.locator('.app-top header').waitFor();
-      check(`Home ${width}px: 通常の Enter で計画を作り、保存先 (ブラウザ内) が帯に出る`, await page.locator('.save-chip__file').innerText() === 'Browser');
+      check(`Home ${width}px: 通常の Enter で計画を作り、保存先 (ブラウザ内) が帯に出る`, (await page.locator('.save-chip').innerText()).includes('Browser:'));
       await page.getByRole('button', { name: 'Home', exact: true }).click();
       const saved = page.locator('.home-project-open');
       await saved.waitFor();
@@ -44,7 +44,7 @@ const { chromium, BASE, check, result } = require('./lib.cjs');
       await saved.focus();
       await page.keyboard.press('Enter');
       await page.locator('.app-top header').waitFor();
-      check(`Home ${width}px: 保存済みの計画をキーボードで開ける`, await page.locator('.save-chip__file').innerText() === 'Browser');
+      check(`Home ${width}px: 保存済みの計画をキーボードで開ける`, (await page.locator('.save-chip').innerText()).includes('Browser:'));
       check(`Home ${width}px: ブラウザのエラーが無い`, errors.length === 0, errors.join(' | '));
       await context.close();
     }

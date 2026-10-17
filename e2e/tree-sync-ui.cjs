@@ -209,7 +209,7 @@ const { chromium, open, check, result } = require("./lib.cjs");
     check("Tree: 閲覧専用では編集操作なし", (await page.locator(".tree-row__menu").count()) === 0);
     check("Tree: 画面エラーなし", errors.length === 0, errors.join("\n"));
     await page.close();
-    // 翻訳で文字幅が変わっても、12 状態が同じ 5 群にまとまり、画面外にはみ出さないことを確認する。
+    // 翻訳で文字幅が変わっても、12 状態が同じ 6 群にまとまり (送信待ちは送受信中と分ける)、画面外にはみ出さないことを確認する。
     for (const lang of ["ja", "en"])
       for (const width of [1280, 320, 390]) {
         const { page } = await open(browser, { query: `?demo=1&lang=${lang}` });
@@ -257,7 +257,7 @@ const { chromium, open, check, result } = require("./lib.cjs");
           });
           if (!fits) throw new Error(`sync overflow: ${state}/${lang}/${width}`);
         }
-        check(`Sync: 12状態を5表示に整理し収まる ${lang}/${width}`, labels.size === 5);
+        check(`Sync: 12状態を6表示に整理し、送信待ちを区別して収まる ${lang}/${width}`, labels.size === 6);
         await page.keyboard.press("Escape");
         check(`Sync: Escapeで閉じる ${lang}/${width}`, (await page.locator(".sync-panel").count()) === 0);
         await page.close();

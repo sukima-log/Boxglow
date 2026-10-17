@@ -966,10 +966,9 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 
 .app-top > header { height: 60px; min-height: 60px; }
 
-/* 上の帯: 幅が狭くなっても操作が画面の外に出ないよう、折り返す (高さは可変、最小 64px)。
-   右パネルはキャンバスと同じ行に置くので、保存エラーの帯や折り返した帯がパネルの見出しに被らない */
+/* 上の帯は最小64px。右パネルはキャンバスと同じ行に置き、保存エラーの帯が見出しに被らないようにする。 */
 /* 帯は 1 行のまま横にスクロールする (折り返さない。利用者の指定 2026-10-17)。開き物は画面基準の固定配置 (TopBar.tsx の below) */
-.app-top > header.topbar { height: auto; min-height: 64px; display: flex; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; gap: 8px 16px; padding: 8px 16px; border-bottom: 2px solid var(--line); background: var(--bg-card); }
+.app-top > header.topbar { height: auto; min-height: 64px; display: flex; flex-wrap: nowrap; overflow: visible; gap: 8px; padding: 8px 16px; border-bottom: 2px solid var(--line); background: var(--bg-card); }
 .topbar-identity, .topbar-tools { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; flex-wrap: nowrap; }
 .topbar-tools { justify-content: flex-end; margin-left: auto; }
 .topbar-tools > button, .topbar-tools > .relative:not(.topbar-search) { flex-shrink: 0; }
@@ -2000,3 +1999,21 @@ button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent)
 .live-md .cm-md-img { max-width: 100%; border-radius: 8px; border: 1px solid var(--line); display: block; margin: 4px 0; }
 .live-md .cm-md-img-missing { color: var(--text-muted); font-size: 12px; }
 
+
+/* 操作の入口を固定し、1行の横スクロールを維持する。区切り線でスクロール領域との境界を示す。 */
+/* スクロールバーは出さない (利用者の指定 2026-10-17。ホイール・トラックパッド・ドラッグで動く) */
+.topbar-scroll { display: flex; align-items: center; gap: 16px; min-width: 0; flex: 1; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.topbar-scroll::-webkit-scrollbar { display: none; }
+.topbar-pinned { display: flex; align-items: center; flex: none; gap: 8px; padding-left: 8px; border-left: 1px solid var(--line-soft); background: var(--bg-card); }
+.topbar-pinned > .relative > button { min-width: 32px; }
+.save-chip.save-error { color: var(--danger); outline: 1px solid var(--danger); }
+.save-chip.unsaved { color: var(--attention-text); background: var(--attention-bg); }
+.sync-popover .sync-startup__choices, .sync-startup__choices { display: grid !important; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.sync-startup__choices > button { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 16px; text-align: left; white-space: normal; }
+.sync-startup__choices > button > span { font-size: 12px; font-weight: 400; }
+@media (max-width: 760px) {
+  .topbar-pinned .theme-toggle { display: none; }
+  .topbar .project-name { max-width: 144px; }
+}
+
+.sync-panel__plan-summary { display: flex; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--text-muted); }

@@ -1,0 +1,21 @@
+/** 状態・操作結果の補助説明。既存の英語UIラベルは変更しない。 */
+export const uiFeedback: Record<string, string> = {
+  "同期を要求しました。結果は同期の状態で確認できます": "Sync requested. Check the sync status for the result."
+, "全体を並べ直しました。元に戻す操作で戻せます": "Layout updated. Use Undo to restore it."
+, "「{title}」を削除しました。元に戻す操作で戻せます": "Deleted “{title}”. Use Undo to restore it."
+, "送信待ち": "Waiting to send"
+, "送受信中…": "Syncing…"
+, "サーバーと最新の内容を確認しました": "Checked the latest content with the server."
+, "準備中…": "Preparing…"
+, "次に、今の計画を送るか、サーバーの計画を受け取るか選びます": "Next, choose to send this plan or receive a plan from the server."
+, "今の計画を送り、ほかの端末でも続きを開けます": "Send this plan and continue on another device."
+, "保存済みの計画を一覧から選んで受け取ります": "Choose a saved plan from the server list."
+, "この端末の同期を止めてサインアウトします。手元の計画は残ります": "Signs out and stops syncing on this device. Your local plans remain."
+, "手元に保存した計画は、サーバーとそろっています。": "Your locally saved plan matches the server."
+, "手元には保存済みです。サーバーへの送信を待っています。": "Saved locally. Waiting to send to the server."
+, "今の計画": "Current plan"
+, "サンプルは保存されません。Save で自分の計画のコピーを残せます": "Samples are not saved. Use Save to keep your own plan."
+, "{file} に自動で保存します。Save で今すぐ書きます": "Edits are saved automatically to {file}. Save writes immediately."
+, "配置固定: 押すとボックスの移動と結線ができます": "View: click to enable moving boxes and connecting ports."
+, "配置編集: ドラッグで移動・結線できます。押すと配置を固定します": "Edit: drag to move and connect. Click to lock the layout."
+};

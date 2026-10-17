@@ -241,7 +241,7 @@ function ReceiveSection() {
       {status.credentials.account && (
         <p className="home-receive__who">
           <SignedInLine status={status} />
-          <button className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "signOut" })}>{t("サインアウト")}</button>
+          <button className="btn btn-ghost btn-sm" title={t("この端末の同期を止めてサインアウトします。手元の計画は残ります")} onClick={() => void act({ kind: "signOut" })}>{t("サインアウト")}</button>
         </p>
       )}
       <SyncStartup status={status} act={act} unsaved={false} receive />

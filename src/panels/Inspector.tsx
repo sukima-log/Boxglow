@@ -200,16 +200,22 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
     // タブは保つ (別のボックスを選んでも I/O などを続けて見比べられるように。Status には戻さない)
   }, [blockId]);
 
-  const setStatus = (s: BlockStatus) => apply((p) => updateBlock(p, blockId, { status: s }));
+  /** 状態を変える (同じ状態なら何もしない。結果は選択の表示で分かるので通知は出さない) */
+  const setStatus = (s: BlockStatus) => {
+    if (b.status === s) return;
+    apply((p) => updateBlock(p, blockId, { status: s }));
+  };
   const toggleAssignee = (id: string) =>
     apply((p) => {
       const cur = p.blocks[blockId].assigneeIds;
       return updateBlock(p, blockId, { assigneeIds: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
     });
   const remove = () => {
+    // 下の階層があるときだけ確認する (子のないボックスは Undo で戻せる。VS Code の webview では confirm が使えないので、確認を増やすと消せなくなる)
     if (kids.length > 0 && !confirm(t("「{title}」と下の階層のブロックを削除します。よろしいですか?", { title: b.title }))) return;
     select({});
     apply((p) => removeBlock(p, blockId));
+    setToast(t("「{title}」を削除しました。元に戻す操作で戻せます", { title: b.title }));
   };
   const copyPrompt = async (ask: "plan" | "decompose" | "review") => {
     setAiOpen(false);
@@ -277,10 +283,10 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
 
       {/* タブ: 一度に 1 項目だけ見せる */}
       <div className="seg" style={{ gridTemplateColumns: "repeat(6, 1fr)" }}>
-        {/* タブは記号 + 短い英語 (言語に依らず分かるように)。日本語の説明はツールチップ (TAB_HELP) */}
+        {/* タブは既存の記号と英語名を維持する。現在の選択も支援技術へ伝える */}
         {([["status", "Status"], ["io", "I/O"], ["owner", "Owner"], ["dates", "Dates"], ["log", "Note"], ["more", "More"]] as const).map(([id, label]) => (
           <button key={id} className="seg__btn seg__btn--tab" data-on={tab === id} onClick={() => setTab(id)} style={{ padding: "6px 2px", fontSize: 11 }}
-            title={TAB_HELP[id]} aria-label={label}>
+            title={TAB_HELP[id]} aria-label={label} aria-pressed={tab === id}>
             <TabIcon id={id} />
             <span className="seg__btn-label">{label}</span>
             {id === "status" && (pending.length > 0 || unread.length > 0) && <span className="dot decision" style={{ marginLeft: 4, display: "inline-block", width: 6, height: 6, borderRadius: 999, background: "var(--accent)" }} />}
@@ -328,7 +334,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         </div>
         <div className="seg">
           {(["black", "gray", "white"] as BlockStatus[]).map((s) => (
-            <button key={s} className="seg__btn" data-on={b.status === s} disabled={readonly} onClick={() => setStatus(s)} title={t(STATUS_HELP[s])}>
+            <button key={s} className="seg__btn" data-on={b.status === s} aria-pressed={b.status === s} disabled={readonly} onClick={() => setStatus(s)} title={t(STATUS_HELP[s])}>
               <span className={`tree-glyph ${s}`}>{GLYPH[s]}</span>
               <span>{STATUS_LABEL[s]}</span>
             </button>

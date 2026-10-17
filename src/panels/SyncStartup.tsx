@@ -1,6 +1,7 @@
+import { useProjectStore } from "../store/useProjectStore";
 import { SignInButtons } from "./SignInButtons";
 /** 同期開始の入口。送り先・保存先を先に示し、実際の処理は許可リスト付きホストへ渡す。 */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import type { HostAction, SyncStatus } from "../sync/status";
 import { SignInCode } from "./SyncPanel";
@@ -16,30 +17,45 @@ export function SyncStartup({ status, act, unsaved, receive = false }: {
   receive?: boolean;
 }) {
   const [id, setId] = useState("");
+  // ブラウザ内の保存はファイルではない。内部IDでなく利用者が付けた計画名を示す。
+  const source = useProjectStore(s => s.source);
+  const projectName = useProjectStore(s => s.project?.name);
   const [destination, setDestination] = useState<"current" | "new">(receive || status.file?.binding ? "current" : "new");
   const [name, setName] = useState("remote.boxglow.json");
   const op = status.startup;
+  const [pending, setPending] = useState(false);
+  const pendingRef = useRef(false);
+  /** Input: ホスト操作。Output: 同じ操作の連打を抑え、応答まで処理中を示す。送受信の意味はホストに委ねる。 */
+  const request = async (action: HostAction) => {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    setPending(true);
+    try { return await act(action); }
+    finally { pendingRef.current = false; setPending(false); }
+  };
   // 受け取り専用: 「選ぶ」段階を飛ばして、サーバーの一覧 (サインインが要ればその手順) へ進む
   useEffect(() => {
     if (receive && op?.stage === "choose" && !op.error) void act({ kind: "continueStart", operationId: op.operationId, intent: "existing" });
   }, [receive, op?.stage, op?.operationId, op?.error, act]);
   if (!op)
     return <>
-      <button className="btn btn-primary btn-sm" disabled={unsaved} onClick={() => void act({ kind: "beginSync" })}>{receive ? t("サーバーの計画を受け取る") : t("同期を始める")}</button>
+      <button className="btn btn-primary btn-sm" disabled={unsaved || pending} onClick={() => void request({ kind: "beginSync" })}>{pending ? t("準備中…") : receive ? t("サーバーの計画を受け取る") : t("同期を始める")}</button>
+      {!receive && <p className="muted">{t("次に、今の計画を送るか、サーバーの計画を受け取るか選びます")}</p>}
+      {unsaved && <p className="muted">{t("先に保存してください")}</p>}
       {/* Boxglow の同期サーバーは招待制の試験中: 押す前に分かるよう 1 行だけ添える (自分のサーバーでは出さない) */}
       {status.isDefaultServer && <p className="muted">{t("Boxglow の同期サーバーは招待制の試験中です")}</p>}
     </>;
   const filename = status.file?.path.split(/[\\/]/).pop();
-  const busy = op.stage === "working";
+  const busy = pending || op.stage === "working";
   return <section className="sync-startup" aria-label={t("同期を始める")}>
   {!(receive && status.isDefaultServer) && <p>{t("送り先")}: <span className="break-all">{status.isDefaultServer ? t("Boxglow の同期サーバー") : status.server}</span></p>}
-  {op.stage !== "list" && op.stage !== "opened" && !receive && <p>{t("今開いているファイル")}: <span className="break-all">{filename}</span></p>}
+  {op.stage !== "list" && op.stage !== "opened" && !receive && <p>{source === "idb" ? t("今の計画") : t("今開いているファイル")}: <span className="break-all">{source === "idb" ? projectName : filename}</span></p>}
   {op.error && <p role="alert">{op.error}</p>}
   {/* 招待されていないときは、やり直しではなく順番待ちを案内する */}
   {status.notInvited?.waitlist && <a className="btn btn-sm" href={status.notInvited.waitlist} target="_blank" rel="noreferrer">{t("順番待ちに登録する")}</a>}
-  {op.stage === "choose" && !receive && <div className="sync-panel__choices">
-   <button className="btn btn-primary btn-sm" disabled={unsaved} onClick={() => void act({ kind: "continueStart", operationId: op.operationId, intent: "new" })}>{t("この計画を新しくサーバーに置く")}</button>
-   <button className="btn btn-sm" disabled={unsaved} onClick={() => void act({ kind: "continueStart", operationId: op.operationId, intent: "existing" })}>{t("サーバーの計画を開く")}</button>
+  {op.stage === "choose" && !receive && <div className="sync-panel__choices sync-startup__choices">
+   <button aria-label={t("この計画を新しくサーバーに置く")} className="btn btn-primary btn-sm" disabled={unsaved || pending} onClick={() => void request({ kind: "continueStart", operationId: op.operationId, intent: "new" })}><strong>{t("この計画を新しくサーバーに置く")}</strong><span>{t("今の計画を送り、ほかの端末でも続きを開けます")}</span></button>
+   <button aria-label={t("サーバーの計画を開く")} className="btn btn-sm" disabled={unsaved || pending} onClick={() => void request({ kind: "continueStart", operationId: op.operationId, intent: "existing" })}><strong>{t("サーバーの計画を開く")}</strong><span>{t("保存済みの計画を一覧から選んで受け取ります")}</span></button>
   </div>}
   {/* サインインの段階: ボタンは中止より前のここに出す。コードは、受け取り専用 (同期パネルが無い Home) のときだけここに出す (ふつうは同期パネルが出す) */}
   {op.stage === "signin" && (receive && status.signIn
@@ -64,20 +80,20 @@ export function SyncStartup({ status, act, unsaved, receive = false }: {
    </fieldset>}
    <p>{receive ? t("受け取る計画を選んでください。ここに保存して開きます。") : destination === "current" ? t("開く計画を選んでください。手元と内容が違う場合は、比較してから進みます。") : t("開く計画を選んでください。")}</p>
    {op.unsupported && <p>{t("このサーバーは計画一覧に対応していません。計画IDを指定してください。")}</p>}
-   {op.projects?.map(p => <div key={p.id} className="sync-panel__row"><button className="sync-project-row btn" disabled={unsaved} onClick={() => void act({ kind: "openProject", operationId: op.operationId, projectId: p.id, destination, name })}>
+   {op.projects?.map(p => <div key={p.id} className="sync-panel__row"><button className="sync-project-row btn" disabled={unsaved || pending} onClick={() => void request({ kind: "openProject", operationId: op.operationId, projectId: p.id, destination, name })}>
     <strong>{p.name || p.id}</strong><span>{p.updatedAt ? new Date(p.updatedAt).toLocaleString() : t("更新日時不明")} · {Math.ceil(p.bytes / 1024)} KB</span>
    </button><button className="btn btn-ghost btn-sm" aria-label={t("サーバーから削除…")+" "+p.name} title={t("サーバーから削除…")} onClick={()=>void act({kind:"previewDelete",projectId:p.id})}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg></button></div>)}
    {!op.unsupported && op.projects?.length === 0 && !op.error && <p>{t("このアカウントの計画はありません。")}</p>}
    <div className="sync-panel__row">
-    <button className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "listProjects", operationId: op.operationId })}>{t("再読み込み")}</button>
-    {op.nextCursor && <button className="btn btn-sm" onClick={() => void act({ kind: "listProjects", operationId: op.operationId, cursor: op.nextCursor! })}>{t("次のページ")}</button>}
+    <button className="btn btn-ghost btn-sm" onClick={() => void request({ kind: "listProjects", operationId: op.operationId })}>{t("再読み込み")}</button>
+    {op.nextCursor && <button className="btn btn-sm" onClick={() => void request({ kind: "listProjects", operationId: op.operationId, cursor: op.nextCursor! })}>{t("次のページ")}</button>}
    </div>
    <details><summary>{t("計画IDを指定")}</summary><p>{t("別の送り先は --server または VS Code の boxglow.sync.server で指定できます。")}</p>
     <input className="input" aria-label={t("計画ID")} value={id} onChange={e => setId(e.target.value)} maxLength={256}/>
-    <button className="btn btn-sm" disabled={!id.trim() || unsaved} onClick={() => void act({ kind: "openProject", operationId: op.operationId, projectId: id.trim(), destination, name })}>{t("開く")}</button>
+    <button className="btn btn-sm" disabled={!id.trim() || unsaved} onClick={() => void request({ kind: "openProject", operationId: op.operationId, projectId: id.trim(), destination, name })}>{t("開く")}</button>
    </details>
   </>}
   {/* コードや URL を出している間は、その欄の「中止」だけにする (同じ画面に 2 つ出さない) */}
-  {!(receive && status.signIn) && <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void act({ kind: "cancelBegin" })}>{t("中止")}</button>}
+  {!(receive && status.signIn) && <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void request({ kind: "cancelBegin" })}>{t("中止")}</button>}
  </section>;
 }

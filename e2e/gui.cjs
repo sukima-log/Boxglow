@@ -16,13 +16,13 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
       await page.setViewportSize({width,height:844});
       // 帯は折り返さず 1 行のまま横にスクロールする (2026-10-17 の指定)。操作は帯のスクロール範囲の中にあり、端までスクロールすれば画面内に来る
       check(`上の帯 ${width}px: 1 行のまま横にスクロールでき、検索・メニュー・保存の札はスクロール範囲の中にある`, await page.evaluate(()=> {
-        const bar=document.querySelector('header.topbar');
+        const bar=document.querySelector('.topbar-scroll');
         const controls=[...document.querySelectorAll('.topbar button,.topbar input,.save-chip')].filter(e=>e.getClientRects().length);
         const top=controls[0].getBoundingClientRect().top;
         const oneRow=controls.every(e=>Math.abs(e.getBoundingClientRect().top-top)<24);
         const canScroll=bar.scrollWidth<=bar.clientWidth || getComputedStyle(bar).overflowX==='auto';
         bar.scrollLeft=bar.scrollWidth;
-        const menu=document.querySelector('.topbar button[title="Menu"]').getBoundingClientRect();
+        const menu=document.querySelector('.topbar button[aria-label="Menu"]').getBoundingClientRect();
         const reachable=menu.right<=innerWidth+1 && menu.left>=0;
         bar.scrollLeft=0;
         return oneRow && canScroll && reachable;
@@ -30,21 +30,23 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     }
     // マウスのホイール (縦) で帯が横に動く (幅 390 では帯がはみ出している)
     await page.setViewportSize({width:390,height:844});
-    await page.evaluate(()=>{document.querySelector('header.topbar').scrollLeft=0;});
+    await page.evaluate(()=>{document.querySelector('.topbar-scroll').scrollLeft=0;});
     await page.mouse.move(200,30); await page.mouse.wheel(0,300);
-    check('上の帯: マウスのホイールで横に動く', await page.evaluate(()=>document.querySelector('header.topbar').scrollLeft>0));
-    await page.evaluate(()=>{document.querySelector('header.topbar').scrollLeft=0;});
+    check('上の帯: マウスのホイールで横に動く', await page.evaluate(()=>document.querySelector('.topbar-scroll').scrollLeft>0));
+    await page.evaluate(()=>{document.querySelector('.topbar-scroll').scrollLeft=0;});
     await page.setViewportSize({width:1280,height:844});
     // Auto Layout はモードに関係なく ⋯ メニューにある (帯に出し入れすると帯の幅が変わり、折り返しが切り替わって揺れるため)
     const inBar=()=>page.evaluate(()=>[...document.querySelectorAll('.topbar-tools > button')].some(e=>e.textContent==='Auto Layout'&&e.getClientRects().length>0));
     check('閲覧時: Auto Layout は帯に出さない',!await inBar());
-    await page.locator('.topbar button[title="Menu"]').click();
+    await page.locator('.topbar button[aria-label="Menu"]').click();
     check('閲覧時: メニューから Auto Layout に到達できる',await page.getByRole('button',{name:'Auto Layout',exact:true}).isVisible());
-    await page.locator('.topbar button[title="Menu"]').click(); // もう一度押してメニューを閉じる
+    await page.locator('.topbar button[aria-label="Menu"]').click(); // もう一度押してメニューを閉じる
     // Edit / View を切り替えても、帯の高さ・モード札の幅・右端の要素の位置が変わらない (幅 1280 と、折り返しの境目に近い幅で確かめる)
-    const barBox=()=>page.evaluate(()=>{const r=(s)=>{const e=document.querySelector(s);if(!e)return null;const b=e.getBoundingClientRect();return [Math.round(b.left),Math.round(b.top),Math.round(b.width),Math.round(b.height)];};return JSON.stringify([r('.topbar'),r('.mode-toggle'),r('.topbar-search'),r('.topbar button[title="Menu"]')]);});
+    const barBox=()=>page.evaluate(()=>{const r=(s)=>{const e=document.querySelector(s);if(!e)return null;const b=e.getBoundingClientRect();return [Math.round(b.left),Math.round(b.top),Math.round(b.width),Math.round(b.height)];};return JSON.stringify([r('.topbar'),r('.mode-toggle'),r('.topbar-search'),r('.topbar button[aria-label="Menu"]')]);});
     for (const width of [1280,1100,1000,900]) {
       await page.setViewportSize({width,height:844});await page.waitForTimeout(150);
+      // 横スクロールの自動移動と、モード変更による幅の変化を混同しない。
+      await page.locator('.mode-toggle').scrollIntoViewIfNeeded();
       const before=await barBox();
       await page.locator('.mode-toggle').click();await page.waitForTimeout(150);
       const after=await barBox();
@@ -212,7 +214,7 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.locator('.react-flow__node-terminal').first().dblclick();await page.waitForTimeout(500);
     check('タブの入出力ノード: ダブルクリックで Top に戻る',await page.evaluate(()=>window.boxglow.store.getState().viewScope)===null);
     await page.setViewportSize({width:390,height:844});await page.waitForTimeout(300);
-    await page.locator('.topbar button[title="Menu"]').click();
+    await page.locator('.topbar button[aria-label="Menu"]').click();
     check('狭い幅 (390px): 追加・Auto Layout・Undo / Redo は ⋯ メニューの中にある',await page.locator('.menu-actions').getByRole('button',{name:'+ Block',exact:true}).isVisible() && await page.getByRole('button',{name:'Auto Layout',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Undo',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Redo',exact:true}).isVisible());
     check('画面: 実行時のエラーが無い',errors.length===0,errors.join(';'));
     await page.context().close();

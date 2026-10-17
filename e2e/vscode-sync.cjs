@@ -242,7 +242,7 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     check('VS Code: 開き直すと、受け取った中身になる (エディタの編集は外れる)', !!reopened && !reopened.name.endsWith('_EDITOR') && reopened.title === '衝突中に届いた題名' && !reopened.conflict, JSON.stringify(reopened));
     if (!frame3) throw new Error('開き直した webview が見つからない');
     // ⋯ メニューの「退避した編集を読み込む」→ 取り込み → Save → 同期 (同期の欄を使わない入口。R49-03)
-    await frame3.locator('button[title="Menu"]').click();
+    await frame3.locator('button[aria-label="Menu"], button[aria-label="メニュー"]').click();
     await frame3.getByRole('button', { name: /^(退避した編集を読み込む|Load saved edits)$/ }).click();
     const input = win.locator('.quick-input-widget input');
     await input.waitFor({ timeout: 10000 });
