@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 // Vite の設定
 // 配置先の URL パス (base) は環境変数 VITE_BASE で切り替える。
 //   既定は相対パス "./" (npm に同梱して boxglow serve で配る dist/ と、ブログの /apps/boxglow/ の両方で動く)
@@ -10,7 +11,11 @@ export default defineConfig({
   base: process.env.VITE_BASE ?? "./", // 相対パス: npm 同梱 (boxglow serve)、ブログの /apps/boxglow/、Pages のどこに置いても動く
   // 画面の下の帯に出すビルド日時 (配信のキャッシュで古い版を見ていないか確認するため)
   define: { __BUILD__: JSON.stringify(new Date().toLocaleString("sv-SE", { timeZone: "Asia/Tokyo" }).slice(0, 16)) },
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), {
+    // .md を文字列として読み込む (CLI の説明文書を vitest から読むため。esbuild の loader md:text と同じ)
+    name: "md-as-text", enforce: "pre",
+    load(id: string) { if (id.endsWith(".md")) return { code: `export default ${JSON.stringify(readFileSync(id, "utf8"))};`, map: null }; }
+  }],
   build: {
     // 更新が最大 1 時間キャッシュされる配信先 (livedoor) でも、ハッシュ付きの資産名なら即時に新しい中身が取れる
     assetsDir: "assets",

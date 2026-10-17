@@ -49,7 +49,7 @@ beforeAll(async () => {
   root = mkdtempSync(resolve("node_modules/.cache/auth-routing-"));
   product = await recorder(); custom = await recorder();
   mkdirSync(join(root, "bin")); mkdirSync(join(root, "dist")); writeFileSync(join(root, "dist", "index.html"), "test");
-  const result = await build({ entryPoints: ["cli/main.ts"], bundle: true, write: false, platform: "node", format: "esm", loader: { ".md": "text" }, external: ["@modelcontextprotocol/sdk", "zod"] });
+  const result = await build({ entryPoints: ["cli/entry.ts"], bundle: true, write: false, platform: "node", format: "esm", loader: { ".md": "text" }, external: ["@modelcontextprotocol/sdk", "zod"] });
   cli = join(root, "bin", "cli.mjs"); writeFileSync(cli, result.outputFiles[0].text.replaceAll(DEFAULT_SYNC_SERVER, product.url));
   const extension = await build({ entryPoints: ["vscode/src/sync.ts"], bundle: true, write: false, platform: "node", format: "cjs", plugins: [{ name: "vscode-test-api", setup(b) {
     b.onResolve({ filter: /^vscode$/ }, () => ({ path: "vscode", namespace: "test-api" }));

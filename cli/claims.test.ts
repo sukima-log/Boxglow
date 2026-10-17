@@ -10,7 +10,7 @@ import { blockSize } from "../src/model/size";
 import { prepareClaimSave, type ClaimCommand } from "./claims";
 vi.setConfig({testTimeout:30000});
 let dir:string,entry:string,serial=0;
-beforeAll(async()=>{const cache=resolve("node_modules/.cache");mkdirSync(cache,{recursive:true});dir=mkdtempSync(join(cache,"claims-"));entry=join(dir,"cli.mjs");await build({entryPoints:["cli/main.ts"],bundle:true,loader:{".md":"text"},platform:"node",format:"esm",external:["@modelcontextprotocol/sdk","zod"],outfile:entry});});
+beforeAll(async()=>{const cache=resolve("node_modules/.cache");mkdirSync(cache,{recursive:true});dir=mkdtempSync(join(cache,"claims-"));entry=join(dir,"cli.mjs");await build({entryPoints:["cli/entry.ts"],bundle:true,loader:{".md":"text"},platform:"node",format:"esm",external:["@modelcontextprotocol/sdk","zod"],outfile:entry});});
 afterAll(()=>{if(dir)rmSync(dir,{recursive:true,force:true});});
 function fixture(enabled=true){let p=createProject("test");p.lang="en";for(const title of ["alpha","beta"])p=addBlock(p,{parentId:defaultTaskParent(p),title,outputName:"result"}).project;p=resolveAllOverlaps(normalizeCollapsed(p),(q,id)=>blockSize(q,id));if(enabled)p.claimPolicy={mode:"reject",leaseMinutes:30};const file=join(dir,`plan-${serial++}.json`);writeFileSync(file,toJSON(p));
  const args=(more:string[])=>[entry,...more,"--file",file];

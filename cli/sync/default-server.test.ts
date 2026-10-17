@@ -22,7 +22,7 @@ it("既定フォールバックではwhoami/sync/serveに環境トークンを�
   await new Promise<void>(r => recorder.listen(0, "127.0.0.1", r));
   const address = recorder.address() as { port: number };
   const url = `http://127.0.0.1:${address.port}`;
-  const bundle = buildSync({ entryPoints: [resolve("cli/main.ts")], bundle: true, write: false, platform: "node", format: "esm", loader: { ".md": "text" }, external: ["@modelcontextprotocol/sdk", "zod"] }).outputFiles[0].text;
+  const bundle = buildSync({ entryPoints: [resolve("cli/entry.ts")], bundle: true, write: false, platform: "node", format: "esm", loader: { ".md": "text" }, external: ["@modelcontextprotocol/sdk", "zod"] }).outputFiles[0].text;
   mkdirSync(join(root, "bin")); mkdirSync(join(root, "dist"));
   writeFileSync(join(root, "dist", "index.html"), "test");
   const cli = join(root, "bin", "boxglow.mjs");

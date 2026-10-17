@@ -12,7 +12,7 @@ beforeAll(async () => {
   // Keep the temporary bundle under node_modules so its external SDK imports resolve.
   const cache = resolve("node_modules/.cache"); mkdirSync(cache, { recursive: true });
   dir = mkdtempSync(join(cache, "boxglow-mcp-")); entry = join(dir, "cli.mjs");
-  await build({ entryPoints: ["cli/main.ts"], bundle: true, loader: { ".md": "text" }, platform: "node", format: "esm", target: "node18", external: ["@modelcontextprotocol/sdk", "zod"], outfile: entry });
+  await build({ entryPoints: ["cli/entry.ts"], bundle: true, loader: { ".md": "text" }, platform: "node", format: "esm", target: "node18", external: ["@modelcontextprotocol/sdk", "zod"], outfile: entry });
 });
 afterAll(() => { if (dir) rmSync(dir, { recursive: true, force: true }); });
 

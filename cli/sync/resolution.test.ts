@@ -44,7 +44,7 @@ beforeAll(async () => {
   entry = join(root, "cli.mjs");
   outside = mkdtempSync(join(tmpdir(), "boxglow-cli-cwd-"));
   await build({
-    entryPoints: ["cli/main.ts"],
+    entryPoints: ["cli/entry.ts"],
     bundle: true,
     loader: { ".md": "text" },
     platform: "node",

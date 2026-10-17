@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { startMcp } from "./mcp";
 import { startServe } from "./serve";
 import { commitFile, describeLock, FileConflict, inspectLock, lockTokenOf, removeLock, revisionOf, sleepSync } from "./file-store";
+import { planIO } from "./plan-io";
 import { briefReceipt, contextReceipt, isCurrentToken, requireContext } from "./context";
 import { setupAgent } from "./setup-agent";
 import { runSyncCommand, runWatchCommand } from "./sync/command";
@@ -94,21 +95,8 @@ const str = (v: string | string[] | true | undefined): string | undefined => (ty
 /** 配列オプション */
 const list = (v: string | string[] | true | undefined): string[] => (typeof v === "string" ? [v] : Array.isArray(v) ? v : []);
 
-/** boxglow.json の場所を決める (--file > BOXGLOW_FILE > カレントから上へ探す) */
-function locateFile(opt: string | undefined, forInit = false): string {
-  if (opt) return resolve(opt);
-  if (process.env.BOXGLOW_FILE) return resolve(process.env.BOXGLOW_FILE);
-  let dir = process.cwd();
-  for (let i = 0; i < 12; i++) {
-    const candidate = join(dir, "boxglow.json");
-    if (existsSync(candidate)) return candidate;
-    const parent = dirname(dir);
-    if (parent === dir) break;
-    dir = parent;
-  }
-  if (forInit) return join(process.cwd(), "boxglow.json");
-  throw new Error(t("boxglow.json が見つかりません (--file で指定するか、`boxglow init` で作ってください)"));
-}
+/** boxglow.json の場所を決める (入出力の層に任せる: ファイル版は --file > BOXGLOW_FILE > カレントから上へ探す) */
+function locateFile(opt: string | undefined, forInit = false): string { return planIO().locate(opt, forInit); }
 
 /**
  * 成果物の指定 ("題名=URL またはパス"、または "URL またはパス") から Artifact を作る
@@ -159,7 +147,7 @@ const CONFLICT_RETRIES = 8;
  * Output: fromJSON 済みの Project
  */
 function load(path: string): Project {
-  const text = readFileSync(path, "utf8");
+  const text = planIO().read(path);
   readRevisions.set(resolve(path), revisionOf(text));
   return fromJSON(text);
 }
@@ -178,7 +166,7 @@ function save(path: string, p: Project): void {
   const normalized = normalizeCollapsed(normalizeInputNames(p).project);
   let text = toJSON(normalized) + "\n";
   const warnings:string[]=[];
-  const revision = commitFile(path, text, expected, { prepare: (current) => {
+  const revision = planIO().commit(path, text, expected, { prepare: (current) => {
     // ロック取得・リビジョン照合後の原本と比較する。受け持ち検証には補正後の差分を渡す。
     const next = current
       ? resolveChangedOverlaps(normalizeCollapsed(fromJSON(current)), normalized, blockSize)
@@ -668,7 +656,7 @@ function main(argv: string[]): void {
 
   if (cmd === "init") {
     const path = locateFile(str(options.file), true);
-    if (existsSync(path) && !options.force) throw new Error(t("{path} は既にあります (--force で上書き)", { path }));
+    if (planIO().exists(path) && !options.force) throw new Error(t("{path} は既にあります (--force で上書き)", { path }));
     // 上書き (--force) のときは今の中身の版を、新規のときは「無い」ことを保存の前提にする
     readRevisions.set(resolve(path), existsSync(path) ? revisionOf(readFileSync(path, "utf8")) : null);
     // 計画の言語を決めて書き込む: 指定があればそれ、無ければ環境の言語 (日本語の環境なら ja、それ以外は en)
@@ -1576,8 +1564,11 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
   }
 }
 
-// 入口: mcp と serve は常駐するので別扱い。それ以外は 1 回実行して終わる
-const argv = process.argv.slice(2);
+/**
+ * コマンドラインの入口 (bin/boxglow.js = cli/entry.ts から呼ぶ)。mcp と serve は常駐するので別扱い。それ以外は 1 回実行して終わる
+ * Input : argv = process.argv.slice(2)。Output: なし (標準出力と終了コード)
+ */
+export function cliMain(argv: string[]): void {
 if (argv[0] === "mcp") {
   // MCP サーバ (標準入出力)。--file で計画の場所を指定できる (無ければカレントから上へ探す)
   const { options } = parseArgs(argv.slice(1));
@@ -1726,4 +1717,5 @@ if (argv[0] === "mcp") {
   } finally {
     process.stdout.write(buf);
   }
+}
 }

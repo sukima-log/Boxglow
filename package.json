@@ -12,7 +12,7 @@
     "e2e": "bash e2e/run.sh",
     "test:watch": "vitest",
     "typecheck": "tsc -b",
-    "build:cli": "esbuild cli/main.ts --bundle --loader:.md=text --platform=node --format=esm --target=node18 --external:@modelcontextprotocol/sdk --external:zod --outfile=bin/boxglow.js --banner:js='#!/usr/bin/env node'",
+    "build:cli": "esbuild cli/entry.ts --bundle --loader:.md=text --platform=node --format=esm --target=node18 --external:@modelcontextprotocol/sdk --external:zod --outfile=bin/boxglow.js --banner:js='#!/usr/bin/env node'",
     "prepare": "npm run build:cli",
     "prepublishOnly": "npm run build",
     "build:pages": "tsc -b && VITE_BASE=/ vite build --outDir dist-pages && npm run build:cli && npm run build:legal",
