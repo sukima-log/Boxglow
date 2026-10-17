@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 // Vite の設定
 // 配置先の URL パス (base) は環境変数 VITE_BASE で切り替える。
@@ -17,7 +17,10 @@ function swPlugin() {
     configResolved(config: { build: { outDir: string }; base: string }) { outDir = config.build.outDir; base = config.base === "./" ? "/" : config.base; },   // 相対 base (npm 同梱・ブログ) では配置先が分からないので "/" を仮定 (登録は boxglow.app だけ)
     closeBundle() {
       const build = new Date().toLocaleString("sv-SE", { timeZone: "Asia/Tokyo" }).slice(0, 16);
-      writeFileSync(join(outDir, "sw.js"), readFileSync("scripts/sw.template.js", "utf8").replaceAll("__BUILD__", build).replaceAll("__BASE__", base));
+      // 資産の一覧 (assets/ の JS と CSS): 最初の起動で控えるため、sw.js に埋める
+      let assets: string[] = [];
+      try { assets = readdirSync(join(outDir, "assets")).filter((f) => /\.(js|css)$/.test(f)).map((f) => "assets/" + f); } catch { /* 資産が無いビルドは空 */ }
+      writeFileSync(join(outDir, "sw.js"), readFileSync("scripts/sw.template.js", "utf8").replaceAll("__BUILD__", build).replaceAll("__BASE__", base).replace("__ASSETS__", JSON.stringify(assets)));
     }
   };
 }

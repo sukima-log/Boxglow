@@ -98,6 +98,25 @@ const { chromium, BASE, check, result } = require('./lib.cjs');
       check('PWA: マニフェスト (standalone・アイコン 2 つ) と sw.js (版入り) が配信される', pwa.manifest === 'standalone' && pwa.icons === 2 && pwa.sw, JSON.stringify(pwa));
       check('PWA: 試験環境では Service Worker を登録しない', pwa.registered === false);
       await context.close();
+      // ?pwa=1 で登録し、最初の起動 (まだ制御されていない読み込み) の後に機内モード相当にしても開ける
+      const ctx2 = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      const page2 = await ctx2.newPage();
+      await page2.goto(BASE + '?lang=ja&pwa=1');
+      await page2.waitForFunction(() => !!window.boxglow);
+      await page2.waitForFunction(async () => { const reg = await navigator.serviceWorker.getRegistration(); return !!reg && reg.active?.state === 'activated'; }, null, { timeout: 20000 });
+      // 控えに入口と資産がそろうのを待つ (install が 1 つずつ取る)
+      await page2.waitForFunction(async (base) => { const keys = await caches.keys(); const k = keys.find((x) => x.startsWith('boxglow-')); if (!k) return false; const c = await caches.open(k); const shell = await c.match(base); const all = await c.keys(); return !!shell && all.length >= 3; }, BASE, { timeout: 20000 });
+      // 制御が始まる (claim) のを待ってから機内モード相当にする
+      await page2.waitForFunction(() => !!navigator.serviceWorker.controller, null, { timeout: 20000 });
+      await page2.waitForTimeout(1000);
+      await ctx2.setOffline(true);
+      await page2.goto(BASE + '?lang=ja&pwa=1').catch(() => {});
+      let offlineOk = false;
+      try { await page2.waitForFunction(() => !!window.boxglow, null, { timeout: 15000 }); offlineOk = true; } catch { offlineOk = false; }
+      const offlineBody = await page2.evaluate(() => document.body?.innerText.slice(0, 80)).catch(() => '(evaluate failed)');
+      check('PWA: オフライン (機内モード相当) でも前回の画面が開く', offlineOk && await page2.getByRole('button', { name: 'サンプルを試す', exact: true }).isVisible().catch(() => false), JSON.stringify({ offlineOk, url: page2.url(), body: offlineBody }));
+      await ctx2.setOffline(false);
+      await ctx2.close();
     }
   } finally { await browser.close(); }
   const { passed, failed } = result(); console.log(`\n${passed}/${passed + failed} passed`);
