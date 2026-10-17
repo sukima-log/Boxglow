@@ -1948,4 +1948,26 @@ button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent)
 .notes-editor__preview { border: 1px dashed var(--line); border-radius: 8px; padding: 8px 12px; }
 /* 狭い画面 (スマホ) では、タブは記号だけにして帯を低くする (説明はツールチップのまま) */
 @media (max-width: 480px) { .seg__btn--tab .seg__btn-label { display: none; } .seg__btn--tab { padding: 8px 0 !important; } }
+/* Markdown のライブプレビュー付きの編集欄 (CodeMirror)。見た目は .md に合わせる */
+.live-md { border: 1px solid var(--line); border-radius: 8px; background: var(--card); padding: 4px 0; }
+.live-md:focus-within { border-color: var(--primary); }
+.live-md .cm-editor { outline: none; font-size: 13px; line-height: 1.7; }
+.live-md .cm-scroller { font-family: inherit; }
+.live-md .cm-content { padding: 4px 12px; caret-color: var(--text); }
+.live-md .cm-line { padding: 0; }
+.live-md .cm-placeholder { color: var(--text-muted); }
+.live-md .cm-md-h1 { font-size: 16px; font-weight: 700; margin-top: 8px; } .live-md .cm-md-h2 { font-size: 15px; font-weight: 700; margin-top: 8px; }
+.live-md .cm-md-h3 { font-size: 14px; font-weight: 700; } .live-md .cm-md-h4, .live-md .cm-md-h5, .live-md .cm-md-h6 { font-weight: 700; }
+.live-md .cm-md-strong { font-weight: 700; } .live-md .cm-md-em { font-style: italic; } .live-md .cm-md-strike { text-decoration: line-through; color: var(--text-muted); }
+.live-md .cm-md-code { font-family: var(--font-mono, monospace); font-size: 12px; background: var(--bg); padding: 1px 4px; border-radius: 4px; }
+.live-md .cm-md-link { color: var(--primary-strong); text-decoration: underline; } .live-md .cm-md-url { color: var(--text-muted); }
+.live-md .cm-md-li { padding-left: 4px; } .live-md .cm-md-bullet { display: inline-block; width: 16px; color: var(--text-muted); }
+.live-md .cm-md-task { display: inline-block; width: 18px; } .live-md .cm-md-task--done { color: var(--text-muted); }
+.live-md .cm-md-codeblock { font-family: var(--font-mono, monospace); font-size: 12px; background: var(--bg); padding-left: 8px; padding-right: 8px; }
+.live-md .cm-md-fence-hidden { height: 0; overflow: hidden; padding: 0; }
+.live-md .cm-md-blockquote { border-left: 3px solid var(--line); padding-left: 12px; color: var(--text-muted); }
+.live-md .cm-md-table { font-family: var(--font-mono, monospace); font-size: 12px; }
+.live-md .cm-md-hr { border: 0; border-top: 1px solid var(--line); margin: 8px 0; }
+.live-md .cm-md-img { max-width: 100%; border-radius: 8px; border: 1px solid var(--line); display: block; margin: 4px 0; }
+.live-md .cm-md-img-missing { color: var(--text-muted); font-size: 12px; }
 

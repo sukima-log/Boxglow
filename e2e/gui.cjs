@@ -116,12 +116,14 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('記録: Ctrl+Enter で追記され、Markdown で整形されて書き手が付く',await page.locator('.worklog__entry:not(.worklog__entry--handoff)').count()===1 && await page.locator('.worklog__entry:not(.worklog__entry--handoff) strong').count()===1 && (await page.locator('.worklog__entry:not(.worklog__entry--handoff) .worklog__by').first().textContent()||'').length>0);
     check('記録: タブに件数が出る',(await page.locator('.seg__btn[data-on="true"]').textContent()).includes('1'));
     // Notes (ノートタブ) の Markdown の表示と、押して編集
-    await page.evaluate(()=>{const s=window.boxglow.store.getState();const b=Object.values(s.project.blocks).find(x=>x.title==='バックエンド');s.apply(p=>({...p,blocks:{...p.blocks,[b.id]:{...p.blocks[b.id],description:'# 見出し\n\n- [x] 済み\n- [ ] まだ\n\n`code`'}}}));s.select({blockId:b.id,panelTab:'log'});});await page.waitForTimeout(400);
-    check('メモ: Markdown で整形される (見出し・チェック・コード)',await page.locator('.md-view h1').count()===1 && await page.locator('.md-view li.md-task[data-done="true"]').count()===1 && await page.locator('.md-view code').count()===1);
-    await page.locator('.md-view').click();await page.waitForTimeout(300);
-    check('メモ: 押すと素の Markdown の編集欄になり、下に見た目がリアルタイムで出る',await page.locator('textarea.md-edit--notes').count()===1 && (await page.locator('textarea.md-edit--notes').inputValue()).startsWith('# 見出し') && await page.locator('.notes-editor__preview h1').count()===1);
-    await page.locator('textarea.md-edit--notes').fill('- aaaaaa\n* bbbbbb');await page.waitForTimeout(200);
-    check('メモ: - と * の箇条書きが点つきで表示される',await page.locator('.notes-editor__preview li').count()===2 && (await page.locator('.notes-editor__preview ul').first().evaluate((el)=>getComputedStyle(el).listStyleType))==='disc');
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();const b=Object.values(s.project.blocks).find(x=>x.title==='バックエンド');s.apply(p=>({...p,blocks:{...p.blocks,[b.id]:{...p.blocks[b.id],description:'# 見出し\n\n- [x] 済み\n- [ ] まだ\n\n`code`'}}}));s.select({blockId:b.id,panelTab:'log'});});await page.locator('.live-md .cm-md-h1').waitFor({timeout:5000}).catch(()=>{});await page.waitForTimeout(300);
+    check('メモ: ライブプレビュー: カーソルの無い行は見た目 (見出しの大きさ・チェック・コード) で、記法の印は隠れる',await page.locator('.live-md .cm-md-h1').count()===1 && !(await page.locator('.live-md .cm-md-h1').innerText()).includes('#') && await page.locator('.live-md .cm-md-task').count()===2 && await page.locator('.live-md .cm-md-task--done').count()===1 && await page.locator('.live-md .cm-md-code').count()===1);
+    await page.locator('.live-md .cm-md-h1').click();await page.waitForTimeout(300);
+    check('メモ: カーソルを置いた行は打ったままの Markdown (# が見える)',(await page.locator('.live-md .cm-md-h1').innerText()).includes('# 見出し'));
+    await page.keyboard.press('Control+a');await page.keyboard.type('- aaaaaa\nbbbbbb');await page.waitForTimeout(600); // (Enter で箇条書きが続く: 2 行目は「- bbbbbb」になる)
+    check('メモ: 打つと同時に、カーソルの無い行は点つきの箇条書きになる (カーソルの行はそのまま)',await page.locator('.live-md .cm-md-bullet').count()===1 && (await page.locator('.live-md .cm-line').last().innerText()).includes('- bbbbbb'));
+    await page.evaluate(()=>document.activeElement?.blur());await page.waitForTimeout(600);
+    check('メモ: 欄を離れると全部の行が見た目になり、本文が保存されている',await page.locator('.live-md .cm-md-bullet').count()===2 && await page.evaluate(()=>{const s=window.boxglow.store.getState();const b=Object.values(s.project.blocks).find(x=>x.title==='バックエンド');return b.description==='- aaaaaa\n- bbbbbb';}));
     await page.evaluate(()=>{const s=window.boxglow.store.getState();s.select({});});await page.waitForTimeout(300);
 
     // Activity の検査 (lint) のタブ: 3 組に分かれ、行を押すとボックスが選ばれる。タブの数字は必ず直すの件数

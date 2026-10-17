@@ -17,6 +17,7 @@ import { descriptionReminder, freshnessText } from "../model/workflow";
 import { isAcked as decisionIsAcked } from "../model/graph";
 import { useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
+import { LiveMarkdownEditor } from "./LiveMarkdownEditor";
 import { addLogEntry, removeLogEntry, isNow, setNow, addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, removeBlock, setCategory, setProgress, setSchedule, updateBlock, waitingFor } from "../model/graph";
 import { saveTemplate } from "../lib/templates";
 import { actorLabel, ACTIVITY_LABEL, agoText } from "../model/report";
@@ -150,8 +151,6 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   const [aiOpen, setAiOpen] = useState(false);
   const [scopeEditing, setScopeEditing] = useState(false);
   const [showPrompt, setShowPrompt] = useState<"plan" | "decompose" | "review" | null>(null);
-  // Notes (Markdown) を編集中か (表示を押すと編集に切り替わり、欄を離れると表示に戻る)
-  const [notesEditing, setNotesEditing] = useState(false);
   const saveAsset = useProjectStore((s) => s.saveAsset);
   /**
    * 貼り付け・ドロップされた画像を boxglow.assets/ に保存し、メモの末尾に ![](boxglow.assets/...) を足す (serve / VS Code)
@@ -491,17 +490,12 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
 
       {/* AI */}
       {tab === "log" && (<>
-        {/* ノート: 自由に書く広い欄 (Markdown)。書いてあれば整形して表示し、押すと編集。空なら最初から入力欄 */}
+        {/* ノート: 常に編集できる 1 つの欄 (Obsidian のライブプレビュー: カーソルの行は打ったままの Markdown、ほかの行は見た目)。閲覧専用なら整形表示だけ */}
         <section className="sec notes">
           {b.description && freshnessText(b, b.descriptionUpdatedAt, "older") && <p className="text-[11px]">{freshnessText(b, b.descriptionUpdatedAt, "older")}</p>}
-          {b.description && !notesEditing && !readonly ? (
-            <div className="md-view md-view--notes" role="button" tabIndex={0} title={t("押すと編集")} onClick={() => setNotesEditing(true)} onKeyDown={(e) => { if (e.key === "Enter") setNotesEditing(true); }}>
-              <Markdown text={b.description} />
-            </div>
-          ) : b.description && readonly ? <Markdown text={b.description} className="md-view md-view--notes" /> : (
-            <NotesEditor value={b.description} autoFocus={notesEditing} placeholder={t("メモ (Markdown で書けます: 見出し・箇条書き・表・リンク・画像)")}
-              onCommit={(v) => apply((p) => updateBlock(p, blockId, { description: v }))} onDone={() => setNotesEditing(false)}
-              onFiles={(files, e) => void pasteImages(files, e)} />
+          {readonly ? (b.description ? <Markdown text={b.description} className="md-view md-view--notes" /> : null) : (
+            <NotesEditor value={b.description} placeholder={t("メモ (Markdown で書けます: 見出し・箇条書き・表・リンク・画像)")}
+              onCommit={(v) => apply((p) => updateBlock(p, blockId, { description: v }))} onFiles={(files, e) => void pasteImages(files, e)} />
           )}
         </section>
         <div className="sec__head"><span className="label">{t("記録")}</span></div>
@@ -631,33 +625,21 @@ function TabIcon({ id }: { id: "status" | "io" | "owner" | "dates" | "log" | "mo
 }
 
 /**
- * ノートの編集欄: 素の Markdown の入力欄と、その下にリアルタイムの見た目 (Obsidian のライブプレビューに相当。打つたびに描き直す)
- * Input : value = 今の本文, onCommit = 保存 (少し待ってまとめる + 欄を離れたとき), onDone = 編集を終えた (表示に戻す), onFiles = 画像の貼り付け・ドロップ
- * Output: 入力欄 + プレビューの JSX
+ * ノートの編集欄: Markdown のライブプレビュー (LiveMarkdownEditor) に、保存のまとめ (400ms) と欄を離れたときの保存を付ける
+ * Input : value = 今の本文, onCommit = 保存, onFiles = 画像の貼り付け・ドロップ
+ * Output: 編集欄の JSX
  */
-function NotesEditor({ value, placeholder, autoFocus, onCommit, onDone, onFiles }: { value: string; placeholder: string; autoFocus?: boolean; onCommit: (v: string) => void; onDone: () => void; onFiles: (files: FileList | null, e: { preventDefault: () => void }) => void }) {
-  const [draft, setDraft] = useState(value);
+function NotesEditor({ value, placeholder, onCommit, onFiles }: { value: string; placeholder: string; onCommit: (v: string) => void; onFiles: (files: FileList | null, e: { preventDefault: () => void }) => void }) {
+  const assetBase = useProjectStore((s) => s.assetBase);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const draft = useRef(value);
   const latest = useRef(value); latest.current = value;
-  const focused = useRef(false);
-  // 外から本文が変わった (画像の貼り付けで末尾に足した、AI が書き換えた) ときは、保存待ちが無ければ取り込む
-  useEffect(() => { if (!focused.current || !timer.current) setDraft(value); }, [value]);
-  const commit = (v: string) => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } if (v !== latest.current) onCommit(v); };
-  const change = (v: string) => { setDraft(v); if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => { timer.current = null; if (v !== latest.current) onCommit(v); }, 400); };
+  const flush = () => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } if (draft.current !== latest.current) onCommit(draft.current); };
+  // 片付け: 欄が消えるとき (別のボックスを選んだ) に、まとめ待ちの変更を保存する
+  useEffect(() => () => flush(), []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <div className="notes-editor">
-      <textarea className="input md-edit md-edit--notes" placeholder={placeholder} value={draft} autoFocus={autoFocus}
-        onChange={(e) => change(e.target.value)}
-        onFocus={() => { focused.current = true; }}
-        onBlur={() => { focused.current = false; commit(draft); onDone(); }}
-        onPaste={(e) => onFiles(e.clipboardData.files, e)} onDrop={(e) => onFiles(e.dataTransfer.files, e)} />
-      {draft.trim() && (
-        <div className="notes-editor__preview" aria-label={t("見た目")}>
-          <span className="sec__hint">{t("見た目 (打つと同時に反映)")}</span>
-          <Markdown text={draft} />
-        </div>
-      )}
-    </div>
+    <LiveMarkdownEditor value={value} placeholder={placeholder} assetBase={assetBase} minHeight={240}
+      onChange={(v) => { draft.current = v; if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => { timer.current = null; if (v !== latest.current) onCommit(v); }, 400); }}
+      onBlur={flush} onFiles={onFiles} />
   );
 }
-
