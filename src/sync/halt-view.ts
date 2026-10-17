@@ -175,7 +175,8 @@ export function haltView(result: Extract<SyncResult, { status: "halted" }>, file
       break;
     case "account-mismatch":
       fix = "credentials";
-      out(t("この計画の結び付けは、別の利用者 ({bound}) のものです。今のトークンの利用者は {actual} です。別の利用者の計画を置き換えないよう、何も送らず、何も書いていません。結び付けたときの利用者のトークンで実行してください", { bound: halt.bound, actual: halt.actual }));
+      // (アカウント ID を並べても利用者には分からない。何が起きたか・どうすればよいかだけを言う)
+      out(t("この計画は、別のアカウントでサーバーに置かれたものです。今のサインインでは送受信しません (手元のファイルもサーバーも変えていません)。置いたときのアカウントでサインインし直すか、この計画を新しくサーバーに置いてください"));
       break;
     case "account-unconfirmed":
       out(t("この計画の結び付けには、利用者の記録がありません (記録するようになる前に結び付けたものです)。今のトークンの利用者は {account} です。この利用者で結び付けたものなら、次を実行すると、利用者を記録して同期を続けます:", { account: halt.account }));
