@@ -1,3 +1,4 @@
+import { SignInButtons } from "./SignInButtons";
 /** 同期開始の入口。送り先・保存先を先に示し、実際の処理は許可リスト付きホストへ渡す。 */
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
@@ -46,10 +47,7 @@ export function SyncStartup({ status, act, unsaved, receive = false }: {
     ? <SignInCode code={status.signIn} onCancel={() => void act({ kind: "cancelSignIn" })} />
     : <div className="sync-startup__signin">
         <p>{t("サインインすると、サーバーにある自分の計画を選べます。")}</p>
-        <div className="sync-startup__buttons">
-          <button className="btn btn-primary btn-sm" onClick={() => void act({ kind: "signIn", provider: "github" })}>{t("GitHub でサインイン")}</button>
-          <button className="btn btn-sm" onClick={() => void act({ kind: "signIn", provider: "google" })}>{t("Google でサインイン")}</button>
-        </div>
+        <SignInButtons act={act} />
       </div>)}
   {busy && <p role="status">{t("処理しています…")}</p>}
   {op.stage === "opened" && op.opened && <>

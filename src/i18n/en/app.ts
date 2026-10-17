@@ -136,6 +136,8 @@ export const app: Record<string, string> = {
 , "アカウントの削除を受け付けました。保存データは {date} に消えます (それまでは support@boxglow.app への連絡で取り消せます)": "Account deletion accepted. Stored data is erased on {date} (until then, contact support@boxglow.app to cancel)"
 , "30 日後": "in 30 days"
 , "プラン": "Plan"
+, "サインイン中": "Signed in"
+, "サインインしていません": "Not signed in"
 , "アカウント": "Account"
 , "この計画": "This plan"
 , "ファイル": "File"

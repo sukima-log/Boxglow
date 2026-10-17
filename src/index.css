@@ -1190,6 +1190,18 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .sync-panel__choices { display: flex; gap: 6px; flex-wrap: wrap; }
 .sync-panel__details { font-size: 12px; color: var(--text-muted); white-space: pre-wrap; word-break: break-all; }
 .sync-panel__id { font-family: var(--font-mono, monospace); font-size: 11px; }
+/* サインインのボタン: 各社の印つきで、押せると分かる大きさ。GitHub は濃い色、Google は白地 */
+.signin-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.signin-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; border-radius: 8px; }
+.signin-btn--github { background: #24292f; color: #fff; border-color: #24292f; }
+.signin-btn--github:hover { background: #32383f; border-color: #32383f; color: #fff; }
+.signin-btn--google { background: #fff; color: #1f1f1f; border-color: #dadce0; }
+.signin-btn--google:hover { background: #f8f9fa; border-color: #c6c8cc; color: #1f1f1f; }
+/* サインインの状態の行: 点の色で一目で分かる (緑 = サインイン中、灰 = していない) */
+.signed-line { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+.signed-line__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
+.signed-line[data-on="true"] { color: var(--text); }
+.signed-line[data-on="true"] .signed-line__dot { background: #2e9e6b; }
 /* 詳細と設定の中の組: 見出し (小さく薄い) + 行。組の間は細い線で区切る。知らせの組は線なし */
 .sync-panel__group { display: grid; gap: 6px; padding: 8px 0 4px; border-top: 1px solid var(--line-soft); }
 .sync-panel__group--notes { border-top: 0; padding-top: 0; }

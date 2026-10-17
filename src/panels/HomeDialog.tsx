@@ -1,3 +1,4 @@
+import { SignedInLine } from "./SignInButtons";
 /**
  * プロジェクトを開いていないときの画面 (Home)
  * 上から: サンプルを試す / 「自分の計画で始める」の引き出し (ファイルを開く = 見る・コピーして編集・serve で編集して保存 / 新しい計画を作る。
@@ -239,7 +240,7 @@ function ReceiveSection() {
       {/* サインイン中の利用者と、サインアウト (計画を開いていない Home からも抜けられるように) */}
       {status.credentials.account && (
         <p className="home-receive__who">
-          <span className="sync-panel__who">{status.credentials.account.display}</span>
+          <SignedInLine status={status} />
           <button className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "signOut" })}>{t("サインアウト")}</button>
         </p>
       )}

@@ -12,8 +12,9 @@ import { ConflictGroups } from "./ConflictGroups";
 import { useEffect, useRef, useState } from "react";
 import { useProjectStore } from "../store/useProjectStore";
 import { planLabel } from "../sync/billing";
+import { SignInButtons, SignedInLine } from "./SignInButtons";
 import { t } from "../i18n";
-import type { HaltItem, SyncStatus } from "../sync/status";
+import type { HaltItem, SyncStatus, HostAction } from "../sync/status";
 
 /** 入力: ホストの状態。出力: 利用者向けの名前、記号、配色。元のstateは変更しない。 */
 function chip(status: SyncStatus): {
@@ -167,6 +168,19 @@ export function SyncChip() {
 
 /** 入力: 最新の同期状態と閉じる操作。出力: 主操作、比較、折りたたんだ設定・詳細。 */
 function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => void }) {
+  /**
+   * 申し込み / 契約の管理を 1 回の押下で開く
+   *   押した瞬間に空のタブを開いておき (利用者の操作の中なので遮られない)、サーバーから URL が来たらそのタブをそこへ移す。
+   *   タブを開けない環境 (VS Code の webview など) では、状態に残った URL をリンクとして出す (下の billingLink)
+   */
+  const openBilling = async (action: HostAction) => {
+    let tab: Window | null = null;
+    try { tab = window.open("about:blank", "_blank"); } catch { tab = null; }
+    await act(action);
+    const link = useProjectStore.getState().syncStatus?.billingLink;
+    if (tab && link) { tab.location.href = link.url; void act({ kind: "billingDismiss" }); }
+    else if (tab) tab.close();
+  };
   /** アカウントの削除の確認を出しているか (サインアウトや閉じるで消える) */
   const [confirmDelete, setConfirmDelete] = useState(false);
   useEffect(() => { if (status.credentials.source === "none") setConfirmDelete(false); }, [status.credentials.source]);
@@ -197,6 +211,8 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
         <strong>{status.startup ? t("同期を始める") : c.label}</strong>
       </div>
       {!status.startup && <div className="sync-panel__line">{explanation(status)}</div>}
+      {/* サインインの状態は、いつも同じ場所に出す (サインインしているかどうかが一目で分かるように) */}
+      {status.support === "ok" && status.server && <SignedInLine status={status} />}
       {unsaved && file?.enabled && (
         <div className="sync-panel__line muted">{t("未保存の編集があります。保存すると送られます")}</div>
       )}
@@ -215,17 +231,7 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
       ) : (
         <div className="sync-panel__row">
           {status.support === "ok" && !account && status.credentials.source !== "env" && (!status.server || file?.binding || status.startup?.stage === "signin") && (
-            <>
-              <button
-                className="btn btn-primary btn-sm"
-                onClick={() => void act({ kind: "signIn", provider: "github" })}
-              >
-                {t("GitHub でサインイン")}
-              </button>
-              <button className="btn btn-sm" onClick={() => void act({ kind: "signIn", provider: "google" })}>
-                {t("Google でサインイン")}
-              </button>
-            </>
+            <SignInButtons act={act} />
           )}
           {file && ready && !file.enabled && !status.startup && (!status.server || file.binding) && (
             <button className="btn btn-primary btn-sm" onClick={() => void act({ kind: "enable" })}>
@@ -367,16 +373,16 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
                 {account.billing.plan ? planLabel(account.billing.plan) : t("未契約")}{account.billing.plan === "team" && account.billing.seats > 0 ? ` × ${account.billing.seats}` : ""}
                 {account.billing.plan && account.billing.plan !== "comp" ? ` (${billingStatusLabel(account.billing.status)})` : ""}
               </span>
-              {account.billing.portal && <button className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "billingPortal" })}>{t("契約の管理")}</button>}
+              {account.billing.portal && <button className="btn btn-ghost btn-sm" onClick={() => void openBilling({ kind: "billingPortal" })}>{t("契約の管理")}</button>}
             </div>
             {/* 申し込み: 契約が無い (試用中を含む) か、契約が切れているとき。契約を求めていない試用中は、契約が無くても同期は止まらない */}
             {account.billing.checkout && (!account.billing.plan || !account.billing.entitled) && (
               <div className="sync-panel__row">
-                <button className="btn btn-primary btn-sm" onClick={() => void act({ kind: "billingCheckout", plan: "personal" })}>{t("Personal を申し込む (月 500 円)")}</button>
-                <button className="btn btn-sm" onClick={() => void act({ kind: "billingCheckout", plan: "team", seats: 2 })}>{t("Team を申し込む (1 人 月 800 円)")}</button>
+                <button className="btn btn-primary btn-sm" onClick={() => void openBilling({ kind: "billingCheckout", plan: "personal" })}>{t("Personal を申し込む (月 500 円)")}</button>
+                <button className="btn btn-sm" onClick={() => void openBilling({ kind: "billingCheckout", plan: "team", seats: 2 })}>{t("Team を申し込む (1 人 月 800 円)")}</button>
               </div>
             )}
-            {/* 申し込み / 契約の管理の画面: リンクとして出す (VS Code の webview でも外で開ける) */}
+            {/* タブを開けなかったときだけ残る: 画面の URL をリンクとして出す (VS Code の webview では外のブラウザで開く) */}
             {status.billingLink && (
               <div className="sync-panel__row sync-panel__billing-link">
                 <a href={status.billingLink.url} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm">
