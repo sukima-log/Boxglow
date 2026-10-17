@@ -82,6 +82,23 @@ describe("Codex の config.toml の併合 (見出しの揺れと壊れた形。C
     // 別の表の中の mcp_servers = ... は、その表のキーなので関係ない
     expect(mergeCodexConfig(`[profiles.a]\nmcp_servers = "x"\n`, S, T)).toContain("[mcp_servers.boxglow]");
   });
+  it("コメントの中の 3 つ引用符や # を含む文字列に惑わされず、別の表を消さない (Codex レビュー 29c R29c-01)", () => {
+    const q3 = '"""';
+    const before = `[mcp_servers.boxglow]\nurl = "https://old.invalid/mcp"\n# example delimiter: ${q3}\n[mcp_servers.other]\ncommand = "must-keep"\n# end example: ${q3}\n[projects."/work"]\ntrust_level = "trusted"\n`;
+    const out = mergeCodexConfig(before, S, T);
+    expect(out).toContain(`[mcp_servers.other]\ncommand = "must-keep"`);
+    expect(out).toContain(`[projects."/work"]\ntrust_level = "trusted"`);
+    expect(out).not.toContain("old.invalid");
+    expect(out.match(/^\[mcp_servers\.boxglow\]/gm)?.length).toBe(1);
+    // 文字列の中の # と、値の後ろのコメントに区切りがある形
+    const tricky = `[mcp_servers.boxglow]\nurl = "https://old.invalid/mcp" # ${q3} not a string\nnote = "has # hash and [mcp_servers.fake] inside"\n[mcp_servers.other]\ncommand = "keep"\n`;
+    const out2 = mergeCodexConfig(tricky, S, T);
+    expect(out2).toContain(`[mcp_servers.other]\ncommand = "keep"`);
+    expect(out2).not.toContain("old.invalid"); expect(out2).not.toContain("fake");
+    // エスケープした引用符を含む基本文字列の後ろの見出しも、正しく表として読む
+    const esc = `[mcp_servers.boxglow]\nurl = "https://old.invalid/mcp"\nlabel = "say \\"hi\\" # not comment"\n[mcp_servers.other]\ncommand = "keep"\n`;
+    expect(mergeCodexConfig(esc, S, T)).toContain(`[mcp_servers.other]\ncommand = "keep"`);
+  });
   it("同じ表が 2 つある / [mcp_servers] の中にインラインで書いてあるときは、書き戻さずに例外", () => {
     expect(() => mergeCodexConfig(`[mcp_servers.boxglow]\nurl = "a"\n[mcp_servers.boxglow]\nurl = "b"\n`, S, T)).toThrow(/more than once/);
     expect(() => mergeCodexConfig(`[mcp_servers]\nboxglow = { url = "a" }\n`, S, T)).toThrow(/inline/);

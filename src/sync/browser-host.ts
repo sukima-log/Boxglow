@@ -73,6 +73,8 @@ export class BrowserSyncHost {
   private network: { at: number; message: string } | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** 計画ごとの同期の世代: 止める・解除で進め、始める前の await の間に止められた同期を送らないために使う (Codex レビュー 29c R29c-03) */
+  private readonly syncGeneration = new Map<string, number>();
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly now: () => number;
   private readonly doFetch: typeof fetch;
@@ -99,7 +101,7 @@ export class BrowserSyncHost {
   notifyLocalChange(projectId: string): void {
     if (!this.enabled.has(projectId)) return;
     const old = this.saveTimers.get(projectId); if (old) clearTimeout(old);
-    this.saveTimers.set(projectId, setTimeout(() => { this.saveTimers.delete(projectId); void this.syncFile(projectId, {}); }, AFTER_SAVE_MS));
+    this.saveTimers.set(projectId, setTimeout(() => { this.saveTimers.delete(projectId); if (this.enabled.has(projectId)) void this.syncFile(projectId, {}); }, AFTER_SAVE_MS));
   }
   /** 片付け (試験用) */
   dispose(): void { if (this.timer) clearInterval(this.timer); this.timer = null; for (const tm of this.saveTimers.values()) clearTimeout(tm); }
@@ -341,7 +343,14 @@ export class BrowserSyncHost {
   // ---------------------------------------------------------------- 同期の実行
 
   private enable(file: string): void { this.enabled.add(file); saveEnabled(this.enabled); void this.syncFile(file, {}); }
-  private disable(file: string): void { this.enabled.delete(file); saveEnabled(this.enabled); this.emit(); }
+  /** 予約した送信を消し、始める前の同期を古い世代にする (止める・解除・別タブの追従で呼ぶ)。Input: 計画 ID。Output: なし */
+  private cancelScheduledSync(file: string): void {
+    const timer = this.saveTimers.get(file);
+    if (timer) clearTimeout(timer);
+    this.saveTimers.delete(file);
+    this.syncGeneration.set(file, (this.syncGeneration.get(file) ?? 0) + 1);
+  }
+  private disable(file: string): void { this.cancelScheduledSync(file); this.enabled.delete(file); saveEnabled(this.enabled); this.emit(); }
   /**
    * この端末での同期をやめる: 止めたうえで、結び付け (IndexedDB の同期の状態) を消す。計画とサーバーの控えは残る
    * Input : file = 計画の ID。Output: なし (状態を配る)。送受信の途中なら何もしない (次の emit で分かる)
@@ -352,7 +361,8 @@ export class BrowserSyncHost {
     try { result = await removeBrowserSyncState(file, this.server); } catch (e) { this.message = t("同期の状態を消せませんでした: {reason}", { reason: e instanceof Error ? e.message : String(e) }); this.emit(); return; }
     if (result === "busy") { this.message = t("送受信が終わってから、もう一度押してください"); this.emit(); return; }
     if (result === "pending") { this.message = t("同期の復旧が済んでから、もう一度押してください"); this.emit(); return; }
-    // 消せてから、有効の記憶と手元の覚えを外す
+    // 消せてから、予約した送信を取り消し、有効の記憶と手元の覚えを外す
+    this.cancelScheduledSync(file);
     this.enabled.delete(file); saveEnabled(this.enabled);
     this.knownBindings.delete(file); this.results.delete(file);
     this.message = t("この端末での同期をやめました。サーバーの計画は「サーバーの計画を開く」で受け取り直せます");
@@ -364,6 +374,7 @@ export class BrowserSyncHost {
     const dropped = [...this.enabled].filter((id) => !next.has(id));
     this.enabled.clear(); for (const id of next) this.enabled.add(id);
     for (const id of dropped) {
+      this.cancelScheduledSync(id);
       try { if ((await browserSyncIO(id, this.server).readState()) === null) { this.knownBindings.delete(id); this.results.delete(id); } } catch { /* 読めないときは次の結果で */ }
     }
     this.emit();
@@ -376,7 +387,10 @@ export class BrowserSyncHost {
     for (const id of file ? [file] : [...this.open.keys()]) if (this.enabled.has(id)) await this.syncFile(id, {});
   }
   private async syncFile(file: string, extra: Partial<SyncOptions>): Promise<void> {
+    const generation = this.syncGeneration.get(file) ?? 0;
     await this.refreshAccount();
+    // (待っている間に止められた・解除された: 送らない)
+    if ((this.syncGeneration.get(file) ?? 0) !== generation) return;
     if (!this.signedIn()) { this.message = t("先にサインインしてください"); this.emit(); return; }
     const credentials = this.generation;
     this.busy++; this.emit();

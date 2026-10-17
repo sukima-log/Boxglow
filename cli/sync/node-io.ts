@@ -27,7 +27,7 @@ import { bindingDir, bindingsOf, hashOf, lockFileSync, realFile, StateStore } fr
 export function removeNodeSyncState(file: string, server: string): "ok" | "busy" | "pending" {
   const real = realFile(file);
   const dir = bindingDir(real, server);
-  if (!existsSync(join(dir, "state.json"))) { rmSync(dir, { recursive: true, force: true }); return "ok"; }
+  // state.json が無くても、別の同期が結び付けを作っている途中かもしれない。必ずロックの中で見る (Codex レビュー 29c R29c-02)
   const unlockFile = lockFileSync(real);
   if (!unlockFile) return "busy";
   const store = new StateStore(dir);
@@ -35,14 +35,13 @@ export function removeNodeSyncState(file: string, server: string): "ok" | "busy"
   try {
     unlockState = store.lock();
     if (!unlockState) return "busy";
-    let state: ReturnType<StateStore["read"]> = null;
-    try { state = store.read(); } catch { state = null; }   // 読めない状態 (壊れている) は、解除で消してよい
+    // 読めない状態 (壊れている) は、復旧の記録があるか分からないので消さない (例外のまま呼び出し側へ)
+    const state = store.read();
     if (state?.pending || state?.relink) return "pending";
     // ロックを持ったまま、状態・写し・控え・止めている印を消す (ロックのファイルはこの後に消す)
     for (const name of ["state.json", "objects", "relinks", "stopped"]) rmSync(join(dir, name), { recursive: true, force: true });
   } finally { unlockState?.(); unlockFile(); }
-  // 残り (ロックのファイルなど) を消す。その間に別の同期が結び直していたら (state.json が戻っていたら) 触らない
-  if (!existsSync(join(dir, "state.json"))) rmSync(dir, { recursive: true, force: true });
+  // 空になったフォルダは残す (ロックを外した後に消すと、新しい同期が作った置き場を消しかねない。state.json の無いフォルダは結び付けの一覧に出ない)
   return "ok";
 }
 

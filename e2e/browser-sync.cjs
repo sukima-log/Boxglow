@@ -258,9 +258,20 @@ const ROOT = path.resolve(__dirname, '..');
     await page2.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'synced', null, { timeout: 20000 }).catch(() => {});
     check('ブラウザ同期: 「同期を再開する」で同期済みに戻る', (await page2.locator('.sync-chip').getAttribute('data-state')) === 'synced');
     await page2.locator('.sync-panel__details > summary').click();
+    // 別のタブ (同じブラウザ) で同じ計画を開いて編集し、送信が予約されている間に、このタブで解除する → 予約は取り消され、結び付けは復活しない (Codex レビュー 29c R29c-03)
+    const page2b = await context2.newPage(); await page2b.goto(url); await page2b.waitForFunction(() => !!window.boxglow);
+    const pid2 = await page2.evaluate(() => window.boxglow.store.getState().project?.id);
+    await page2b.evaluate((id) => window.boxglow.store.getState().openProject(id), pid2);
+    await page2b.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'synced', null, { timeout: 20000 });
+    const versionsBefore = server.project(remoteId, 'acc-browser')?.versions?.length ?? 0;
+    await page2b.evaluate(() => window.boxglow.store.getState().apply((p) => ({ ...p, name: '予約の後に解除' })));
     await page2.getByRole('button', { name: 'この端末の結び付けを解除する (サーバーの控えは残す)', exact: true }).click();
     await page2.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'unbound', null, { timeout: 15000 }).catch(() => {});
-    check('ブラウザ同期: 「解除」で結び付けが消えて未接続になり、サーバーの計画は残る', (await page2.locator('.sync-chip').getAttribute('data-state')) === 'unbound' && !!server.project(remoteId, 'acc-browser')?.head && (await page2.evaluate(() => window.boxglow.store.getState().syncStatus?.file?.binding)) === null);
+    await page2b.waitForTimeout(3500);
+    const headAfter = server.project(remoteId, 'acc-browser')?.head;
+    check('ブラウザ同期: 「解除」で結び付けが消えて未接続になり、サーバーの計画は残る', (await page2.locator('.sync-chip').getAttribute('data-state')) === 'unbound' && !!headAfter && (await page2.evaluate(() => window.boxglow.store.getState().syncStatus?.file?.binding)) === null);
+    check('ブラウザ同期: 別タブの予約した送信は解除で取り消され、サーバーも別タブの結び付けも変わらない', (server.project(remoteId, 'acc-browser')?.versions?.length ?? 0) === versionsBefore && JSON.parse(headAfter?.text ?? '{}').name !== '予約の後に解除' && (await page2b.evaluate(() => window.boxglow.store.getState().syncStatus?.file?.binding)) === null, JSON.stringify({ versionsBefore, versions: server.project(remoteId, 'acc-browser')?.versions?.length, name: JSON.parse(headAfter?.text ?? '{}').name, b: await page2b.evaluate(() => window.boxglow.store.getState().syncStatus?.file?.binding) }));
+    await page2b.close();
     await page2.keyboard.press('Escape');
     // Home に戻ると、サインイン中の利用者とサインアウトが出て、サインアウトできる
     await page2.evaluate(() => window.boxglow.store.getState().closeProject());

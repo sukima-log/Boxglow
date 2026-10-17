@@ -116,7 +116,7 @@ describe("状態の判定", () => {
     held!();
     // やめる: 結び付けのフォルダが消え、ファイルは残る。状態は「オフ」(結び付け無し・無効)
     await host.act(file, { kind: "unbind" });
-    expect(existsSync(dir)).toBe(false);
+    expect(existsSync(join(dir, "state.json"))).toBe(false);   // (フォルダ自体は空のまま残してよい: 一覧には出ない)
     expect(existsSync(file)).toBe(true);
     expect(host.status(file)).toMatchObject({ state: "off", file: { enabled: false, binding: null } });
     expect(host.status(file).message).toContain("やめました");
