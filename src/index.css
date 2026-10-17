@@ -1198,8 +1198,10 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .agent-tokens__new .input { flex: 1; min-width: 120px; }
 .agent-tokens__token { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--primary); border-radius: 8px; }
 .agent-tokens__secret { font-family: var(--font-mono, monospace); font-size: 11px; overflow-wrap: anywhere; user-select: all; }
-.agent-tokens__row { flex-direction: row; align-items: center; gap: 8px; }
-.agent-tokens__row > button { margin-left: auto; }
+/* トークンの行: 左に名前と権限 (2 段)、右に失効 (後ろの .sync-project-row の縦並びより優先するため、親を付けて指定) */
+.agent-tokens .agent-tokens__row { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 8px; row-gap: 2px; }
+.agent-tokens__row > strong, .agent-tokens__row > small { grid-column: 1; }
+.agent-tokens__row > button { grid-column: 2; grid-row: 1 / span 2; }
 .agent-tokens__row[data-off="true"] { opacity: 0.6; }
 /* 右上のアカウント: 丸いボタン (頭文字 / 人型) と、その下に開くメニュー */
 .account-wrap { position: relative; flex: none; }
