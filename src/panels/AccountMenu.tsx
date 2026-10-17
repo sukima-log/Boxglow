@@ -169,7 +169,7 @@ export function AccountButton() {
                 <div className="sync-panel__group">
                   <button className="sync-action" data-open={agentOpen ? "true" : "false"} aria-expanded={agentOpen} onClick={() => setAgentOpen(!agentOpen)}>
                     <span className="sync-action__icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 3v4"/><circle cx="9" cy="13" r="1"/><circle cx="15" cy="13" r="1"/></svg></span>
-                    <span className="sync-action__text"><span className="sync-action__label">{t("AI エージェントの接続")}</span><span className="sync-action__hint">{t("手元にファイルが無い端末やクラウドの AI 向け。この計画をサーバー経由で読み書きさせる (手元で開いている計画には不要)")}</span></span>
+                    <span className="sync-action__text"><span className="sync-action__label">{t("AI エージェントの接続")}</span><span className="sync-action__hint">{t("ファイルが手元に無い AI (クラウドなど) に、サーバー経由でこの計画を読み書きさせる")}</span></span>
                     <span className="sync-action__chev" aria-hidden="true">{agentOpen ? "▾" : "▸"}</span>
                   </button>
                   {agentOpen && (
@@ -244,7 +244,7 @@ export function AccountButton() {
                         <div className="sync-project-row agent-tokens__row" key={tk.id} data-off={tk.revoked ? "true" : "false"}>
                           <strong>{tk.name}</strong>
                           <small>{tk.write ? t("読み書き") : t("読み取り専用")} · {tk.projectId}{tk.requests > 0 ? ` · ${t("{n} 回", { n: String(tk.requests) })}` : ""}{tk.revoked ? ` · ${t("失効")}` : ""}</small>
-                          {!tk.revoked && <button className="btn btn-ghost btn-sm" disabled={status.agent?.busy} onClick={() => void act({ kind: "revokeAgentToken", id: tk.id })}>{t("失効")}</button>}
+                          {!tk.revoked && <button className="btn btn-sm" disabled={status.agent?.busy} onClick={() => void act({ kind: "revokeAgentToken", id: tk.id })}>{t("失効")}</button>}
                         </div>
                       ))}
                       {/* 失効したものは折りたたんで件数だけ (記録はサーバーが 30 日で消す) */}
@@ -255,7 +255,7 @@ export function AccountButton() {
                         <div className="sync-project-row agent-tokens__row" key={tk.id} data-off={tk.revoked ? "true" : "false"}>
                           <strong>{tk.name}</strong>
                           <small>{tk.write ? t("読み書き") : t("読み取り専用")} · {tk.projectId}{tk.requests > 0 ? ` · ${t("{n} 回", { n: String(tk.requests) })}` : ""}{tk.revoked ? ` · ${t("失効")}` : ""}</small>
-                          {!tk.revoked && <button className="btn btn-ghost btn-sm" disabled={status.agent?.busy} onClick={() => void act({ kind: "revokeAgentToken", id: tk.id })}>{t("失効")}</button>}
+                          {!tk.revoked && <button className="btn btn-sm" disabled={status.agent?.busy} onClick={() => void act({ kind: "revokeAgentToken", id: tk.id })}>{t("失効")}</button>}
                         </div>
                       ))}
                         </details>
@@ -280,7 +280,7 @@ export function AccountButton() {
                     </div>
                   </div>
                 ) : (
-                  <button className="btn btn-ghost btn-sm sync-panel__danger" onClick={() => setConfirmDelete(true)}>{t("アカウントを削除…")}</button>
+                  <button className="btn btn-sm sync-panel__danger" onClick={() => setConfirmDelete(true)}>{t("アカウントを削除…")}</button>
                 )}
               </div>
             </>

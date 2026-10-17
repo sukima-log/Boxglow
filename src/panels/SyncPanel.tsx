@@ -134,6 +134,8 @@ export function SyncChip() {
         <span>
           {t("同期")}: {c.label}
         </span>
+        {/* 押すと開く印 (保存状態の札は押せないので、見た目で区別する) */}
+        <span className="sync-chip__chev" aria-hidden="true">▾</span>
       </button>
       {open && (
         <div
@@ -348,7 +350,7 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
             </> : <span className="sync-account__name">{t("環境変数のトークン")}</span>}
           </div>
           {account && (
-            <button className="btn btn-ghost btn-sm sync-account__out" title={t("プラン・サインインの手段・サインアウト")} onClick={() => useProjectStore.getState().setAccountMenuOpen(true)}>
+            <button className="btn btn-sm sync-account__out" title={t("プラン・サインインの手段・サインアウト")} onClick={() => useProjectStore.getState().setAccountMenuOpen(true)}>
               {t("アカウント設定")}
             </button>
           )}

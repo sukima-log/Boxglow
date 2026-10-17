@@ -1184,6 +1184,9 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .sync-chip-wrap { position: relative; flex: none; }
 .sync-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 2px solid var(--line-soft); background: transparent; font-size: 12px; color: var(--text-muted); cursor: pointer; white-space: nowrap; }
 .sync-chip__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line-soft); }
+/* 同期の札は押せる (保存状態の札は押せない): hover で色が付き、▾ が付く */
+.sync-chip:hover, .sync-chip:focus-visible { background: var(--primary-soft); outline: none; }
+.sync-chip__chev { font-size: 10px; color: var(--text-muted); margin-left: -2px; }
 .sync-chip.tone-ok { color: var(--text); } .sync-chip.tone-ok .sync-chip__dot { background: #2e9e6b; }
 .sync-chip.tone-busy { color: var(--text); } .sync-chip.tone-busy .sync-chip__dot { background: var(--primary); }
 .sync-chip.tone-attention { color: var(--text); border-color: var(--accent); } .sync-chip.tone-attention .sync-chip__dot { background: var(--accent); }
@@ -1806,7 +1809,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .vertical-terminal__ports { display:flex; padding:8px 16px; }
 .vertical-terminal .bg-terminal__row { flex:1; min-width:0; height:auto; padding:4px 8px; white-space:normal; text-align:center; overflow-wrap:anywhere; font-size:14px; line-height:20px; }
 .flow-direction { display:inline-flex; gap:2px; padding-left:8px; margin-left:4px; border-left:1px solid var(--line); }
-.flow-direction button { display:flex; align-items:center; justify-content:center; width:32px; }
+.flow-direction button { display:flex; align-items:center; justify-content:center; gap:3px; min-width:32px; padding:0 6px; }
 .flow-direction svg { width:18px; height:18px; }
 .canvas-tools__scroll-hint { font-size:11px; color:var(--text-muted); padding:6px 8px 0; }
 
@@ -2109,3 +2112,8 @@ button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent)
 .task-table__now { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 6px; background: var(--accent); color: #fff; font: 800 10px/14px ui-sans-serif, system-ui, sans-serif; letter-spacing: .08em; vertical-align: middle; }
 /* 触って操作する端末 (スマホ・タブレット) にはホイールの案内を出さない (PWA。B152) */
 @media (hover: none) and (pointer: coarse) { .canvas-tools__scroll-hint { display: none; } }
+
+/* 折り畳み (details) の見出しに添える「開くと何が出るか」の 1 行 */
+.summary-hint { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--text-muted); }
+/* 左下の横 / 縦 / 表 の切り替えに添える短い文字 */
+.flow-direction__label { font-size: 10px; margin-left: 2px; }

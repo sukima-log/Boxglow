@@ -107,7 +107,7 @@ export function SyncLifecycle({status,act,unsaved=false}:{status:SyncStatus;act:
     {state.shares.map(s=><div className="sync-project-row sync-share-row" key={s.id} data-off={s.revoked || s.expired ? "true" : "false"}>
      <strong>{new Date(s.createdAt).toLocaleString(getLang() === "ja" ? "ja-JP" : "en-US")}</strong>
      <small>{s.revoked ? t("失効") : s.expired ? t("期限切れ") : s.expiresAt ? t("期限") + ": " + new Date(s.expiresAt).toLocaleDateString(getLang() === "ja" ? "ja-JP" : "en-US") : t("無期限")}</small>
-     {!s.revoked && !s.expired && <button className="btn btn-ghost btn-sm" disabled={state.busy} onClick={()=>void act({kind:"revokeShare",projectId:state.sharesOf!,shareId:s.id})}>{t("失効")}</button>}
+     {!s.revoked && !s.expired && <button className="btn btn-sm" disabled={state.busy} onClick={()=>void act({kind:"revokeShare",projectId:state.sharesOf!,shareId:s.id})}>{t("失効")}</button>}
     </div>)}
     {state.shares.length === 0 && <p>{t("共有リンクはまだありません。")}</p>}
    </div>}

@@ -397,7 +397,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         {/* AI への引き継ぎ: セッションをまたいで残すメモ (project.handoffs にボックスごとに 1 つ)。メモがあるときは開いた状態で出す。
             下のボタンは、判断・入出力も含めた引き継ぎ情報 (agentContext) を JSON でコピーする */}
         <details className="text-[12px]" open={!!project.handoffs?.[blockId] && b.status !== "white"}>
-          <summary title={t("セッションを越えて残す発見・次の手順・未解決事項。AI は context コマンドで判断と合わせて読み直します。")}>{t("引き継ぎ")}</summary>
+          <summary title={t("セッションを越えて残す発見・次の手順・未解決事項。AI は context コマンドで判断と合わせて読み直します。")}>{t("引き継ぎ")}<span className="summary-hint">{t("AI へ残すメモと次の手順")}</span></summary>
           {/* 引き継ぎが状態の変更より前のものだと分かったときだけ注記する (画面の文字を増やさない) */}
           {project.handoffs?.[blockId]?.note && freshnessText(b, project.handoffs[blockId].at, "older") && <p className="my-2 text-[11px]">{freshnessText(b, project.handoffs[blockId].at, "older")}</p>}
           <DebouncedText multiline className="input mt-2" value={project.handoffs?.[blockId]?.note ?? ""} disabled={readonly} placeholder={t("発見 / 次の手順 / 未解決事項")}

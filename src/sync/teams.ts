@@ -126,13 +126,13 @@ export async function performTeamAction(doFetch: (path: string, init?: RequestIn
   const jsonInit = (method: string, body?: unknown): RequestInit => ({ method, headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
   const fail = (what: string, res: Response, body: Record<string, unknown>): TeamsState => {
     const code = typeof body.code === "string" ? body.code : "";
-    const reason = res.status === 402 ? t("有料プランの契約が必要です") : res.status === 403 ? t("この操作には管理者の権限が要ります") : res.status === 404 ? t("見つかりません (チームが消えたか、メンバーではありません)")
+    const reason = res.status === 402 ? t("有料プランの契約が必要です") : res.status === 403 ? t("この操作には管理者の権限が要ります") : res.status === 404 ? t("見つかりません (ワークスペースが消えたか、メンバーではありません)")
       : code === "full" ? t("メンバーの上限 ({n} 人) に達しています。契約の人数を増やしてください", { n: String(body.limit ?? "") })
       : code === "last-admin" ? t("最後の管理者は抜けられません。先に別のメンバーを管理者にしてください")
-      : code === "too-many" ? t("作れるチームの数の上限です")
+      : code === "too-many" ? t("作れるワークスペースの数の上限です")
       : code === "too-few-seats" ? t("人数は今のメンバー数 ({n} 人) 以上にしてください", { n: String(body.members ?? "") })
       : code === "already-subscribed" ? t("すでに契約があります。契約の管理から変更してください")
-      : code === "no-subscription" ? t("このチームには契約がありません")
+      : code === "no-subscription" ? t("このワークスペースには契約がありません")
       : t("サーバーの応答: {status}", { status: String(res.status) });
     return { ...next, error: `${what}: ${reason}` };
   };
@@ -152,11 +152,11 @@ export async function performTeamAction(doFetch: (path: string, init?: RequestIn
   try {
     switch (action.kind) {
       case "teamDismiss": next.newInvite = undefined; next.link = undefined; next.join = undefined; next.open = undefined; return next;
-      case "listTeams": { const res = await doFetch("/v1/teams"); const body = await res.json().catch(() => ({})) as Record<string, unknown>; if (!res.ok) return fail(t("チームの一覧"), res, body); next.list = parseTeams(body); return next; }
+      case "listTeams": { const res = await doFetch("/v1/teams"); const body = await res.json().catch(() => ({})) as Record<string, unknown>; if (!res.ok) return fail(t("ワークスペースの一覧"), res, body); next.list = parseTeams(body); return next; }
       case "openTeam": next.open = await detail(action.id, null); next.newInvite = undefined; next.link = undefined; return next;
-      case "createTeam": { const res = await doFetch("/v1/teams", jsonInit("POST", { name: action.name })); const body = await res.json().catch(() => ({})) as Record<string, unknown>; if (!res.ok) return fail(t("チームを作る"), res, body); await refreshList(); const id = ((body.team ?? {}) as { teamId?: string }).teamId; if (id) next.open = await detail(id, "admin"); return next; }
+      case "createTeam": { const res = await doFetch("/v1/teams", jsonInit("POST", { name: action.name })); const body = await res.json().catch(() => ({})) as Record<string, unknown>; if (!res.ok) return fail(t("ワークスペースを作る"), res, body); await refreshList(); const id = ((body.team ?? {}) as { teamId?: string }).teamId; if (id) next.open = await detail(id, "admin"); return next; }
       case "renameTeam": { const res = await doFetch(`/v1/teams/${encodeURIComponent(action.id)}`, jsonInit("PATCH", { name: action.name })); const body = await res.json().catch(() => ({})) as Record<string, unknown>; if (!res.ok) return fail(t("名前の変更"), res, body); await refreshList(); next.open = await detail(action.id, null); return next; }
-      case "deleteTeam": { const res = await doFetch(`/v1/teams/${encodeURIComponent(action.id)}`, { method: "DELETE" }); const body = await res.json().catch(() => ({})) as Record<string, unknown>; if (!res.ok) return fail(t("チームの削除"), res, body); await refreshList(); next.open = undefined; return next; }
+      case "deleteTeam": { const res = await doFetch(`/v1/teams/${encodeURIComponent(action.id)}`, { method: "DELETE" }); const body = await res.json().catch(() => ({})) as Record<string, unknown>; if (!res.ok) return fail(t("ワークスペースの削除"), res, body); await refreshList(); next.open = undefined; return next; }
       case "leaveTeam": case "removeMember": {
         const who = action.kind === "leaveTeam" ? "me" : action.accountId;
         const res = await doFetch(`/v1/teams/${encodeURIComponent(action.id)}/members/${encodeURIComponent(who)}`, { method: "DELETE" });
@@ -175,7 +175,7 @@ export async function performTeamAction(doFetch: (path: string, init?: RequestIn
       case "joinPreview": case "joinTeam": {
         const res = await doFetch(`/v1/join/${encodeURIComponent(action.token)}`, action.kind === "joinTeam" ? { method: "POST" } : {});
         const body = await res.json().catch(() => ({})) as Record<string, unknown>;
-        if (!res.ok) { next.join = { token: action.token, error: res.status === 404 ? t("この招待リンクは使えません (失効・期限切れ・チームが消えた)") : fail(t("参加"), res, body).error }; return next; }
+        if (!res.ok) { next.join = { token: action.token, error: res.status === 404 ? t("この招待リンクは使えません (失効・期限切れ・ワークスペースが消えた)") : fail(t("参加"), res, body).error }; return next; }
         const team = (body.team ?? {}) as Record<string, unknown>;
         next.join = { token: action.token, team: { teamId: str(team.teamId, 64), name: str(team.name, 64), members: Array.isArray(team.members) ? team.members.length : Number(team.members) || 0 }, role: roleOf(body.role), alreadyMember: body.alreadyMember === true, joined: body.joined === true };
         if (action.kind === "joinTeam") await refreshList();
@@ -184,7 +184,7 @@ export async function performTeamAction(doFetch: (path: string, init?: RequestIn
     }
   } catch (e) {
     const err = e as { res?: Response; body?: Record<string, unknown> };
-    if (err.res && err.body) return fail(t("チーム"), err.res, err.body);
+    if (err.res && err.body) return fail(t("ワークスペース"), err.res, err.body);
     return { ...next, error: t("サーバーと通信できませんでした") + ` (${e instanceof Error ? e.message : String(e)})` };
   }
 }

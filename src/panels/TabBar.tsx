@@ -74,12 +74,12 @@ export function TabBar({ project, majors, scope, onSelect, marked }: { project: 
         <button className="canvas-tab" role="tab" data-on={scope === null} data-marked={marked?.has(null) || undefined} onClick={() => pick(null)} title={t("大項目の一覧を俯瞰する (中はそれぞれのタブで)")}>Top</button>
         {foldDone && doneCount > 0 && (
           <button className="canvas-tab canvas-tab--done-fold" role="tab" aria-expanded={false} onClick={() => setDoneOpen(true)} title={t("完了した大項目 {n} 個 (押すと展開)", { n: doneCount })}>
-            <StatusIcon status="white" /><span className="truncate">{doneCount}</span>
+            <StatusIcon status="white" /><span className="truncate">{t("完了 {n}", { n: doneCount })}</span>
           </button>
         )}
         {majors.length >= FOLD_FROM && doneOpen && doneCount > 0 && (
           <button className="canvas-tab canvas-tab--done-fold" role="tab" aria-expanded={true} onClick={() => setDoneOpen(false)} title={t("完了した大項目を畳む")}>
-            <StatusIcon status="white" /><span className="truncate">{doneCount} ▴</span>
+            <StatusIcon status="white" /><span className="truncate">{t("完了 {n}", { n: doneCount })} ▴</span>
           </button>
         )}
         {majors.filter((b) => !(foldDone && b.status === "white" && b.id !== scope)).map((b) => (

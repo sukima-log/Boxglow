@@ -100,7 +100,7 @@ export function CanvasTools({ snap, onSnap, showMap, onMap, fit, readFromTop }: 
         <ViewSwitch />
         {selectedNodes.length > 0 && <button onClick={() => fit(selectedNodes)} title={t("選んだボックス (線を選んでいれば両端のボックス) へ移動")}>To selection</button>}
         <details ref={menu} className="canvas-tools__settings">
-          <summary title={t("表示と配置 (凡例・吸着・整列・ミニマップ・操作の説明)")}>View</summary>
+          <summary title={t("表示と配置 (凡例・吸着・整列・ミニマップ・操作の説明)")}>Display</summary>
           <div className="canvas-tools__popover">
       <div className="canvas-tools__legend" aria-label={t("配線の凡例")}>
         <span><i />{t("未確定")}</span><span><i className="ready" />{t("確定済み")}</span><span><i className="selected" />{t("選択中")}</span>
@@ -156,13 +156,16 @@ export function ViewSwitch() {
     <span className="flow-direction" role="group" aria-label={t("表示の切り替え")}>
       <button disabled={canEdit && !table} aria-pressed={!table && !vertical} aria-label={t("横フロー")} title={directionTitle(t("横フロー"))} onClick={() => direction("horizontal")}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="2" y="8" width="5" height="8" rx="1"/><path d="M9 12h6m-2-3 3 3-3 3"/><rect x="18" y="8" width="4" height="8" rx="1"/></svg>
+        <span className="flow-direction__label">{t("横")}</span>
       </button>
       <button disabled={canEdit && !table} aria-pressed={!table && vertical} aria-label={t("縦フロー")} title={directionTitle(t("縦フロー"))} onClick={() => direction("vertical")}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="8" y="2" width="8" height="5" rx="1"/><path d="M12 9v6m-3-2 3 3 3-3"/><rect x="8" y="18" width="8" height="4" rx="1"/></svg>
+        <span className="flow-direction__label">{t("縦")}</span>
       </button>
-      {/* 担当の一覧 (表): 記号だけにして、説明はツールチップに出す */}
+      {/* 担当の一覧 (表): 記号に短い文字を添え、説明はツールチップに出す */}
       <button className="view-switch__table" aria-pressed={table} aria-label="In charge" title={t("In charge: 担当のボックスを表で見る")} onClick={toggleTable}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14h18M9 9v11"/></svg>
+        <span className="flow-direction__label">{t("表")}</span>
       </button>
     </span>
   );

@@ -60,7 +60,6 @@ export function HomeDialog() {
   // 「自分の計画で始める」の引き出しを利用者が開閉した結果 (null = まだ触っていない → 下の hasOwn に従う)
   const [ownOpen, setOwnOpen] = useState<boolean | null>(null);
   // このブラウザに保存済みの計画がある、または前回開いたファイルを覚えている (= 初回ではない)
-  const hasOwn = projects.length > 0 || !!last;
 
   // 開いたときに、保存済みの計画の一覧と、前回開いたファイル (Reopen 用) を読む
   useEffect(() => {
@@ -170,21 +169,21 @@ export function HomeDialog() {
           <button className="btn btn-primary" onClick={openSample}>{t("サンプルを試す")}</button>
         </section>
         {/* 自分の計画を開く・作る操作の引き出し。上: 既にあるファイルを開く、下: 新しい計画を作る。
-            保存済みの計画や前回のファイルがある人 (2 回目以降) には最初から開いて見せ、何も無い初回だけ閉じておく。
+            最初から開いて見せる (閉じていると、ファイルを開くまでに 1 手増える。使いやすさの見直し 2026-10-18)。
             利用者が自分で開閉したら、その状態を優先する (ownOpen) */}
-        <details className="home-disclosure" open={ownOpen ?? hasOwn} onToggle={(e) => { const now = e.currentTarget.open; if (now !== (ownOpen ?? hasOwn)) setOwnOpen(now); }}>
+        <details className="home-disclosure" open={ownOpen ?? true} onToggle={(e) => { const now = e.currentTarget.open; if (now !== (ownOpen ?? true)) setOwnOpen(now); }}>
           <summary>{t("自分の計画で始める")}</summary>
         {/* 既にあるファイルを開く: AI を使うかどうかに関係なく、ここから開く (見る / コピーして編集 / 編集してファイルに保存、の 3 通りを 1 か所に並べる) */}
         <section className="home-section home-section--shared" aria-labelledby="home-shared">
           <h2 id="home-shared" className="font-head text-[18px]">{t("ファイルを開く")}</h2>
-          <p className="home-description">{t("手元の boxglow.json を開きます。")}</p>
+          <p className="home-description">{t("手元の boxglow.json を開きます。開いた後、上の帯の「このファイルを編集する」で、そのファイルにそのまま保存できます。")}</p>
           <div className="flex flex-wrap gap-2">
             {canOpenLocalFile() && <button className="btn btn-primary" onClick={() => void openFile()} title={t("ファイルを開いて、図として見ます (まず閲覧専用。帯の「このファイルを編集する」で、そのファイルに保存できます)")}>{t("開いて見る")}</button>}
             {canOpenLocalFile() && last && <button className="btn" onClick={() => void openFile(last)} title={t("前回開いたファイル")}>Reopen {last.name}</button>}
             <button className="btn" onClick={() => void doImport()} title={t("ファイルの中身を、このブラウザにコピーして編集します (元のファイルは変わりません)")}>{t("コピーして編集")}</button>
           </div>
           <div className="home-server">
-            <p className="home-description">{t("編集してファイルに保存するには、計画のあるフォルダーで実行します (AI と一緒に使うときも、これです)。VS Code の拡張でも開けます。")}</p>
+            <p className="home-description">{t("AI (Claude Code / Codex) と同じファイルを編集するときは、計画のあるフォルダーで次を実行するか、VS Code の拡張で開きます。")}</p>
             <div className="home-command">
               <code>npx boxglow serve --open</code>
               <button className="btn btn-sm" onClick={() => void copyCommand()}>{t("コピー")}</button>

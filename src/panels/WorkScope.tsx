@@ -45,7 +45,7 @@ export function WorkflowSettings({ project }: { project: Project }) {
   const apply = useProjectStore(s => s.apply);
   const readonly = useProjectStore(s => s.readonly);
   return <details className="text-[12px] workflow-settings">
-    <summary>{t("AI の作業確認")}</summary>
+    <summary>{t("AI の作業確認")}<span className="summary-hint">{t("入力待ち・成果物なしを許すか")}</span></summary>
     <div className="flex flex-col gap-2 mt-2">
       {([["startWithoutInputs", "入力待ちで開始"], ["doneWithoutArtifacts", "成果物なしで完了"]] as const).map(([key, label]) =>
         <label key={key}>{t(label)}<select className="input" aria-label={t(label)} disabled={readonly} value={project.workflowPolicy?.[key] ?? "warn"}

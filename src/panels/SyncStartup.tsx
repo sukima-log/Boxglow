@@ -119,7 +119,7 @@ export function SyncStartup({ status, act, unsaved, receive = false }: {
     <button className="btn btn-sm" disabled={!id.trim() || unsaved} onClick={() => void request({ kind: "openProject", operationId: op.operationId, projectId: id.trim(), destination, name })}>{t("開く")}</button>
    </details>
   </>}
-  {/* コードや URL を出している間は、その欄の「中止」だけにする (同じ画面に 2 つ出さない) */}
-  {!(receive && status.signIn) && <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void request({ kind: "cancelBegin" })}>{t("中止")}</button>}
+  {/* コードや URL を出している間は、その欄 (SignInCode) の「中止」だけにする (同期パネルでも Home でも、同じ画面に 2 つ出さない) */}
+  {!status.signIn && <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => void request({ kind: "cancelBegin" })}>{t("中止")}</button>}
  </section>;
 }

@@ -27,9 +27,9 @@ export function JoinDialog() {
   const close = () => { setToken(null); void act({ kind: "teamDismiss" }); };
   // Home の覆いより上に出す (別の重なり文脈にならないよう、body の直下に描く)
   return createPortal(
-    <div className="join-dialog" role="dialog" aria-label={t("チームへの参加")}>
+    <div className="join-dialog" role="dialog" aria-label={t("ワークスペースへの参加")}>
       <div className="join-dialog__card">
-        <strong>{t("チームへの参加")}</strong>
+        <strong>{t("ワークスペースへの参加")}</strong>
         {!signedIn ? (
           <>
             <p>{t("招待リンクを開きました。参加するには、先にサインインしてください。")}</p>
@@ -41,7 +41,7 @@ export function JoinDialog() {
         ) : join?.joined || join?.alreadyMember ? (
           <>
             <p>{join.joined ? t("「{name}」に参加しました。") : t("「{name}」のメンバーです。", { name: join.team?.name ?? "" })}</p>
-            <p className="muted">{t("Home の「サーバーの計画を受け取る」や、同期の「サーバーの計画を開く」で、チームを選ぶとその計画を開けます。")}</p>
+            <p className="muted">{t("Home の「サーバーの計画を受け取る」や、同期の「サーバーの計画を開く」で、ワークスペースを選ぶとその計画を開けます。")}</p>
           </>
         ) : join?.team ? (
           <>

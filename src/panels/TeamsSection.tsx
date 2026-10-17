@@ -101,18 +101,18 @@ export function TeamsSection({ status, act }: { status: SyncStatus; act: (a: Hos
               {teams?.link && <a className="btn btn-primary btn-sm" href={teams.link.url} target="_blank" rel="noreferrer" onClick={() => void act({ kind: "teamDismiss" })}>{teams.link.kind === "checkout" ? t("申し込み画面を開く") : t("契約の管理を開く")}</a>}
               {/* ログ (admin) */}
               {admin && detail.log && detail.log.length > 0 && (
-                <details className="teams__log"><summary className="muted">{t("記録 {n} 件", { n: String(detail.log.length) })}</summary>
+                <details className="teams__log"><summary className="muted">{t("記録 {n} 件 (参加・役割・契約の変更)", { n: String(detail.log.length) })}</summary>
                   {detail.log.slice(0, 50).map((l, i) => <div key={i} className="muted teams__logrow">{new Date(l.at).toLocaleString()} · {l.actor} · {l.action} {l.target}</div>)}
                 </details>
               )}
               {/* 離脱 / 削除 */}
               <div className="sync-panel__row">
-                {confirm === null && <button className="btn btn-ghost btn-sm" disabled={teams?.busy} onClick={() => setConfirm("leave")}>{t("このワークスペースから抜ける…")}</button>}
-                {confirm === null && admin && <button className="btn btn-ghost btn-sm danger" disabled={teams?.busy} onClick={() => setConfirm("delete")}>{t("ワークスペースを消す…")}</button>}
+                {confirm === null && <button className="btn btn-sm" disabled={teams?.busy} onClick={() => setConfirm("leave")}>{t("このワークスペースから抜ける…")}</button>}
+                {confirm === null && admin && <button className="btn btn-sm danger" disabled={teams?.busy} onClick={() => setConfirm("delete")}>{t("ワークスペースを消す…")}</button>}
               </div>
               {confirm && (
                 <div className="sync-lifecycle__confirm">
-                  <p>{confirm === "delete" ? t("「{name}」を消します。中の計画はサーバーから 30 日後に消えます (手元のファイルは残ります)。", { name: detail.name }) : t("「{name}」から抜けます。このチームの計画は同期できなくなります。", { name: detail.name })}</p>
+                  <p>{confirm === "delete" ? t("「{name}」を消します。中の計画はサーバーから 30 日後に消えます (手元のファイルは残ります)。", { name: detail.name }) : t("「{name}」から抜けます。このワークスペースの計画は同期できなくなります。", { name: detail.name })}</p>
                   <div className="sync-panel__row">
                     <button className="btn btn-primary btn-sm danger" disabled={teams?.busy} onClick={() => { setConfirm(null); void act(confirm === "delete" ? { kind: "deleteTeam", id: detail.teamId } : { kind: "leaveTeam", id: detail.teamId }); }}>{confirm === "delete" ? t("消す") : t("抜ける")}</button>
                     <button className="btn btn-ghost btn-sm" onClick={() => setConfirm(null)}>{t("やめる")}</button>

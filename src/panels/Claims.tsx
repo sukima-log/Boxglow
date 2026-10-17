@@ -38,7 +38,7 @@ export function ClaimSettings({project}:{project:Project}) {
     if(next.mode==="off")for(const [id,c] of Object.entries(p.claims??{}))if(!c.releasedAt)q=releaseClaim(q,id,t("受け持ち制御を無効化"),Date.now());
     return {...q,log:[...q.log,{id:crypto.randomUUID(),at:new Date().toISOString(),actor:"human",kind:"note",claimEvent:"policy",message:t("受け持ち設定: {mode}",{mode:next.mode})}]};
   },{history:false});
-  return <details className="text-[12px] claim-settings"><summary>{t("AI の受け持ち")}</summary>
+  return <details className="text-[12px] claim-settings"><summary>{t("AI の受け持ち")}<span className="summary-hint">{t("AI の排他的な受け持ちと期限")}</span></summary>
     <div className="flex flex-col gap-2 mt-2">
       <label>{t("受け持ち制御")}<select className="input" aria-label={t("受け持ち制御")} value={policy.mode} disabled={readonly} onChange={e=>change({...policy,mode:e.target.value as ClaimPolicy["mode"]})}>
         <option value="off">{t("無効 (既定)")}</option><option value="reject">{t("有効・範囲外を拒否 (推奨)")}</option><option value="warn">{t("有効・警告のみ")}</option>

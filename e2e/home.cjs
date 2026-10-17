@@ -16,8 +16,11 @@ const { chromium, BASE, check, result } = require('./lib.cjs');
       page.on('pageerror', e => errors.push(String(e)));
       await page.goto(BASE + '?lang=en');
       await page.getByRole('button', { name: 'Try the sample', exact: true }).waitFor();
-      check(`Home ${width}px: 初回は自分の計画の操作 (引き出し) が閉じている`, !await page.getByText('npx boxglow serve --open', {exact:true}).isVisible());
+      // 引き出しは最初から開いている (閉じていると、ファイルを開くまでに 1 手増える。2026-10-18)。閉じて開き直せることも見る
+      check(`Home ${width}px: 初回から自分の計画の操作 (引き出し) が開いている`, await page.getByRole('heading', { name: 'Open a file', exact: true }).isVisible());
       check(`Home ${width}px: 流れ図と「登録不要」の文言が無い`, await page.locator('.home-flow').count() === 0 && await page.getByText('No sign-up', { exact: false }).count() === 0);
+      await page.locator('.home-disclosure > summary').click();
+      check(`Home ${width}px: 引き出しを閉じられる`, !await page.getByRole('heading', { name: 'Open a file', exact: true }).isVisible());
       await page.locator('.home-disclosure > summary').click();
       await page.getByRole('heading', { name: 'Open a file', exact: true }).waitFor();
       check(`Home ${width}px: リポジトリのファイルとブラウザ内の計画の違いが書かれている`, await page.getByText('They do not automatically sync', { exact: false }).isVisible());
