@@ -15,6 +15,8 @@ import { fromJSON, toJSON } from "../model/graph";
 import { parseConflictResolution, type ConflictResolution } from "../model/conflict-groups";
 import { browserSyncIO } from "./browser-io";
 import { applyRevert, parseVersionList, planNameOf } from "./versions";
+import { parseBilling } from "./billing";
+import { SyncPaymentError } from "./run";
 import { haltView } from "./halt-view";
 import { runSync, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncOptions, type SyncResult } from "./run";
 import type { HostAction, SyncAction, SyncStatus } from "./status";
@@ -107,7 +109,7 @@ export class BrowserSyncHost {
       if (credentials !== this.generation) return;
       if (res.status === 401 || res.status === 403) { this.account = { credentials }; return; }
       if (!res.ok) { this.account = { credentials, problem: `HTTP ${res.status}` }; return; }
-      const me = await res.json() as { account?: unknown; login?: unknown; signedInWith?: unknown };
+      const me = await res.json() as { account?: unknown; login?: unknown; signedInWith?: unknown; billing?: unknown };
       if (typeof me.account !== "string") { this.account = { credentials, problem: "me" }; return; }
       let identities: ("github" | "google")[] | undefined;
       try {
@@ -116,7 +118,7 @@ export class BrowserSyncHost {
       } catch { /* 一覧は無くてもよい */ }
       if (credentials !== this.generation) return;
       this.account = { credentials, account: { accountId: me.account, display: typeof me.login === "string" && me.login ? me.login : me.account
-        , signedInWith: me.signedInWith === "google" || me.signedInWith === "github" ? me.signedInWith : "unknown", ...(identities ? { identities } : {}) } };
+        , signedInWith: me.signedInWith === "google" || me.signedInWith === "github" ? me.signedInWith : "unknown", ...(identities ? { identities } : {}), ...(parseBilling(me.billing) ? { billing: parseBilling(me.billing)! } : {}) } };
     } catch (e) { if (credentials === this.generation) this.account = { credentials, problem: e instanceof Error ? e.message : String(e) }; }
   }
   private signedIn(): boolean { return !!this.account?.account; }
@@ -210,7 +212,7 @@ export class BrowserSyncHost {
   private async signOut(): Promise<void> {
     this.cancelSignIn();
     try { await this.doFetch(`${this.server}/v1/session`, { method: "DELETE", redirect: "error" }); } catch { /* Cookie が消えれば、サーバー側のトークンは期限で消える */ }
-    this.generation++; this.account = null; this.startups.clear(); this.choices.clear(); this.results.clear(); this.message = undefined;
+    this.generation++; this.account = null; this.startups.clear(); this.choices.clear(); this.results.clear(); this.message = undefined; this.billingLink = undefined;
     this.emit();
   }
 
@@ -383,6 +385,9 @@ export class BrowserSyncHost {
       case "cancelSignIn": this.cancelSignIn(); break;
       case "signOut": await this.signOut(); break;
       case "deleteAccount": await this.deleteAccount(); break;
+      case "billingCheckout": await this.billingLinkFor("checkout", action.plan, action.seats); break;
+      case "billingPortal": await this.billingLinkFor("portal"); break;
+      case "billingDismiss": this.billingLink = undefined; this.emit(); break;
       case "pause": this.paused = true; break;
       case "resume": this.paused = false; break;
       case "bind": case "syncNow": if (file) await this.syncFile(file, {}); break;
@@ -439,6 +444,28 @@ export class BrowserSyncHost {
     }
   }
 
+  /** 申し込み / 契約の管理の URL (最新の 1 つ。サインアウトで消す) */
+  private billingLink: SyncStatus["billingLink"];
+  /** 課金の画面の URL をサーバーにもらう (Cookie のセッション)。結果は status.billingLink */
+  private async billingLinkFor(kind: "checkout" | "portal", plan?: "personal" | "team", seats?: number): Promise<void> {
+    if (!this.signedIn()) { this.message = t("先にサインインしてください"); this.emit(); return; }
+    this.billingLink = undefined;
+    try {
+      const res = await this.doFetch(`${this.server}/v1/billing/${kind}`, { method: "POST", redirect: "error", headers: { "content-type": "application/json" }, body: JSON.stringify(kind === "checkout" ? { plan, seats } : {}) });
+      const body = await res.json().catch(() => ({})) as { url?: unknown; code?: unknown };
+      if (!res.ok || typeof body.url !== "string" || !/^https:\/\//.test(body.url)) {
+        this.message = res.status === 409 && body.code === "already-subscribed" ? t("すでに契約があります。契約の管理から変更してください")
+          : res.status === 503 ? t("このサーバーでは、課金はまだ使えません")
+          : t("課金の画面を用意できませんでした (サーバーの応答: {status})", { status: res.status });
+        this.emit(); return;
+      }
+      this.billingLink = { kind, url: body.url, ...(plan ? { plan } : {}) };
+      this.message = undefined;
+      this.account = null;
+    } catch { this.message = t("サーバーと通信できませんでした"); }
+    this.emit();
+  }
+
   /** 今の状態を組み立てる (file = 今の画面の計画 id) */
   status(file: string | null): SyncStatus {
     const account = this.account?.account;
@@ -453,6 +480,7 @@ export class BrowserSyncHost {
     , ...(this.signingIn?.code ? { signIn: this.signingIn.code } : {})
     , ...(this.message ? { message: this.message } : {})
     , ...(this.notInvited ? { notInvited: this.notInvited } : {})
+    , ...(this.billingLink ? { billingLink: this.billingLink } : {})
     };
     const unsafe = serverProblem(this.server);
     if (unsafe) { status.state = "problem"; status.problem = { kind: "configuration", text: unsafe, fix: "server-setting" }; return status; }
@@ -466,7 +494,8 @@ export class BrowserSyncHost {
     if (r.status === "error") {
       const e = r.error;
       status.state = "problem";
-      status.problem = e instanceof SyncAuthError ? { kind: "auth", text: t("サーバーが利用者を確かめられませんでした"), fix: "credentials" }
+      status.problem = e instanceof SyncPaymentError ? { kind: "payment", text: t("有料プランの契約が必要です"), fix: "billing" }
+        : e instanceof SyncAuthError ? { kind: "auth", text: t("サーバーが利用者を確かめられませんでした"), fix: "credentials" }
         : e instanceof SyncRejectedError ? { kind: "rejected", text: t("サーバーが、この計画の同期を受け付けませんでした (待っても直りません)"), fix: "rerun" }
         : e instanceof SyncNetworkError ? { kind: "network", text: t("サーバーと通信できませんでした"), fix: "wait" }
         : { kind: "busy", text: e instanceof Error ? e.message : String(e), fix: "rerun" };

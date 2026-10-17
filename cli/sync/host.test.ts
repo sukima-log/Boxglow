@@ -9,7 +9,7 @@ import { addBlock, createProject, defaultTaskParent, fromJSON, toJSON, updateBlo
 import type { Project } from "../../src/model/types";
 import { syncOnce } from "./client";
 import { readCredentials, saveCredentials } from "./credentials";
-import { SyncHost, type SyncStatus } from "./host";
+import { SyncHost, type SyncStatus, parseHostAction } from "./host";
 import { lockWatch } from "./watch";
 import { TestSyncServer } from "./test-server";
 
@@ -208,6 +208,45 @@ describe("サインインとサインアウト", () => {
     await host.act(file, { kind: "cancelLifecycle" });
     await host.act(file, { kind: "confirmLifecycle", choiceId: stale });
     expect(server.project(remoteId, "acc-hist")!.versions.length).toBe(3);
+    await host.stop();
+  });
+
+  it("課金: /v1/me の billing が状態に出る。申し込み・契約の管理の URL は billingLink に入り、サインアウトで消える。契約が無いと同期は 402 → problem = payment", async () => {
+    const { file } = planFile("p1");
+    signedIn("acc-pay");
+    server.billing.required = true;
+    const { host } = make();
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    await settle(); await settle();
+    let state = host.status(file);
+    expect(state.problem).toMatchObject({ kind: "payment", fix: "billing" });
+    expect(state.state).toBe("problem");
+    expect(state.credentials.account?.billing).toMatchObject({ required: true, entitled: false, plan: null, checkout: true, portal: false });
+    // 契約の管理は顧客が無いので失敗 (message)。申し込みは URL
+    state = await host.act(file, { kind: "billingPortal" });
+    expect(state.billingLink).toBeUndefined();
+    expect(state.message).toBeTruthy();
+    state = await host.act(file, { kind: "billingCheckout", plan: "team", seats: 3 });
+    expect(state.billingLink).toMatchObject({ kind: "checkout", url: "https://stripe.test/checkout/acc-pay", plan: "team" });
+    expect(server.billing.calls.at(-1)).toMatchObject({ kind: "checkout", account: "acc-pay", body: { plan: "team", seats: 3 } });
+    // 顧客ができたので契約の管理も URL。閉じると消える
+    state = await host.act(file, { kind: "billingPortal" });
+    expect(state.billingLink).toMatchObject({ kind: "portal" });
+    state = await host.act(file, { kind: "billingDismiss" });
+    expect(state.billingLink).toBeUndefined();
+    // 契約ができた (Webhook 相当) → 同期が通り、billing が entitled
+    server.billing.subscribed.add("acc-pay");
+    state = await host.act(file, { kind: "syncNow" });
+    expect(state.state).toBe("synced");
+    await settle(); await settle();
+    expect(host.status(file).credentials.account?.billing).toMatchObject({ entitled: true, plan: "personal", portal: true });
+    // 受け取る形の照合
+    expect(parseHostAction(JSON.stringify({ kind: "billingCheckout", plan: "personal" }))).toEqual({ kind: "billingCheckout", plan: "personal" });
+    expect(parseHostAction(JSON.stringify({ kind: "billingCheckout", plan: "gold" }))).toBeNull();
+    expect(parseHostAction(JSON.stringify({ kind: "billingCheckout", plan: "team", seats: 500 }))).toBeNull();
+    await host.act(file, { kind: "signOut" });
+    expect(host.status(file).billingLink).toBeUndefined();
     await host.stop();
   });
 

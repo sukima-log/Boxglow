@@ -1,3 +1,4 @@
+import type { Billing } from "./billing";
 /**
  * 画面からの同期で、裏方 (cli/sync/host.ts) と画面 (src/store / src/panels) が共有する型
  * 画面は、この状態を表示し、操作を送るだけ (同期の判断・通信・資格情報は裏方にある。トークンの値は、この状態に入らない)
@@ -45,7 +46,9 @@ export interface SyncStatus {
   /** 資格情報の出どころと、確かめた利用者 (トークンの値は入れない) */
   credentials: { source: "env" | "stored" | "none"; account?: { accountId: string; display: string; signedInWith: "github" | "google" | "unknown"
     /** このアカウントに付いているサインインの手段 (サーバーが答えたときだけ。2 つ目を足す操作の表示に使う) */
-    identities?: ("github" | "google")[] } };
+    identities?: ("github" | "google")[]
+    /** 課金の状態 (サーバーが答えたときだけ) */
+    billing?: Billing } };
   /** 常駐の同期の所有者: self = この裏方 / external = 別のプロセス / unknown = ロックの持ち主を判定できない / none = まだ取っていない */
   owner: "self" | "external" | "unknown" | "none";
   /** 今の画面のファイル (開いていなければ null) */
@@ -56,7 +59,9 @@ export interface SyncStatus {
   /** 確認が要る場面 (選べる操作つき。choiceIds = 項目の id → 選択 ID) */
   halt?: HaltView & { choiceIds: Record<string, string>; resolutionChoiceId?: string };
   /** 選べる操作の無い問題と、直す場所 */
-  problem?: { kind: "configuration" | "auth" | "network" | "rejected" | "state-unreadable" | "busy"; text: string; fix: "server-setting" | "credentials" | "wait" | "local-file" | "sync-state" | "rerun" };
+  problem?: { kind: "configuration" | "auth" | "payment" | "network" | "rejected" | "state-unreadable" | "busy"; text: string; fix: "server-setting" | "credentials" | "billing" | "wait" | "local-file" | "sync-state" | "rerun" };
+  /** 申し込み / 契約の管理の画面の URL (操作 billingCheckout / billingPortal の結果。画面はリンクとして出す。次の操作やサインアウトで消える) */
+  billingLink?: { kind: "checkout" | "portal"; url: string; plan?: string };
   /** サインインの途中 (コードを表示している間) */
   signIn?: ({ provider: "github"; userCode: string; verificationUrl: string; expiresAt: string }
          | { provider: "google"; url: string; expiresAt: string }) & { link?: boolean };
@@ -110,6 +115,8 @@ export type HostAction =
   | { kind: "signIn"; provider: "github" | "google" } | { kind: "cancelSignIn" } | { kind: "signOut" }
   /** 本人によるアカウントの削除 (サーバーが止めてトークンを全部失効させ、30 日後に保存データを消す。手元はサインアウトと同じ片付け) */
   | { kind: "deleteAccount" }
+  /** 課金: 申し込みの画面 (Stripe Checkout) / 契約の管理 (Customer Portal) の URL をもらう (結果は status.billingLink) */
+  | { kind: "billingCheckout"; plan: "personal" | "team"; seats?: number } | { kind: "billingPortal" } | { kind: "billingDismiss" }
   /** 2 つ目のサインイン手段を、サインイン済みのアカウントに足す (コードや URL は signIn と同じ欄に出る) */
   | { kind: "linkIdentity"; provider: "github" | "google" }
   | { kind: "bind" } | { kind: "syncNow" }

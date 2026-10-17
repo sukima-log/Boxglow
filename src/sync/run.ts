@@ -96,6 +96,10 @@ export class SyncConfigurationError extends Error {
 export class SyncAuthError extends SyncNetworkError {
   constructor(readonly status: number) { super(`not authorized (${status})`); }
 }
+/** 契約が無いので断られた (402)。申し込めば直る。待っても直らないので通信の失敗とは分ける */
+export class SyncPaymentError extends SyncNetworkError {
+  constructor() { super("payment required (402)"); }
+}
 /**
  * サーバーが、この計画の要求を断った (待っても、送り直しても直らない: 大きすぎる・クライアントが古い・計画として不正・操作の食い違い・保存の上限)。
  * 通信の失敗とは分ける (通信の失敗として扱うと、同じ要求を送り続け、常時の同期ではほかの計画まで止めてしまう)
@@ -108,6 +112,7 @@ const TERMINAL_STATUS = new Set([400, 413, 422, 426, 428, 507]);
 /** 応答の状態コードが「利用者を確かめられない」なら、その旨の例外を投げる */
 function rejectUnauthorized(res: Response): void {
   if (res.status === 401 || res.status === 403) throw new SyncAuthError(res.status);
+  if (res.status === 402) throw new SyncPaymentError();
 }
 
 /** AI用入口から人の判断が必要な操作を要求した場合。通信や状態の作成より前に拒否する。 */

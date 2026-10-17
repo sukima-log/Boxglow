@@ -63,6 +63,8 @@ export class TestSyncServer {
   revoked = new Set<string>();
   /** 本人の操作で削除を受け付けた利用者 (DELETE /v1/account) */
   deletedAccounts = new Set<string>();
+  /** 課金の再現: required = 契約を求める (契約の無い利用者の同期は 402)、subscribed = 契約のある利用者、customers = 顧客のできた利用者 */
+  billing = { required: false, subscribed: new Set<string>(), customers: new Set<string>(), calls: [] as { kind: string; account: string; body: unknown }[] };
   private codes = 0;
   /** 中身の大きさの上限 (バイト)。超えた PUT は、操作の照合より前に 413 で断る (本番のサーバーと同じ順) */
   maxBytes = Infinity;
@@ -189,11 +191,30 @@ export class TestSyncServer {
       send(200, JSON.stringify({ account, identities: this.identities.get(account) ?? ["github"] }));
       return;
     }
+    const billingOf = () => ({ required: this.billing.required, entitled: !this.billing.required || this.billing.subscribed.has(account)
+      , plan: this.billing.subscribed.has(account) ? "personal" : null, status: this.billing.subscribed.has(account) ? "active" : "none", seats: 1, periodEnd: null
+      , checkout: !this.billing.subscribed.has(account), portal: this.billing.customers.has(account) });
     if (req.method === "GET" && req.url === "/v1/me") {
       send(200, JSON.stringify({ account, login: this.issued.get(bearer ?? "")?.login ?? account, devices: [{ name: "this", current: true }]
-      , usage: { projects: projects.size, contentBytes: 1_500_000 }, limits: { projects: 10, contentBytes: 200_000_000 } }));
+      , usage: { projects: projects.size, contentBytes: 1_500_000 }, limits: { projects: 10, contentBytes: 200_000_000 }, billing: billingOf() }));
       return;
     }
+    // 課金の口 (本番と同じ形。URL は偽物)
+    if (req.method === "GET" && req.url === "/v1/billing") { send(200, JSON.stringify(billingOf())); return; }
+    if (req.method === "POST" && (req.url === "/v1/billing/checkout" || req.url === "/v1/billing/portal")) {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk as Buffer);
+      const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as Record<string, unknown>;
+      const kind = req.url.endsWith("checkout") ? "checkout" : "portal";
+      this.billing.calls.push({ kind, account, body });
+      if (kind === "checkout" && this.billing.subscribed.has(account)) { send(409, JSON.stringify({ code: "already-subscribed" })); return; }
+      if (kind === "portal" && !this.billing.customers.has(account)) { send(409, JSON.stringify({ code: "no-customer" })); return; }
+      if (kind === "checkout") this.billing.customers.add(account);
+      send(200, JSON.stringify({ url: `https://stripe.test/${kind}/${account}`, ...(kind === "checkout" ? { plan: body.plan, seats: body.plan === "team" ? body.seats ?? 2 : 1 } : {}) }));
+      return;
+    }
+    // 契約を求めていて、この利用者に契約が無ければ、同期の要求は 402 (自分の情報・課金・サインアウトは上で済んでいる)
+    if (this.billing.required && !this.billing.subscribed.has(account) && req.url?.startsWith("/v1/projects")) { send(402, JSON.stringify({ code: "payment-required" })); return; }
     if (req.method === "DELETE" && req.url === "/v1/account") {
       // 本人によるアカウントの削除: confirm: true が無ければ 400。受け付けたら、その利用者に発行したトークンを全部失効させ、削除済みに印を付ける
       const chunks: Buffer[] = [];

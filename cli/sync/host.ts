@@ -18,6 +18,8 @@ import { APP_VERSION } from "../../src/model/version";
 import { t } from "../../src/i18n/core";
 import { inspectLock } from "../file-store";
 import { syncOnce, SyncConfigurationError, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
+import { SyncPaymentError } from "../../src/sync/run";
+import { parseBilling } from "../../src/sync/billing";
 import { haltView, type SyncAction } from "./command";
 import { credentialsPath, readCredentials, resolveToken } from "./credentials";
 import { runGoogleLogin, runLinkIdentity, runLogin, runLogout, serverProblem } from "./login";
@@ -381,6 +383,7 @@ export class SyncHost {
       const lines: string[] = [];
       await runLogout({ server: this.server, allowEnvironmentToken: this.options.allowEnvironmentToken, out: (line) => lines.push(line), fetch: this.doFetch });
       this.account = null;
+      this.billingLink = undefined;
       this.results.clear();
       this.message = lines.at(-1);
     } finally {
@@ -413,6 +416,34 @@ export class SyncHost {
     this.message = t("アカウントの削除を受け付けました。保存データは {date} に消えます (それまでは support@boxglow.app への連絡で取り消せます)", { date: accepted.wipeAt ? accepted.wipeAt.slice(0, 10) : t("30 日後") });
     this.emit();
   }
+  /** 申し込み / 契約の管理の URL (最新の 1 つ。サインアウトで消す) */
+  private billingLink: SyncStatus["billingLink"];
+  /**
+   * 課金の画面の URL をサーバーにもらう (Stripe Checkout / Customer Portal)。結果は status.billingLink (画面がリンクとして出す)
+   * Input : kind = "checkout" | "portal", plan / seats = checkout のとき。Output: なし (失敗は message)
+   */
+  private async billingLinkFor(kind: "checkout" | "portal", plan?: "personal" | "team", seats?: number): Promise<void> {
+    const creds = this.resolveCredentials();
+    if (!creds) { this.message = t("先にサインインしてください"); this.emit(); return; }
+    const unsafe = serverProblem(this.server);
+    if (unsafe) { this.message = unsafe; this.emit(); return; }
+    this.billingLink = undefined;
+    try {
+      const res = await this.doFetch(`${this.server}/v1/billing/${kind}`, { method: "POST", redirect: "error", headers: { authorization: `Bearer ${creds.token}`, "content-type": "application/json", "x-boxglow-version": APP_VERSION }, body: JSON.stringify(kind === "checkout" ? { plan, seats } : {}) });
+      const body = await res.json().catch(() => ({})) as { url?: unknown; code?: unknown };
+      if (!res.ok || typeof body.url !== "string" || !/^https:\/\//.test(body.url)) {
+        this.message = res.status === 409 && body.code === "already-subscribed" ? t("すでに契約があります。契約の管理から変更してください")
+          : res.status === 503 ? t("このサーバーでは、課金はまだ使えません")
+          : t("課金の画面を用意できませんでした (サーバーの応答: {status})", { status: res.status });
+        this.emit(); return;
+      }
+      this.billingLink = { kind, url: body.url, ...(plan ? { plan } : {}) };
+      this.message = undefined;
+      // 申し込みや解約の後に /v1/me を読み直すため、次の確認で資格情報の控えを捨てる
+      this.account = null;
+    } catch { this.message = t("サーバーと通信できませんでした"); }
+    this.emit();
+  }
   private message: string | undefined;
   /** 直前のサインインで「招待されていない」と言われたこと (画面に理由と順番待ちを出す。次のサインインで消す) */
   private notInvited: SyncStatus["notInvited"];
@@ -427,7 +458,7 @@ export class SyncHost {
     const unsafe = serverProblem(this.server);
     if (unsafe) { this.account = { credentials, problem: unsafe }; return; }
     // (/v1/me を JSON で読む。whoami の表示の文を読み取ると、言語や ID の形で読めなくなる)
-    type Me = { account?: unknown; login?: unknown; signedInWith?: unknown };
+    type Me = { account?: unknown; login?: unknown; signedInWith?: unknown; billing?: unknown };
     const read = async (): Promise<{ me: Me | null; problem?: string }> => {
       try {
         const res = await this.doFetch(`${this.server}/v1/me`, { headers: { authorization: `Bearer ${this.resolveCredentials()!.token}`, "x-boxglow-version": APP_VERSION }, redirect: "error" });
@@ -446,7 +477,8 @@ export class SyncHost {
       if (res.ok) { const list = (await res.json() as { identities?: unknown }).identities; if (Array.isArray(list)) identities = list.filter((x): x is "github" | "google" => x === "github" || x === "google"); }
     } catch { /* 一覧は無くてもよい */ }
     if (this.credentialsGeneration() !== credentials) return;
-    this.account = { credentials, account: { accountId: me.account, display: typeof me.login === "string" && me.login ? me.login : me.account, signedInWith, ...(identities ? { identities } : {}) } };
+    const billing = parseBilling(me.billing);
+    this.account = { credentials, account: { accountId: me.account, display: typeof me.login === "string" && me.login ? me.login : me.account, signedInWith, ...(identities ? { identities } : {}), ...(billing ? { billing } : {}) } };
   }
 
   /** 計画ごとの開始操作。IDは画面の古いクリックを拒否するための印。認証情報は入れない。 */
@@ -721,6 +753,9 @@ export class SyncHost {
       case "cancelSignIn": if (!this.signingIn?.owner || this.signingIn.owner.file === real) this.cancelSignIn(); break;
       case "signOut": await this.signOut(); break;
       case "deleteAccount": await this.deleteAccount(); break;
+      case "billingCheckout": await this.billingLinkFor("checkout", action.plan, action.seats); break;
+      case "billingPortal": await this.billingLinkFor("portal"); break;
+      case "billingDismiss": this.billingLink = undefined; this.emit(); break;
       case "pause": this.paused = true; break;
       case "resume": this.paused = false; break;
       case "bind":
@@ -808,6 +843,7 @@ export class SyncHost {
       session: this.session, seq: ++this.seq, support: this.support, credentials, owner: this.owner,
       server: this.server, isDefaultServer: isDefaultSyncServer(this.server), destinationPicker:this.options.destinationPicker,
       ...(real && this.localBackups.get(real)?.credentials === this.credentialsGeneration() ? {localBackup:this.localBackups.get(real)!.path} : {}),
+      ...(this.billingLink ? { billingLink: this.billingLink } : {}),
       ...(real && this.lifecycles.get(real)?.credentials === this.credentialsGeneration() ? {lifecycle:this.lifecycles.get(real)!.state} : {}),
       ...(real && this.startups.has(real) ? {startup:(( {credentials:_,...safe} ) => safe)(this.startups.get(real)!)} : {})
     , file: real ? { path: real, enabled, binding } : null
@@ -844,7 +880,8 @@ export class SyncHost {
     if (r.status === "error") {
       const e = r.error;
       status.state = "problem";
-      status.problem = e instanceof SyncAuthError ? { kind: "auth", text: t("サーバーが利用者を確かめられませんでした"), fix: "credentials" }
+      status.problem = e instanceof SyncPaymentError ? { kind: "payment", text: t("有料プランの契約が必要です"), fix: "billing" }
+        : e instanceof SyncAuthError ? { kind: "auth", text: t("サーバーが利用者を確かめられませんでした"), fix: "credentials" }
         : e instanceof SyncRejectedError ? { kind: "rejected", text: t("サーバーが、この計画の同期を受け付けませんでした (待っても直りません)")+(e.status===507 ? " "+t("削除した計画も30日間は保存量に含まれます。") : ""), fix: "local-file" }
         : e instanceof SyncNetworkError ? { kind: "network", text: t("サーバーと通信できませんでした"), fix: "wait" }
         : e instanceof SyncStateUnreadable ? { kind: "state-unreadable", text: t("同期の状態のファイルを読めません"), fix: "sync-state" }
@@ -925,12 +962,15 @@ export function parseHostAction(text: string): HostAction | null {
     case "cancelSignIn":
     case "signOut":
     case "deleteAccount":
+    case "billingPortal":
+    case "billingDismiss":
     case "bind":
     case "syncNow":
     case "pause":
     case "resume":
       return { kind: o.kind };
     case "signIn": return o.provider === "github" || o.provider === "google" ? { kind: "signIn", provider: o.provider } : null;
+    case "billingCheckout": return (o.plan === "personal" || o.plan === "team") && (o.seats === undefined || typeof o.seats === "number" && o.seats >= 1 && o.seats <= 100) ? { kind: "billingCheckout", plan: o.plan, ...(typeof o.seats === "number" ? { seats: o.seats } : {}) } : null;
     case "linkIdentity": return o.provider === "github" || o.provider === "google" ? { kind: "linkIdentity", provider: o.provider } : null;
     case "resolveGroups": {
       const resolution = parseConflictResolution(o.resolution);

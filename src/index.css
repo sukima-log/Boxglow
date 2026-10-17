@@ -1132,6 +1132,10 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 /* アカウントの削除: 取り返しのつかない操作なので、目立たせず (ghost のまま) 色だけ注意色にする */
 .sync-panel__danger { color: var(--danger, #c0392b); }
 .sync-panel__confirm-delete { display: grid; gap: 8px; padding: 8px; border: 1px solid var(--danger); border-radius: 8px; }
+/* 課金: プランの行 (契約が無いと注意色) と、申し込みの画面へのリンク */
+.sync-panel__billing { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; width: 100%; }
+.sync-panel__plan[data-entitled="false"] { color: var(--danger); }
+.sync-panel__billing-link { display: flex; gap: 8px; align-items: center; }
 /* Home の「サーバーの計画を受け取る」節 (ファイルがまだ無い / 空のとき) */
 .home-receive { margin-top: 24px; padding-top: 16px; border-top: 2px dashed var(--line); }
 .home-receive h3 { font-size: 16px; margin: 0 0 4px; }

@@ -11,6 +11,7 @@ import { SyncStartup } from "./SyncStartup";
 import { ConflictGroups } from "./ConflictGroups";
 import { useEffect, useRef, useState } from "react";
 import { useProjectStore } from "../store/useProjectStore";
+import { planLabel } from "../sync/billing";
 import { t } from "../i18n";
 import type { HaltItem, SyncStatus } from "../sync/status";
 
@@ -315,6 +316,15 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
         {status.server && <div className="break-all">{t("送り先")}: {status.server}</div>}
         {file && <div className="break-all">{t("今開いているファイル")}: {file.path}</div>}
         {status.startup?.opened && <div className="break-all">{t("保存先")}: {status.startup.opened.path}</div>}
+        {/* 申し込み / 契約の管理の画面: リンクとして出す (VS Code の webview でも外で開ける) */}
+        {status.billingLink && (
+          <div className="sync-panel__line sync-panel__billing-link">
+            <a href={status.billingLink.url} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm">
+              {status.billingLink.kind === "checkout" ? t("申し込みの画面を開く (Stripe)") : t("契約の管理を開く (Stripe)")}
+            </a>
+            <button className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "billingDismiss" })}>{t("閉じる")}</button>
+          </div>
+        )}
         {status.message && <div className="sync-panel__line">{status.message}</div>}
         {status.problem && (
           <div className="sync-panel__line sync-panel__problem">
@@ -344,6 +354,23 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
               <button className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "signOut" })}>
                 {t("サインアウト")}
               </button>
+              {/* 課金: サーバーが契約の状態を返したときだけ。試用 (required = false) でも、契約があれば出す */}
+              {account.billing && (account.billing.required || account.billing.plan) && (
+                <div className="sync-panel__billing">
+                  <span className="sync-panel__plan" data-entitled={account.billing.entitled ? "true" : "false"}>
+                    {t("プラン")}: {planLabel(account.billing.plan)}{account.billing.plan === "team" && account.billing.seats > 0 ? ` × ${account.billing.seats}` : ""}
+                    {account.billing.plan && account.billing.plan !== "comp" ? ` (${billingStatusLabel(account.billing.status)})` : ""}
+                  </span>
+                  {account.billing.checkout && !account.billing.entitled && <>
+                    <button className="btn btn-primary btn-sm" onClick={() => void act({ kind: "billingCheckout", plan: "personal" })}>{t("Personal を申し込む (月 500 円)")}</button>
+                    <button className="btn btn-sm" onClick={() => void act({ kind: "billingCheckout", plan: "team", seats: 2 })}>{t("Team を申し込む (1 人 月 800 円)")}</button>
+                  </>}
+                  {account.billing.checkout && account.billing.entitled && !account.billing.plan && (
+                    <button className="btn btn-sm" onClick={() => void act({ kind: "billingCheckout", plan: "personal" })}>{t("有料プランを申し込む")}</button>
+                  )}
+                  {account.billing.portal && <button className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "billingPortal" })}>{t("契約の管理")}</button>}
+                </div>
+              )}
               {/* アカウントの削除: 欄の中で 2 段階の確認 (window.confirm は VS Code の webview で使えない)。猶予 (30 日) と取り消し方を先に示す */}
               {confirmDelete ? (
                 <div className="sync-panel__confirm-delete" role="group" aria-label={t("アカウントの削除の確認")}>
@@ -618,6 +645,8 @@ function fixHint(fix: string): string {
       return t("同期の状態のフォルダを確かめてください");
     case "server-content":
       return t("サーバーの中身を確かめてください");
+    case "billing":
+      return t("同期パネルの「申し込む」から有料プランを契約してください");
     case "credentials":
       return t("サインインを確かめてください");
     case "rerun":
@@ -626,5 +655,18 @@ function fixHint(fix: string): string {
       return t("しばらく待ちます");
     default:
       return "";
+  }
+}
+
+/** Stripe の契約の状態 → 画面の言葉 */
+function billingStatusLabel(status: string): string {
+  switch (status) {
+    case "active": return t("有効");
+    case "trialing": return t("試用中");
+    case "past_due": return t("支払いの確認待ち");
+    case "canceled": return t("解約済み");
+    case "unpaid": case "incomplete": case "incomplete_expired": return t("未払い");
+    case "none": return t("未契約");
+    default: return status;
   }
 }

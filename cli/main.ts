@@ -18,6 +18,7 @@ import { briefReceipt, contextReceipt, isCurrentToken, requireContext } from "./
 import { setupAgent } from "./setup-agent";
 import { runSyncCommand, runWatchCommand } from "./sync/command";
 import { runLinkIdentity, runLogin, runLogout, runWhoami } from "./sync/login";
+import { runBilling } from "./sync/billing";
 import { resolveToken } from "./sync/credentials";
 import { projectProblem } from "../src/model/validate-file";
 import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
@@ -425,6 +426,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   sync --reconnect-restored <印> --actor human   削除記録の復元先へ結び直し、手元の未送信編集と比較する
   remote trash | delete|restore <ID> [--server URL]  削除済み一覧 / 削除・復元の確認。確定は --confirm <印> --actor human
   remote versions <ID> | revert <ID> <版> --file <path> --actor human   履歴の一覧 / その版の中身を手元のファイルに戻す (控えを取る。次の同期で新しい版として送られる)
+  billing [--checkout personal|team [--seats n] | --portal]   契約の状態 / 申し込みの画面 (Stripe) の URL / 契約の管理の URL
   login [--server <URL>] [--name <端末の名前>] [--add github|google]   (試験中) 同期サーバーにサインインする (GitHub のアカウント。表示されたコードを、ブラウザで入力する)。--add は、サインイン済みのアカウントに 2 つ目の手段を足す
   logout [--server <URL>] / whoami [--server <URL>]  サインアウトする (サーバー側のトークンも取り消す) / 今の利用者・端末・保存量を出す
   unlock [--remove --lock-token <印> --actor human]  残った保存ロックの状態 (持ち主・判定) を出す (読むだけ。AI も使える)。--remove は人が解除する:
@@ -539,6 +541,7 @@ Usage (npx boxglow <command> ...):
   sync --reconnect-restored <token> --actor human  Reconnect the original file to its restored plan and compare unsent edits
   remote trash | delete|restore <ID> [--server URL]  List trash / preview delete or restore; confirm with --confirm <token> --actor human
   remote versions <ID> | revert <ID> <rev> --file <path> --actor human   List history / write that version into the local file (a backup is kept; the next sync sends it as a new version)
+  billing [--checkout personal|team [--seats n] | --portal]   Subscription status / checkout URL (Stripe) / subscription management URL
   login [--server <URL>] [--name <device name>] [--add github|google]  (experimental) Sign in to a sync server (GitHub account; enter the code shown in your browser). --add links a second sign-in method to the signed-in account
   logout [--server <URL>] / whoami [--server <URL>]  Sign out (also revokes the token on the server) / show the current account, devices and storage
   unlock [--remove --lock-token <token> --actor human]  Show a leftover save lock (owner and verdict; read-only, agents may use it). --remove is for a person:
@@ -1610,6 +1613,23 @@ if (argv[0] === "mcp") {
     if(!server) throw new Error(t("サーバーが決まっていません。--server <URL> を指定してください"));
     process.exitCode=await runLifecycle({server,command:positional[0],id:positional[1],revision:positional[2],file:str(options.file),actor:str(options.actor),confirm:str(options.confirm),cursor:str(options.cursor)},console.log);
   })().catch(e=>{console.error(e.message);process.exitCode=1;});
+} else if (argv[0] === "billing") {
+  // 契約の状態と、申し込み / 契約の管理の画面の URL (通信するので、ほかのコマンドとは別扱い)
+  const { options } = parseArgs(argv.slice(1));
+  (async () => {
+    setLang(explicitLang(options) ?? "ja");
+    const known = new Set(["server", "lang", "file", "checkout", "seats", "portal"]);
+    const unknown = Object.keys(options).filter((k) => !known.has(k));
+    if (unknown.length > 0) { console.log(t("boxglow {cmd} が知らない指定です: {list}", { cmd: "billing", list: unknown.map((k) => "--" + k).join(", ") })); process.exitCode = 1; return; }
+    let file: string | undefined;
+    try { file = locateFile(str(options.file)); } catch { /* 計画なしでも可能 */ }
+    const { server } = selectSyncServer(file, str(options.server)?.trim() || undefined);
+    if (!server) { console.log(t("サーバーが決まっていません。--server <URL> を指定してください")); process.exitCode = 1; return; }
+    const checkout = str(options.checkout);
+    if (checkout !== undefined && checkout !== "personal" && checkout !== "team") { console.log(t("--checkout には personal か team を指定してください")); process.exitCode = 1; return; }
+    const seats = options.seats !== undefined ? Number(options.seats) : undefined;
+    process.exitCode = await runBilling({ server, out: (line) => console.log(line), checkout, seats: Number.isFinite(seats) ? seats : undefined, portal: options.portal === true || options.portal === "true" });
+  })().catch((e) => { console.error(`[boxglow billing] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });
 } else if (argv[0] === "login" || argv[0] === "logout" || argv[0] === "whoami") {
   // 同期サーバーへのサインイン (通信と、利用者の操作を待つので、ほかのコマンドとは別扱い)
   const { options } = parseArgs(argv.slice(1));
