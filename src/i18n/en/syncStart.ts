@@ -39,7 +39,7 @@ export const syncStart: Record<string, string> = {
   "サインインの手段": "Sign-in methods",
   "契約": "Subscription",
   "技術情報": "Technical details",
-  "取り返しのつかない操作": "Irreversible actions",
+  "削除 (元に戻せません)": "Delete (cannot be undone)",
   "この計画をサーバーから削除…": "Delete this plan from the server…",
   "環境変数のトークン": "Environment token",
   "共有リンク": "Share links",

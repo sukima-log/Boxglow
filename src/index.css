@@ -1236,10 +1236,10 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 /* サインインのボタン: 各社の印つきで、押せると分かる大きさ。GitHub は濃い色、Google は白地 */
 .signin-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 .signin-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; border-radius: 8px; }
-.signin-btn--github { background: #24292f; color: #fff; border-color: #24292f; }
-.signin-btn--github:hover { background: #32383f; border-color: #32383f; color: #fff; }
-.signin-btn--google { background: #fff; color: #1f1f1f; border-color: #dadce0; }
-.signin-btn--google:hover { background: #f8f9fa; border-color: #c6c8cc; color: #1f1f1f; }
+/* 2 つのボタンは同じ目立ち方にする (どちらを使ってもよい)。各社の印だけで見分ける */
+.signin-btn { background: var(--bg-card); color: var(--text); border: 1px solid var(--line); min-width: 180px; justify-content: flex-start; }
+.signin-btn:hover, .signin-btn:focus-visible { background: var(--primary-soft); border-color: var(--primary); color: var(--text); }
+.signin-btn--github svg { color: var(--text); }
 /* サインインの状態の行: 点の色で一目で分かる (緑 = サインイン中、灰 = していない) */
 .signed-line { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
 .signed-line__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }

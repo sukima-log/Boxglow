@@ -428,9 +428,9 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
             {/* R39-06: 開き直した後の VS Code で退避を取り込む入口。 */}
             <RestoreEntry />
           </div>
-          {(file?.binding || account) && (
+          {((file?.binding && status.features?.trash !== false) || account) && (
             <div className="sync-panel__group sync-panel__group--danger">
-              <div className="sync-panel__group-title">{t("取り返しのつかない操作")}</div>
+              <div className="sync-panel__group-title">{t("削除 (元に戻せません)")}</div>
               <div className="sync-panel__row">
                 {file?.binding && status.features?.trash !== false && <button className="btn btn-ghost btn-sm sync-panel__danger" disabled={status.lifecycle?.busy} onClick={() => void act({ kind: "previewDelete", projectId: file.binding!.remoteId })}>{t("この計画をサーバーから削除…")}</button>}
                 {account && !confirmDelete && <button className="btn btn-ghost btn-sm sync-panel__danger" onClick={() => setConfirmDelete(true)}>{t("アカウントを削除…")}</button>}
