@@ -1,3 +1,4 @@
+import { t } from "../i18n/core";
 /**
  * 課金の状態 (サーバーの GET /v1/me の billing / GET /v1/billing)。ホスト共通
  *   - required: サーバーが契約を求めているか (提供開始後 true。試用の間は false)
@@ -20,6 +21,19 @@ export function parseBilling(value: unknown): Billing | undefined {
   , periodEnd: typeof b.periodEnd === "string" ? b.periodEnd.slice(0, 64) : null
   , checkout: b.checkout === true, portal: b.portal === true
   };
+}
+
+/** Stripe の契約の状態 → 画面の言葉 */
+export function billingStatusLabel(status: string): string {
+  switch (status) {
+    case "active": return t("有効");
+    case "trialing": return t("試用中");
+    case "past_due": return t("支払いの確認待ち");
+    case "canceled": return t("解約済み");
+    case "unpaid": case "incomplete": case "incomplete_expired": return t("未払い");
+    case "none": return t("未契約");
+    default: return status;
+  }
 }
 
 /** 画面に出すプランの名前 */

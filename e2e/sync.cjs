@@ -273,7 +273,9 @@ const ROOT = path.resolve(__dirname, '..');
 
     const issuedBefore = server.issued.size;
     // 2 つ目のサインイン手段: 欄の「+ Google」→ 許可の URL が出る → (サーバー側で許可) → 一覧に Google ✓
-    await page.locator('.sync-panel__details > summary').click();
+    // 手段の追加は右上のアカウントのメニューから (この検査ではタブを塞ぎ、画面のリンクから開く経路を確かめる)
+    await page.evaluate(()=>{window.open=()=>null;});
+    await page.locator('.account-button').click();
     check('同期F: 付いている手段が記号で出て、無い方は + で足せる', (await page.locator('.sync-panel__identities').textContent()).includes('GitHub ✓') && await page.getByRole('button',{name:'+ Google',exact:true}).count()===1);
     await page.getByRole('button',{name:'+ Google',exact:true}).click();
     await page.getByRole('link',{name:'Google のサインインのページを開く',exact:true}).waitFor();

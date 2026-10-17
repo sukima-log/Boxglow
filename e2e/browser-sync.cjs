@@ -137,26 +137,29 @@ const ROOT = path.resolve(__dirname, '..');
     check('ブラウザ同期: Home からサインアウトできる', await page2.evaluate(() => window.boxglow.store.getState().syncStatus?.credentials.source === 'none'));
     await context2.close();
     // サインアウト: 印が「未サインイン」、サーバーでトークンが失効
-    await page.locator('.sync-panel__details > summary').click();
-    await page.getByRole('button', { name: 'サインアウト', exact: true }).click();
+    // サインアウトは右上のアカウントのメニューから
+    await page.locator('.account-button').click();
+    await page.locator('.account-menu').getByRole('button', { name: 'サインアウト', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'signed-out', null, { timeout: 15000 });
     check('ブラウザ同期: サインアウトで「未サインイン」に戻り、トークンが失効する', server.revoked.has(token));
     // アカウントの削除: もう一度サインインしてから、詳細の「アカウントを削除…」→ 確認 → サーバーが受け付け、トークンが全部失効し、未サインインに戻る
-    await page.getByRole('button', { name: 'GitHub でサインイン', exact: true }).click();
+    // (右上のアカウントのメニューからサインインし直す。メニューは開いたままなので、終わったら Escape で閉じてから開き直す)
+    await page.locator('.account-menu').getByRole('button', { name: 'GitHub でサインイン', exact: true }).click();
     await page.locator('.sync-panel__code').waitFor({ timeout: 15000 });
     server.deviceCodes.set([...server.deviceCodes.keys()].at(-1), { account: 'acc-browser', login: 'browser-user' });
     await page.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'synced', null, { timeout: 30000 });
-    // details の open は属性が "" なので、プロパティで見る (閉じていれば開く)
-    if (!(await page.locator('.sync-panel__details').evaluate((el) => el.open))) await page.locator('.sync-panel__details > summary').click();
-    await page.getByRole('button', { name: 'アカウントを削除…', exact: true }).click();
+    await page.keyboard.press('Escape'); await page.waitForTimeout(200);
+    await page.locator('.account-button').click();
+    await page.locator('.account-menu').getByRole('button', { name: 'アカウントを削除…', exact: true }).click();
     const confirmBox = page.locator('.sync-panel__confirm-delete'); await confirmBox.waitFor({ timeout: 5000 });
     check('ブラウザ同期: アカウントの削除は欄の中の確認で 30 日の猶予を説明する', ((await confirmBox.textContent()) ?? '').includes('30 日'));
     await confirmBox.getByRole('button', { name: 'やめる', exact: true }).click();
     check('ブラウザ同期: 「やめる」で削除されない', !server.deletedAccounts.has('acc-browser') && (await page.locator('.sync-panel__confirm-delete').count()) === 0);
-    await page.getByRole('button', { name: 'アカウントを削除…', exact: true }).click();
+    await page.locator('.account-menu').getByRole('button', { name: 'アカウントを削除…', exact: true }).click();
     await page.locator('.sync-panel__confirm-delete').getByRole('button', { name: 'アカウントを削除する', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'signed-out', null, { timeout: 15000 });
     check('ブラウザ同期: 削除をサーバーが受け付け、その利用者のトークンが全部失効する', server.deletedAccounts.has('acc-browser') && [...server.issued].filter(([, u]) => u.account === 'acc-browser').every(([tok]) => server.revoked.has(tok)));
+    await page.locator('.sync-chip').click();
     check('ブラウザ同期: 削除の受け付けと消える日が画面に出る', (await page.locator('.sync-panel').textContent()).includes('アカウントの削除を受け付けました'));
     check('ブラウザ同期: 実行エラーなし', errors.length === 0, errors.join('\n'));
   } catch (e) {

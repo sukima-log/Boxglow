@@ -165,6 +165,9 @@ interface State {
   readonlyReason: string | null;
   /** 1 段のサインインで自動で開いたページの印 (Google = URL、GitHub = コード)。SignInCode が案内を切り替えるために持つ */
   signInOpened: string | null;
+  /** 右上のアカウントのメニューを開いているか (同期パネルなど他の場所からも開けるように店で持つ) */
+  accountMenuOpen: boolean;
+  setAccountMenuOpen: (open: boolean) => void;
   /** VS Code の中で、拡張からファイルの中身をまだ受け取れていないときの案内 (Home 画面に出す)。受け取れたら null */
   hostNotice: string | null;
   /**
@@ -843,6 +846,8 @@ export const useProjectStore = create<State>((set, get) => {
   , peerVersion: null
   , readonlyReason: null
   , signInOpened: null
+  , accountMenuOpen: false
+  , setAccountMenuOpen: (open) => set({ accountMenuOpen: open })
   , hostNotice: null
   , vscodeFile: null
   , createInVsCode: (name) => {

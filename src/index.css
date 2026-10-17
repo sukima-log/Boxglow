@@ -1192,6 +1192,18 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .sync-panel__choices { display: flex; gap: 6px; flex-wrap: wrap; }
 .sync-panel__details { font-size: 12px; color: var(--text-muted); white-space: pre-wrap; word-break: break-all; }
 .sync-panel__id { font-family: var(--font-mono, monospace); font-size: 11px; }
+/* 右上のアカウント: 丸いボタン (頭文字 / 人型) と、その下に開くメニュー */
+.account-wrap { position: relative; flex: none; }
+.account-button { position: relative; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg-card); color: var(--text-muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.account-button[data-on="true"] { background: var(--primary-soft); color: var(--primary-strong); border-color: var(--primary); }
+.account-button:hover, .account-button:focus-visible { border-color: var(--primary-strong); outline: none; }
+.account-button--static { cursor: default; }
+.account-button__initial { font-weight: 700; font-size: 14px; }
+.account-button__dot { position: absolute; right: -1px; bottom: -1px; width: 9px; height: 9px; border-radius: 50%; background: #2e9e6b; border: 2px solid var(--bg-card); }
+.account-menu { position: fixed; z-index: 85; width: min(340px, calc(100vw - 16px)); padding: 12px 14px; display: grid; gap: 4px; font-size: 13px; }
+.account-menu__head { display: flex; align-items: center; gap: 10px; padding-bottom: 4px; }
+.account-menu__who { display: flex; flex-direction: column; min-width: 0; }
+.account-menu .sync-panel__group:first-of-type { border-top: 0; }
 /* 同期パネルの段: 知らせ / アカウント / 切替 / 操作の一覧 / その他 */
 .sync-panel__notes { display: grid; gap: 4px; }
 .sync-account { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--bg-card) 70%, var(--line-soft)); border: 1px solid var(--line-soft); }

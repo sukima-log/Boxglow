@@ -6,6 +6,7 @@ import type React from "react";
 import { useEffect, useRef, useState } from "react";
 import { TreeIcon } from "./TreeIcon";
 import { RestoreDialog, SaveHeldChip, SyncChip } from "./SyncPanel";
+import { AccountButton } from "./AccountMenu";
 import { addBlock, addProjectBlock, normalizeCollapsed, searchBlocks, summarize, toJSON } from "../model/graph";
 import { layoutAll } from "../model/autolayout";
 import { projectToMarkdown, scopeToMermaid } from "../model/export";
@@ -312,6 +313,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
       </div>
       {/* スクロール領域の外に固定し、画面幅に関係なく操作の入口を残す。 */}
       <div className="topbar-pinned">
+        <AccountButton />
         <div className="relative">
           <button ref={menuRef} className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setMenu(!menu); }} title="Menu" aria-label="Menu" aria-expanded={menu} onKeyDown={(e) => { if (e.key === "Escape") setMenu(false); }}>⋯</button>
           {menu && (

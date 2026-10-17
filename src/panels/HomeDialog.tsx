@@ -1,4 +1,5 @@
 import { SignedInLine } from "./SignInButtons";
+import { AccountButton } from "./AccountMenu";
 /**
  * プロジェクトを開いていないときの画面 (Home)
  * 上から: サンプルを試す / 「自分の計画で始める」の引き出し (ファイルを開く = 見る・コピーして編集・serve で編集して保存 / 新しい計画を作る。
@@ -99,6 +100,7 @@ export function HomeDialog() {
             </h1>
             <p className="mt-1" style={{ color: "var(--text-muted)" }}>{t("AI エージェントとチームの作業を、ボックスと線で一目で。")}</p>
           </div>
+          <AccountButton />
           <button className="btn btn-ghost btn-sm" onClick={() => setLang(lang === "en" ? "ja" : "en")} aria-label={t("画面の文言の言語を切り替える")}>{lang === "en" ? "日本語" : "English"}</button>
         </div>
 

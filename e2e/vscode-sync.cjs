@@ -303,9 +303,8 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     } finally {watchingD=false;await dismissD;await appD.close().catch(()=>{});}
 
     // サインアウト (開き直した画面から)
-    if (!(await frame3.locator('.sync-panel').isVisible().catch(() => false))) await frame3.locator('.sync-chip').click();
-    await frame3.locator('.sync-panel__details > summary').click();
-    await frame3.getByRole('button', { name: /^(サインアウト|Sign out)$/ }).click();
+    await frame3.locator('.account-button').click();
+    await frame3.locator('.account-menu').getByRole('button', { name: /^(サインアウト|Sign out)$/ }).click();
     let signedOut = false;
     try { await frame3.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'signed-out', null, { timeout: 20000 }); signedOut = true; } catch { signedOut = false; }
     check('VS Code: サインアウトで「未サインイン」', signedOut);
