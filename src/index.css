@@ -1070,9 +1070,12 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .btn:hover { box-shadow: none; transform: none; border-color: var(--primary); }
 .card { border-width: 1px; border-color: var(--line-soft); }
 .app-top > header.topbar { border-bottom: 1px solid var(--line-soft); min-height: 64px; }
-.topbar-identity { flex: 1 1 360px; }
+/* 左のまとまりは、幅が足りなければ中で折り返す (同期の印などが右のまとまりの下へ潜り込んで重ならないように)。右は内容の幅のまま */
+.topbar-identity { flex: 1 1 360px; flex-wrap: wrap; min-width: 0; }
 .topbar-tools { flex: 0 1 auto; }
 .topbar-search { flex: 0 1 200px; }
+/* 狭い幅では右のまとまりを次の行へ (上の .topbar-tools の指定が、前の方にある同じ指定を打ち消すので、ここでもう一度書く) */
+@media (max-width: 1100px) { .topbar-tools { flex-basis: 100%; } }
 /* ⋯ メニューの中の編集の操作 (+ Block・Undo・Redo。Auto Layout は幅に関係なくいつもメニューにある): 帯に出せない狭い幅 (760px 以下) のときだけ出す。
    通常の幅では帯にボタンがあるので、メニューには出さない (同じ操作を 2 か所に置かない) */
 .menu-actions { display: none; flex-direction: column; gap: 4px; }
