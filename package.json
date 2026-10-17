@@ -20,7 +20,8 @@
     "waitlist:list": "npx --yes wrangler@4 kv key list --binding WAITLIST --prefix email: --remote",
     "waitlist:get": "npx --yes wrangler@4 kv key get --binding WAITLIST --remote",
     "build:vscode": "npm run build && rm -rf vscode/media && cp -r dist vscode/media && rm -rf vscode/media/waitlist && cp docs/logo/boxglow-128.png vscode/media/icon-128.png && cd vscode && npm run compile",
-    "build:legal": "node scripts/build-legal.mjs --out dist-pages"
+    "build:legal": "node scripts/build-legal.mjs --out dist-pages",
+    "build:hosted": "esbuild cli/hosted.ts --bundle --loader:.md=text --platform=node --format=esm --target=es2022 --alias:node:fs=./cli/shims/node-fs.ts --alias:node:os=./cli/shims/node-os.ts --alias:node:child_process=./cli/shims/node-child_process.ts --alias:node:http=./cli/shims/node-http.ts --outfile=dist/hosted-mcp.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",

@@ -36,13 +36,11 @@ function opt(argv: string[], name: string, value: string | string[] | boolean | 
   for (const v of Array.isArray(value) ? value : [value]) argv.push(`--${name}`, String(v));
 }
 
-export async function startMcp(run: Run): Promise<void> {
-  // ツールの説明の言語を決める: 環境変数 BOXGLOW_LANG (en / ja)、無ければ日本語のまま。
-  // mcp の入口は main() を通らないので、説明を登録する前にここで決める (各ツールの実行時は runCli が毎回決め直す)
-  const envLang = (process.env.BOXGLOW_LANG ?? "").toLowerCase();
-  if (envLang === "en" || envLang === "ja") setLang(envLang);
-  const server = new McpServer({ name: "boxglow", version: APP_VERSION });
-  // 入力はなし。任意のfileや人の選択を指定した要求は、通常同期へ読み替えず拒否する。
+/**
+ * 道具 (ツール) を登録する。標準入出力の MCP (手元) と、ホスト型の MCP (Workers。cli/hosted.ts) で同じ
+ * Input : server = MCP サーバー, run = CLI を関数として実行するもの。Output: なし
+ */
+export function registerTools(server: McpServer, run: Run): void {
   server.registerTool("boxglow_sync", {
     description: t("結び付け済みの計画を同期し、停止理由と比較を返す。判断が必要ならAIはaskで人に知らせる。人が画面かCLIで選ぶ。"),
     inputSchema: z.object({}).catchall(z.unknown()),
@@ -127,6 +125,16 @@ export async function startMcp(run: Run): Promise<void> {
 
   server.registerTool("boxglow_claims", { description:t("受け持ち一覧 (自分・他者・期限切れ)"), inputSchema:{}, annotations:{readOnlyHint:true} }, async()=>safe(run,["claims"]));
   server.registerTool("boxglow_claim_renew", { description:t("受け持ちの期限を延長する (5分ごと、または長い処理の前に実行)"), inputSchema:{block} }, async({block:b})=>safe(run,["claim-renew",b]));
+}
+
+export async function startMcp(run: Run): Promise<void> {
+  // ツールの説明の言語を決める: 環境変数 BOXGLOW_LANG (en / ja)、無ければ日本語のまま。
+  // mcp の入口は main() を通らないので、説明を登録する前にここで決める (各ツールの実行時は runCli が毎回決め直す)
+  const envLang = (process.env.BOXGLOW_LANG ?? "").toLowerCase();
+  if (envLang === "en" || envLang === "ja") setLang(envLang);
+  const server = new McpServer({ name: "boxglow", version: APP_VERSION });
+  registerTools(server, run);
+  // 入力はなし。任意のfileや人の選択を指定した要求は、通常同期へ読み替えず拒否する。
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
