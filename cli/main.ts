@@ -21,6 +21,7 @@ import { runSyncCommand, runWatchCommand } from "./sync/command";
 import { runLinkIdentity, runLogin, runLogout, runWhoami, runGoogleLogin } from "./sync/login";
 import { runBilling } from "./sync/billing";
 import { runAgentToken } from "./sync/agent-token";
+import { planTemplateFrom } from "../src/model/template";
 import { runTeam } from "./sync/team";
 import { teamApiBase } from "../src/sync/teams";
 import { bindingsOf } from "./sync/state-store";
@@ -378,7 +379,7 @@ const HELP_JA = `
 boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポジトリ内の boxglow.json を操作する入口
 
 使い方 (npx boxglow <command> ...):
-  init [--name <名前>] [--file <path>]           boxglow.json を作る
+  init [--name <名前>] [--file <path>] [--from <計画ファイル>]   boxglow.json を作る (--from で別の計画の構造だけを写して始める = テンプレート)
   setup-agent [--agent codex|claude-code|all] [--dir <path>]                     AI が自律的に使えるように設定する: AGENTS.md / CLAUDE.md に手順を追記、
                                                  Codex は AGENTS.md と .agents/skills、Claude Code は CLAUDE.md・スキル・フック・.mcp.json (既定: all)
   claims                                        受け持ち一覧 (自分・他者・期限切れ)
@@ -496,7 +497,7 @@ const HELP_EN = `
 boxglow CLI: the entry point for AI agents (Claude Code / Codex, etc.) and people to work with the boxglow.json in a repository
 
 Usage (npx boxglow <command> ...):
-  init [--name <name>] [--file <path>]           Create boxglow.json
+  init [--name <name>] [--file <path>] [--from <plan file>]   Create boxglow.json (--from copies only the structure of another plan = template)
   setup-agent [--agent codex|claude-code|all] [--dir <path>]                     Set things up so AI can use Boxglow on its own: append the instructions to AGENTS.md / CLAUDE.md,
                                                  Codex: AGENTS.md and .agents/skills. Claude Code: CLAUDE.md, skill, hook and .mcp.json (default: all)
   claims                                        Claims grouped by own/others/expired
@@ -672,10 +673,12 @@ function main(argv: string[]): void {
     // 計画の言語を決めて書き込む: 指定があればそれ、無ければ環境の言語 (日本語の環境なら ja、それ以外は en)
     const lang = explicitLang(options) ?? envLang();
     setLang(lang);
-    const p = createProject(str(options.name) ?? t("新しいプロジェクト"));
+    // --from <計画ファイル>: その計画の構造 (箱・出力・つながり・担当) だけを写して始める (進捗・記録・判断・成果物は消す。B153)
+    const from = str(options.from);
+    const p = from ? planTemplateFrom(load(from), str(options.name) ?? load(from).name) : createProject(str(options.name) ?? t("新しいプロジェクト"));
     p.lang = lang;
     save(path, p);
-    out(t("作成: {path}", { path }));
+    out(from ? t("作成: {path} ({from} の構造から)", { path, from }) : t("作成: {path}", { path }));
     return;
   }
 

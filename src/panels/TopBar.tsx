@@ -40,6 +40,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   const importJSON = useProjectStore((s) => s.importJSON);
   const copyToMine = useProjectStore((s) => s.copyToMine);
   const setToast = useProjectStore((s) => s.setToast);
+  const registerTemplate = useProjectStore((s) => s.registerTemplate);
   // VS Code の中: 退避した編集の読み込み (同期の設定が無くても使う。保存の衝突の帯から退避した編集を、開き直した後に取り込む。R49-03)
   const loadEvacuated = useProjectStore((s) => s.loadEvacuated);
   const restoring = useProjectStore((s) => s.restorePending !== null || s.editorBehind !== null);
@@ -335,6 +336,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
                 <button className="btn btn-ghost btn-sm justify-start" onClick={addProject} title={t("同じファイルにプロジェクトのボックスを足す")}>New Project</button>
               )}
               {!readonly && <div style={{ borderTop: "1px solid var(--line-soft)", margin: "4px 0" }} />}
+              {!ephemeral && <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); void registerTemplate(project.name); }} title={t("今の計画の構造 (箱・出力・つながり・担当) を、進捗や記録を除いてテンプレートとして登録する。Home の「新しい計画を作る」で選べる")}>{t("テンプレートに登録")}</button>}
               <button className="btn btn-ghost btn-sm justify-start" onClick={exportJSON}>Export JSON</button>
               <button className="btn btn-ghost btn-sm justify-start" onClick={exportMd}>Export Markdown</button>
               <button className="btn btn-ghost btn-sm justify-start" onClick={copyMermaid}>Copy Mermaid</button>

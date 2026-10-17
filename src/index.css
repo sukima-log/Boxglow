@@ -958,6 +958,9 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .home-server { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .home-command { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px; border: 1px solid var(--line-soft); border-radius: 8px; background: var(--bg-card); }
 .home-command code { flex: 1; overflow-wrap: anywhere; font-size: 13px; }
+.home-templates { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; }
+.home-templates__pick { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.home-templates .input { flex: 1; min-width: 0; }
 .home-create { display: flex; gap: 8px; margin-top: 8px; }
 .home-create input { flex: 1; min-width: 0; }
 .home-projects { max-height: 200px; overflow: auto; }

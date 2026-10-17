@@ -25,6 +25,15 @@ export function HomeDialog() {
   const projects = useProjectStore((s) => s.projects);
   const refreshList = useProjectStore((s) => s.refreshList);
   const newProject = useProjectStore((s) => s.newProject);
+  const planTemplates = useProjectStore((s) => s.planTemplates);
+  const refreshPlanTemplates = useProjectStore((s) => s.refreshPlanTemplates);
+  const deletePlanTemplate = useProjectStore((s) => s.deletePlanTemplate);
+  const newProjectFromTemplate = useProjectStore((s) => s.newProjectFromTemplate);
+  // 選んだテンプレート ("" = 白紙)
+  const [template, setTemplate] = useState("");
+  useEffect(() => { void refreshPlanTemplates(); }, [refreshPlanTemplates]);
+  /** 作る: テンプレートを選んでいればそれから、そうでなければ白紙から */
+  const create = (n: string) => template ? newProjectFromTemplate(template, n) : newProject(n);
   const openProject = useProjectStore((s) => s.openProject);
   const deleteProject = useProjectStore((s) => s.deleteProject);
   const importJSON = useProjectStore((s) => s.importJSON);
@@ -189,10 +198,20 @@ export function HomeDialog() {
           <div className="home-create">
             <label className="sr-only" htmlFor="home-project-name">{t("新しい計画の名前")}</label>
             <input id="home-project-name" className="input" placeholder={t("新しい計画の名前")} value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.nativeEvent.isComposing && e.keyCode !== 229 && name.trim()) void newProject(name.trim());
+              if (e.key === "Enter" && !e.nativeEvent.isComposing && e.keyCode !== 229 && name.trim()) void create(name.trim());
             }} />
-            <button className="btn" disabled={!name.trim()} onClick={() => void newProject(name.trim())}>Create</button>
+            <button className="btn" disabled={!name.trim()} onClick={() => void create(name.trim())}>Create</button>
           </div>
+          {/* 登録したテンプレート (⋯ メニューの「テンプレートに登録」): 選ぶと、その構造から始める */}
+          {planTemplates.length > 0 && (
+            <div className="home-templates">
+              <label className="home-templates__pick">{t("テンプレート")}: <select className="input" value={template} aria-label={t("テンプレート")} onChange={(e) => setTemplate(e.target.value)}>
+                <option value="">{t("白紙から")}</option>
+                {planTemplates.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select></label>
+              {template && <button className="btn btn-ghost btn-sm btn-danger" aria-label={t("テンプレート「{name}」を消す", { name: template })} title={t("このテンプレートを消す")} onClick={() => { void deletePlanTemplate(template); setTemplate(""); }}>×</button>}
+            </div>
+          )}
         </section>
 
         </details>

@@ -18,6 +18,8 @@ import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normali
 export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile, writeLocalFile } from "../lib/localfile";
+import { deletePlanTemplate, listPlanTemplates, savePlanTemplate, type PlanTemplate } from "../lib/templates";
+import { planTemplateFrom } from "../model/template";
 import { mergeProjects } from "../model/merge";
 import { applyRestore, editorCaughtUp, prepareRestore, readRecovery, type Recovery, type RestoreConflict, type RestorePicks, type RestoreStep } from "../sync/recovery";
 import { buildSampleProject } from "../model/sample";
@@ -233,6 +235,12 @@ interface State {
 
   refreshList: () => Promise<void>;
   newProject: (name: string) => Promise<void>;
+  /** 計画のテンプレート (利用者が登録したもの。B153): 一覧・登録 (今の計画の構造だけを写す)・削除・そこから新しい計画を作る */
+  planTemplates: PlanTemplate[];
+  refreshPlanTemplates: () => Promise<void>;
+  registerTemplate: (name: string) => Promise<void>;
+  deletePlanTemplate: (id: string) => Promise<void>;
+  newProjectFromTemplate: (templateId: string, name: string) => Promise<void>;
   openProject: (id: string) => Promise<boolean>;
   openProjectObject: (p: Project, ephemeral: boolean) => void;
   /** 共有リンク (閲覧専用) で開く: サーバーの公開の口から最新の中身を読み、保存しない計画として読み取り専用で開く */
@@ -1068,6 +1076,27 @@ export const useProjectStore = create<State>((set, get) => {
 
   , newProject: async (name) => {
       const p = createProject(name || t("無題のプロジェクト"));
+      await saveProject(p);
+      get().openProjectObject(p, false);
+      get().setEditMode(true);
+      await get().refreshList();
+    }
+  , planTemplates: []
+  , refreshPlanTemplates: async () => { try { set({ planTemplates: await listPlanTemplates() }); } catch { /* 置き場が使えない環境では空のまま */ } }
+  , registerTemplate: async (name) => {
+      const p = get().project;
+      if (!p) return;
+      const label = name.trim() || p.name;
+      // id は名前: 同じ名前で登録し直すと置き換わる (古いテンプレートが溜まらない)
+      await savePlanTemplate({ id: label, name: label, updatedAt: new Date().toISOString(), text: toJSON(planTemplateFrom(p, label)) });
+      await get().refreshPlanTemplates();
+      set({ toast: t("テンプレート「{name}」を登録しました。Home の「新しい計画を作る」で選べます", { name: label }) });
+    }
+  , deletePlanTemplate: async (id) => { await deletePlanTemplate(id); await get().refreshPlanTemplates(); }
+  , newProjectFromTemplate: async (templateId, name) => {
+      const tpl = get().planTemplates.find((x) => x.id === templateId) ?? (await listPlanTemplates()).find((x) => x.id === templateId);
+      if (!tpl) { set({ toast: t("テンプレートが見つかりません") }); return; }
+      const p = planTemplateFrom(fromJSON(tpl.text), name.trim() || tpl.name);
       await saveProject(p);
       get().openProjectObject(p, false);
       get().setEditMode(true);

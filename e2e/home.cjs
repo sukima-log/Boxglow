@@ -48,6 +48,40 @@ const { chromium, BASE, check, result } = require('./lib.cjs');
       check(`Home ${width}px: ブラウザのエラーが無い`, errors.length === 0, errors.join(' | '));
       await context.close();
     }
+
+    // ---- 計画のテンプレート (B153): 登録 → Home の「新しい計画を作る」で選べる → 構造だけ (進捗なし) の新しい計画 → 消せる ----
+    {
+      const context = await browser.newContext({ locale: 'ja-JP', viewport: { width: 1280, height: 900 } });
+      const page = await context.newPage();
+      await page.goto(BASE + '?lang=ja');
+      await page.waitForFunction(() => !!window.boxglow);
+      // 計画を作って、箱を 1 つ進めてから登録
+      await page.evaluate(() => window.boxglow.store.getState().newProject('元の計画'));
+      await page.waitForFunction(() => window.boxglow.store.getState().project?.name === '元の計画');
+      await page.evaluate(() => { const s = window.boxglow.store.getState(); s.apply((p) => { const id = Object.keys(p.blocks).find((k) => p.blocks[k].kind !== 'project'); return { ...p, description: '説明', blocks: { ...p.blocks, [id]: { ...p.blocks[id], title: '進めた箱', status: 'gray' } } }; }); });
+      await page.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved');
+      await page.evaluate(() => window.boxglow.store.getState().registerTemplate('元の計画'));
+      await page.waitForFunction(() => window.boxglow.store.getState().planTemplates.length === 1);
+      check('テンプレート: 登録すると一覧に入る (名前 = 計画名)', (await page.evaluate(() => window.boxglow.store.getState().planTemplates[0].name)) === '元の計画');
+      // Home へ戻って選んで作る
+      await page.evaluate(() => window.boxglow.store.getState().closeProject());
+      await page.evaluate(() => { const d = document.querySelector('.home-disclosure'); if (d && !d.open) d.open = true; });   // 保存済みの計画があると最初から開いている
+      await page.locator('.home-templates select').waitFor({ timeout: 10000 });
+      await page.locator('.home-templates select').selectOption('元の計画');
+      await page.locator('#home-project-name').fill('テンプレートから');
+      await page.getByRole('button', { name: 'Create', exact: true }).click();
+      await page.waitForFunction(() => window.boxglow.store.getState().project?.name === 'テンプレートから');
+      const made = await page.evaluate(() => { const p = window.boxglow.store.getState().project; const bs = Object.values(p.blocks).filter((b) => b.kind !== 'project'); return { titles: bs.map((b) => b.title), statuses: bs.map((b) => b.status), description: p.description, logs: p.log.length }; });
+      check('テンプレート: 作った計画は構造 (題名・説明) を引き継ぎ、進捗は白紙', made.titles.includes('進めた箱') && made.statuses.every((x) => x === 'black') && made.description === '説明' && made.logs === 0, JSON.stringify(made));
+      // 消す
+      await page.evaluate(() => window.boxglow.store.getState().closeProject());
+      await page.evaluate(() => { const d = document.querySelector('.home-disclosure'); if (d && !d.open) d.open = true; });
+      await page.locator('.home-templates select').selectOption('元の計画');
+      await page.getByRole('button', { name: 'テンプレート「元の計画」を消す', exact: true }).click();
+      await page.waitForFunction(() => window.boxglow.store.getState().planTemplates.length === 0);
+      check('テンプレート: Home から消せる (消すと選択肢が出ない)', (await page.locator('.home-templates').count()) === 0);
+      await context.close();
+    }
   } finally { await browser.close(); }
   const { passed, failed } = result(); console.log(`\n${passed}/${passed + failed} passed`);
   process.exitCode = failed ? 1 : 0;
