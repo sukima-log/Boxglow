@@ -22,6 +22,8 @@ import { runLinkIdentity, runLogin, runLogout, runWhoami, runGoogleLogin } from 
 import { runBilling } from "./sync/billing";
 import { runAgentToken } from "./sync/agent-token";
 import { planTemplateFrom } from "../src/model/template";
+import { combineProjects, splitProject } from "../src/model/combine";
+import { basename } from "node:path";
 import { runTeam } from "./sync/team";
 import { teamApiBase } from "../src/sync/teams";
 import { bindingsOf } from "./sync/state-store";
@@ -380,6 +382,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
 
 使い方 (npx boxglow <command> ...):
   init [--name <名前>] [--file <path>] [--from <計画ファイル>]   boxglow.json を作る (--from で別の計画の構造だけを写して始める = テンプレート)
+  combine <計画ファイル>... --out <path>          複数の計画を 1 つにまとめる (最初のファイルを土台に、残りを別のプロジェクトの箱として取り込む。判断・成果物・記録も残す)
+  split-file <プロジェクトの箱> --out <path>       プロジェクトの箱を別の計画に切り出す (またぐ線は両側の最上位の入力 / 出力に由来を残す)
   setup-agent [--agent codex|claude-code|all] [--dir <path>]                     AI が自律的に使えるように設定する: AGENTS.md / CLAUDE.md に手順を追記、
                                                  Codex は AGENTS.md と .agents/skills、Claude Code は CLAUDE.md・スキル・フック・.mcp.json (既定: all)
   claims                                        受け持ち一覧 (自分・他者・期限切れ)
@@ -498,6 +502,8 @@ boxglow CLI: the entry point for AI agents (Claude Code / Codex, etc.) and peopl
 
 Usage (npx boxglow <command> ...):
   init [--name <name>] [--file <path>] [--from <plan file>]   Create boxglow.json (--from copies only the structure of another plan = template)
+  combine <plan file>... --out <path>            Combine plans into one file (the first file is the base; the others become project boxes; decisions, artifacts and logs are kept)
+  split-file <project box> --out <path>          Move a project box into its own plan file (wires across files become top-level inputs / outputs that say where they come from / go to)
   setup-agent [--agent codex|claude-code|all] [--dir <path>]                     Set things up so AI can use Boxglow on its own: append the instructions to AGENTS.md / CLAUDE.md,
                                                  Codex: AGENTS.md and .agents/skills. Claude Code: CLAUDE.md, skill, hook and .mcp.json (default: all)
   claims                                        Claims grouped by own/others/expired
@@ -1617,6 +1623,44 @@ if (argv[0] === "mcp") {
     const server=str(options.team) ? teamApiBase(selected.server,str(options.team)!) : selected.server;
     process.exitCode=await runLifecycle({server,command:positional[0],id:positional[1],revision:positional[2],file:str(options.file),actor:str(options.actor),confirm:str(options.confirm),cursor:str(options.cursor)},console.log);
   })().catch(e=>{console.error(e.message);process.exitCode=1;});
+} else if (argv[0] === "combine") {
+  // 結合: boxglow combine <計画ファイル>... --out <path> (最初のファイルを土台に、残りを別のプロジェクトの箱として取り込む。B154)
+  const { positional, options } = parseArgs(argv.slice(1));
+  try {
+    setLang(explicitLang(options) ?? "ja");
+    // save() は受け持ち制御の文脈 (claimRequest) を見るので、人の操作として用意する
+    claimRequest = claimCommand("combine", undefined, options, actorOf(str(options.actor), process.env));
+    const outPath = str(options.out);
+    if (positional.length < 2 || !outPath) throw new Error("boxglow combine <計画ファイル> <計画ファイル>... --out <path>");
+    if (existsSync(outPath) && !options.force) throw new Error(t("{path} は既にあります (--force で上書き)", { path: outPath }));
+    let merged = load(positional[0]);
+    for (const file of positional.slice(1)) merged = combineProjects(merged, load(file), basename(file));
+    readRevisions.set(resolve(outPath), existsSync(outPath) ? revisionOf(readFileSync(outPath, "utf8")) : null);
+    save(outPath, merged);
+    console.log(t("結合: {n} 個の計画を {path} にまとめました (プロジェクトの箱 {m} 個)", { n: String(positional.length), path: outPath, m: String(projectBlocks(merged).length) }));
+  } catch (e) { console.error(`[boxglow combine] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; }
+} else if (argv[0] === "split-file") {
+  // 分割: boxglow split-file <プロジェクトの箱> --out <path> [--file <計画>] (箱を別の計画に切り出し、元のファイルから外す。B154)
+  const { positional, options } = parseArgs(argv.slice(1));
+  try {
+    setLang(explicitLang(options) ?? "ja");
+    // save() は受け持ち制御の文脈 (claimRequest) を見るので、人の操作として用意する
+    claimRequest = claimCommand("split-file", undefined, options, actorOf(str(options.actor), process.env));
+    const outPath = str(options.out);
+    if (!positional[0] || !outPath) throw new Error("boxglow split-file <プロジェクトの箱> --out <path> [--file <計画>]");
+    if (existsSync(outPath) && !options.force) throw new Error(t("{path} は既にあります (--force で上書き)", { path: outPath }));
+    const path = locateFile(str(options.file));
+    const p = load(path);
+    // (mustFind は受け持ちの文脈を使うので、ここでは findBlock を直接使う)
+    const found = findBlock(p, positional[0]);
+    if (!found.block) throw new Error(t("ブロック「{ref}」が見つかりません。", { ref: positional[0] }));
+    const box = found.block;
+    const { remaining, extracted } = splitProject(p, box.id, str(options.name));
+    readRevisions.set(resolve(outPath), existsSync(outPath) ? revisionOf(readFileSync(outPath, "utf8")) : null);
+    save(outPath, extracted);
+    save(path, remaining);
+    console.log(t("分割: 「{title}」を {out} に切り出しました ({path} には残り {m} 個のプロジェクトの箱)", { title: box.title, out: outPath, path, m: String(projectBlocks(remaining).length) }));
+  } catch (e) { console.error(`[boxglow split-file] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; }
 } else if (argv[0] === "team") {
   // チーム (ワークスペース) の操作。通信するので、ほかのコマンドとは別扱い
   const { positional, options } = parseArgs(argv.slice(1));

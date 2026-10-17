@@ -20,6 +20,7 @@ import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile, writeLocalFile } from "../lib/localfile";
 import { deletePlanTemplate, listPlanTemplates, savePlanTemplate, type PlanTemplate } from "../lib/templates";
 import { planTemplateFrom } from "../model/template";
+import { combineProjects, splitProject } from "../model/combine";
 import { mergeProjects } from "../model/merge";
 import { applyRestore, editorCaughtUp, prepareRestore, readRecovery, type Recovery, type RestoreConflict, type RestorePicks, type RestoreStep } from "../sync/recovery";
 import { buildSampleProject } from "../model/sample";
@@ -241,6 +242,10 @@ interface State {
   registerTemplate: (name: string) => Promise<void>;
   deletePlanTemplate: (id: string) => Promise<void>;
   newProjectFromTemplate: (templateId: string, name: string) => Promise<void>;
+  /** 別の計画 (JSON の文字列) を、今の計画に別のプロジェクトの箱として取り込む (B154)。Output: 取り込んだ箱の数 */
+  combineInto: (text: string, label: string) => number;
+  /** プロジェクトの箱を別の計画に切り出す: 今の計画からは外し、切り出した計画の JSON を返す (呼び出し側が保存 / ダウンロードする) */
+  splitOut: (projectBlockId: string) => string | null;
   openProject: (id: string) => Promise<boolean>;
   openProjectObject: (p: Project, ephemeral: boolean) => void;
   /** 共有リンク (閲覧専用) で開く: サーバーの公開の口から最新の中身を読み、保存しない計画として読み取り専用で開く */
@@ -1084,6 +1089,22 @@ export const useProjectStore = create<State>((set, get) => {
       get().openProjectObject(p, false);
       get().setEditMode(true);
       await get().refreshList();
+    }
+  , combineInto: (text, label) => {
+      const p = get().project;
+      if (!p) return 0;
+      const source = fromJSON(text);
+      const before = Object.keys(p.blocks).length;
+      const q = combineProjects(p, source, label);
+      get().apply(() => q);
+      return Object.keys(q.blocks).length - before;
+    }
+  , splitOut: (projectBlockId) => {
+      const p = get().project;
+      if (!p) return null;
+      const { remaining, extracted } = splitProject(p, projectBlockId);
+      get().apply(() => remaining);
+      return toJSON(extracted) + "\n";
     }
   , planTemplates: []
   , refreshPlanTemplates: async () => { try { set({ planTemplates: await listPlanTemplates() }); } catch { /* 置き場が使えない環境では空のまま */ } }

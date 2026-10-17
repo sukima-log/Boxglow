@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { TreeIcon } from "./TreeIcon";
 import { RestoreDialog, SaveHeldChip, SyncChip } from "./SyncPanel";
 import { AccountButton } from "./AccountMenu";
-import { addBlock, addProjectBlock, normalizeCollapsed, searchBlocks, summarize, toJSON } from "../model/graph";
+import { addBlock, addProjectBlock, normalizeCollapsed, searchBlocks, summarize, toJSON, projectBlocks } from "../model/graph";
 import { layoutAll } from "../model/autolayout";
 import { projectToMarkdown, scopeToMermaid } from "../model/export";
 import { ROOT_ID, type Project } from "../model/types";
@@ -41,6 +41,9 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   const copyToMine = useProjectStore((s) => s.copyToMine);
   const setToast = useProjectStore((s) => s.setToast);
   const registerTemplate = useProjectStore((s) => s.registerTemplate);
+  const combineInto = useProjectStore((s) => s.combineInto);
+  const splitOut = useProjectStore((s) => s.splitOut);
+  const viewScope = useProjectStore((s) => s.viewScope);
   // VS Code の中: 退避した編集の読み込み (同期の設定が無くても使う。保存の衝突の帯から退避した編集を、開き直した後に取り込む。R49-03)
   const loadEvacuated = useProjectStore((s) => s.loadEvacuated);
   const restoring = useProjectStore((s) => s.restorePending !== null || s.editorBehind !== null);
@@ -164,6 +167,26 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   const exportMd = () => downloadText(`${safeFilename(project.name)}.md`, projectToMarkdown(project), "text/markdown");
   const copyMermaid = async () => {
     setToast((await copyText(scopeToMermaid(project, selection.blockId ?? ROOT_ID))) ? t("Mermaid をコピーしました") : t("コピーできませんでした"));
+  };
+  /** 別の計画のファイルを選んで、別のプロジェクトの箱として取り込む (B154) */
+  const combineFromFile = async () => {
+    const text = await pickTextFile(".json,application/json");
+    if (!text) return;
+    try { const n = combineInto(text, t("取り込んだ計画")); setToast(t("取り込みました (箱 {n} 個)。元に戻す操作で戻せます", { n: String(n) })); }
+    catch (e) { setToast(e instanceof Error ? e.message : String(e)); }
+  };
+  /** 今見ているプロジェクトの箱 (Top なら最初の箱) を別の計画に切り出してダウンロードする */
+  const splitCurrent = () => {
+    const boxes = projectBlocks(project);
+    const scope = viewScope ? project.blocks[viewScope] : null;
+    const target = scope && scope.kind === "project" ? scope : (scope ? (() => { let b = scope; while (b.parentId && b.parentId !== ROOT_ID) b = project.blocks[b.parentId]; return b; })() : boxes[0]);
+    if (!target) return;
+    try {
+      const text = splitOut(target.id);
+      if (!text) return;
+      downloadText(safeFilename(target.title) + ".boxglow.json", text, "application/json");
+      setToast(t("「{title}」を切り出してダウンロードしました。この計画からは外しました (元に戻す操作で戻せます)", { title: target.title }));
+    } catch (e) { setToast(e instanceof Error ? e.message : String(e)); }
   };
   const doImport = async () => {
     const text = await pickTextFile(".json,application/json");
@@ -341,6 +364,8 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
               <button className="btn btn-ghost btn-sm justify-start" onClick={exportMd}>Export Markdown</button>
               <button className="btn btn-ghost btn-sm justify-start" onClick={copyMermaid}>Copy Mermaid</button>
               <button className="btn btn-ghost btn-sm justify-start" onClick={doImport}>Import JSON</button>
+              {!readonly && <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); void combineFromFile(); }} title={t("別の計画 (boxglow.json) を、この計画の別のプロジェクトの箱として取り込む。判断・成果物・記録も残る")}>{t("別の計画を取り込む")}</button>}
+              {!readonly && projectBlocks(project).length >= 2 && <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); splitCurrent(); }} title={t("今見ているプロジェクトの箱を別の計画 (JSON) に切り出してダウンロードし、この計画からは外す。またぐ線は両側の最上位の入力 / 出力に由来が残る")}>{t("このプロジェクトを別ファイルに")}</button>}
               {source === "vscode" && !readonly && <button className="btn btn-ghost btn-sm justify-start" disabled={restoring} onClick={loadEvacuated}>{t("退避した編集を読み込む")}</button>}
               <div style={{ borderTop: "1px solid var(--line-soft)", margin: "4px 0" }} />
               <button className="btn btn-ghost btn-sm justify-start" onClick={onHelp}>Help</button>
