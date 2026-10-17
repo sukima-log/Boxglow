@@ -112,7 +112,8 @@ export function SyncLifecycle({status,act,unsaved=false}:{status:SyncStatus;act:
     {state.shares.length === 0 && <p>{t("共有リンクはまだありません。")}</p>}
    </div>}
    {state.nextCursor && <button className="btn btn-sm" disabled={state.busy} onClick={()=>void act({kind:"listTrash",cursor:state.nextCursor!})}>{t("次のページ")}</button>}
-   <button className="btn btn-ghost btn-sm" disabled={state.busy} onClick={()=>void act({kind:"cancelLifecycle"})}>{t("閉じる")}</button>
+   {/* 行の直下に開いているときは、行をもう一度押せば閉じるので「閉じる」は出さない。行に属さない内容 (その他からの削除の確認など) だけに出す */}
+   {opened===null && <button className="btn btn-ghost btn-sm" disabled={state.busy} onClick={()=>void act({kind:"cancelLifecycle"})}>{t("閉じる")}</button>}
   </div> : null;
  return <section className="sync-lifecycle" aria-label={t("この計画の操作")}>
   <div className="sync-actions">

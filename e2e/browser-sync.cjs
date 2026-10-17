@@ -110,7 +110,7 @@ const ROOT = path.resolve(__dirname, '..');
     await page.waitForFunction(() => document.querySelector('.sync-share-row')?.getAttribute('data-off') === 'true', null, { timeout: 10000 });
     const revokedRead = await page.evaluate(async (u) => (await fetch(u)).status, server.url + '/v1/shares/' + decodeURIComponent(shareUrl.match(/share=([^&]+)/)[1]));
     check('ブラウザ同期: 失効した共有リンクは読めない', revokedRead === 404);
-    await page.locator('.sync-lifecycle').getByRole('button', { name: '閉じる', exact: true }).click();
+    await page.getByRole('button', { name: /^履歴/ }).click(); // 行をもう一度押して閉じる
     await page.evaluate(() => window.boxglow.store.getState().apply((p) => ({ ...p, name: 'ブラウザで改名' })));
     await page.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'synced', null, { timeout: 20000 });
     await page.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved', null, { timeout: 10000 }).catch(() => {});
