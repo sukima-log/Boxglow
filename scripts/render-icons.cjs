@@ -8,9 +8,10 @@ const path = require("node:path");
 const { chromium } = require(process.env.PLAYWRIGHT || "playwright");
 const svg = fs.readFileSync(path.join(__dirname, "..", "docs", "logo", "app-icon.svg"), "utf8");
 // maskable: 角丸を無くして外周まで背景にし、箱を 0.78 倍に縮めて中央へ (安全域 80% の中)
-const maskable = svg.replace(/rx="112"/g, 'rx="0"').replace('<g id="boxes" filter="url(#shadow)">', '<g id="boxes" filter="url(#shadow)" transform="translate(256 256) scale(0.78) translate(-256 -256)">');
+// maskable: 角丸と縁を無くして外周まで背景にし、箱を安全域 (中央 80%) に収める (1.28 → 1.0 倍 = 中央 60%)
+const maskable = svg.replace(/rx="112"/g, 'rx="0"').replace(/<rect id="edge"[^>]*\/>/, "").replace('scale(1.28)', 'scale(1.0)');
 // iPhone (apple-touch-icon): 角は iOS が丸めるので、透明にせず背景を全面に (透明だと黒く埋まる)。箱はそのまま
-const square = svg.replace(/rx="112"/g, 'rx="0"');
+const square = svg.replace(/rx="112"/g, 'rx="0"').replace(/<rect id="edge"[^>]*\/>/, "");
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 512, height: 512 }, deviceScaleFactor: 1 });
