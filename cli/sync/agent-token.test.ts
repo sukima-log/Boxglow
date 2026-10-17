@@ -3,7 +3,7 @@
  * 試験サーバー (cli/sync/test-server.ts) に対して通信する。資格情報は保存済みのもの
  */
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createProject, toJSON } from "../../src/model/graph";
@@ -29,6 +29,20 @@ async function putPlan(): Promise<string> {
   if (!res.ok) throw new Error(`put failed: ${res.status}`);
   return id;
 }
+
+it("connect: トークンを作って設定ファイルに書く (値は出さない)", async () => {
+  const lines: string[] = [];
+  const out = (l: string) => lines.push(l);
+  const projectId = await putPlan();
+  const dir = join(root, "plan"); mkdirSync(dir, { recursive: true });
+  expect(await runAgentToken({ server: server.url, out, command: "connect", target: "nope", write: true, projectId, dir })).toBe(1);
+  expect(await runAgentToken({ server: server.url, out, command: "connect", target: "claude-code", write: true, projectId, dir })).toBe(0);
+  expect(lines.join("\n")).not.toContain("bga_");
+  expect(lines.join("\n")).toContain(join(dir, ".mcp.json"));
+  expect(lines.join("\n")).toContain("共有やコミットをしないでください"); // .gitignore が無いフォルダ
+  expect(JSON.parse(readFileSync(join(dir, ".mcp.json"), "utf8")).mcpServers.boxglow.headers.Authorization).toMatch(/^Bearer bga_/);
+  expect([...server.agentTokens.values()][0]).toMatchObject({ name: "claude-code", write: true });
+});
 
 it("一覧 → 作る (値は 1 度だけ出る。Claude Code / Codex の設定が付く) → 一覧に回数と権限 → 失効", async () => {
   const lines: string[] = [];

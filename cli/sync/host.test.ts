@@ -272,6 +272,40 @@ describe("サインインとサインアウト", () => {
     await host.stop();
   });
 
+  it("AI エージェントの接続: Claude Code は計画のフォルダの .mcp.json に書き (既存の項目は残し .gitignore に足す)、Codex は ~/.codex/config.toml に書く。トークンは見せない", async () => {
+    const { file } = planFile("p1");
+    const dir = join(root, "p1");
+    writeFileSync(join(dir, ".mcp.json"), JSON.stringify({ mcpServers: { other: { command: "x" } } }));
+    writeFileSync(join(dir, ".gitignore"), "node_modules\n");
+    const home = process.env.HOME; process.env.HOME = join(root, "home"); mkdirSync(process.env.HOME, { recursive: true });
+    try {
+      signedIn("acc-connect");
+      const { host } = make();
+      host.openFile(file); host.enable(file);
+      await host.act(file, { kind: "bind" });
+      const remoteId = host.status(file).file!.binding!.remoteId;
+      expect(host.status(file).features?.agentConfig).toBe(true);
+      let state = await host.act(file, { kind: "connectAgent", projectId: remoteId, target: "claude-code", write: true });
+      expect(state.agent?.error).toBeUndefined();
+      expect(state.agent?.connected).toEqual({ target: "claude-code", wrote: true, path: join(dir, ".mcp.json"), gitignored: true });
+      expect(state.agent?.newToken).toBeUndefined();
+      const mcp = JSON.parse(readFileSync(join(dir, ".mcp.json"), "utf8"));
+      expect(mcp.mcpServers.other).toEqual({ command: "x" });
+      expect(mcp.mcpServers.boxglow.url).toBe(`${server.url}/mcp`);
+      expect(mcp.mcpServers.boxglow.headers.Authorization).toMatch(/^Bearer bga_/);
+      expect(readFileSync(join(dir, ".gitignore"), "utf8")).toContain("\n.mcp.json\n");
+      expect(state.agent?.tokens?.[0]).toMatchObject({ name: "claude-code", write: true });
+      state = await host.act(file, { kind: "connectAgent", projectId: remoteId, target: "codex", write: false });
+      expect(state.agent?.connected).toMatchObject({ target: "codex", wrote: true, path: join(process.env.HOME!, ".codex", "config.toml") });
+      expect(readFileSync(join(process.env.HOME!, ".codex", "config.toml"), "utf8")).toContain("[mcp_servers.boxglow]");
+      expect(state.agent?.tokens?.map((x) => x.name)).toEqual(["codex", "claude-code"]);
+      state = await host.act(file, { kind: "agentTokenDismiss" });
+      expect(state.agent?.connected).toBeUndefined();
+      expect(parseHostAction(JSON.stringify({ kind: "connectAgent", projectId: remoteId, target: "other", write: true }))).toBeNull();
+      await host.stop();
+    } finally { process.env.HOME = home; }
+  });
+
   it("課金: /v1/me の billing が状態に出る。申し込み・契約の管理の URL は billingLink に入り、サインアウトで消える。契約が無いと同期は 402 → problem = payment", async () => {
     const { file } = planFile("p1");
     signedIn("acc-pay");

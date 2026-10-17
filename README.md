@@ -172,11 +172,7 @@ The server finds `boxglow.json` like the CLI does (current directory upwards, or
 
 ### Hosted MCP (no local file)
 
-A plan placed on the sync server can also be reached over HTTP MCP at `https://sync.boxglow.app/mcp`, so an agent on another machine (or a cloud agent) works on it without a local `boxglow.json`. Create a token from the account menu ("AI agent access": per plan, read-only or read-write, up to 10 per account; shown once) or with `boxglow agent-token create --name claude-code --write`, then register it:
-
-```
-claude mcp add --transport http boxglow https://sync.boxglow.app/mcp --header "Authorization: Bearer bga_..."
-```
+A plan placed on the sync server can also be reached over HTTP MCP at `https://sync.boxglow.app/mcp`, so an agent on another machine (or a cloud agent) works on it without a local `boxglow.json`. Account menu → "AI agent access" → **Connect Claude Code** (or Codex): in serve and VS Code this creates the token and writes the config file (`.mcp.json` next to the plan, or `~/.codex/config.toml`); in the browser app it gives you the config file to download and the three steps to place it. CLI: `boxglow agent-token connect claude-code|codex`. Tokens are per plan, read-only or read-write, up to 10 per account, and can be revoked from the same place.
 
 Writes become new versions on the server and reach the synced devices on their next sync. Details: [docs/HOSTED_MCP.md](docs/HOSTED_MCP.md) (Japanese).
 

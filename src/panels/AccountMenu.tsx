@@ -11,7 +11,40 @@ import { TEAM_PLAN_AVAILABLE, billingStatusLabel, planLabel } from "../sync/bill
 import { openBilling } from "./accountActions";
 import { SignInButtons, signInOneStep } from "./SignInButtons";
 import { SignInCode } from "./SyncPanel";
-import { claudeCodeCommand, claudeCodeMcpJson, codexConfig, mcpUrlOf } from "../sync/agent";
+import { claudeCodeCommand, claudeCodeMcpJson, codexConfig, gitignoreWithMcpJson, mergeMcpJson } from "../sync/agent";
+
+/**
+ * Claude Code で開くフォルダを選ばせて、その直下の .mcp.json に boxglow の項目を書く (ブラウザ版。Chrome / Edge の File System Access API)
+ * 既にある .mcp.json はほかの項目を残して併合し、.gitignore があれば .mcp.json を足す
+ * Input : server, token。Output: 書いたフォルダ名と .gitignore に入れたか。取り消しは null
+ */
+async function writeMcpJsonToFolder(server: string, token: string): Promise<{ folder: string; gitignored: boolean } | null> {
+  if (!window.showDirectoryPicker) return null;
+  let dir: FileSystemDirectoryHandle;
+  try { dir = await window.showDirectoryPicker({ mode: "readwrite", id: "boxglow-mcp" }); }
+  catch (e) { if (e instanceof DOMException && e.name === "AbortError") return null; throw e; }
+  const readText = async (name: string): Promise<string | null> => {
+    try { return await (await (await dir.getFileHandle(name)).getFile()).text(); }
+    catch (e) { if (e instanceof DOMException && e.name === "NotFoundError") return null; throw e; }
+  };
+  const writeText = async (name: string, text: string): Promise<void> => {
+    const w = await (await dir.getFileHandle(name, { create: true })).createWritable();
+    await w.write(text); await w.close();
+  };
+  await writeText(".mcp.json", mergeMcpJson(await readText(".mcp.json"), server, token));
+  const gi = await readText(".gitignore");
+  let gitignored = false;
+  if (gi !== null) { const next = gitignoreWithMcpJson(gi); if (next !== null) await writeText(".gitignore", next); gitignored = true; }
+  return { folder: dir.name, gitignored };
+}
+
+/** 文字列をファイルとしてダウンロードさせる (ブラウザ版で設定ファイルを渡す)。Input: name = ファイル名, text = 中身 */
+function downloadText(name: string, text: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+  const a = document.createElement("a");
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 /** 人型の印 (未サインイン) */
 function PersonIcon() {
@@ -32,9 +65,11 @@ export function AccountButton() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   /** AI エージェントの接続: 欄の開閉、作るトークンの名前と権限、コピーしたもの */
   const [agentOpen, setAgentOpen] = useState(false);
-  const [agentName, setAgentName] = useState("claude-code");
   const [agentWrite, setAgentWrite] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
+  /** ブラウザ版でフォルダを選んで .mcp.json を書いた結果 (ok) か、書けなかった理由 (error) */
+  const [picked, setPicked] = useState<{ folder: string; gitignored: boolean } | { error: string } | null>(null);
+  const canPickFolder = typeof window !== "undefined" && typeof window.showDirectoryPicker === "function";
   useEffect(() => { if (agentOpen && status?.credentials.account && !status.agent) void act({ kind: "listAgentTokens" }); }, [agentOpen, !!status?.credentials.account]);
   const account = status?.credentials.account;
   const initial = account ? (account.display.trim()[0] ?? "?").toUpperCase() : null;
@@ -138,30 +173,69 @@ export function AccountButton() {
                   {agentOpen && (
                     <div className="agent-tokens">
                       {!status.file?.binding ? (
-                        <p className="muted">{t("今開いている計画をサーバーに置くと、その計画のトークンを作れます")}</p>
+                        <p className="muted">{t("今開いている計画をサーバーに置くと、AI エージェントをつなげます")}</p>
                       ) : (
                         <div className="agent-tokens__new">
-                          <input className="input" value={agentName} onChange={(e) => setAgentName(e.target.value)} maxLength={64} aria-label={t("トークンの名前")} placeholder={t("名前 (例: claude-code)")} />
                           <label className="sync-switch" title={t("オフにすると、読む道具だけが使えます")}>
                             <input type="checkbox" checked={agentWrite} onChange={(e) => setAgentWrite(e.target.checked)} />
                             <span className="sync-switch__track" aria-hidden="true"><span className="sync-switch__knob" /></span>
                             <span>{t("書き込みも許可")}</span>
                           </label>
-                          <button className="btn btn-primary btn-sm" disabled={status.agent?.busy || !agentName.trim()} onClick={() => void act({ kind: "createAgentToken", projectId: status.file!.binding!.remoteId, name: agentName.trim(), write: agentWrite })}>{t("トークンを作る")}</button>
+                          <div className="sync-panel__row">
+                            <button className="btn btn-primary btn-sm" disabled={status.agent?.busy} title={status.features?.agentConfig ? t("この計画のフォルダの .mcp.json に設定を書きます") : t("設定ファイルを作り、置き方を案内します")} onClick={() => { setCopied(null); setPicked(null); void act({ kind: "connectAgent", projectId: status.file!.binding!.remoteId, target: "claude-code", write: agentWrite }); }}>{t("Claude Code に接続")}</button>
+                            <button className="btn btn-sm" disabled={status.agent?.busy} title={status.features?.agentConfig ? t("ホームフォルダの .codex/config.toml に設定を書きます") : t("設定を作り、置き方を案内します")} onClick={() => { setCopied(null); void act({ kind: "connectAgent", projectId: status.file!.binding!.remoteId, target: "codex", write: agentWrite }); }}>{t("Codex に接続")}</button>
+                          </div>
                         </div>
                       )}
                       {status.agent?.error && <p role="alert" className="sync-panel__problem">{status.agent.error}</p>}
-                      {status.agent?.newToken && (
-                        <div className="agent-tokens__token">
-                          <strong>{t("トークンを作りました。この値は今だけ表示されます (控えてください)。")}</strong>
-                          <code className="agent-tokens__secret">{status.agent.newToken.token}</code>
-                          <div className="sync-panel__row">
-                            <button className="btn btn-sm" onClick={() => { void navigator.clipboard?.writeText(claudeCodeCommand(status.server!, status.agent!.newToken!.token)).then(() => setCopied("claude")).catch(() => setCopied(null)); }}>{copied === "claude" ? t("コピーしました") : t("Claude Code の登録コマンドをコピー")}</button>
-                            <button className="btn btn-sm" title={t("VS Code 拡張やデスクトップアプリの Claude Code 向け。作業フォルダの直下に .mcp.json として保存する")} onClick={() => { void navigator.clipboard?.writeText(claudeCodeMcpJson(status.server!, status.agent!.newToken!.token)).then(() => setCopied("mcpjson")).catch(() => setCopied(null)); }}>{copied === "mcpjson" ? t("コピーしました") : t(".mcp.json の設定をコピー")}</button>
-                            <button className="btn btn-sm" onClick={() => { void navigator.clipboard?.writeText(codexConfig(status.server!, status.agent!.newToken!.token)).then(() => setCopied("codex")).catch(() => setCopied(null)); }}>{copied === "codex" ? t("コピーしました") : t("Codex の設定をコピー")}</button>
-                            <button className="btn btn-ghost btn-sm" onClick={() => { setCopied(null); void act({ kind: "agentTokenDismiss" }); }}>{t("閉じる")}</button>
-                          </div>
-                          <p className="muted break-all">{t("MCP の URL")}: {mcpUrlOf(status.server!)}</p>
+                      {status.agent?.connected && (
+                        <div className="agent-tokens__token agent-connect">
+                          {status.agent.connected.wrote ? (
+                            <>
+                              <strong>{status.agent.connected.target === "codex" ? t("Codex に接続しました") : t("Claude Code に接続しました")}</strong>
+                              <p className="muted break-all">{t("設定を書きました")}: {status.agent.connected.path}{status.agent.connected.target === "claude-code" && status.agent.connected.gitignored ? ` (${t(".gitignore にも追加")})` : ""}</p>
+                              {status.agent.connected.target === "claude-code" && !status.agent.connected.gitignored && <p className="muted">{t("このファイルにはトークンが入るので、共有やコミットをしないでください")}</p>}
+                              <p>{status.agent.connected.target === "codex" ? t("Codex を開き直すと、boxglow のツールが使えます") : t("Claude Code を開き直すと、boxglow のツールが使えます。初回に「このプロジェクトの MCP サーバーを使うか」と聞かれたら許可してください")}</p>
+                            </>
+                          ) : status.agent.newToken && status.agent.connected.target === "claude-code" ? (
+                            <>
+                              {canPickFolder ? (
+                                <>
+                                  <strong>{picked && "folder" in picked ? t("Claude Code に接続しました") : t("あと 2 手順で Claude Code から使えます")}</strong>
+                                  <ol className="agent-connect__steps">
+                                    <li>
+                                      {picked && "folder" in picked
+                                        ? <span>{t("設定を書きました")}: {picked.folder}/.mcp.json{picked.gitignored ? ` (${t(".gitignore にも追加")})` : ""}</span>
+                                        : <><button className="btn btn-primary btn-sm" onClick={() => { void writeMcpJsonToFolder(status.server!, status.agent!.newToken!.token).then((r) => { if (r) setPicked(r); }).catch((e) => setPicked({ error: e instanceof Error ? e.message : String(e) })); }}>{t("フォルダを選んで設定を書く")}</button> <span className="muted">{t("Claude Code で開くフォルダ (プロジェクトの直下) を選ぶと、その中の .mcp.json に書きます")}</span></>}
+                                      {picked && "error" in picked && <span role="alert" className="sync-panel__problem"> {t("書けませんでした")}: {picked.error}</span>}
+                                    </li>
+                                    <li>{t("Claude Code を開き直す。初回に「このプロジェクトの MCP サーバーを使うか」と聞かれたら許可する")}</li>
+                                  </ol>
+                                  {picked && "folder" in picked && !picked.gitignored && <p className="muted">{t("このファイルにはトークンが入るので、共有やコミットをしないでください")}</p>}
+                                </>
+                              ) : (
+                                <>
+                                  <strong>{t("あと 3 手順で Claude Code から使えます")}</strong>
+                                  <ol className="agent-connect__steps">
+                                    <li><button className="btn btn-primary btn-sm" onClick={() => { downloadText(".mcp.json", claudeCodeMcpJson(status.server!, status.agent!.newToken!.token)); setCopied("download"); }}>{t("設定ファイル (.mcp.json) をダウンロード")}</button>{copied === "download" && <span className="muted"> {t("保存しました")}</span>}</li>
+                                    <li>{t("保存したファイルの名前が mcp.json になっていたら、先頭に . を付けて .mcp.json にし、Claude Code で開くフォルダの直下に置く (既に .mcp.json があるなら、中の boxglow の項目を足す)")}</li>
+                                    <li>{t("Claude Code を開き直す。初回に「このプロジェクトの MCP サーバーを使うか」と聞かれたら許可する")}</li>
+                                  </ol>
+                                </>
+                              )}
+                              <p className="muted">{t("CLI の claude を使う場合は、コマンド 1 つで済みます")}: <button className="btn btn-ghost btn-sm" onClick={() => { void navigator.clipboard?.writeText(claudeCodeCommand(status.server!, status.agent!.newToken!.token)).then(() => setCopied("claude")).catch(() => setCopied(null)); }}>{copied === "claude" ? t("コピーしました") : t("登録コマンドをコピー")}</button></p>
+                            </>
+                          ) : status.agent.newToken && (
+                            <>
+                              <strong>{t("あと 3 手順で Codex から使えます")}</strong>
+                              <ol className="agent-connect__steps">
+                                <li><button className="btn btn-primary btn-sm" onClick={() => { void navigator.clipboard?.writeText(codexConfig(status.server!, status.agent!.newToken!.token)).then(() => setCopied("codex")).catch(() => setCopied(null)); }}>{copied === "codex" ? t("コピーしました") : t("設定をコピー")}</button></li>
+                                <li>{t("ホームフォルダの .codex/config.toml を開き (無ければ作る)、末尾に貼り付けて保存する")}</li>
+                                <li>{t("Codex を開き直す")}</li>
+                              </ol>
+                            </>
+                          )}
+                          <div className="sync-panel__row"><button className="btn btn-ghost btn-sm" onClick={() => { setCopied(null); setPicked(null); void act({ kind: "agentTokenDismiss" }); }}>{t("閉じる")}</button></div>
                         </div>
                       )}
                       {status.agent?.tokens?.map((tk) => (

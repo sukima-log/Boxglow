@@ -110,16 +110,29 @@ const ROOT = path.resolve(__dirname, '..');
     const revokedRead = await page.evaluate(async (u) => (await fetch(u)).status, server.url + '/v1/shares/' + decodeURIComponent(shareUrl.match(/share=([^&]+)/)[1]));
     check('ブラウザ同期: 失効した共有リンクは読めない', revokedRead === 404);
     await page.getByRole('button', { name: /^履歴/ }).click(); // 行をもう一度押して閉じる
-    // AI エージェントの接続: 右上のアカウントのメニュー → 「AI エージェントの接続」 → 作る → 値 (bga_) が 1 度だけ出て、貼る設定のコピーがある → 失効
+    // AI エージェントの接続: 右上のアカウントのメニュー → 「AI エージェントの接続」 → 「Claude Code に接続」 → ブラウザ版は 3 手順 (設定ファイルのダウンロード → 置く → 開き直す) → 失効
     await page.locator('.account-button').click();
     await page.locator('.account-menu').getByRole('button', { name: /^AI エージェントの接続/ }).click();
     await page.locator('.agent-tokens').waitFor({ timeout: 10000 });
-    await page.locator('.agent-tokens').getByRole('button', { name: 'トークンを作る', exact: true }).click();
-    await page.locator('.agent-tokens__secret').waitFor({ timeout: 10000 });
-    const agentToken = (await page.locator('.agent-tokens__secret').textContent()) ?? '';
-    check('ブラウザ同期: アカウントのメニューから AI エージェント用トークンを作ると値が出る', /^bga_acc[0-9a-f]{32}\./.test(agentToken), agentToken);
-    check('ブラウザ同期: Claude Code / Codex の設定をコピーするボタンがある', (await page.locator('.agent-tokens__token').getByRole('button', { name: 'Claude Code の登録コマンドをコピー', exact: true }).count()) === 1 && (await page.locator('.agent-tokens__token').getByRole('button', { name: 'Codex の設定をコピー', exact: true }).count()) === 1);
-    check('ブラウザ同期: トークンの一覧には値が無く、読み書きと計画の ID が出る', !((await page.locator('.agent-tokens__row').first().textContent()) ?? '').includes('bga_') && ((await page.locator('.agent-tokens__row').first().textContent()) ?? '').includes('読み書き'));
+    check('ブラウザ同期: 接続はボタン 1 つ (トークンの名前を聞かない)', (await page.locator('.agent-tokens input[type="text"]').count()) === 0 && (await page.locator('.agent-tokens').getByRole('button', { name: 'Codex に接続', exact: true }).count()) === 1);
+    await page.locator('.agent-tokens').getByRole('button', { name: 'Claude Code に接続', exact: true }).click();
+    await page.locator('.agent-connect').waitFor({ timeout: 10000 });
+    const connectText = (await page.locator('.agent-connect').textContent()) ?? '';
+    check('ブラウザ同期: ブラウザ版は 3 手順 (ダウンロード・置く場所・開き直す) を出し、トークンの値は見せない', /あと [23] 手順/.test(connectText) && connectText.includes('フォルダ') && connectText.includes('開き直す') && !connectText.includes('bga_'));
+    // フォルダ選択 (File System Access API) を、メモリ上の偽物に差し替える (.gitignore はある前提)
+    await page.evaluate(() => {
+      const files = { '.gitignore': 'node_modules\n' };
+      window.__fsFiles = files;
+      const handle = (name) => ({ kind: 'file', name, getFile: async () => ({ text: async () => files[name] }), createWritable: async () => ({ write: async (t) => { files[name] = t; }, close: async () => {} }) });
+      window.showDirectoryPicker = async () => ({ kind: 'directory', name: 'myproject', getFileHandle: async (name, opts) => { if (!(name in files)) { if (!opts?.create) throw new DOMException('no', 'NotFoundError'); files[name] = ''; } return handle(name); } });
+    });
+    await page.locator('.agent-connect').getByRole('button', { name: 'フォルダを選んで設定を書く', exact: true }).click();
+    await page.waitForFunction(() => (document.querySelector('.agent-connect')?.textContent ?? '').includes('設定を書きました'), null, { timeout: 10000 });
+    const written = await page.evaluate(() => window.__fsFiles);
+    const mcpWritten = JSON.parse(written['.mcp.json']);
+    check('ブラウザ同期: 選んだフォルダの .mcp.json に MCP の URL とトークンが書かれ、.gitignore にも足される', mcpWritten.mcpServers.boxglow.url === server.url + '/mcp' && /^Bearer bga_acc[0-9a-f]{32}\./.test(mcpWritten.mcpServers.boxglow.headers.Authorization) && written['.gitignore'].includes('\n.mcp.json\n'));
+    check('ブラウザ同期: 書いた後は「接続しました」とフォルダ名が出る', ((await page.locator('.agent-connect').textContent()) ?? '').includes('myproject/.mcp.json'));
+    check('ブラウザ同期: トークンの一覧には値が無く、名前と読み書きと計画の ID が出る', !((await page.locator('.agent-tokens__row').first().textContent()) ?? '').includes('bga_') && ((await page.locator('.agent-tokens__row').first().textContent()) ?? '').includes('claude-code') && ((await page.locator('.agent-tokens__row').first().textContent()) ?? '').includes('読み書き'));
     await page.locator('.agent-tokens__row').first().getByRole('button', { name: '失効', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('.agent-tokens__row')?.getAttribute('data-off') === 'true', null, { timeout: 10000 });
     check('ブラウザ同期: トークンを失効させると一覧で失効になる', [...server.agentTokens.values()][0]?.revoked === true);

@@ -390,7 +390,7 @@ export class BrowserSyncHost {
       case "billingCheckout": await this.billingLinkFor("checkout", action.plan, action.seats); break;
       case "billingPortal": await this.billingLinkFor("portal"); break;
       case "billingDismiss": this.billingLink = undefined; this.emit(); break;
-      case "listAgentTokens": case "createAgentToken": case "revokeAgentToken": case "agentTokenDismiss": await this.agentAction(action); break;
+      case "listAgentTokens": case "createAgentToken": case "connectAgent": case "revokeAgentToken": case "agentTokenDismiss": await this.agentAction(action); break;
       case "pause": this.paused = true; break;
       case "resume": this.paused = false; break;
       case "bind": case "syncNow": if (file) await this.syncFile(file, {}); break;
@@ -472,20 +472,23 @@ export class BrowserSyncHost {
   private agent: NonNullable<SyncStatus["agent"]> | undefined;
   /** エージェント用トークン: 一覧 / 作る / 失効 (Cookie のセッション)。結果は status.agent */
   private async agentAction(action: HostAction): Promise<void> {
-    if (action.kind === "agentTokenDismiss") { if (this.agent) this.agent.newToken = undefined; this.emit(); return; }
+    if (action.kind === "agentTokenDismiss") { if (this.agent) { this.agent.newToken = undefined; this.agent.connected = undefined; } this.emit(); return; }
     if (!this.signedIn()) { this.message = t("先にサインインしてください"); this.emit(); return; }
     if (this.agent?.busy) return;
     const state = this.agent ?? { busy: false };
     this.agent = state; state.busy = true; state.error = undefined; this.emit();
     try {
-      if (action.kind === "createAgentToken") {
-        const res = await this.doFetch(`${this.server}/v1/agent-tokens`, { method: "POST", redirect: "error", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: action.name, projectId: action.projectId, write: action.write }) });
+      if (action.kind === "createAgentToken" || action.kind === "connectAgent") {
+        const name = action.kind === "connectAgent" ? action.target : action.name;
+        const res = await this.doFetch(`${this.server}/v1/agent-tokens`, { method: "POST", redirect: "error", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, projectId: action.projectId, write: action.write }) });
         const body = await res.json().catch(() => ({})) as { id?: unknown; token?: unknown; code?: unknown; limit?: unknown };
         if (res.status === 409 && body.code === "quota") throw new Error(t("エージェント用トークンは {n} 個までです。使わないものを失効させてください", { n: String(body.limit ?? "") }));
         // 404: 計画がこのアカウントに無い (別のアカウントで置いた計画を、違うアカウントで開いているとき)
         if (res.status === 404) throw new Error(t("今サインインしているアカウントには、この計画がサーバー上にありません (別のアカウントで置いた計画かもしれません)。その計画を置いたアカウントでサインインし直すか、このアカウントで計画を置き直してください"));
         if (!res.ok || typeof body.id !== "string" || typeof body.token !== "string") throw new Error(t("トークンを作れませんでした (サーバーの応答: {status})", { status: res.status }));
-        state.newToken = { id: body.id, name: action.name, token: body.token, projectId: action.projectId, write: action.write };
+        state.newToken = { id: body.id, name, token: body.token, projectId: action.projectId, write: action.write };
+        // ブラウザ版は手元にファイルを書けないので、画面がダウンロードと手順を出す
+        state.connected = action.kind === "connectAgent" ? { target: action.target, wrote: false } : undefined;
       }
       if (action.kind === "revokeAgentToken") {
         const res = await this.doFetch(`${this.server}/v1/agent-tokens/${encodeURIComponent(action.id)}`, { method: "DELETE", redirect: "error" });

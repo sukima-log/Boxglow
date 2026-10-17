@@ -1,3 +1,4 @@
+import type { AgentTarget } from "./agent";
 import type { Billing } from "./billing";
 import type { AgentTokenEntry } from "./agent";
 /**
@@ -62,7 +63,9 @@ export interface SyncStatus {
   /** 選べる操作の無い問題と、直す場所 */
   problem?: { kind: "configuration" | "auth" | "payment" | "network" | "rejected" | "state-unreadable" | "busy"; text: string; fix: "server-setting" | "credentials" | "billing" | "wait" | "local-file" | "sync-state" | "rerun" };
   /** AI エージェント用トークン (ホスト型の MCP): 一覧と、今作ったトークン (このときだけ分かる) */
-  agent?: { busy: boolean; error?: string; tokens?: AgentTokenEntry[]; newToken?: { id: string; name: string; token: string; projectId: string; write: boolean } };
+  agent?: { busy: boolean; error?: string; tokens?: AgentTokenEntry[]; newToken?: { id: string; name: string; token: string; projectId: string; write: boolean }
+    /** 「Claude Code に接続」「Codex に接続」の結果。wrote = 設定ファイルを書けた (serve / VS Code)。書けない環境 (ブラウザ版) では newToken を使って画面が手順を出す */
+    ; connected?: { target: AgentTarget; wrote: boolean; path?: string; gitignored?: boolean } };
   /** 申し込み / 契約の管理の画面の URL (操作 billingCheckout / billingPortal の結果。画面はリンクとして出す。次の操作やサインアウトで消える) */
   billingLink?: { kind: "checkout" | "portal"; url: string; plan?: string };
   /** サインインの途中 (コードを表示している間) */
@@ -99,7 +102,7 @@ export interface SyncStatus {
   /** このホストで作成した、置き換え前のローカルファイルの控え。 */
   localBackup?: string;
   /** このホストで使えない機能 (省略 = 全部使える)。trash = ゴミ箱 (削除・復元) */
-  features?: { trash?: boolean };
+  features?: { trash?: boolean; /** 設定ファイル (.mcp.json / Codex の config.toml) を手元に書ける (serve / VS Code) */ agentConfig?: boolean };
   /** 1 行の補足 */
   message?: string;
   /**
@@ -129,7 +132,7 @@ export type HostAction =
   /** 課金: 申し込みの画面 (Stripe Checkout) / 契約の管理 (Customer Portal) の URL をもらう (結果は status.billingLink) */
   | { kind: "billingCheckout"; plan: "personal" | "team"; seats?: number } | { kind: "billingPortal" } | { kind: "billingDismiss" }
   /** AI エージェント用トークン: 一覧 / 作る (計画と権限) / 失効 / 作ったトークンの表示を消す */
-  | { kind: "listAgentTokens" } | { kind: "createAgentToken"; projectId: string; name: string; write: boolean } | { kind: "revokeAgentToken"; id: string } | { kind: "agentTokenDismiss" }
+  | { kind: "listAgentTokens" } | { kind: "createAgentToken"; projectId: string; name: string; write: boolean } | { kind: "connectAgent"; projectId: string; target: AgentTarget; write: boolean } | { kind: "revokeAgentToken"; id: string } | { kind: "agentTokenDismiss" }
   /** 2 つ目のサインイン手段を、サインイン済みのアカウントに足す (コードや URL は signIn と同じ欄に出る) */
   | { kind: "linkIdentity"; provider: "github" | "google" }
   | { kind: "bind" } | { kind: "syncNow" }

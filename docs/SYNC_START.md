@@ -83,7 +83,7 @@ CIなどで製品サーバーへ環境トークンを使う場合は、`BOXGLOW_
 
 ### AI エージェントの接続 (ホスト型の MCP)
 
-アカウントのメニュー → 「AI エージェントの接続」で、今開いている計画 (サーバーに置いたもの) 用のトークンを作れます (名前、読み取り専用 / 読み書き。1 アカウント 10 個まで。値は作った直後だけ表示)。Claude Code や Codex にそのトークンを登録すると、手元にファイルが無くても `https://sync.boxglow.app/mcp` 経由で計画を読み書きできます。CLI は `boxglow agent-token [list | create --name <名前> [--write] | revoke <id>]`。詳しくは [HOSTED_MCP.md](HOSTED_MCP.md)。
+アカウントのメニュー → 「AI エージェントの接続」 → 「Claude Code に接続」か「Codex に接続」で、今開いている計画 (サーバーに置いたもの) をエージェントから `https://sync.boxglow.app/mcp` 経由で読み書きできるようにします。serve / VS Code ではトークンを作って設定ファイルまで書き、ブラウザ版では設定ファイルのダウンロードと置き方の 3 手順を出します (1 アカウント 10 個まで。一覧から失効できます)。CLI は `boxglow agent-token connect claude-code|codex [--read-only]`。詳しくは [HOSTED_MCP.md](HOSTED_MCP.md)。
 
 ### アカウントの削除
 

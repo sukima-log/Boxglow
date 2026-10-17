@@ -5,22 +5,23 @@
 ## 使い方
 
 1. 計画をサーバーに置く (同期を有効にして結び付ける。[SYNC_START.md](SYNC_START.md))。
-2. アカウントのメニュー (右上のアイコン) → 「AI エージェントの接続」 → 名前 (例: claude-code) と「書き込みも許可」を決めて「トークンを作る」。
-3. トークンの値 (`bga_...`) は作った直後だけ表示されます (サーバーはハッシュしか持ちません)。「Claude Code の登録コマンドをコピー」か「Codex の設定をコピー」で、そのまま貼れる形になります。
-   - Claude Code: `claude mcp add --transport http boxglow https://sync.boxglow.app/mcp --header "Authorization: Bearer bga_..."`
-   - Claude Code の VS Code 拡張・デスクトップアプリ (CLI の `claude` コマンドが無いとき): 「.mcp.json の設定をコピー」を押し、作業フォルダの直下に `.mcp.json` として保存する。Claude Code を開き直すと、初回に「このプロジェクトの MCP サーバーを使うか」の確認が出るので許可する。トークンを含むので、このファイルは共有・コミットしない (`.gitignore` に入れる)
-     ```json
-     { "mcpServers": { "boxglow": { "type": "http", "url": "https://sync.boxglow.app/mcp", "headers": { "Authorization": "Bearer bga_..." } } } }
-     ```
-   - Codex (`~/.codex/config.toml`):
-     ```toml
-     [mcp_servers.boxglow]
-     url = "https://sync.boxglow.app/mcp"
-     http_headers = { Authorization = "Bearer bga_..." }
-     ```
-4. エージェントが `boxglow_status` を呼ぶと、サーバー上の最新の版が読めます。書き込み (`boxglow_start` など) は、サーバーに新しい版として保存され、同期している端末には次の同期で届きます。
+2. アカウントのメニュー (右上のアイコン) → 「AI エージェントの接続」 → 「書き込みも許可」を決めて **「Claude Code に接続」** か **「Codex に接続」** を押す。
+   - **serve / VS Code 拡張** (手元にファイルを書ける): これで終わりです。トークンを作り、設定ファイルに書き込みます (Claude Code は計画のフォルダの `.mcp.json`、Codex はホームフォルダの `.codex/config.toml`。ほかの項目は残し、boxglow の項目だけ足します。`.gitignore` があれば `.mcp.json` を足します)。Claude Code / Codex を開き直すと boxglow のツールが使えます。初回に「このプロジェクトの MCP サーバーを使うか」と聞かれたら許可します。トークンの値は表示しません。
+   - **ブラウザ版 (boxglow.app)**: Claude Code は「フォルダを選んで設定を書く」で、Claude Code で開くフォルダ (プロジェクトの直下) を選ぶと、その中の `.mcp.json` に直接書きます (Chrome / Edge。既存の項目は残し、`.gitignore` があれば足します) → Claude Code を開き直す (初回の確認を許可)。フォルダを選べないブラウザでは `.mcp.json` をダウンロードし、名前を `.mcp.json` に直して置きます。Codex: 「設定をコピー」 → ホームフォルダの `.codex/config.toml` の末尾に貼る → Codex を開き直す。CLI の `claude` がある人は「登録コマンドをコピー」の 1 行でも済みます。
+3. エージェントが `boxglow_status` を呼ぶと、サーバー上の最新の版が読めます。書き込み (`boxglow_start` など) は、サーバーに新しい版として保存され、同期している端末には次の同期で届きます。
 
-CLI でも同じことができます: `boxglow agent-token` (一覧)、`boxglow agent-token create --name claude-code --write` (今の計画のトークンを作る)、`boxglow agent-token revoke <id>`。
+CLI でも同じことができます: `boxglow agent-token connect claude-code|codex [--read-only]` (計画のフォルダで。トークンを作り、設定ファイルに書く)。トークンの値だけ要るときは `boxglow agent-token create --name <名前> [--write]`、一覧は `boxglow agent-token`、失効は `boxglow agent-token revoke <id>`。
+
+設定ファイルの中身 (手で置くとき):
+
+- Claude Code (`.mcp.json`。作業フォルダの直下): `{ "mcpServers": { "boxglow": { "type": "http", "url": "https://sync.boxglow.app/mcp", "headers": { "Authorization": "Bearer bga_..." } } } }`
+- Claude Code の CLI: `claude mcp add --transport http boxglow https://sync.boxglow.app/mcp --header "Authorization: Bearer bga_..."`
+- Codex (`~/.codex/config.toml`):
+  ```toml
+  [mcp_servers.boxglow]
+  url = "https://sync.boxglow.app/mcp"
+  http_headers = { Authorization = "Bearer bga_..." }
+  ```
 
 ## トークンの性質
 

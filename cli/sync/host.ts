@@ -22,6 +22,8 @@ import { SyncPaymentError } from "../../src/sync/run";
 import { parseBilling } from "../../src/sync/billing";
 import { parseShareList, shareUrl } from "../../src/sync/shares";
 import { parseAgentTokens } from "../../src/sync/agent";
+import { writeAgentConfig } from "./agent-config";
+import { dirname } from "node:path";
 import { haltView, type SyncAction } from "./command";
 import { credentialsPath, readCredentials, resolveToken } from "./credentials";
 import { runGoogleLogin, runLinkIdentity, runLogin, runLogout, serverProblem } from "./login";
@@ -424,8 +426,8 @@ export class SyncHost {
   /** AI エージェント用トークンの状態 (アカウントにつき 1 つ) */
   private agent: NonNullable<SyncStatus["agent"]> | undefined;
   /** エージェント用トークン: 一覧 / 作る / 失効 (本人のトークンで /v1/agent-tokens を呼ぶ)。結果は status.agent */
-  private async agentAction(action: HostAction): Promise<void> {
-    if (action.kind === "agentTokenDismiss") { if (this.agent) this.agent.newToken = undefined; this.emit(); return; }
+  private async agentAction(action: HostAction, file: string | null): Promise<void> {
+    if (action.kind === "agentTokenDismiss") { if (this.agent) { this.agent.newToken = undefined; this.agent.connected = undefined; } this.emit(); return; }
     const creds = this.resolveCredentials();
     if (!creds) { this.message = t("先にサインインしてください"); this.emit(); return; }
     if (this.agent?.busy) return;
@@ -433,14 +435,28 @@ export class SyncHost {
     this.agent = state; state.busy = true; state.error = undefined; this.emit();
     const headers = { authorization: `Bearer ${creds.token}`, "content-type": "application/json", "x-boxglow-version": APP_VERSION };
     try {
-      if (action.kind === "createAgentToken") {
-        const res = await this.doFetch(`${this.server}/v1/agent-tokens`, { method: "POST", headers, redirect: "error", body: JSON.stringify({ name: action.name, projectId: action.projectId, write: action.write }) });
+      if (action.kind === "createAgentToken" || action.kind === "connectAgent") {
+        const name = action.kind === "connectAgent" ? action.target : action.name;
+        const res = await this.doFetch(`${this.server}/v1/agent-tokens`, { method: "POST", headers, redirect: "error", body: JSON.stringify({ name, projectId: action.projectId, write: action.write }) });
         const body = await res.json().catch(() => ({})) as { id?: unknown; token?: unknown; code?: unknown; limit?: unknown };
         if (res.status === 409 && body.code === "quota") throw new Error(t("エージェント用トークンは {n} 個までです。使わないものを失効させてください", { n: String(body.limit ?? "") }));
         // 404: 計画がこのアカウントに無い (別のアカウントで置いた計画を、違うアカウントで開いているとき)
         if (res.status === 404) throw new Error(t("今サインインしているアカウントには、この計画がサーバー上にありません (別のアカウントで置いた計画かもしれません)。その計画を置いたアカウントでサインインし直すか、このアカウントで計画を置き直してください"));
         if (!res.ok || typeof body.id !== "string" || typeof body.token !== "string") throw new Error(t("トークンを作れませんでした (サーバーの応答: {status})", { status: res.status }));
-        state.newToken = { id: body.id, name: action.name, token: body.token, projectId: action.projectId, write: action.write };
+        const created = { id: body.id, name, token: body.token, projectId: action.projectId, write: action.write };
+        state.connected = undefined;
+        if (action.kind === "connectAgent") {
+          // 設定ファイルを手元に書く (書けたらトークンは見せない。書けなければ見せて、手で置いてもらう)
+          try {
+            const written = writeAgentConfig(action.target, this.server, created.token, file ? dirname(file) : process.cwd());
+            state.newToken = undefined;
+            state.connected = { target: action.target, wrote: true, path: written.path, gitignored: written.gitignored };
+          } catch (e) {
+            state.newToken = created;
+            state.connected = { target: action.target, wrote: false };
+            state.error = t("設定ファイルを書けませんでした ({reason})。下の手順で手で置いてください", { reason: e instanceof Error ? e.message : String(e) });
+          }
+        } else state.newToken = created;
       }
       if (action.kind === "revokeAgentToken") {
         const res = await this.doFetch(`${this.server}/v1/agent-tokens/${encodeURIComponent(action.id)}`, { method: "DELETE", headers, redirect: "error" });
@@ -812,7 +828,7 @@ export class SyncHost {
       case "billingCheckout": await this.billingLinkFor("checkout", action.plan, action.seats); break;
       case "billingPortal": await this.billingLinkFor("portal"); break;
       case "billingDismiss": this.billingLink = undefined; this.emit(); break;
-      case "listAgentTokens": case "createAgentToken": case "revokeAgentToken": case "agentTokenDismiss": await this.agentAction(action); break;
+      case "listAgentTokens": case "createAgentToken": case "connectAgent": case "revokeAgentToken": case "agentTokenDismiss": await this.agentAction(action, real); break;
       case "pause": this.paused = true; break;
       case "resume": this.paused = false; break;
       case "bind":
@@ -902,6 +918,7 @@ export class SyncHost {
       ...(real && this.localBackups.get(real)?.credentials === this.credentialsGeneration() ? {localBackup:this.localBackups.get(real)!.path} : {}),
       ...(this.billingLink ? { billingLink: this.billingLink } : {}),
       ...(this.agent ? { agent: this.agent } : {}),
+      features: { agentConfig: true },   // serve / VS Code は設定ファイルを手元に書ける
       ...(real && this.lifecycles.get(real)?.credentials === this.credentialsGeneration() ? {lifecycle:this.lifecycles.get(real)!.state} : {}),
       ...(real && this.startups.has(real) ? {startup:(( {credentials:_,...safe} ) => safe)(this.startups.get(real)!)} : {})
     , file: real ? { path: real, enabled, binding } : null
@@ -1034,6 +1051,7 @@ export function parseHostAction(text: string): HostAction | null {
       return { kind: o.kind };
     case "signIn": return o.provider === "github" || o.provider === "google" ? { kind: "signIn", provider: o.provider } : null;
     case "createAgentToken": return typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 && typeof o.name === "string" && o.name.length <= 64 ? { kind: "createAgentToken", projectId: o.projectId, name: o.name, write: o.write === true } : null;
+    case "connectAgent": return typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 && (o.target === "claude-code" || o.target === "codex") ? { kind: "connectAgent", projectId: o.projectId, target: o.target, write: o.write === true } : null;
     case "revokeAgentToken": return typeof o.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(o.id) ? { kind: "revokeAgentToken", id: o.id } : null;
     case "billingCheckout": return (o.plan === "personal" || o.plan === "team") && (o.seats === undefined || typeof o.seats === "number" && o.seats >= 1 && o.seats <= 100) ? { kind: "billingCheckout", plan: o.plan, ...(typeof o.seats === "number" ? { seats: o.seats } : {}) } : null;
     case "linkIdentity": return o.provider === "github" || o.provider === "google" ? { kind: "linkIdentity", provider: o.provider } : null;
