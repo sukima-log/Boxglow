@@ -11,6 +11,12 @@ import "./index.css";
 
 initTheme();
 
+// PWA (B152): Service Worker は本番の画面 (boxglow.app) でだけ登録する。serve / VS Code / プレビュー / 試験では登録しない
+// (登録すると、ホーム画面に追加でき、オフラインでも前回の画面と保存済みの計画を開ける)
+if ("serviceWorker" in navigator && /(^|\.)boxglow\.app$/.test(window.location.hostname) && !window.acquireVsCodeApi) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => { /* 登録できなくても画面は動く */ }); });
+}
+
 // 動作確認やデバッグ用に、状態 (store) をコンソールから触れるようにしておく (window.boxglow.store.getState())
 declare global {
   interface Window {

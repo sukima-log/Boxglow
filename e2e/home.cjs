@@ -82,6 +82,23 @@ const { chromium, BASE, check, result } = require('./lib.cjs');
       check('テンプレート: Home から消せる (消すと選択肢が出ない)', (await page.locator('.home-templates').count()) === 0);
       await context.close();
     }
+
+    // ---- PWA (B152): マニフェストと sw.js が配信され、試験環境 (127.0.0.1) では Service Worker を登録しない ----
+    {
+      const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      const page = await context.newPage();
+      await page.goto(BASE + '?lang=ja');
+      await page.waitForFunction(() => !!window.boxglow);
+      const pwa = await page.evaluate(async (base) => {
+        const link = document.querySelector('link[rel="manifest"]');
+        const manifest = link ? await (await fetch(link.href)).json().catch(() => null) : null;
+        const sw = await fetch(base + 'sw.js').then((r) => r.ok ? r.text() : '').catch(() => '');
+        return { manifest: manifest?.display, icons: manifest?.icons?.length ?? 0, sw: sw.includes('boxglow-') && !sw.includes('__BUILD__'), registered: !!navigator.serviceWorker?.controller };
+      }, BASE);
+      check('PWA: マニフェスト (standalone・アイコン 2 つ) と sw.js (版入り) が配信される', pwa.manifest === 'standalone' && pwa.icons === 2 && pwa.sw, JSON.stringify(pwa));
+      check('PWA: 試験環境では Service Worker を登録しない', pwa.registered === false);
+      await context.close();
+    }
   } finally { await browser.close(); }
   const { passed, failed } = result(); console.log(`\n${passed}/${passed + failed} passed`);
   process.exitCode = failed ? 1 : 0;

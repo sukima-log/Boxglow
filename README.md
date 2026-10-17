@@ -137,6 +137,10 @@ Use `codex mcp list` to verify the registration. `.mcp.json` in a repository is 
 
 See the official [Codex skills locations](https://learn.chatgpt.com/docs/build-skills) and [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 
+## On a phone or tablet
+
+Open https://boxglow.app and use "Add to Home Screen" (Share menu on iPhone, browser menu on Android): Boxglow opens like an app, and the last loaded screen with the plans saved in that browser works offline (sync resumes when online). The vertical flow is the default below 900 px; decisions can be answered from the Activity list or the box panel.
+
 ## Any browser: `npx boxglow serve`
 
 The web app opens a local `boxglow.json` directly only in Chrome / Edge (File System Access API), and those browsers refuse some locations: a file inside WSL (`\\wsl.localhost\...`) is rejected with a "contains system files" message. Use `serve` (or the VS Code extension) for those. `npx boxglow serve` runs a small local server (127.0.0.1 only) that serves the bundled app and exposes the file as `GET/PUT /api/project` plus an SSE `/api/events` stream, so the page updates a moment after the CLI or an agent writes the file, and edits in the page are written back. Open `http://localhost:4174/?serve=1` (`--open` opens it for you).
