@@ -86,6 +86,10 @@ export interface SyncStatus {
     /** 履歴 (版の一覧。新しい順) と、その計画の ID */
     versions?:{revision:string;at:string}[];
     versionsOf?:string;
+    /** 共有リンク (閲覧専用) の一覧と、その計画の ID。newShare = 今作ったリンク (URL はこのときだけ分かる) */
+    shares?:{id:string;createdAt:string;expiresAt:string|null;revoked:boolean;expired:boolean}[];
+    sharesOf?:string;
+    newShare?:{id:string;url:string;expiresAt:string|null};
     /** 確認中の操作 (revert = 履歴の版の中身を手元のファイルに戻す。サーバーの履歴は変えず、次の同期で新しい版として送られる) */
     preview?:{kind:"delete"|"restore"|"revert";id:string;name:string;account:string;revision:string;expiresAt?:string;targetId?:string};
   };
@@ -109,6 +113,8 @@ export type HostAction =
 
   | { kind:"listTrash"; cursor?:string } | {kind:"cancelLifecycle"}
   | { kind:"listVersions"; projectId:string } | { kind:"previewRevert"; projectId:string; revision:string }
+  /** 共有リンク (閲覧専用): 一覧 / 作る (期限は日数。無ければ無期限) / 失効 */
+  | { kind:"listShares"; projectId:string } | { kind:"createShare"; projectId:string; expiresInDays?:number } | { kind:"revokeShare"; projectId:string; shareId:string }
   | {kind:"previewDelete"|"previewRestore";projectId:string}
   | {kind:"confirmLifecycle";choiceId:string}
   | { kind: "enable" } | { kind: "disable" }

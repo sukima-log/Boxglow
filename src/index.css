@@ -1190,6 +1190,13 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .sync-panel__choices { display: flex; gap: 6px; flex-wrap: wrap; }
 .sync-panel__details { font-size: 12px; color: var(--text-muted); white-space: pre-wrap; word-break: break-all; }
 .sync-panel__id { font-family: var(--font-mono, monospace); font-size: 11px; }
+/* 共有リンク: 作った直後の URL は選びやすい入力欄で。失効・期限切れの行は薄く */
+.sync-shares { display: grid; gap: 8px; }
+.sync-shares__expires { display: inline-flex; align-items: center; gap: 6px; }
+.sync-shares__expires select { font-size: 12px; }
+.sync-shares__new { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--primary); border-radius: 8px; }
+.sync-shares__url { flex: 1; min-width: 0; font-family: var(--font-mono, monospace); font-size: 11px; }
+.sync-share-row[data-off="true"] { opacity: 0.6; }
 /* サインインのボタン: 各社の印つきで、押せると分かる大きさ。GitHub は濃い色、Google は白地 */
 .signin-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
 .signin-btn { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; border-radius: 8px; }

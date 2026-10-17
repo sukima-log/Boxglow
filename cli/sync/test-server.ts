@@ -63,6 +63,8 @@ export class TestSyncServer {
   revoked = new Set<string>();
   /** 本人の操作で削除を受け付けた利用者 (DELETE /v1/account) */
   deletedAccounts = new Set<string>();
+  /** 共有リンク: id → { token, projectId, revoked, expiresAt } (利用者ごと) */
+  shares = new Map<string, { id: string; token: string; account: string; projectId: string; revoked: boolean; expiresAt: string | null; createdAt: string }>();
   /** 課金の再現: required = 契約を求める (契約の無い利用者の同期は 402)、subscribed = 契約のある利用者、customers = 顧客のできた利用者 */
   billing = { required: false, subscribed: new Set<string>(), customers: new Set<string>(), calls: [] as { kind: string; account: string; body: unknown }[] };
   private codes = 0;
@@ -106,6 +108,16 @@ export class TestSyncServer {
     // Authorization が無く Cookie があれば、Cookie の値をトークンとして扱う (本番と同じ。Origin の照合は試験では省く)
     if (!req.headers.authorization && cookieToken) req.headers.authorization = `Bearer ${decodeURIComponent(cookieToken)}`;
     const plain = (status: number, body: unknown, headers: Record<string, string> = {}) => { res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", ...cors, ...headers }); res.end(JSON.stringify(body)); };
+    // 共有リンクで読む (誰でも。トークンなし)
+    const shareRead = /^\/v1\/shares\/([^/]+)$/.exec(req.url ?? "");
+    if (shareRead && req.method === "GET") {
+      const token = decodeURIComponent(shareRead[1]);
+      const s = [...this.shares.values()].find((x) => x.token === token && !x.revoked && (x.expiresAt === null || x.expiresAt > new Date().toISOString()));
+      const head = s ? this.space(s.account).get(s.projectId)?.head : undefined;
+      if (!s || !head) { plain(404, { code: "not-found" }, { "access-control-allow-origin": "*" }); return; }
+      plain(200, { text: head.text, name: (JSON.parse(head.text) as { name?: string }).name ?? s.projectId, revision: head.revision, projectId: s.projectId }, { "access-control-allow-origin": "*" }); return;
+    }
+    if (req.method === "OPTIONS" && req.url?.startsWith("/v1/shares/")) { res.writeHead(204, { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, OPTIONS", "access-control-allow-headers": "content-type" }); res.end(); return; }
     if (req.method === "POST" && req.url === "/v1/session") {
       const token = /^Bearer (.+)$/.exec(req.headers.authorization ?? "")?.[1];
       const user = token ? this.issued.get(token) : undefined;
@@ -281,6 +293,32 @@ export class TestSyncServer {
       const done = projects.get(decodeURIComponent(opMatch[1]))?.ops.get(decodeURIComponent(opMatch[2]));
       send(200, JSON.stringify({ revision: done?.revision ?? null }));
       return;
+    }
+    // 共有リンク: 一覧・作る・失効 (本番と同じ形。トークンは bgs_<利用者>.<秘密> の見た目だけ合わせる)
+    const sharesMatch = /^\/v1\/projects\/([^/]+)\/shares(?:\/([^/]+))?$/.exec(req.url ?? "");
+    if (sharesMatch) {
+      const projectId = decodeURIComponent(sharesMatch[1]);
+      const nowAt = new Date().toISOString();
+      const list = () => [...this.shares.values()].filter((s) => s.account === account && s.projectId === projectId).reverse().map((s) => ({ id: s.id, createdAt: s.createdAt, expiresAt: s.expiresAt, revoked: s.revoked, expired: s.expiresAt !== null && s.expiresAt <= nowAt }));
+      if (sharesMatch[2] === undefined && req.method === "GET") { send(200, JSON.stringify({ shares: list() })); return; }
+      if (sharesMatch[2] === undefined && req.method === "POST") {
+        if (!projects.get(projectId)?.head) { send(404, JSON.stringify({ code: "absent" })); return; }
+        const chunks: Buffer[] = []; for await (const chunk of req) chunks.push(chunk as Buffer);
+        const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { expiresInDays?: number };
+        const active = [...this.shares.values()].filter((s) => s.account === account && !s.revoked).length;
+        if (active >= 5) { send(409, JSON.stringify({ code: "quota", which: "shares", limit: 5 })); return; }
+        const n = this.shares.size + 1;
+        const id = "sh" + String(n).padStart(6, "0");
+        const token = `bgs_acc${String(n).padStart(32, "0")}.${(id + "x".repeat(43)).slice(0, 43)}`;
+        const expiresAt = typeof body.expiresInDays === "number" && body.expiresInDays > 0 ? new Date(Date.now() + body.expiresInDays * 86_400_000).toISOString() : null;
+        this.shares.set(id, { id, token, account, projectId, revoked: false, expiresAt, createdAt: nowAt });
+        send(201, JSON.stringify({ id, token, expiresAt, createdAt: nowAt })); return;
+      }
+      if (sharesMatch[2] !== undefined && req.method === "DELETE") {
+        const s = this.shares.get(decodeURIComponent(sharesMatch[2]));
+        if (s && s.account === account) s.revoked = true;
+        send(200, JSON.stringify({ revoked: true })); return;
+      }
     }
     const match = /^\/v1\/projects\/([^/]+)$/.exec(req.url ?? "");
     if (!match) { send(404, JSON.stringify({ code: "not-found" })); return; }

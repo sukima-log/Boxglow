@@ -211,6 +211,37 @@ describe("サインインとサインアウト", () => {
     await host.stop();
   });
 
+  it("共有リンク: 作ると URL が 1 度だけ状態に出る (トークンは一覧に無い)。失効すると一覧で失効。上限は 5 本", async () => {
+    const { file } = planFile("p1");
+    signedIn("acc-share");
+    const { host } = make();
+    host.openFile(file); host.enable(file);
+    await host.act(file, { kind: "bind" });
+    const remoteId = host.status(file).file!.binding!.remoteId;
+    let state = await host.act(file, { kind: "listShares", projectId: remoteId });
+    expect(state.lifecycle?.shares).toEqual([]);
+    state = await host.act(file, { kind: "createShare", projectId: remoteId, expiresInDays: 30 });
+    expect(state.lifecycle?.newShare?.url).toMatch(/^https:\/\/boxglow\.app\/#share=bgs_acc[0-9a-f]{32}\.[A-Za-z0-9_-]{43}&server=/);
+    expect(state.lifecycle?.shares?.length).toBe(1);
+    expect(state.lifecycle?.shares?.[0]).toMatchObject({ revoked: false, expired: false });
+    expect(JSON.stringify(state.lifecycle?.shares)).not.toContain("bgs_");
+    const id = state.lifecycle!.shares![0].id;
+    // 公開の口で読める → 失効で読めない
+    const token = [...server.shares.values()][0].token;
+    expect((await fetch(`${server.url}/v1/shares/${token}`)).status).toBe(200);
+    state = await host.act(file, { kind: "revokeShare", projectId: remoteId, shareId: id });
+    expect(state.lifecycle?.shares?.[0]).toMatchObject({ id, revoked: true });
+    expect(state.lifecycle?.newShare).toBeUndefined();
+    expect((await fetch(`${server.url}/v1/shares/${token}`)).status).toBe(404);
+    // 上限: 5 本まで。6 本目は error
+    for (let i = 0; i < 5; i++) { state = await host.act(file, { kind: "createShare", projectId: remoteId }); expect(state.lifecycle?.error).toBeUndefined(); }
+    state = await host.act(file, { kind: "createShare", projectId: remoteId });
+    expect(state.lifecycle?.error).toContain("5");
+    expect(parseHostAction(JSON.stringify({ kind: "createShare", projectId: remoteId, expiresInDays: 400 }))).toBeNull();
+    expect(parseHostAction(JSON.stringify({ kind: "revokeShare", projectId: remoteId, shareId: "../x" }))).toBeNull();
+    await host.stop();
+  });
+
   it("課金: /v1/me の billing が状態に出る。申し込み・契約の管理の URL は billingLink に入り、サインアウトで消える。契約が無いと同期は 402 → problem = payment", async () => {
     const { file } = planFile("p1");
     signedIn("acc-pay");

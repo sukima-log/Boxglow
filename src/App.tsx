@@ -15,6 +15,7 @@ import { addBlock, computeProgress, disconnect, pendingDecisions, portsOf, remov
 import { ROOT_ID } from "./model/types";
 import { majorBlocks, parentForNewBlock, useProjectStore, useShownProject } from "./store/useProjectStore";
 import { DEFAULT_SYNC_SERVER } from "../cli/sync/server-policy";
+import { shareFromHash } from "./sync/shares";
 import { scopePath, wireNetTabs } from "./model/graph";
 import { ResizeHandle } from "./panels/parts";
 import { t, useLang } from "./i18n";
@@ -161,6 +162,9 @@ export function App() {
     } else if (params.get("serve") === "1") {
       void openFromServer(); // npx boxglow serve が配信する手元の boxglow.json
     } else {
+      // 共有リンク (#share=<トークン>[&server=<URL>]): 閲覧専用で開く。同期の裏方は作らない
+      const shared = shareFromHash(window.location.hash);
+      if (shared) { void useProjectStore.getState().openShared(shared.token, shared.server ?? params.get("server")?.trim() ?? DEFAULT_SYNC_SERVER); return () => observer?.disconnect(); }
       const m = window.location.hash.match(/p=([\w-]+)/);
       if (m) void openProject(m[1]);
       // ブラウザだけ (serve / VS Code / 記事の埋め込みではない): 同期の裏方を中に作る。送り先は ?server= (開発用の localhost) か製品のサーバー

@@ -20,6 +20,7 @@ import { inspectLock } from "../file-store";
 import { syncOnce, SyncConfigurationError, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
 import { SyncPaymentError } from "../../src/sync/run";
 import { parseBilling } from "../../src/sync/billing";
+import { parseShareList, shareUrl } from "../../src/sync/shares";
 import { haltView, type SyncAction } from "./command";
 import { credentialsPath, readCredentials, resolveToken } from "./credentials";
 import { runGoogleLogin, runLinkIdentity, runLogin, runLogout, serverProblem } from "./login";
@@ -692,6 +693,27 @@ export class SyncHost {
       if(action.kind === "listTrash") Object.assign(entry.state,await listTrash(o,action.cursor));
       // 履歴: 一覧と、戻す前の確認 (中身は控えに持ち、画面には名前と版だけ出す)
       if(action.kind === "listVersions") { entry.state.versions=await listVersions(o,action.projectId); entry.state.versionsOf=action.projectId; }
+      // 共有リンク: 一覧・作る (URL は作ったときだけ)・失効。サーバーの口は本人のトークンで呼ぶ
+      if(action.kind === "listShares" || action.kind === "createShare" || action.kind === "revokeShare") {
+        const creds=this.resolveCredentials(); if(!creds) throw new Error(t("先にサインインしてください"));
+        const headers={authorization:`Bearer ${creds.token}`,"content-type":"application/json","x-boxglow-version":APP_VERSION};
+        const base=`${this.server}/v1/projects/${encodeURIComponent(action.projectId)}/shares`;
+        if(action.kind === "createShare") {
+          const res=await this.doFetch(base,{method:"POST",headers,redirect:"error",body:JSON.stringify({expiresInDays:action.expiresInDays})});
+          const body=await res.json().catch(()=>({})) as {id?:unknown;token?:unknown;expiresAt?:unknown;code?:unknown;limit?:unknown};
+          if(res.status === 409 && body.code === "quota") throw new Error(t("共有リンクは {n} 本までです。使わないリンクを失効させてください",{n:String(body.limit ?? "")}));
+          if(!res.ok || typeof body.id !== "string" || typeof body.token !== "string") throw new Error(t("共有リンクを作れませんでした (サーバーの応答: {status})",{status:res.status}));
+          entry.state.newShare={id:body.id,url:shareUrl(body.token,this.server),expiresAt:typeof body.expiresAt === "string" ? body.expiresAt : null};
+        }
+        if(action.kind === "revokeShare") {
+          const res=await this.doFetch(`${base}/${encodeURIComponent(action.shareId)}`,{method:"DELETE",headers,redirect:"error"});
+          if(!res.ok) throw new Error(t("共有リンクを失効できませんでした (サーバーの応答: {status})",{status:res.status}));
+          if(entry.state.newShare?.id === action.shareId) entry.state.newShare=undefined;
+        }
+        const list=await this.doFetch(base,{headers,redirect:"error"});
+        if(!list.ok) throw new Error(t("共有リンクの一覧を読めませんでした (サーバーの応答: {status})",{status:list.status}));
+        entry.state.shares=parseShareList(await list.json()); entry.state.sharesOf=action.projectId;
+      }
       if(action.kind === "previewRevert") {
         entry.preview=await previewRevert(o,action.projectId,action.revision);
         const {kind,id,name,account,revision}=entry.preview;
@@ -730,7 +752,7 @@ export class SyncHost {
   /** 操作を受ける (serve の POST /api/sync、拡張の sync-action)。結果は状態で返す */
   async act(file: string | null, action: HostAction): Promise<SyncStatus> {
     const real = file ? realFile(file) : null;
-    if (["listTrash","cancelLifecycle","previewDelete","previewRestore","confirmLifecycle","listVersions","previewRevert"].includes(action.kind)) {
+    if (["listTrash","cancelLifecycle","previewDelete","previewRestore","confirmLifecycle","listVersions","previewRevert","listShares","createShare","revokeShare"].includes(action.kind)) {
       if(real) { const work=this.lifecycleAction(real,action);this.manual.add(work);try {await work;} finally {this.manual.delete(work);} }
       return this.status(file);
     }
@@ -949,6 +971,9 @@ export function parseHostAction(text: string): HostAction | null {
     case "previewRestore": return typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 ? {kind:o.kind,projectId:o.projectId} : null;
     case "confirmLifecycle": return typeof o.choiceId === "string" && o.choiceId.length <= 128 ? {kind:o.kind,choiceId:o.choiceId} : null;
     case "listVersions": return typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 ? {kind:o.kind,projectId:o.projectId} : null;
+    case "listShares": return typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 ? {kind:o.kind,projectId:o.projectId} : null;
+    case "createShare": return typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 && (o.expiresInDays === undefined || typeof o.expiresInDays === "number" && o.expiresInDays > 0 && o.expiresInDays <= 365) ? {kind:o.kind,projectId:o.projectId,...(typeof o.expiresInDays === "number" ? {expiresInDays:o.expiresInDays} : {})} : null;
+    case "revokeShare": return typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 && typeof o.shareId === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(o.shareId) ? {kind:o.kind,projectId:o.projectId,shareId:o.shareId} : null;
     case "previewRevert": return typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 && typeof o.revision === "string" && /^[A-Za-z0-9._-]{1,64}$/.test(o.revision) ? {kind:o.kind,projectId:o.projectId,revision:o.revision} : null;
     case "cancelLifecycle":
     case "beginSync":

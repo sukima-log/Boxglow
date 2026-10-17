@@ -5,6 +5,9 @@ import type { HostAction, SyncStatus } from "../sync/status";
 export function SyncLifecycle({status,act}:{status:SyncStatus;act:(a:HostAction)=>Promise<unknown>}) {
  const state=status.lifecycle, preview=state?.preview;
  const previous=useRef<string|null>(null),[replaced,setReplaced]=useState(false);
+ /** 共有リンクの期限 (日。0 = 無期限) と、URL をコピーしたか */
+ const [expires,setExpires]=useState(30),[copied,setCopied]=useState(false);
+ useEffect(()=>{setCopied(false);},[state?.newShare?.id]);
  useEffect(()=>{
   if(!state){previous.current=null;setReplaced(false);}
   else if(preview){setReplaced(previous.current!==null && previous.current!==state.choiceId);previous.current=state.choiceId;}
@@ -15,6 +18,7 @@ export function SyncLifecycle({status,act}:{status:SyncStatus;act:(a:HostAction)
    <button className="btn btn-sm" disabled={state?.busy} onClick={()=>void act({kind:"beginSync"})}>{t("サーバーの計画を開く")}</button>
    <button className="btn btn-sm" disabled={state?.busy} onClick={()=>void act({kind:"listTrash"})}>{t("削除済みの計画")}</button>
    {status.file?.binding && <button className="btn btn-sm" disabled={state?.busy} onClick={()=>void act({kind:"listVersions",projectId:status.file!.binding!.remoteId})}>{t("履歴")}</button>}
+   {status.file?.binding && <button className="btn btn-sm" disabled={state?.busy} onClick={()=>void act({kind:"listShares",projectId:status.file!.binding!.remoteId})}>{t("共有リンク")}</button>}
    {status.file?.binding && <button className="btn btn-ghost btn-sm" disabled={state?.busy} onClick={()=>void act({kind:"previewDelete",projectId:status.file!.binding!.remoteId})}>{t("サーバーから削除…")}</button>}
   </div>
   {state && <div className="sync-lifecycle__body">
@@ -47,6 +51,31 @@ export function SyncLifecycle({status,act}:{status:SyncStatus;act:(a:HostAction)
     {i === 0 ? <small>{t("今の版")}</small> : <button className="btn btn-sm" disabled={state.busy} onClick={()=>void act({kind:"previewRevert",projectId:state.versionsOf!,revision:v.revision})}>{t("この版に戻す…")}</button>}
    </div>)}
    {state.versions?.length === 0 && <p>{t("履歴はまだありません。")}</p>}
+   {/* 共有リンク (閲覧専用): 作る → URL は作った直後だけ表示 (保存しているのはハッシュ)。一覧は作成日と期限、失効 */}
+   {state.shares && state.sharesOf && <div className="sync-shares">
+    <p className="muted">{t("リンクを知っている人は、この計画の最新の内容を閲覧専用で見られます (サインイン不要)。")}</p>
+    <div className="sync-panel__row">
+     <button className="btn btn-primary btn-sm" disabled={state.busy} onClick={()=>void act({kind:"createShare",projectId:state.sharesOf!,expiresInDays:expires || undefined})}>{t("リンクを作る")}</button>
+     <label className="sync-shares__expires">{t("期限")}
+      <select value={expires} onChange={(e)=>setExpires(Number(e.target.value))} disabled={state.busy}>
+       <option value={7}>{t("{n} 日",{n:"7"})}</option><option value={30}>{t("{n} 日",{n:"30"})}</option><option value={90}>{t("{n} 日",{n:"90"})}</option><option value={0}>{t("無期限")}</option>
+      </select>
+     </label>
+    </div>
+    {state.newShare && <div className="sync-shares__new">
+     <strong>{t("リンクを作りました。この URL は今だけ表示されます (控えてください)。")}</strong>
+     <div className="sync-panel__row">
+      <input className="input sync-shares__url" readOnly value={state.newShare.url} onFocus={(e)=>e.currentTarget.select()} aria-label={t("共有リンクの URL")}/>
+      <button className="btn btn-sm" onClick={()=>{void navigator.clipboard?.writeText(state.newShare!.url).then(()=>setCopied(true),()=>setCopied(false));}}>{copied ? t("コピーしました") : t("コピー")}</button>
+     </div>
+    </div>}
+    {state.shares.map(s=><div className="sync-project-row sync-share-row" key={s.id} data-off={s.revoked || s.expired ? "true" : "false"}>
+     <strong>{new Date(s.createdAt).toLocaleString(getLang() === "ja" ? "ja-JP" : "en-US")}</strong>
+     <small>{s.revoked ? t("失効") : s.expired ? t("期限切れ") : s.expiresAt ? t("期限") + ": " + new Date(s.expiresAt).toLocaleDateString(getLang() === "ja" ? "ja-JP" : "en-US") : t("無期限")}</small>
+     {!s.revoked && !s.expired && <button className="btn btn-ghost btn-sm" disabled={state.busy} onClick={()=>void act({kind:"revokeShare",projectId:state.sharesOf!,shareId:s.id})}>{t("失効")}</button>}
+    </div>)}
+    {state.shares.length === 0 && <p>{t("共有リンクはまだありません。")}</p>}
+   </div>}
    {state.nextCursor && <button className="btn btn-sm" disabled={state.busy} onClick={()=>void act({kind:"listTrash",cursor:state.nextCursor!})}>{t("次のページ")}</button>}
    <button className="btn btn-ghost btn-sm" disabled={state.busy} onClick={()=>void act({kind:"cancelLifecycle"})}>{t("閉じる")}</button>
   </div>}

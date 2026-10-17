@@ -16,6 +16,7 @@ import { parseConflictResolution, type ConflictResolution } from "../model/confl
 import { browserSyncIO } from "./browser-io";
 import { applyRevert, parseVersionList, planNameOf } from "./versions";
 import { parseBilling } from "./billing";
+import { parseShareList, shareUrl } from "./shares";
 import { SyncPaymentError } from "./run";
 import { haltView } from "./halt-view";
 import { runSync, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncOptions, type SyncResult } from "./run";
@@ -393,7 +394,7 @@ export class BrowserSyncHost {
       case "bind": case "syncNow": if (file) await this.syncFile(file, {}); break;
       case "choose": await this.choose(action.choiceId, file); break;
       case "resolveGroups": await this.choose(action.choiceId, file, action.resolution); break;
-      case "listVersions": case "previewRevert": case "confirmLifecycle": case "cancelLifecycle": if (file) await this.lifecycleAction(file, action); break;
+      case "listVersions": case "previewRevert": case "confirmLifecycle": case "cancelLifecycle": case "listShares": case "createShare": case "revokeShare": if (file) await this.lifecycleAction(file, action); break;
       case "listTrash": case "previewDelete": case "previewRestore":
         this.message = t("サーバーの計画の削除と復元は、ブラウザ版ではまだ使えません (npx boxglow remote か、serve / VS Code の画面で)"); break;
     }
@@ -419,6 +420,25 @@ export class BrowserSyncHost {
         const res = await this.doFetch(`${this.server}/v1/projects/${encodeURIComponent(action.projectId)}/versions`, { redirect: "error" });
         if (!res.ok) throw new Error(t("履歴を読めませんでした (サーバーの応答: {status})", { status: res.status }));
         entry.state.versions = parseVersionList(await res.json()); entry.state.versionsOf = action.projectId;
+      }
+      // 共有リンク: 一覧・作る (URL は作ったときだけ)・失効 (Cookie のセッション)
+      if (action.kind === "listShares" || action.kind === "createShare" || action.kind === "revokeShare") {
+        const base = `${this.server}/v1/projects/${encodeURIComponent(action.projectId)}/shares`;
+        if (action.kind === "createShare") {
+          const res = await this.doFetch(base, { method: "POST", redirect: "error", headers: { "content-type": "application/json" }, body: JSON.stringify({ expiresInDays: action.expiresInDays }) });
+          const body = await res.json().catch(() => ({})) as { id?: unknown; token?: unknown; expiresAt?: unknown; code?: unknown; limit?: unknown };
+          if (res.status === 409 && body.code === "quota") throw new Error(t("共有リンクは {n} 本までです。使わないリンクを失効させてください", { n: String(body.limit ?? "") }));
+          if (!res.ok || typeof body.id !== "string" || typeof body.token !== "string") throw new Error(t("共有リンクを作れませんでした (サーバーの応答: {status})", { status: res.status }));
+          entry.state.newShare = { id: body.id, url: shareUrl(body.token, this.server), expiresAt: typeof body.expiresAt === "string" ? body.expiresAt : null };
+        }
+        if (action.kind === "revokeShare") {
+          const res = await this.doFetch(`${base}/${encodeURIComponent(action.shareId)}`, { method: "DELETE", redirect: "error" });
+          if (!res.ok) throw new Error(t("共有リンクを失効できませんでした (サーバーの応答: {status})", { status: res.status }));
+          if (entry.state.newShare?.id === action.shareId) entry.state.newShare = undefined;
+        }
+        const list = await this.doFetch(base, { redirect: "error" });
+        if (!list.ok) throw new Error(t("共有リンクの一覧を読めませんでした (サーバーの応答: {status})", { status: list.status }));
+        entry.state.shares = parseShareList(await list.json()); entry.state.sharesOf = action.projectId;
       }
       if (action.kind === "previewRevert") {
         const res = await this.doFetch(`${this.server}/v1/projects/${encodeURIComponent(action.projectId)}/versions/${encodeURIComponent(action.revision)}`, { redirect: "error" });

@@ -227,6 +227,8 @@ interface State {
   newProject: (name: string) => Promise<void>;
   openProject: (id: string) => Promise<boolean>;
   openProjectObject: (p: Project, ephemeral: boolean) => void;
+  /** 共有リンク (閲覧専用) で開く: サーバーの公開の口から最新の中身を読み、保存しない計画として読み取り専用で開く */
+  openShared: (token: string, server: string) => Promise<void>;
   importJSON: (text: string) => Promise<void>;
   openSample: () => void;
   /** 公開用の例 (examples/logic-daw/boxglow.json) を開く (保存しない) */
@@ -1317,6 +1319,18 @@ export const useProjectStore = create<State>((set, get) => {
 
   , openSample: () => {
       get().openProjectObject(buildSampleProject(), true); // サンプルも View から (Edit は上の帯で切り替える)
+    }
+  , openShared: async (token, server) => {
+      try {
+        const res = await fetch(`${server.replace(/\/$/, "")}/v1/shares/${encodeURIComponent(token)}`, { redirect: "error" });
+        if (!res.ok) { set({ toast: t("この共有リンクは使えません (失効・期限切れ・リンクの誤り)") }); return; }
+        const body = await res.json() as { text?: unknown };
+        if (typeof body.text !== "string") { set({ toast: t("この共有リンクは使えません (失効・期限切れ・リンクの誤り)") }); return; }
+        get().openProjectObject(fromJSON(body.text), true);
+        set({ readonly: true, readonlyReason: t("共有リンクで開いています (閲覧専用。保存されません)") });
+      } catch {
+        set({ toast: t("共有リンクの内容を読めませんでした (通信を確認してください)") });
+      }
     }
   , openExample: () => {
       // ビルドに同梱した例 (3 階層の Logic DAW の計画)。記事の埋め込みと ?demo=daw で使う
