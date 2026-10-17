@@ -12,6 +12,7 @@ import { readCredentials, saveCredentials } from "./credentials";
 import { SyncHost, type SyncStatus, parseHostAction } from "./host";
 import { lockWatch } from "./watch";
 import { TestSyncServer } from "./test-server";
+import { setDpapi } from "./dpapi";
 
 let server: TestSyncServer;
 let root: string;
@@ -48,9 +49,11 @@ const advance = async (host: SyncHost, ms: number) => { clock += ms; await host.
 const settle = () => new Promise((r) => setTimeout(r, 20));
 
 describe("状態の判定", () => {
-  it("Windows で動く裏方は unsupported。資格情報が無ければ signed-out。有効にしていなければ off。結び付いていなければ unbound", async () => {
+  it("Windows で動く裏方は DPAPI が使えなければ unsupported。資格情報が無ければ signed-out。有効にしていなければ off。結び付いていなければ unbound", async () => {
     const { file } = planFile("p1");
-    expect(make({ platform: "win32" }).host.status(file).state).toBe("unsupported");
+    // (Windows は DPAPI が使えるときだけ対応: ここでは使えない Windows を作る)
+    setDpapi({ protect: () => { throw new Error("no powershell"); }, unprotect: () => { throw new Error("no powershell"); } });
+    try { expect(make({ platform: "win32" }).host.status(file).state).toBe("unsupported"); } finally { setDpapi(null); }
     const { host } = make({ platform: "linux" });
     expect(host.status(file)).toMatchObject({ state: "signed-out", credentials: { source: "none" }, file: { enabled: false, binding: null } });
     // (トークンと利用者の ID を別の値にする: 試験用サーバーは、発行したトークンなら、その利用者として扱う)

@@ -9,6 +9,7 @@ import { runSyncCommand, runWatchCommand } from "./command";
 import { syncOnce, fetchHeads, SyncConfigurationError, SyncNetworkError } from "./client";
 import { DEFAULT_SYNC_SERVER, isDefaultSyncServer, environmentTokenAllowed, serverProblem } from "./server-policy";
 import { runLogin, runGoogleLogin, runWhoami } from "./login";
+import { setDpapi } from "./dpapi";
 import { SyncWatcher, type WatchEvent } from "./watch";
 import { TestSyncServer } from "./test-server";
 import { bindingDir } from "./state-store";
@@ -22,6 +23,7 @@ beforeEach(() => {
   delete process.env.BOXGLOW_TOKEN; delete process.env.BOXGLOW_TOKEN_SERVER; setLang("ja");
 });
 afterEach(() => {
+  setDpapi(null);   // (DPAPI の偽物を戻す)
   Object.defineProperty(process, "platform", platform);
   for (const key of ["BOXGLOW_CONFIG_DIR", "BOXGLOW_TOKEN", "BOXGLOW_TOKEN_SERVER"]) {
     if (originalEnv[key] === undefined) delete process.env[key]; else process.env[key] = originalEnv[key];
@@ -61,6 +63,8 @@ it("既存の非localhost HTTP bindingもwatchが通信せず止める", async (
 });
 it.each(["ja", "en"] as const)("Windowsのlogin/google/whoamiは専用送り先も案内 (%s)", async lang => {
   setLang(lang); Object.defineProperty(process, "platform", { value: "win32" });
+  // (DPAPI が使えない Windows: 保存できないので、専用送り先 (環境トークン) を案内する)
+  setDpapi({ protect: () => { throw new Error("no powershell"); }, unprotect: () => { throw new Error("no powershell"); } });
   const request = vi.fn<typeof fetch>();
   for (const action of [runLogin, runGoogleLogin, runWhoami]) {
     const lines: string[] = [];
