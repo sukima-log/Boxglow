@@ -170,6 +170,10 @@ Before removing, stop every Boxglow that has the plan open (CLI, `serve`, VS Cod
 
 The server finds `boxglow.json` like the CLI does (current directory upwards, or `--file` / `BOXGLOW_FILE`). The CLI and the MCP tools write the same file, so either can be used.
 
+### Teams (workspaces)
+
+Account menu → **Workspace** → create one (just a name), then **Create an invite link** (viewer or editor) and send the `https://boxglow.app/#join=...` URL; the other person signs in, opens it and joins. When starting sync, choose the workspace under "Put it in" (or "Receive from" on Home) and the plan lives in the team: everyone with the editor role syncs it, viewers can read it, admins manage members, invites, share links, agent tokens and the subscription (Team plan, per workspace, seats = member limit). CLI: `boxglow team ...`, `boxglow sync --team <ID>`, `boxglow remote ... --team <ID>`. Details: [docs/SYNC_START.md](docs/SYNC_START.md) (Japanese).
+
 ### Hosted MCP (no local file)
 
 A plan placed on the sync server can also be reached over HTTP MCP at `https://sync.boxglow.app/mcp`, so an agent on another machine (or a cloud agent) works on it without a local `boxglow.json`. Account menu → "AI agent access" → **Connect Claude Code** (or Codex): in serve and VS Code this creates the token and writes the config file (`.mcp.json` next to the plan, or `~/.codex/config.toml`); in the browser app it gives you the config file to download and the three steps to place it. CLI: `boxglow agent-token connect claude-code|codex`. Tokens are per plan, read-only or read-write, up to 10 per account, and can be revoked from the same place.

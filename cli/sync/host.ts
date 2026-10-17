@@ -22,6 +22,7 @@ import { SyncPaymentError } from "../../src/sync/run";
 import { parseBilling } from "../../src/sync/billing";
 import { parseShareList, shareUrl } from "../../src/sync/shares";
 import { parseAgentTokens } from "../../src/sync/agent";
+import { parseTeamAction, parseTeams, performTeamAction, teamApiBase, type TeamsState } from "../../src/sync/teams";
 import { writeAgentConfig } from "./agent-config";
 import { dirname } from "node:path";
 import { haltView, type SyncAction } from "./command";
@@ -388,7 +389,7 @@ export class SyncHost {
       await runLogout({ server: this.server, allowEnvironmentToken: this.options.allowEnvironmentToken, out: (line) => lines.push(line), fetch: this.doFetch });
       this.account = null;
       this.billingLink = undefined;
-      this.agent = undefined;
+      this.agent = undefined; this.teams = undefined; this.pendingTeam.clear();
       this.results.clear();
       this.message = lines.at(-1);
     } finally {
@@ -426,6 +427,21 @@ export class SyncHost {
   /** AI エージェント用トークンの状態 (アカウントにつき 1 つ) */
   private agent: NonNullable<SyncStatus["agent"]> | undefined;
   /** エージェント用トークン: 一覧 / 作る / 失効 (本人のトークンで /v1/agent-tokens を呼ぶ)。結果は status.agent */
+  /** チーム (ワークスペース) の状態 */
+  private teams: TeamsState | undefined;
+  /** 開始の手順で選んだチーム (ファイルごと。結び付けを作るまで) */
+  private readonly pendingTeam = new Map<string, { id: string; name: string }>();
+  /** チームの操作 (本人のトークンで /v1/teams... を呼ぶ。中身はホスト共通の performTeamAction) */
+  private async teamAction(action: Extract<HostAction, { kind: "listTeams" | "openTeam" | "createTeam" | "renameTeam" | "deleteTeam" | "leaveTeam" | "setMember" | "removeMember" | "createInvite" | "revokeInvite" | "teamCheckout" | "teamSeats" | "teamPortal" | "joinPreview" | "joinTeam" | "teamDismiss" }>): Promise<void> {
+    const creds = this.resolveCredentials();
+    if (!creds) { this.message = t("先にサインインしてください"); this.emit(); return; }
+    if (this.teams?.busy) return;
+    const state = this.teams ?? { busy: false };
+    this.teams = { ...state, busy: true, error: undefined }; this.emit();
+    const doFetch = (path: string, init: RequestInit = {}) => this.doFetch(`${this.server}${path}`, { ...init, headers: { authorization: `Bearer ${creds.token}`, "x-boxglow-version": APP_VERSION, ...(init.headers as Record<string, string> | undefined) }, redirect: "error" });
+    this.teams = await performTeamAction(doFetch, state, action, t);
+    this.emit();
+  }
   private async agentAction(action: HostAction, file: string | null): Promise<void> {
     if (action.kind === "agentTokenDismiss") { if (this.agent) { this.agent.newToken = undefined; this.agent.connected = undefined; } this.emit(); return; }
     const creds = this.resolveCredentials();
@@ -540,16 +556,29 @@ export class SyncHost {
   private beginSync(file: string): void {
     if (this.stopping || this.stopped || this.startups.get(file)?.stage === "working")
       return;
-    this.startups.set(file, { operationId: randomUUID(), stage: "choose" });
+    const op: NonNullable<SyncStatus["startup"]> & { credentials?: string } = { operationId: randomUUID(), stage: "choose" };
+    this.startups.set(file, op);
     this.emit();
+    // 置く先 / 受け取る元の候補 (自分のチーム)。読めなければ個人だけ
+    const creds = this.resolveCredentials();
+    if (creds) void this.doFetch(`${this.server}/v1/teams`, { headers: { authorization: `Bearer ${creds.token}` }, redirect: "error" })
+      .then(async (res) => { if (res.ok && this.startups.get(file) === op) { op.teams = parseTeams(await res.json()).map((x) => ({ teamId: x.teamId, name: x.name, role: x.role })); this.emit(); } })
+      .catch(() => { /* 候補が読めなくても、個人として続けられる */ });
   }
   /** 入力: 操作IDと意図。出力: 必要なサインイン、一覧、または新規配置へ進む。 */
-  private async continueStart(file: string, operationId: string, intent?: "new" | "existing"): Promise<void> {
+  private async continueStart(file: string, operationId: string, intent?: "new" | "existing", team?: string): Promise<void> {
     const op = this.startups.get(file);
     if (!op || op.operationId !== operationId || op.stage === "working" || this.stopping || this.stopped)
       return;
     if (intent)
       op.intent = intent;
+    // 置く先 / 受け取る元 (候補の中から。"" = 個人)
+    if (team !== undefined) {
+      // 候補 (beginSync が裏で読む) がまだ無ければ、ここで読む (選んだ ID の名前を結び付けに記録するため)
+      if (team !== "" && !op.teams) { try { const creds = this.resolveCredentials(); const res = creds ? await this.doFetch(`${this.server}/v1/teams`, { headers: { authorization: `Bearer ${creds.token}` }, redirect: "error" }) : null; if (res?.ok) op.teams = parseTeams(await res.json()).map((x) => ({ teamId: x.teamId, name: x.name, role: x.role })); } catch { /* 読めなければ個人として続ける */ } }
+      const found = op.teams?.find((x) => x.teamId === team); op.team = found ? { id: found.teamId, name: found.name } : undefined;
+      if (team !== "" && !found) { op.error = t("選んだワークスペースが見つかりません。選び直してください"); op.stage = "choose"; this.emit(); return; }
+    }
     if (!op.intent)
       return;
     const unsafe = serverProblem(this.server);
@@ -573,7 +602,7 @@ export class SyncHost {
     op.error = undefined;
     this.emit();
     // syncOnceが送信前に結び付けと操作を保存するので、再クリック・再起動も同じ計画へ再試行する。
-    await this.syncFile(file, {});
+    await this.syncFile(file, op.team ? { team: op.team } : {});
     if (this.startups.get(file) !== op || this.stopped || this.stopping) return;
     if (op.credentials !== this.credentialsGeneration()) {
       op.stage = "choose";
@@ -616,7 +645,8 @@ export class SyncHost {
     op.credentials = credentials;
     this.emit();
     try {
-      const res = await this.doFetch(`${this.server}/v1/projects?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, { headers: { authorization: `Bearer ${token}` }, redirect: "error" });
+      const base = op.team ? teamApiBase(this.server, op.team.id) : this.server;
+      const res = await this.doFetch(`${base}/v1/projects?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, { headers: { authorization: `Bearer ${token}` }, redirect: "error" });
       if (this.startups.get(file) !== op || credentials !== this.credentialsGeneration())
         return;
       if ([404, 405, 501].includes(res.status)) {
@@ -699,7 +729,7 @@ export class SyncHost {
       if (this.startups.get(file) !== op || this.stopping || this.stopped) return;
       if (op.credentials !== this.credentialsGeneration()) throw new Error("Credentials changed");
       // 不存在のIDを作成に転じない条件を同期のロック内でも検証する。
-      await this.syncFile(target, { remoteId: action.projectId, requireRemote: true });
+      await this.syncFile(target, { remoteId: action.projectId, requireRemote: true, ...(op.team ? { team: op.team } : {}) });
       if (this.startups.get(file) !== op || this.stopping || this.stopped) return;
       if (op.credentials !== this.credentialsGeneration()) throw new Error("Credentials changed");
       const result = this.results.get(target)?.result;
@@ -815,7 +845,8 @@ export class SyncHost {
           this.startups.delete(real);
         }
         break;
-      case "continueStart": if (real) await this.continueStart(real,action.operationId,action.intent); break;
+      case "continueStart": if (real) await this.continueStart(real,action.operationId,action.intent,action.team); break;
+      case "listTeams": case "openTeam": case "createTeam": case "renameTeam": case "deleteTeam": case "leaveTeam": case "setMember": case "removeMember": case "createInvite": case "revokeInvite": case "teamCheckout": case "teamSeats": case "teamPortal": case "joinPreview": case "joinTeam": case "teamDismiss": await this.teamAction(action); break;
       case "listProjects": if (real) await this.listProjects(real,action.operationId,action.cursor); break;
       case "openProject": if (real) await this.openProject(real,action); break;
       case "enable": if (real) this.enable(real); break;
@@ -855,7 +886,10 @@ export class SyncHost {
     this.busy++; this.emit();
     try {
       const token = this.resolveCredentials()?.token;
-      const result = await syncOnce({ file, server: this.server, token, fetch: this.doFetch, now: () => new Date(this.wall()), ...extra });
+      // 置く先 / 受け取る元のチーム (開始の手順で選んだもの): 結び付けが保存されるまで覚えておき、同期に渡す (結び付けを作るときだけ使われる)
+      if (extra.team) this.pendingTeam.set(file, extra.team);
+      const pending = this.pendingTeam.get(file);
+      const result = await syncOnce({ file, server: this.server, token, fetch: this.doFetch, now: () => new Date(this.wall()), ...(pending ? { team: pending } : {}), ...extra });
       this.results.set(file, { result, at: this.wall(), credentials });
       if ("localBackup" in result && result.localBackup) this.localBackups.set(file, { path: result.localBackup, credentials });
       this.rememberSuccessfulSync(file);
@@ -910,7 +944,7 @@ export class SyncHost {
       : saved ? { accountId: saved.account, display: saved.login, signedInWith: "unknown" as const } : undefined;
     const credentials: SyncStatus["credentials"] = { source: credentialsSource, ...(account ? { account } : {}) };
     let binding: { server: string; remoteId: string } | null = null;
-    if (real) { try { const b = bindingsOf(real).bindings.find((x) => x.server === this.server); if (b) binding = { server: b.server, remoteId: b.remoteId }; } catch { /* 読めない状態は problem に出る */ } }
+    if (real) { try { const b = bindingsOf(real).bindings.find((x) => x.server === this.server); if (b) binding = { server: b.server, remoteId: b.remoteId, ...(b.team ? { team: b.team } : {}) }; } catch { /* 読めない状態は problem に出る */ } }
     const enabled = real !== null && this.enabled.has(real);
     const status: SyncStatus = {
       session: this.session, seq: ++this.seq, support: this.support, credentials, owner: this.owner,
@@ -918,6 +952,7 @@ export class SyncHost {
       ...(real && this.localBackups.get(real)?.credentials === this.credentialsGeneration() ? {localBackup:this.localBackups.get(real)!.path} : {}),
       ...(this.billingLink ? { billingLink: this.billingLink } : {}),
       ...(this.agent ? { agent: this.agent } : {}),
+      ...(this.teams ? { teams: this.teams } : {}),
       features: { agentConfig: true },   // serve / VS Code は設定ファイルを手元に書ける
       ...(real && this.lifecycles.get(real)?.credentials === this.credentialsGeneration() ? {lifecycle:this.lifecycles.get(real)!.state} : {}),
       ...(real && this.startups.has(real) ? {startup:(( {credentials:_,...safe} ) => safe)(this.startups.get(real)!)} : {})
@@ -1032,7 +1067,7 @@ export function parseHostAction(text: string): HostAction | null {
     case "beginSync":
     case "cancelBegin":
       return { kind: o.kind };
-    case "continueStart": return typeof o.operationId === "string" && o.operationId.length <= 128 && (o.intent === "new" || o.intent === "existing") ? { kind: o.kind, operationId: o.operationId, intent: o.intent } : null;
+    case "continueStart": return typeof o.operationId === "string" && o.operationId.length <= 128 && (o.intent === "new" || o.intent === "existing") && (o.team === undefined || (typeof o.team === "string" && o.team.length <= 64)) ? { kind: o.kind, operationId: o.operationId, intent: o.intent, ...(typeof o.team === "string" ? { team: o.team } : {}) } : null;
     case "listProjects": return typeof o.operationId === "string" && o.operationId.length <= 128 && (o.cursor === undefined || typeof o.cursor === "string" && o.cursor.length <= 256) ? { kind: o.kind, operationId: o.operationId, ...(typeof o.cursor === "string" ? { cursor: o.cursor } : {}) } : null;
     case "openProject": return typeof o.operationId === "string" && o.operationId.length <= 128 && typeof o.projectId === "string" && o.projectId.length > 0 && o.projectId.length <= 256 && (o.destination === undefined || o.destination === "current" || o.destination === "new") && (o.name === undefined || typeof o.name === "string" && o.name.length <= 128) ? { kind: o.kind, operationId: o.operationId, projectId: o.projectId, destination: o.destination as "current" | "new" | undefined, name: o.name as string | undefined } : null;
     case "enable":
@@ -1061,6 +1096,6 @@ export function parseHostAction(text: string): HostAction | null {
         ? { kind: "resolveGroups", choiceId: o.choiceId, resolution } : null;
     }
     case "choose": return typeof o.choiceId === "string" && o.choiceId.length <= 128 ? { kind: "choose", choiceId: o.choiceId } : null;
-    default: return null;
+    default: return parseTeamAction(o);
   }
 }

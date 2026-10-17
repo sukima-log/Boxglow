@@ -51,6 +51,7 @@ import { Drawer, isFilterEmpty, matchesFilter, type Filter, EMPTY_FILTER } from 
 import { RestoreNotice, SaveNotice } from "./panels/SaveNotice";
 import { VersionInfo } from "./panels/VersionInfo";
 import { TopBar } from "./panels/TopBar";
+import { JoinDialog } from "./panels/JoinDialog";
 import { TaskTable } from "./panels/TaskTable";
 import { TreePanel } from "./panels/TreePanel";
 import { TabBar } from "./panels/TabBar";
@@ -165,6 +166,9 @@ export function App() {
       // 共有リンク (#share=<トークン>[&server=<URL>]): 閲覧専用で開く。同期の裏方は作らない
       const shared = shareFromHash(window.location.hash);
       if (shared) { void useProjectStore.getState().openShared(shared.token, shared.server ?? params.get("server")?.trim() ?? DEFAULT_SYNC_SERVER); return () => observer?.disconnect(); }
+      // 招待リンク (#join=<トークン>): 同期の裏方を作ってから、参加の画面を出す (サインインが要ればその手順)
+      const join = /[#&]join=(bgi_[A-Za-z0-9_.-]+)/.exec(window.location.hash);
+      if (join) { useProjectStore.getState().setJoinToken(join[1]); history.replaceState(null, "", window.location.pathname + window.location.search); }
       const m = window.location.hash.match(/p=([\w-]+)/);
       if (m) void openProject(m[1]);
       // ブラウザだけ (serve / VS Code / 記事の埋め込みではない): 同期の裏方を中に作る。送り先は ?server= (開発用の localhost) か製品のサーバー
@@ -279,6 +283,8 @@ export function App() {
     <div className={gridClass} style={{ ["--right-w" as string]: `${rightW}px` }}>
       <div className="app-top">
         {project && !embed && <TopBar project={project} treeOpen={treeOpen} onToggleTree={toggleTree} onToggleDrawer={toggleDrawer} onHelp={() => setHelpOpen(true)} />}
+        {/* 招待リンクで開いたとき: 参加の画面 (同期の裏方があるときだけ) */}
+        {!embed && <JoinDialog />}
         {project && !embed && <SaveNotice />}
         {/* 退避した編集の取り込みの結果 (編集画面に出す。R44-01) */}
         {project && !embed && <RestoreNotice />}

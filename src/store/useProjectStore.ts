@@ -167,6 +167,9 @@ interface State {
   signInOpened: string | null;
   /** 右上のアカウントのメニューを開いているか (同期パネルなど他の場所からも開けるように店で持つ) */
   accountMenuOpen: boolean;
+  /** 招待リンク (#join=<トークン>) で開いたときのトークン (参加の画面を出す。済んだら null) */
+  joinToken: string | null;
+  setJoinToken: (token: string | null) => void;
   setAccountMenuOpen: (open: boolean) => void;
   /** VS Code の中で、拡張からファイルの中身をまだ受け取れていないときの案内 (Home 画面に出す)。受け取れたら null */
   hostNotice: string | null;
@@ -848,6 +851,8 @@ export const useProjectStore = create<State>((set, get) => {
   , signInOpened: null
   , accountMenuOpen: false
   , setAccountMenuOpen: (open) => set({ accountMenuOpen: open })
+  , joinToken: null
+  , setJoinToken: (token) => set({ joinToken: token })
   , hostNotice: null
   , vscodeFile: null
   , createInVsCode: (name) => {

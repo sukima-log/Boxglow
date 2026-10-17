@@ -16,6 +16,7 @@ import {
 , relinkFinished, relinkPreview, relinkStarted
 , type Content, type Halt, type PendingPush, type RecoveryOutcome, type RelinkPreview, type Remote, type RemoteMark, type SyncState
 } from "./engine";
+import { teamApiBase } from "./teams";
 import { LocalBusy, LocalConflict, type SyncBinding as Binding, type SyncIO, type SyncStoredState as StoredState } from "./io";
 import { APP_VERSION, SAVE_PROTOCOL } from "../model/version";
 
@@ -130,6 +131,8 @@ export interface SyncOptions {
   remoteId?: string;
   /** 一覧から開く操作は、存在しないIDへの新規送信へ変えない。 */
   requireRemote?: boolean;
+  /** 初めて結び付けるときに、チーム (ワークスペース) に置く / から受け取る (結び付けに記録する。以後の API は <server>/v1/teams/<id> が土台。B81) */
+  team?: { id: string; name: string };
   /** 削除記録で確認した復元先へ、人が元ファイルを結び直す選択。 */
   reconnectRestored?: string;
   /** アクセストークン (開発用のサーバーでは省ける) */
@@ -385,7 +388,9 @@ export async function runSync(options: SyncOptions, io: SyncIO): Promise<SyncRes
       lastLocal = local?.hash ?? null;
       await options.onStep?.("local:read");
       // 結び付け: 初めてなら作る (サーバー側の ID は手元で決める)。同じパスに別の計画が置かれていたら、同期しない
-      let binding: Binding = stored?.binding ?? { file, server, remoteId: options.remoteId ?? io.newId(), planId: planId ?? "" };
+      let binding: Binding = stored?.binding ?? { file, server, remoteId: options.remoteId ?? io.newId(), planId: planId ?? "", ...(options.team ? { team: options.team } : {}) };
+      // チームの計画は、API の土台を <server>/v1/teams/<id> にする (その先は個人と同じ)
+      const api = binding.team ? teamApiBase(server, binding.team.id) : server;
       // (初めての結び付けで選択待ちのあいだは、まだ状態が無いので、ここには来ない。
       //  初めての受け取りを記録した後は、書く予定の計画の ID が固定されている。受け取りを書けたか分からない場面では、手元が別の ID でも、
       //  ここでは止めずに「受け取りの再開」の確認に任せる)
@@ -398,7 +403,7 @@ export async function runSync(options: SyncOptions, io: SyncIO): Promise<SyncRes
       const state: SyncState = stored ?? { generation: 0, epoch: null, base: null, pending: null };
       // 結び直しの途中から再開した実行でも、控えの場所を結果に入れる (前の実行が置いた控え)
       if (stored?.relink) relinkBackup = io.relinkBackupPath(stored.relink.backup);
-      const remoteOptions = { server, remoteId: binding.remoteId, token: options.token, fetch: doFetch, hashOf };
+      const remoteOptions = { server: api, remoteId: binding.remoteId, token: options.token, fetch: doFetch, hashOf };
       // ---- 読む: サーバー (やりかけの送りがあるときも取得する。履歴の世代が変わっていないかを、送り直しの前に確かめるため) ----
       const { remote, account } = await fetchRemote(remoteOptions);
       if (options.requireRemote && remote.kind === "absent") throw new Error(t("選んだ計画はサーバーにありません。一覧から選び直してください。"));

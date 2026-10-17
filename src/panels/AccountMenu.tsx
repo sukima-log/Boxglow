@@ -11,6 +11,7 @@ import { TEAM_PLAN_AVAILABLE, billingStatusLabel, planLabel } from "../sync/bill
 import { openBilling } from "./accountActions";
 import { SignInButtons, signInOneStep } from "./SignInButtons";
 import { SignInCode } from "./SyncPanel";
+import { TeamsSection } from "./TeamsSection";
 import { claudeCodeCommand, claudeCodeMcpJson, codexConfig, gitignoreWithMcpJson, mergeMcpJson } from "../sync/agent";
 
 /**
@@ -162,6 +163,8 @@ export function AccountButton() {
                     </div>}
                 </div>
               )}
+              {/* ワークスペース (チーム): 一覧・作る・メンバー・招待・契約 (B81) */}
+              {status.server && <TeamsSection status={status} act={act} />}
               {/* AI エージェントの接続: 計画ごと・権限ごとのトークン。トークンは作ったときだけ表示 (サーバーはハッシュしか持たない) */}
               {status.server && (
                 <div className="sync-panel__group">

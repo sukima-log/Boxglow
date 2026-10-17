@@ -19,6 +19,7 @@ import { isHumanActor } from "../../src/model/graph";
  */
 import { blockResolutionKey, parseConflictResolution, type ConflictResolution, type ResolutionInput } from "../../src/model/conflict-groups";
 import { t } from "../../src/i18n/core";
+import { parseTeams } from "../../src/sync/teams";
 import { readFileSync } from "node:fs";
 import { syncOnce, SyncConfigurationError, HumanSyncRequired, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
 import { bindingsOf, hashOf, SyncStateUnreadable } from "./state-store";
@@ -34,6 +35,8 @@ export interface SyncCommandOptions {
   audience?: "ai" | "human";
   /** 人が打ち直すときの元の引数。通信には使わない。 */
   rawArgs?: string[];
+  /** 初めて置くときのチーム (ワークスペース) の ID (B81)。結び付いた後は結び付けのチームを使う */
+  team?: string;
   file: string;
   server?: string;
   project?: string;
@@ -128,8 +131,17 @@ export async function runSyncCommand(o: SyncCommandOptions, out: (text: string) 
   let result: SyncResult;
   try {
     const resolution = resolutionOptions(o);
+    // --team <ID>: 候補 (自分のチーム) から名前を引いて、結び付けに記録する
+    let team: { id: string; name: string } | undefined;
+    if (o.team) {
+      const token = resolveToken(server)?.token;
+      const res = await fetch(`${server}/v1/teams`, { headers: token ? { authorization: `Bearer ${token}` } : {}, redirect: "error", signal: AbortSignal.timeout(30000) }).catch(() => null);
+      const found = res?.ok ? parseTeams(await res.json()).find((x) => x.teamId === o.team) : undefined;
+      if (!found) { out(t("チームが見つかりません (メンバーでないか、ID が違います): {id}", { id: o.team })); return 1; }
+      team = { id: found.teamId, name: found.name };
+    }
     result = await syncOnce({
-      humanActions: isHumanActor(o.actor ?? ""), file: o.file, server, remoteId: o.project, token: resolveToken(server)?.token
+      humanActions: isHumanActor(o.actor ?? ""), file: o.file, server, remoteId: o.project, token: resolveToken(server)?.token, ...(team ? { team } : {})
     , reconnectRestored: o.reconnectRestored
     , approvedDeletion: o.adopt
     , restoreDeletion: o.restore

@@ -18,6 +18,7 @@ import { applyRevert, parseVersionList, planNameOf } from "./versions";
 import { parseBilling } from "./billing";
 import { parseShareList, shareUrl } from "./shares";
 import { parseAgentTokens } from "./agent";
+import { parseTeams, performTeamAction, teamApiBase, type TeamsState } from "./teams";
 import { SyncPaymentError } from "./run";
 import { haltView } from "./halt-view";
 import { runSync, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncOptions, type SyncResult } from "./run";
@@ -214,7 +215,7 @@ export class BrowserSyncHost {
   private async signOut(): Promise<void> {
     this.cancelSignIn();
     try { await this.doFetch(`${this.server}/v1/session`, { method: "DELETE", redirect: "error" }); } catch { /* Cookie が消えれば、サーバー側のトークンは期限で消える */ }
-    this.generation++; this.account = null; this.startups.clear(); this.choices.clear(); this.results.clear(); this.message = undefined; this.billingLink = undefined; this.agent = undefined;
+    this.generation++; this.account = null; this.startups.clear(); this.choices.clear(); this.results.clear(); this.message = undefined; this.billingLink = undefined; this.agent = undefined; this.teams = undefined;
     this.emit();
   }
 
@@ -242,13 +243,23 @@ export class BrowserSyncHost {
 
   private beginSync(file: string): void {
     if (this.startups.get(file)?.stage === "working") return;
-    this.startups.set(file, { operationId: crypto.randomUUID(), stage: "choose" });
+    const op: NonNullable<SyncStatus["startup"]> & { credentials?: number } = { operationId: crypto.randomUUID(), stage: "choose" };
+    this.startups.set(file, op);
     this.emit();
+    // 置く先 / 受け取る元の候補 (自分のチーム)。サインインしていなければ無し
+    if (this.signedIn()) void this.doFetch(`${this.server}/v1/teams`, { redirect: "error" })
+      .then(async (res) => { if (res.ok && this.startups.get(file) === op) { op.teams = parseTeams(await res.json()).map((x) => ({ teamId: x.teamId, name: x.name, role: x.role })); this.emit(); } })
+      .catch(() => { /* 候補が読めなくても、個人として続けられる */ });
   }
-  private async continueStart(file: string, operationId: string, intent?: "new" | "existing"): Promise<void> {
+  private async continueStart(file: string, operationId: string, intent?: "new" | "existing", team?: string): Promise<void> {
     const op = this.startups.get(file);
     if (!op || op.operationId !== operationId || op.stage === "working") return;
     if (intent) op.intent = intent;
+    if (team !== undefined) {
+      if (team !== "" && !op.teams) { try { const res = await this.doFetch(`${this.server}/v1/teams`, { redirect: "error" }); if (res.ok) op.teams = parseTeams(await res.json()).map((x) => ({ teamId: x.teamId, name: x.name, role: x.role })); } catch { /* 読めなければ個人として続ける */ } }
+      const found = op.teams?.find((x) => x.teamId === team); op.team = found ? { id: found.teamId, name: found.name } : undefined;
+      if (team !== "" && !found) { op.error = t("選んだワークスペースが見つかりません。選び直してください"); op.stage = "choose"; this.emit(); return; }
+    }
     if (!op.intent) return;
     const unsafe = serverProblem(this.server);
     if (unsafe) { op.error = unsafe; op.stage = "choose"; this.emit(); return; }
@@ -258,7 +269,7 @@ export class BrowserSyncHost {
     if (op.intent === "existing") { await this.listProjects(file, operationId); return; }
     // この計画を新しくサーバーに置く (本体が結び付けを作り、送る)
     op.stage = "working"; op.error = undefined; this.emit();
-    await this.syncFile(file, {});
+    await this.syncFile(file, op.team ? { team: op.team } : {});
     if (this.startups.get(file) !== op) return;
     const result = this.results.get(file)?.result;
     if (result && result.status !== "error" && result.status !== "busy") { this.enable(file); this.startups.delete(file); }
@@ -270,7 +281,8 @@ export class BrowserSyncHost {
     if (!op || op.operationId !== operationId || op.stage === "working") return;
     op.stage = "working"; op.error = undefined; op.credentials = credentials; this.emit();
     try {
-      const res = await this.doFetch(`${this.server}/v1/projects?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, { redirect: "error" });
+      const base = op.team ? teamApiBase(this.server, op.team.id) : this.server;
+      const res = await this.doFetch(`${base}/v1/projects?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`, { redirect: "error" });
       if (this.startups.get(file) !== op || credentials !== this.generation) return;
       if (res.status === 401 || res.status === 403) { this.generation++; this.account = null; op.stage = "signin"; return; }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -295,7 +307,8 @@ export class BrowserSyncHost {
     if (op.credentials !== this.generation) { op.error = t("表示したときから、状態が変わっています。選び直してください"); this.emit(); return; }
     op.stage = "working"; op.error = undefined; this.emit();
     try {
-      const res = await this.doFetch(`${this.server}/v1/projects/${encodeURIComponent(action.projectId)}`, { redirect: "error" });
+      const base = op.team ? teamApiBase(this.server, op.team.id) : this.server;
+      const res = await this.doFetch(`${base}/v1/projects/${encodeURIComponent(action.projectId)}`, { redirect: "error" });
       if (res.status === 401 || res.status === 403) throw new Error(t("サインインが確かめられませんでした。サインインし直してください"));
       if (!res.ok) throw new Error(t("選んだ計画はサーバーにありません。一覧から選び直してください。"));
       const text = await res.text();
@@ -304,9 +317,13 @@ export class BrowserSyncHost {
       // 既に同じ id の計画がブラウザにあれば、それを置き換えない (結び付けて、同期の本体に比較させる)
       if (!existing) await saveProject(plan);
       const io = browserSyncIO(plan.id, this.server);
-      const result = await runSync({ server: this.server, remoteId: action.projectId, requireRemote: true, fetch: this.doFetch, now: () => new Date(this.now()) }, io);
+      const opts = { server: this.server, remoteId: action.projectId, requireRemote: true, fetch: this.doFetch, now: () => new Date(this.now()), ...(op.team ? { team: op.team } : {}) };
+      let result = await runSync(opts, io);
+      // 受け取った計画は手元に書いたばかり: 初回の選択 (手元 / サーバー) で止まったら、サーバー側を自動で選んで続ける
+      // (ブラウザは計画をオブジェクトにして保存し直すので、文字列のハッシュがサーバーと一致しないことがある)
+      if (result.status === "halted" && result.halt.reason === "first-link") result = await runSync({ ...opts, firstLink: { token: result.halt.token, prefer: "remote" } }, io);
       this.results.set(plan.id, { result, at: this.now(), credentials: this.generation });
-      this.knownBindings.set(plan.id, { server: this.server, remoteId: action.projectId });
+      this.knownBindings.set(plan.id, { server: this.server, remoteId: action.projectId, ...(op.team ? { team: op.team } : {}) });
       this.enable(plan.id);
       this.startups.delete(file);
       op.stage = "opened"; op.opened = { path: plan.id };
@@ -336,11 +353,14 @@ export class BrowserSyncHost {
     this.busy++; this.emit();
     try {
       const io = browserSyncIO(file, this.server);
-      const result = await runSync({ server: this.server, fetch: this.doFetch, now: () => new Date(this.now()), ...extra }, io);
+      // 結び付けがまだ保存されていない計画 (受け取り直後に選択待ちで止まった、など) でも、置く先のチームを忘れない (結び付けを作るときだけ使われる)
+      // 受け取った計画 (remoteId が分かっている) は、結び付けが保存されるまでその ID を指定し続ける (別の ID で新しい計画を作らない)
+      const known = this.knownBindings.get(file);
+      const result = await runSync({ server: this.server, fetch: this.doFetch, now: () => new Date(this.now()), ...(known ? { remoteId: known.remoteId, requireRemote: true } : {}), ...(known?.team ? { team: known.team } : {}), ...extra }, io);
       this.results.set(file, { result, at: this.now(), credentials });
       this.network = null;
       // 結び付け (サーバー側の計画の ID) は、保存した状態から読む (初回の送りで決まる)
-      try { const state = await io.readState(); if (state) this.knownBindings.set(file, { server: this.server, remoteId: state.binding.remoteId }); } catch { /* 状態が読めないときは、次の結果で */ }
+      try { const state = await io.readState(); if (state) this.knownBindings.set(file, { server: this.server, remoteId: state.binding.remoteId, ...(state.binding.team ? { team: state.binding.team } : {}) }); } catch { /* 状態が読めないときは、次の結果で */ }
       // 受け取った・手元だけを直した: 画面に読み直してもらう。そろったときの手元のハッシュも控える
       if ((result.status === "synced" || result.status === "halted") && (result.pulled > 0 || result.edited > 0)) this.options.onLocalChanged?.(file);
       if (result.status === "synced") this.localHashes.set(file, result.localHash);
@@ -377,7 +397,8 @@ export class BrowserSyncHost {
     switch (action.kind) {
       case "beginSync": if (file) this.beginSync(file); break;
       case "cancelBegin": if (file && this.startups.get(file)?.stage !== "working") { this.startups.delete(file); if (this.signingIn && !this.signingIn.link) this.cancelSignIn(); } break;
-      case "continueStart": if (file) await this.continueStart(file, action.operationId, action.intent); break;
+      case "continueStart": if (file) await this.continueStart(file, action.operationId, action.intent, action.team); break;
+      case "listTeams": case "openTeam": case "createTeam": case "renameTeam": case "deleteTeam": case "leaveTeam": case "setMember": case "removeMember": case "createInvite": case "revokeInvite": case "teamCheckout": case "teamSeats": case "teamPortal": case "joinPreview": case "joinTeam": case "teamDismiss": await this.teamAction(action); break;
       case "listProjects": if (file) await this.listProjects(file, action.operationId, action.cursor); break;
       case "openProject": if (file) await this.openProject(file, action); break;
       case "enable": if (file) this.enable(file); break;
@@ -471,6 +492,18 @@ export class BrowserSyncHost {
   /** AI エージェント用トークンの状態 (アカウントにつき 1 つ) */
   private agent: NonNullable<SyncStatus["agent"]> | undefined;
   /** エージェント用トークン: 一覧 / 作る / 失効 (Cookie のセッション)。結果は status.agent */
+  /** チーム (ワークスペース) の状態 */
+  private teams: TeamsState | undefined;
+  /** チームの操作 (Cookie のセッションで /v1/teams... を呼ぶ。中身はホスト共通の performTeamAction) */
+  private async teamAction(action: Extract<HostAction, { kind: "listTeams" | "openTeam" | "createTeam" | "renameTeam" | "deleteTeam" | "leaveTeam" | "setMember" | "removeMember" | "createInvite" | "revokeInvite" | "teamCheckout" | "teamSeats" | "teamPortal" | "joinPreview" | "joinTeam" | "teamDismiss" }>): Promise<void> {
+    if (!this.signedIn()) { this.message = t("先にサインインしてください"); this.emit(); return; }
+    if (this.teams?.busy) return;
+    const state = this.teams ?? { busy: false };
+    this.teams = { ...state, busy: true, error: undefined }; this.emit();
+    const doFetch = (path: string, init: RequestInit = {}) => this.doFetch(`${this.server}${path}`, { ...init, redirect: "error" });
+    this.teams = await performTeamAction(doFetch, state, action, t);
+    this.emit();
+  }
   private async agentAction(action: HostAction): Promise<void> {
     if (action.kind === "agentTokenDismiss") { if (this.agent) { this.agent.newToken = undefined; this.agent.connected = undefined; } this.emit(); return; }
     if (!this.signedIn()) { this.message = t("先にサインインしてください"); this.emit(); return; }
@@ -538,6 +571,7 @@ export class BrowserSyncHost {
     , ...(this.notInvited ? { notInvited: this.notInvited } : {})
     , ...(this.billingLink ? { billingLink: this.billingLink } : {})
     , ...(this.agent ? { agent: this.agent } : {})
+    , ...(this.teams ? { teams: this.teams } : {})
     };
     const unsafe = serverProblem(this.server);
     if (unsafe) { status.state = "problem"; status.problem = { kind: "configuration", text: unsafe, fix: "server-setting" }; return status; }
@@ -591,12 +625,12 @@ export class BrowserSyncHost {
     this.emit();
   }
   /** 結び付け (状態を読まずに、最後の結果から) */
-  private readonly knownBindings = new Map<string, { server: string; remoteId: string }>();
-  private bindingOf(file: string): { server: string; remoteId: string } | null { return this.knownBindings.get(file) ?? null; }
+  private readonly knownBindings = new Map<string, { server: string; remoteId: string; team?: { id: string; name: string } }>();
+  private bindingOf(file: string): { server: string; remoteId: string; team?: { id: string; name: string } } | null { return this.knownBindings.get(file) ?? null; }
   /** 開いた計画の結び付けを、保存した状態から読む (起動時。結果が無くても「結び付け済み」と出すため) */
   async loadBinding(projectId: string): Promise<void> {
     const state = await browserSyncIO(projectId, this.server).readState();
-    if (state) this.knownBindings.set(projectId, { server: this.server, remoteId: state.binding.remoteId });
+    if (state) this.knownBindings.set(projectId, { server: this.server, remoteId: state.binding.remoteId, ...(state.binding.team ? { team: state.binding.team } : {}) });
     this.emit();
   }
 

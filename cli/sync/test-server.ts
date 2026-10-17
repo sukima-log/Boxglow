@@ -65,6 +65,10 @@ export class TestSyncServer {
   deletedAccounts = new Set<string>();
   /** 共有リンク: id → { token, projectId, revoked, expiresAt } (利用者ごと) */
   shares = new Map<string, { id: string; token: string; account: string; projectId: string; revoked: boolean; expiresAt: string | null; createdAt: string }>();
+  /** チーム (B81): id → { name, members (account → role / displayName), invites, log, deleted }。計画はチーム ID の名前空間 (accounts) に置く */
+  teams = new Map<string, { id: string; name: string; owner: string; members: Map<string, { role: string; displayName: string }>; invites: Map<string, { id: string; token: string; role: string; expiresAt: string; uses: number; revoked: boolean }>; log: { actor: string; action: string; target: string; at: string }[]; deleted: boolean; subscribed: boolean }>();
+  /** 試験の都合: チームの課金を求める (true なら契約の無いチームの同期は 402) */
+  teamBillingRequired = false;
   /** AI エージェント用トークン (利用者ごと): id → { name, projectId, write, revoked, requests } */
   agentTokens = new Map<string, { id: string; token: string; account: string; name: string; projectId: string; write: boolean; revoked: boolean; createdAt: string; requests: number }>();
   /** 課金の再現: required = 契約を求める (契約の無い利用者の同期は 402)、subscribed = 契約のある利用者、customers = 顧客のできた利用者 */
@@ -94,6 +98,8 @@ export class TestSyncServer {
   }
   /** 計画の今の状態 (試験の確認用) */
   project(id: string, account = "test"): StoredProject | undefined { return this.accounts.get(account)?.get(id); }
+  /** アカウント ID → ログイン名 (サインイン済みなら) */
+  loginOf(accountId: string): string { return [...this.issued.values()].find((u) => u.account === accountId)?.login ?? accountId; }
   /** 利用者の名前空間 (無ければ作る) */
   private space(account: string): Map<string, StoredProject> {
     let space = this.accounts.get(account);
@@ -105,7 +111,7 @@ export class TestSyncServer {
     // ---- ブラウザだけの画面の検査用: CORS (試験ではどのオリジンでも許す) と、HttpOnly Cookie のセッション (本番の入口と同じ約束) ----
     const origin = req.headers.origin;
     const cors: Record<string, string> = origin ? { "access-control-allow-origin": origin, "access-control-allow-credentials": "true", vary: "origin", "access-control-expose-headers": "etag, x-boxglow-epoch, x-boxglow-account, x-boxglow-version, retry-after" } : {};
-    if (req.method === "OPTIONS") { res.writeHead(204, { ...cors, "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS", "access-control-allow-headers": req.headers["access-control-request-headers"] ?? "content-type, authorization", "access-control-max-age": "600" }); res.end(); return; }
+    if (req.method === "OPTIONS") { res.writeHead(204, { ...cors, "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS", "access-control-allow-headers": req.headers["access-control-request-headers"] ?? "content-type, authorization", "access-control-max-age": "600" }); res.end(); return; }
     const cookieToken = /(?:^|;\s*)bgl_session=([^;]+)/.exec(req.headers.cookie ?? "")?.[1];
     // Authorization が無く Cookie があれば、Cookie の値をトークンとして扱う (本番と同じ。Origin の照合は試験では省く)
     if (!req.headers.authorization && cookieToken) req.headers.authorization = `Bearer ${decodeURIComponent(cookieToken)}`;
@@ -195,12 +201,113 @@ export class TestSyncServer {
     // ブラウザ (Origin あり) からトークンも Cookie も無しの要求は、本番と同じく 401 (匿名の "test" 利用者にしない)
     if (origin && bearer === undefined) { plain(401, { code: "unauthorized" }); return; }
     if (bearer !== undefined && this.revoked.has(bearer)) { plain(401, { code: "unauthorized" }); return; }
-    const account = bearer === undefined ? "test" : this.issued.get(bearer)?.account ?? bearer;
-    const projects = this.space(account);
+    let account = bearer === undefined ? "test" : this.issued.get(bearer)?.account ?? bearer;
+    let projects = this.space(account);
     const send = (status: number, body = "", headers: Record<string, string> = {}) => {
       res.writeHead(status, { "x-boxglow-epoch": this.epoch, "x-boxglow-account": account, "content-type": "application/json; charset=utf-8", ...cors, ...headers });
       res.end(body);
     };
+    // ---- チーム (B81): 作る・一覧・情報・メンバー・招待・ログ・参加と、チームの保存先への転送 (本番の入口と同じ形) ----
+    const login = this.issued.get(bearer ?? "")?.login ?? account;
+    const teamsRoute = /^\/v1\/teams(?:\/([^/?]+)(\/[^?]*)?)?(?:\?.*)?$/.exec(req.url ?? "");
+    const joinRoute = /^\/v1\/join\/([^/?]+)$/.exec(req.url ?? "");
+    const readJson = async (): Promise<Record<string, unknown>> => { const chunks: Buffer[] = []; for await (const chunk of req) chunks.push(chunk as Buffer); try { return JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as Record<string, unknown>; } catch { return {}; } };
+    const teamInfo = (t: NonNullable<ReturnType<typeof this.teams.get>>) => ({ teamId: t.id, name: t.name, ownerAccount: t.owner, createdAt: "2026-10-18T00:00:00.000Z", members: [...t.members].map(([accountId, m]) => ({ accountId, login: this.loginOf(accountId), role: m.role, displayName: m.displayName, joinedAt: "2026-10-18T00:00:00.000Z" })) });
+    const teamBilling = (t: NonNullable<ReturnType<typeof this.teams.get>>, role: string) => ({ required: this.teamBillingRequired, entitled: !this.teamBillingRequired || t.subscribed, plan: t.subscribed ? "team" : null, status: t.subscribed ? "active" : "none", seats: t.subscribed ? 5 : 0, periodEnd: null, payer: t.subscribed && t.owner === account, portal: t.subscribed && t.owner === account, checkout: role === "admin" && !t.subscribed });
+    if (teamsRoute && bearer !== undefined) {
+      const nowAt = new Date().toISOString();
+      if (teamsRoute[1] === undefined) {
+        if (req.method === "GET") { send(200, JSON.stringify({ teams: [...this.teams.values()].filter((t) => !t.deleted && t.members.has(account)).map((t) => ({ teamId: t.id, name: t.name, role: t.members.get(account)!.role, members: t.members.size })) })); return; }
+        if (req.method === "POST") {
+          const body = await readJson();
+          const name = typeof body.name === "string" ? body.name.trim().slice(0, 64) : "";
+          if (!name) { send(400, JSON.stringify({ code: "bad-request" })); return; }
+          const id = "acc" + String(this.teams.size + 1).padStart(32, "7");
+          const team = { id, name, owner: account, members: new Map([[account, { role: "admin", displayName: login }]]), invites: new Map(), log: [{ actor: login, action: "team-create", target: name, at: nowAt }], deleted: false, subscribed: false };
+          this.teams.set(id, team);
+          send(201, JSON.stringify({ team: teamInfo(team), role: "admin" })); return;
+        }
+        send(405, JSON.stringify({ code: "method" })); return;
+      }
+      const team = this.teams.get(decodeURIComponent(teamsRoute[1]));
+      const role = team && !team.deleted ? team.members.get(account)?.role : undefined;
+      if (!team || !role) { send(404, JSON.stringify({ code: "not-found" })); return; }
+      const rest = teamsRoute[2] ?? "";
+      const forbidden = () => { send(403, JSON.stringify({ code: "forbidden", role })); };
+      if (rest === "" || rest === "/") {
+        if (req.method === "GET") { send(200, JSON.stringify({ team: teamInfo(team), role, usage: { projects: this.space(team.id).size, contentBytes: 0 }, billing: teamBilling(team, role), maxMembers: this.teamBillingRequired && !team.subscribed ? 0 : 20 })); return; }
+        if (req.method === "PATCH") { if (role !== "admin") { forbidden(); return; } const body = await readJson(); if (typeof body.name === "string" && body.name.trim()) { team.name = body.name.trim().slice(0, 64); team.log.push({ actor: login, action: "team-rename", target: team.name, at: nowAt }); } send(200, JSON.stringify({ team: teamInfo(team) })); return; }
+        if (req.method === "DELETE") { if (role !== "admin") { forbidden(); return; } team.deleted = true; team.log.push({ actor: login, action: "team-delete", target: "", at: nowAt }); send(200, JSON.stringify({ deleted: true })); return; }
+      }
+      if (rest === "/members" && req.method === "POST") {
+        if (role !== "admin") { forbidden(); return; }
+        const body = await readJson();
+        const who = typeof body.accountId === "string" ? body.accountId : "";
+        if (!who) { send(404, JSON.stringify({ code: "no-account" })); return; }
+        if (team.members.has(who)) { send(409, JSON.stringify({ code: "exists" })); return; }
+        team.members.set(who, { role: typeof body.role === "string" ? body.role : "editor", displayName: this.loginOf(who) });
+        team.log.push({ actor: login, action: "member-add", target: who, at: nowAt });
+        send(201, JSON.stringify({ team: teamInfo(team) })); return;
+      }
+      const member = /^\/members\/([^/]+)$/.exec(rest);
+      if (member) {
+        const who = decodeURIComponent(member[1]) === "me" ? account : decodeURIComponent(member[1]);
+        const self = who === account;
+        const m = team.members.get(who);
+        if (req.method === "PATCH") {
+          const body = await readJson();
+          if (!m) { send(404, JSON.stringify({ code: "no-member" })); return; }
+          if (typeof body.role === "string") { if (role !== "admin") { forbidden(); return; } if (m.role === "admin" && body.role !== "admin" && [...team.members.values()].filter((x) => x.role === "admin").length <= 1) { send(409, JSON.stringify({ code: "last-admin" })); return; } m.role = body.role; team.log.push({ actor: login, action: "member-role", target: `${who} ${body.role}`, at: nowAt }); }
+          if (typeof body.displayName === "string") { if (!self && role !== "admin") { forbidden(); return; } m.displayName = body.displayName.trim().slice(0, 64); }
+          send(200, JSON.stringify({ team: teamInfo(team) })); return;
+        }
+        if (req.method === "DELETE") {
+          if (!self && role !== "admin") { forbidden(); return; }
+          if (!m) { send(404, JSON.stringify({ code: "no-member" })); return; }
+          if (m.role === "admin" && [...team.members.values()].filter((x) => x.role === "admin").length <= 1) { send(409, JSON.stringify({ code: "last-admin" })); return; }
+          team.members.delete(who); team.log.push({ actor: login, action: "member-remove", target: who, at: nowAt });
+          send(200, JSON.stringify({ removed: true })); return;
+        }
+      }
+      if (rest === "/invites" && req.method === "GET") { if (role !== "admin") { forbidden(); return; } send(200, JSON.stringify({ invites: [...team.invites.values()].map((i) => ({ id: i.id, role: i.role, createdBy: login, createdAt: nowAt, expiresAt: i.expiresAt, uses: i.uses, revoked: i.revoked, expired: false })) })); return; }
+      if (rest === "/invites" && req.method === "POST") {
+        if (role !== "admin") { forbidden(); return; }
+        const body = await readJson();
+        const n = team.invites.size + 1;
+        const id = "inv" + String(n).padStart(13, "0");
+        const token = `bgi_${team.id}.${(id + "i".repeat(43)).slice(0, 43)}`;
+        const inviteRole = body.role === "viewer" ? "viewer" : "editor";
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+        team.invites.set(id, { id, token, role: inviteRole, expiresAt, uses: 0, revoked: false });
+        team.log.push({ actor: login, action: "invite-create", target: `${id} ${inviteRole}`, at: nowAt });
+        send(201, JSON.stringify({ id, token, role: inviteRole, expiresAt, url: `https://boxglow.app/#join=${token}` })); return;
+      }
+      const inviteMatch = /^\/invites\/([^/]+)$/.exec(rest);
+      if (inviteMatch && req.method === "DELETE") { if (role !== "admin") { forbidden(); return; } const i = team.invites.get(decodeURIComponent(inviteMatch[1])); if (i) { i.revoked = true; team.log.push({ actor: login, action: "invite-revoke", target: i.id, at: nowAt }); } send(i ? 200 : 404, JSON.stringify({ revoked: true })); return; }
+      if (rest === "/log" && req.method === "GET") { if (role !== "admin") { forbidden(); return; } send(200, JSON.stringify({ log: [...team.log].reverse() })); return; }
+      // 転送: /v1/teams/<id>/v1/projects... → チームの名前空間で、役割を確かめて同じ処理へ
+      const inner = rest.startsWith("/v1/") ? rest.slice(3) : rest;
+      if (/^\/(projects|agent-tokens|trash)(\/|$)/.test(inner)) {
+        if (this.teamBillingRequired && !team.subscribed) { send(402, JSON.stringify({ code: "payment-required" })); return; }
+        const writes = req.method !== "GET" && req.method !== "HEAD";
+        if (writes && role === "viewer") { forbidden(); return; }
+        const adminOnly = /^\/v1\/(agent-tokens|trash)(\/|$)/.test(inner) || /^\/v1\/projects\/[^/]+\/(shares|restore|trash)(\/|$)/.test(inner) || (req.method === "DELETE" && /^\/v1\/projects\/[^/]+$/.test(inner));
+        if (adminOnly && role !== "admin") { forbidden(); return; }
+        // 以降の経路を、チームの名前空間で処理する (send の x-boxglow-account もチームの ID になる)
+        req.url = "/v1" + inner + (req.url?.includes("?") ? req.url.slice(req.url.indexOf("?")) : "");
+        account = team.id; projects = this.space(team.id);
+      } else { send(404, JSON.stringify({ code: "not-found" })); return; }
+    }
+    if (joinRoute && bearer !== undefined && (req.method === "GET" || req.method === "POST")) {
+      const token = decodeURIComponent(joinRoute[1]);
+      const found = [...this.teams.values()].find((t) => !t.deleted && [...t.invites.values()].some((i) => i.token === token && !i.revoked));
+      const invite = found ? [...found.invites.values()].find((i) => i.token === token)! : null;
+      if (!found || !invite) { send(404, JSON.stringify({ code: "not-found" })); return; }
+      if (req.method === "GET") { send(200, JSON.stringify({ team: { teamId: found.id, name: found.name, members: found.members.size }, role: invite.role, alreadyMember: found.members.has(account) })); return; }
+      const already = found.members.has(account);
+      if (!already) { found.members.set(account, { role: invite.role, displayName: login }); invite.uses++; found.log.push({ actor: login, action: "member-join", target: `${account} ${invite.role}`, at: new Date().toISOString() }); }
+      send(200, JSON.stringify({ joined: !already, alreadyMember: already, team: teamInfo(found), role: found.members.get(account)!.role })); return;
+    }
     if (req.method === "GET" && req.url === "/v1/identities") {
       send(200, JSON.stringify({ account, identities: this.identities.get(account) ?? ["github"] }));
       return;
@@ -228,7 +335,7 @@ export class TestSyncServer {
       return;
     }
     // 契約を求めていて、この利用者に契約が無ければ、同期の要求は 402 (自分の情報・課金・サインアウトは上で済んでいる)
-    if (this.billing.required && !this.billing.subscribed.has(account) && req.url?.startsWith("/v1/projects")) { send(402, JSON.stringify({ code: "payment-required" })); return; }
+    if (this.billing.required && !this.billing.subscribed.has(account) && !this.teams.has(account) && req.url?.startsWith("/v1/projects")) { send(402, JSON.stringify({ code: "payment-required" })); return; }
     if (req.method === "DELETE" && req.url === "/v1/account") {
       // 本人によるアカウントの削除: confirm: true が無ければ 400。受け付けたら、その利用者に発行したトークンを全部失効させ、削除済みに印を付ける
       const chunks: Buffer[] = [];

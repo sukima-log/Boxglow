@@ -306,6 +306,73 @@ describe("サインインとサインアウト", () => {
     } finally { process.env.HOME = home; }
   });
 
+  it("チーム (B81): 作る → 招待リンクで 2 人目が参加 → チームに置いた計画を 2 人が同期 → viewer は書けない → 離脱", async () => {
+    // (資格情報の控えはサーバーごとに 1 つなので、誰として操作するかを、操作の前に切り替える)
+    const as = (account: string) => saveCredentials({ server: server.url, account, login: account, token: account, createdAt: new Date().toISOString() });
+    const { file } = planFile("p1");
+    as("acc-a");
+    const { host: a } = make();
+    a.openFile(file); a.enable(file);
+    // 作る (admin になる)。一覧に出る
+    let s = await a.act(file, { kind: "createTeam", name: "開発" });
+    expect(s.teams?.error).toBeUndefined();
+    expect(s.teams?.list).toEqual([expect.objectContaining({ name: "開発", role: "admin", members: 1 })]);
+    const teamId = s.teams!.list![0].teamId;
+    expect(s.teams?.open?.teamId).toBe(teamId);
+    // 招待リンク (editor)
+    s = await a.act(file, { kind: "createInvite", id: teamId, role: "editor" });
+    expect(s.teams?.newInvite?.url).toMatch(/^https:\/\/boxglow\.app\/#join=bgi_/);
+    const token = /join=(bgi_[^&]+)/.exec(s.teams!.newInvite!.url)![1];
+    // チームに置く: 開始の手順で置く先にチームを選ぶ → 結び付けに team が付き、計画はチームの名前空間に入る
+    await a.act(file, { kind: "beginSync" });
+    await new Promise((r) => setTimeout(r, 50));
+    let op = a.status(file).startup!;
+    expect(op.teams).toEqual([{ teamId, name: "開発", role: "admin" }]);
+    await a.act(file, { kind: "continueStart", operationId: op.operationId, intent: "new", team: teamId });
+    expect(a.status(file).file?.binding).toMatchObject({ remoteId: expect.any(String), team: { id: teamId, name: "開発" } });
+    const remoteId = a.status(file).file!.binding!.remoteId;
+    expect(server.project(remoteId, teamId)?.head).toBeTruthy();
+    expect(server.project(remoteId, "acc-a")).toBeUndefined();
+    // 2 人目 (別の端末・別のアカウント) が参加して、一覧からチームの計画を受け取る
+    const bDir = join(root, "b"); mkdirSync(bDir, { recursive: true });
+    const bFile = join(bDir, "boxglow.json");
+    as("acc-b");
+    const { host: b } = make();
+    b.openFile(bFile);
+    s = await b.act(bFile, { kind: "joinTeam", token });
+    expect(s.teams?.join).toMatchObject({ joined: true, role: "editor", team: { name: "開発" } });
+    expect(s.teams?.list).toEqual([expect.objectContaining({ name: "開発", role: "editor", members: 2 })]);
+    await b.act(bFile, { kind: "beginSync" });
+    await new Promise((r) => setTimeout(r, 50));
+    op = b.status(bFile).startup!;
+    await b.act(bFile, { kind: "continueStart", operationId: op.operationId, intent: "existing", team: teamId });
+    op = b.status(bFile).startup!;
+    expect(op.stage).toBe("list");
+    expect(op.projects?.map((p) => p.id)).toEqual([remoteId]);
+    await b.act(bFile, { kind: "openProject", operationId: op.operationId, projectId: remoteId, destination: "current" });
+    expect(b.status(bFile).file?.binding).toMatchObject({ remoteId, team: { id: teamId, name: "開発" } });
+    expect(read(bFile).name).toBe("p1");
+    // b が編集 → 送る (同じプロセスの 2 つ目のホストは見張りのロックを持てないので、同期の中核を直接呼ぶ) → a が受け取る
+    edit(bFile, (p) => ({ ...p, name: "チームで改名" }));
+    expect((await syncOnce({ file: bFile, server: server.url, token: "acc-b" })).status).toBe("synced");
+    as("acc-a");
+    await a.act(file, { kind: "syncNow" });
+    expect(read(file).name).toBe("チームで改名");
+    // viewer に落とすと、b は書けない (サーバーが 403 で断る)
+    s = await a.act(file, { kind: "setMember", id: teamId, accountId: "acc-b", role: "viewer" });
+    expect([s.teams?.error, s.teams?.open?.members.find((m) => m.accountId === "acc-b")?.role]).toEqual([undefined, "viewer"]);
+    edit(bFile, (p) => ({ ...p, name: "閲覧なのに" }));
+    await expect(syncOnce({ file: bFile, server: server.url, token: "acc-b" })).rejects.toThrow();
+    // 離脱 → 一覧から消える。最後の admin は抜けられない
+    as("acc-b");
+    s = await b.act(bFile, { kind: "leaveTeam", id: teamId });
+    expect(s.teams?.list).toEqual([]);
+    as("acc-a");
+    s = await a.act(file, { kind: "leaveTeam", id: teamId });
+    expect(s.teams?.error).toContain("最後の管理者");
+    await a.stop(); await b.stop();
+  });
+
   it("課金: /v1/me の billing が状態に出る。申し込み・契約の管理の URL は billingLink に入り、サインアウトで消える。契約が無いと同期は 402 → problem = payment", async () => {
     const { file } = planFile("p1");
     signedIn("acc-pay");

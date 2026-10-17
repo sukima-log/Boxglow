@@ -1,4 +1,5 @@
 import type { AgentTarget } from "./agent";
+import type { TeamAction, TeamRef, TeamsState } from "./teams";
 import type { Billing } from "./billing";
 import type { AgentTokenEntry } from "./agent";
 /**
@@ -54,7 +55,7 @@ export interface SyncStatus {
   /** 常駐の同期の所有者: self = この裏方 / external = 別のプロセス / unknown = ロックの持ち主を判定できない / none = まだ取っていない */
   owner: "self" | "external" | "unknown" | "none";
   /** 今の画面のファイル (開いていなければ null) */
-  file: { path: string; enabled: boolean; binding: { server: string; remoteId: string } | null } | null;
+  file: { path: string; enabled: boolean; binding: { server: string; remoteId: string; /** チームに置いた計画なら、そのチーム (B81) */ team?: TeamRef } | null } | null;
   state: "off" | "signed-out" | "unbound" | "synced" | "unsent" | "syncing" | "halted" | "problem" | "offline" | "paused" | "external" | "unsupported";
   /** 最後にそろえたサーバーの版 (詳細の欄にだけ出す) */
   revision: string | null;
@@ -80,6 +81,9 @@ export interface SyncStatus {
     stage:"choose" | "signin" | "list" | "working" | "opened";
     opened?: {path:string; url?:string};
     intent?:"new" | "existing";
+    /** 置く先 / 受け取る元の候補 (自分のチーム。サインイン済みで読めたとき) と、選んだチーム (無ければ個人) */
+    teams?: { teamId: string; name: string; role: string }[];
+    team?: TeamRef;
     projects?: {id:string;name:string;revision:string;updatedAt:string|null;bytes:number}[];
     nextCursor?:string|null;
     unsupported?:boolean;
@@ -102,6 +106,8 @@ export interface SyncStatus {
   /** このホストで作成した、置き換え前のローカルファイルの控え。 */
   localBackup?: string;
   /** このホストで使えない機能 (省略 = 全部使える)。trash = ゴミ箱 (削除・復元) */
+  /** チーム (ワークスペース) の状態 (アカウントのメニューの欄と、招待リンクでの参加) */
+  teams?: TeamsState;
   features?: { trash?: boolean; /** 設定ファイル (.mcp.json / Codex の config.toml) を手元に書ける (serve / VS Code) */ agentConfig?: boolean };
   /** 1 行の補足 */
   message?: string;
@@ -115,7 +121,7 @@ export interface SyncStatus {
 /** 画面からの操作 */
 export type HostAction =
   | { kind:"beginSync" } | {kind:"cancelBegin"}
-  | { kind:"continueStart"; operationId:string; intent:"new"|"existing" }
+  | { kind:"continueStart"; operationId:string; intent:"new"|"existing"; /** 置く先 / 受け取る元のチーム ("" = 個人。B81) */ team?:string }
   | { kind:"listProjects"; operationId:string; cursor?:string }
   | { kind:"openProject"; operationId:string; projectId:string; destination?:"current"|"new"; name?:string }
 
@@ -132,7 +138,7 @@ export type HostAction =
   /** 課金: 申し込みの画面 (Stripe Checkout) / 契約の管理 (Customer Portal) の URL をもらう (結果は status.billingLink) */
   | { kind: "billingCheckout"; plan: "personal" | "team"; seats?: number } | { kind: "billingPortal" } | { kind: "billingDismiss" }
   /** AI エージェント用トークン: 一覧 / 作る (計画と権限) / 失効 / 作ったトークンの表示を消す */
-  | { kind: "listAgentTokens" } | { kind: "createAgentToken"; projectId: string; name: string; write: boolean } | { kind: "connectAgent"; projectId: string; target: AgentTarget; write: boolean } | { kind: "revokeAgentToken"; id: string } | { kind: "agentTokenDismiss" }
+  | TeamAction | { kind: "listAgentTokens" } | { kind: "createAgentToken"; projectId: string; name: string; write: boolean } | { kind: "connectAgent"; projectId: string; target: AgentTarget; write: boolean } | { kind: "revokeAgentToken"; id: string } | { kind: "agentTokenDismiss" }
   /** 2 つ目のサインイン手段を、サインイン済みのアカウントに足す (コードや URL は signIn と同じ欄に出る) */
   | { kind: "linkIdentity"; provider: "github" | "google" }
   | { kind: "bind" } | { kind: "syncNow" }

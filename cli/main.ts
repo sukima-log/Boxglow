@@ -21,6 +21,8 @@ import { runSyncCommand, runWatchCommand } from "./sync/command";
 import { runLinkIdentity, runLogin, runLogout, runWhoami } from "./sync/login";
 import { runBilling } from "./sync/billing";
 import { runAgentToken } from "./sync/agent-token";
+import { runTeam } from "./sync/team";
+import { teamApiBase } from "../src/sync/teams";
 import { bindingsOf } from "./sync/state-store";
 import { resolveToken } from "./sync/credentials";
 import { projectProblem } from "../src/model/validate-file";
@@ -417,6 +419,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   remote trash | delete|restore <ID> [--server URL]  削除済み一覧 / 削除・復元の確認。確定は --confirm <印> --actor human
   remote versions <ID> | revert <ID> <版> --file <path> --actor human   履歴の一覧 / その版の中身を手元のファイルに戻す (控えを取る。次の同期で新しい版として送られる)
   billing [--checkout personal|team [--seats n] | --portal]   契約の状態 / 申し込みの画面 (Stripe) の URL / 契約の管理の URL
+  team [list | create <名前> | show <ID> | invite <ID> [--role viewer|editor] | join <リンク> | role <ID> <アカウント> <役割> | leave <ID>]   チーム (ワークスペース): 同じ計画をチームで同期する。sync --team <ID> で置く先をチームにする
   agent-token connect claude-code|codex [--read-only]   Claude Code / Codex がサーバー経由でこの計画を読み書きできるようにする (トークンを作り、設定ファイルに書く)
   agent-token [list | create --name <名前> [--write] | revoke <id>]   AI エージェント用トークンの一覧 / 値だけ作る / 失効
   login [--server <URL>] [--name <端末の名前>] [--add github|google]   (試験中) 同期サーバーにサインインする (GitHub のアカウント。表示されたコードを、ブラウザで入力する)。--add は、サインイン済みのアカウントに 2 つ目の手段を足す
@@ -534,6 +537,7 @@ Usage (npx boxglow <command> ...):
   remote trash | delete|restore <ID> [--server URL]  List trash / preview delete or restore; confirm with --confirm <token> --actor human
   remote versions <ID> | revert <ID> <rev> --file <path> --actor human   List history / write that version into the local file (a backup is kept; the next sync sends it as a new version)
   billing [--checkout personal|team [--seats n] | --portal]   Subscription status / checkout URL (Stripe) / subscription management URL
+  team [list | create <name> | show <ID> | invite <ID> [--role viewer|editor] | join <link> | role <ID> <account> <role> | leave <ID>]   Teams (workspaces): sync the same plan as a team. sync --team <ID> puts the plan in a team
   agent-token connect claude-code|codex [--read-only]   Let Claude Code / Codex read and write this plan through the server (creates a token and writes the config file)
   agent-token [list | create --name <name> [--write] | revoke <id>]   List agent tokens / create a bare token / revoke
   login [--server <URL>] [--name <device name>] [--add github|google]  (experimental) Sign in to a sync server (GitHub account; enter the code shown in your browser). --add links a second sign-in method to the signed-in account
@@ -1604,12 +1608,28 @@ if (argv[0] === "mcp") {
   const {positional,options}=parseArgs(argv.slice(1));
   (async()=>{
     setLang(explicitLang(options) ?? "ja");
-    const known=new Set(["server","lang","actor","confirm","cursor","file"]);
+    const known=new Set(["server","lang","actor","confirm","cursor","file","team"]);
     if(Object.keys(options).some(k=>!known.has(k)) || positional.length > 3) throw new Error("boxglow remote trash | delete|restore <ID> | versions <ID> | revert <ID> <版> --file <path> --actor human [--server URL]");
-    const {server}=selectSyncServer(undefined,str(options.server));
-    if(!server) throw new Error(t("サーバーが決まっていません。--server <URL> を指定してください"));
+    const selected=selectSyncServer(undefined,str(options.server));
+    if(!selected.server) throw new Error(t("サーバーが決まっていません。--server <URL> を指定してください"));
+    // --team <ID>: チームの計画 (API の土台を <server>/v1/teams/<ID> にする。資格情報は root のもの)
+    const server=str(options.team) ? teamApiBase(selected.server,str(options.team)!) : selected.server;
     process.exitCode=await runLifecycle({server,command:positional[0],id:positional[1],revision:positional[2],file:str(options.file),actor:str(options.actor),confirm:str(options.confirm),cursor:str(options.cursor)},console.log);
   })().catch(e=>{console.error(e.message);process.exitCode=1;});
+} else if (argv[0] === "team") {
+  // チーム (ワークスペース) の操作。通信するので、ほかのコマンドとは別扱い
+  const { positional, options } = parseArgs(argv.slice(1));
+  (async () => {
+    setLang(explicitLang(options) ?? "ja");
+    const known = new Set(["server", "lang", "file", "role"]);
+    const unknown = Object.keys(options).filter((k) => !known.has(k));
+    if (unknown.length > 0) { console.log(t("boxglow {cmd} が知らない指定です: {list}", { cmd: "team", list: unknown.map((k) => "--" + k).join(", ") })); process.exitCode = 1; return; }
+    let file: string | undefined;
+    try { file = locateFile(str(options.file)); } catch { /* 計画が無くても使える */ }
+    const { server } = selectSyncServer(file, str(options.server)?.trim() || undefined);
+    if (!server) { console.log(t("サーバーが決まっていません。--server <URL> を指定してください")); process.exitCode = 1; return; }
+    process.exitCode = await runTeam({ server, out: (line) => console.log(line), command: positional[0] ?? "list", args: positional.slice(1), role: str(options.role) });
+  })().catch((e) => { console.error(`[boxglow team] ${e instanceof Error ? e.message : String(e)}`); process.exitCode = 1; });
 } else if (argv[0] === "agent-token") {
   // AI エージェント用トークン (ホスト型の MCP)。通信するので、ほかのコマンドとは別扱い
   const { positional, options } = parseArgs(argv.slice(1));
@@ -1688,7 +1708,7 @@ if (argv[0] === "mcp") {
     const file = locateFile(str(options.file));
     try { setLang(explicitLang(options) ?? load(file).lang ?? "ja"); } catch { /* 読めない計画でも、止まった理由は表示する */ }
     // 知らない指定 (まだ無い --watch など) を、黙って「1 回の同期」として実行しない
-    const known = new Set(["file", "lang", "actor", "watch", "server", "project", "reconnect-restored", "adopt", "restore", "resolve", "link", "prefer", "recover", "applied", "not-applied", "account", "relink", "block", "settings", "choices-file"]);
+    const known = new Set(["file", "lang", "actor", "watch", "server", "project", "team", "reconnect-restored", "adopt", "restore", "resolve", "link", "prefer", "recover", "applied", "not-applied", "account", "relink", "block", "settings", "choices-file"]);
     const unknown = Object.keys(options).filter((k) => !known.has(k));
     if (unknown.length > 0) { out(t("boxglow sync が知らない指定です: {list}", { list: unknown.map((k) => "--" + k).join(", ") })); process.exitCode = 1; return; }
     process.exitCode = await (options.watch ? runWatchCommand : runSyncCommand)({
@@ -1696,6 +1716,7 @@ if (argv[0] === "mcp") {
     , actor: str(options.actor)
     , rawArgs: argv.slice(1)
     , server: str(options.server)
+    , team: str(options.team)
     , reconnectRestored: str(options["reconnect-restored"])
     , project: str(options.project)
     , adopt: str(options.adopt)

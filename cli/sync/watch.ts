@@ -17,6 +17,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node
 import { join } from "node:path";
 import { FileBusy, lockFile } from "../file-store";
 import { fetchHeads, syncOnce, SyncConfigurationError, SyncAuthError, SyncNetworkError, type SyncResult } from "./client";
+import { teamApiBase } from "../../src/sync/teams";
 import { bindingDir, configDir, hashOf, normalizeServer, StateStore, type Binding, type StoredState } from "./state-store";
 
 /** 手元の変更をまとめる時間 (ms): 最後の変更からこれだけ静かなら送る */
@@ -249,7 +250,12 @@ export class SyncWatcher {
       try {
         const cred = this.creds();
         this.pollTag = cred.tag;
-        const { epoch, heads } = await fetchHeads({ server: this.options.server, token: cred.token, fetch: this.options.fetch });
+        // 個人の計画は <server>、チームの計画は <server>/v1/teams/<id> から版を取る (土台ごとに 1 回)
+        const baseOf = (b: { team?: { id: string } }) => b.team ? teamApiBase(this.options.server, b.team.id) : this.options.server;
+        const bases = new Set<string>([...this.watched.values()].map((w) => baseOf(w.binding)));
+        const headsByBase = new Map<string, Map<string, { revision: string | null; deleted: boolean }>>();
+        let epoch = this.epoch ?? "";
+        for (const base of bases) { const r = await fetchHeads({ server: base, token: cred.token, fetch: this.options.fetch }); epoch = r.epoch; headsByBase.set(base, r.heads); }
         // (利用者を確かめられた。前に認証の失敗を知らせていたら、次に失敗したときにも、もう一度知らせられるようにする)
         this.authNotified = false;
         this.options.onEvent?.({ kind: "authOk", tag: cred.tag });
@@ -259,7 +265,7 @@ export class SyncWatcher {
         this.epoch = epoch;
         for (const w of this.watched.values()) {
           if (w.broken) continue;
-          const entry = heads.get(w.binding.remoteId);
+          const entry = headsByBase.get(baseOf(w.binding))?.get(w.binding.remoteId);
           const head = entry?.deleted ? "(deleted)" : entry?.revision ?? null;
           const base = this.states.get(w.binding.file)?.base?.revision ?? null;
           w.head = head;

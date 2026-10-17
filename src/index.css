@@ -1196,6 +1196,24 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .sync-panel__choices { display: flex; gap: 6px; flex-wrap: wrap; }
 .sync-panel__details { font-size: 12px; color: var(--text-muted); white-space: pre-wrap; word-break: break-all; }
 .sync-panel__id { font-family: var(--font-mono, monospace); font-size: 11px; }
+/* ワークスペース (アカウントのメニュー) と、招待リンクでの参加 (B81) */
+.teams { display: grid; gap: 8px; padding: 4px 0 0 8px; }
+.teams__row[data-open="true"] { border-color: var(--primary); }
+.teams__new { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.teams__new .input { flex: 1; min-width: 120px; }
+.teams__new .teams__seats { flex: none; width: 72px; }
+.teams__detail { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line-soft); border-radius: 8px; }
+.teams__head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.teams__label { margin: 6px 0 0; font-size: 11px; font-weight: 700; color: var(--text-muted); letter-spacing: .04em; }
+.teams__member { display: flex; gap: 8px; align-items: center; }
+.teams__member .teams__name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.teams__member .input { width: auto; }
+.teams__log > summary { cursor: pointer; font-size: 12px; }
+.teams__logrow { font-size: 11px; overflow-wrap: anywhere; }
+.sync-startup__team { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; font-size: 12px; }
+.sync-startup__team .input { flex: 1; }
+.join-dialog { position: fixed; inset: 0; z-index: 3000; display: flex; align-items: center; justify-content: center; background: #0006; }
+.join-dialog__card { display: grid; gap: 10px; width: min(420px, calc(100% - 32px)); padding: 16px; border-radius: 12px; background: var(--bg-card); box-shadow: var(--shadow-card); }
 /* AI エージェントの接続 (アカウントのメニュー) */
 .agent-tokens { display: grid; gap: 8px; padding: 4px 0 0 8px; }
 .agent-tokens__new { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

@@ -259,6 +259,7 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
               {t("サーバーに置く")}
             </button>
           )}
+          {file?.binding?.team && <p className="muted sync-panel__team">{t("ワークスペース")}: {file.binding.team.name}</p>}
           {file?.enabled &&
             ready &&
             file.binding &&

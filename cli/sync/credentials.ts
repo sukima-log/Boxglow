@@ -10,6 +10,7 @@
 import { randomUUID } from "node:crypto";
 import { closeSync, existsSync, fstatSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeSync, fsyncSync } from "node:fs";
 import { environmentTokenAllowed } from "./server-policy";
+import { rootServerOf } from "../../src/sync/teams";
 import { join } from "node:path";
 import { FileBusy, lockFile } from "../file-store";
 import { configDir, hashOf, normalizeServer } from "./state-store";
@@ -38,7 +39,8 @@ export class CredentialsBusy extends Error {
 /** 資格情報のフォルダ */
 const dir = (): string => join(configDir(), "credentials");
 /** そのサーバーの資格情報のファイル */
-export const credentialsPath = (server: string): string => join(dir(), hashOf(normalizeServer(server)).slice(0, 32) + ".json");
+// (チームの API の土台 <server>/v1/teams/<id> でも、資格情報は root の送り先のものを使う)
+export const credentialsPath = (server: string): string => join(dir(), hashOf(normalizeServer(rootServerOf(server))).slice(0, 32) + ".json");
 
 /**
  * パスが「本人だけのもの」かを確かめる (POSIX)

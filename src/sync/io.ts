@@ -13,6 +13,8 @@ export interface SyncBinding {
   file: string;
   server: string;
   remoteId: string;
+  /** チーム (ワークスペース) に置いた計画なら、そのチーム。API は <server>/v1/teams/<id> を土台にする (B81) */
+  team?: { id: string; name: string };
   /** 結び付けたときの手元の計画の ID (初めての受け取りを書く前は "") */
   planId: string;
   /** 受け取りを書く前に控えた、これから書く計画の ID (書けたと確かめたら planId に移す) */

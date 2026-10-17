@@ -25,6 +25,8 @@ export interface Binding {
   server: string;
   /** サーバー側の計画の ID (手元で決めた ID) */
   remoteId: string;
+  /** チーム (ワークスペース) に置いた計画なら、そのチーム (B81) */
+  team?: { id: string; name: string };
   /** 結び付けたときの、計画のファイルの中の ID (同じパスに別の計画が置かれたことに気づくため) */
   planId: string;
   /**
