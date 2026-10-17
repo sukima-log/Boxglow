@@ -231,7 +231,7 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
     <div className="sync-panel" role="dialog" aria-label={t("同期")}>
       <div className={`sync-panel__heading tone-${c.tone}`} role="status" aria-live="polite">
         <span aria-hidden="true">{c.icon}</span>
-        <strong>{status.startup ? t("同期を始める") : c.label}</strong>
+        <strong>{status.startup && !file?.binding ? t("同期を始める") : c.label}</strong>
       </div>
       {!status.startup && <div className="sync-panel__line">{explanation(status)}</div>}
       {/* 知らせ: 補足・停止の理由と直し方・控えの場所 (あるときだけ) */}
@@ -249,7 +249,8 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
       )}
       {/* R49: エディタの未保存編集がある受信待ちは、自動統合・自動の開き直しへ進めず、先に退避を案内する。 */}
       <EditorBehind />
-      {status.server && file && ((!file.binding && !status.halt) || status.startup) && status.support === "ok" && <SyncStartup key={status.startup?.operationId ?? "entry"} status={status} act={act} unsaved={unsaved}/>}
+      {/* 同期の開始の流れ: まだ結び付いていない計画ではここ (主操作)。結び付いた計画では「サーバーの計画を開く」の行の下 (SyncLifecycle) */}
+      {status.server && file && !file.binding && (!status.halt || status.startup) && status.support === "ok" && <SyncStartup key={status.startup?.operationId ?? "entry"} status={status} act={act} unsaved={unsaved}/>}
       {/* 招待されていない (開始の手順の外でサインインしたとき。手順の中では SyncStartup が出す) */}
       {status.notInvited && !status.startup && !status.signIn && (
         <div className="sync-panel__line" role="alert">
@@ -392,7 +393,7 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
         </label>
       )}
       {/* 4 段目: 操作の一覧 (履歴・共有リンク・ゴミ箱・別の計画を開く)。押すと、その下に内容が開く */}
-      {status.support === "ok" && status.credentials.source !== "none" && <SyncLifecycle status={status} act={act}/>}
+      {status.support === "ok" && status.credentials.source !== "none" && <SyncLifecycle status={status} act={act} unsaved={unsaved}/>}
       {/* 5 段目: その他 (技術情報・サインインの手段・契約の管理・取り返しのつかない操作)。ふだんは畳んでおく */}
       {status.support === "ok" && status.server && (
         <details className="sync-panel__details">

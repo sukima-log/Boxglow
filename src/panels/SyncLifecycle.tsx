@@ -3,7 +3,9 @@ import { useEffect, useRef, useState } from "react";
 import React from "react";
 import { t, getLang } from "../i18n";
 import type { HostAction, SyncStatus } from "../sync/status";
-export function SyncLifecycle({status,act}:{status:SyncStatus;act:(a:HostAction)=>Promise<unknown>}) {
+import { SyncStartup } from "./SyncStartup";
+type RowId="versions"|"shares"|"trash"|"open";
+export function SyncLifecycle({status,act,unsaved=false}:{status:SyncStatus;act:(a:HostAction)=>Promise<unknown>;unsaved?:boolean}) {
  const state=status.lifecycle, preview=state?.preview;
  const previous=useRef<string|null>(null),[replaced,setReplaced]=useState(false);
  /** 共有リンクの期限 (日。0 = 無期限) と、URL をコピーしたか */
@@ -14,11 +16,27 @@ export function SyncLifecycle({status,act}:{status:SyncStatus;act:(a:HostAction)
   else if(preview){setReplaced(previous.current!==null && previous.current!==state.choiceId);previous.current=state.choiceId;}
  },[state?.choiceId,!!preview]);
  const current=preview?.id===status.file?.binding?.remoteId;
- /** 行の一覧: 押すとその下に内容が開く。開いている行は印を付ける */
+ /** 行の一覧: 押すとその下に内容が開く (成功でも失敗でも、押した行の直下)。開いている行は印を付ける */
  const remoteId=status.file?.binding?.remoteId;
- const opened:"versions"|"shares"|"trash"|null=state?.versions ? "versions" : state?.shares ? "shares" : state?.projects ? "trash" : null;
- const Row=({id,icon,label,hint,onClick}:{id:string;icon:React.ReactNode;label:string;hint:string;onClick:()=>void})=>
-  <button className="sync-action" data-open={opened===id ? "true" : "false"} aria-expanded={opened===id} disabled={state?.busy} onClick={()=>{ if(opened===id) void act({kind:"cancelLifecycle"}); else onClick(); }}>
+ // 「サーバーの計画を開く」は同期の開始の流れ (status.startup)。結び付いた計画では、この行の下に出す
+ const startupHere=!!status.startup && !!remoteId;
+ const [pressed,setPressed]=useState<RowId|null>(null);
+ // その行の内容が消えたら (閉じた・終わった)、押した行の記憶も消す
+ useEffect(()=>{
+  if(pressed==="open" && !startupHere) setPressed(null);
+  if(pressed && pressed!=="open" && !state) setPressed(null);
+ },[!!state,startupHere,pressed]);
+ const opened:RowId|null=pressed ?? (startupHere ? "open" : state?.versions ? "versions" : state?.shares ? "shares" : state?.projects ? "trash" : null);
+ const Row=({id,icon,label,hint,onClick}:{id:RowId;icon:React.ReactNode;label:string;hint:string;onClick:()=>void})=>
+  <button className="sync-action" data-open={opened===id ? "true" : "false"} aria-expanded={opened===id} disabled={state?.busy} onClick={()=>{
+   if(opened===id) { setPressed(null); void act(id==="open" ? {kind:"cancelBegin"} : {kind:"cancelLifecycle"}); }
+   else {
+    // 別の行を開くときは、開いていたほうを閉じる (開始の流れと一覧を同時に出さない)
+    if(id!=="open" && startupHere) void act({kind:"cancelBegin"});
+    if(id==="open" && state) void act({kind:"cancelLifecycle"});
+    setPressed(id); onClick();
+   }
+  }}>
    <span className="sync-action__icon" aria-hidden="true">{icon}</span>
    <span className="sync-action__text"><span className="sync-action__label">{label}</span><span className="sync-action__hint">{hint}</span></span>
    <span className="sync-action__chev" aria-hidden="true">{opened===id ? "▾" : "▸"}</span>
@@ -29,8 +47,11 @@ export function SyncLifecycle({status,act}:{status:SyncStatus;act:(a:HostAction)
    {id:"shares" as const,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>,label:t("共有リンク"),hint:t("閲覧専用のリンクを作る"),onClick:()=>void act({kind:"listShares",projectId:remoteId})},
   ] : []),
   ...(status.features?.trash === false ? [] : [{id:"trash" as const,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>,label:t("ゴミ箱"),hint:t("削除した計画を戻す"),onClick:()=>void act({kind:"listTrash"})}]),
-  {id:"open" as const,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>,label:t("サーバーの計画を開く"),hint:t("別の計画を受け取る"),onClick:()=>void act({kind:"beginSync"})},
+  ...(remoteId ? [{id:"open" as const,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>,label:t("サーバーの計画を開く"),hint:t("別の計画を受け取る"),onClick:()=>void act({kind:"beginSync"})}] : []),
  ];
+ /** 「サーバーの計画を開く」の中身: 同期の開始の流れを、この行の下に出す */
+ // (結び付いた計画から開くのは「別の計画を受け取る」なので、選ぶ段階を飛ばして一覧へ進む受け取りの形にする)
+ const startupEl=startupHere ? <div className="sync-lifecycle__body"><SyncStartup key={status.startup!.operationId} status={status} act={act} unsaved={unsaved} receive/></div> : null;
  /** 本文 (一覧・確認・結果)。開いている行の直下に挟む。どの行にも属さない内容 (その他からの削除の確認など) は末尾に */
  const bodyEl=state ? <div className="sync-lifecycle__body">
    {state.busy && <p role="status">{t("処理しています…")}</p>}
@@ -94,7 +115,7 @@ export function SyncLifecycle({status,act}:{status:SyncStatus;act:(a:HostAction)
   <div className="sync-actions">
    {rows.map(r=><React.Fragment key={r.id}>
     <Row id={r.id} icon={r.icon} label={r.label} hint={r.hint} onClick={r.onClick}/>
-    {opened===r.id && bodyEl}
+    {opened===r.id && (r.id==="open" ? startupEl : bodyEl)}
    </React.Fragment>)}
    {opened===null && bodyEl}
   </div>
