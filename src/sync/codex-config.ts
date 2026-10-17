@@ -75,16 +75,16 @@ function readKeys(text: string, at: number): { keys: string[]; end: number } {
 
 /**
  * 表の見出し行 ([a.b] / [[a.b]]) を読む
- * Input : kept = コメントを除いた 1 行。Output: 表の名前 ("a.b")。見出しでなければ null。
+ * Input : kept = コメントを除いた 1 行。Output: 表のキーの列 (["a", "b"]。引用符の中のドットは区切りではないので、文字列に平坦化しない)。見出しでなければ null。
  *         [ で始まるのに見出しとして読めない行は例外 (配列の続きの行など、この読み取りでは扱えない形)
  */
-function parseHeader(kept: string): string | null {
+function parseHeader(kept: string): string[] | null {
   const s = kept.trimStart();
   if (!s.startsWith("[")) return null;
   const array = s.startsWith("[[");
   const { keys, end } = readKeys(s, array ? 2 : 1);
   const close = array ? "]]" : "]";
-  if (keys.length > 0 && s.startsWith(close, end) && s.slice(end + close.length).trim() === "") return keys.join(".");
+  if (keys.length > 0 && s.startsWith(close, end) && s.slice(end + close.length).trim() === "") return keys;
   throw new Error("config.toml has a line starting with [ that is not a table header; replace the Boxglow entry by hand");
 }
 
@@ -102,13 +102,13 @@ function parseAssignmentKeys(kept: string): string[] | null {
  *   次の形は、置き換えると二重定義や取り違えになるので例外にする (呼び出し側は書き戻さず、手で置く手順を出す):
  *     ルートに mcp_servers (引用符付きでも) のキーがある / [mcp_servers] の表の中に boxglow のキーがある / 見出しやキーにエスケープがある /
  *     [ で始まるのに見出しとして読めない行がある
- * Input : text = ファイルの中身。Output: { lines, headers } (headers[i] = i 行目の表の名前、見出しでなければ null)
+ * Input : text = ファイルの中身。Output: { lines, headers } (headers[i] = i 行目の表のキーの列、見出しでなければ null)
  */
-function scanCodexConfig(text: string): { lines: string[]; headers: (string | null)[] } {
+function scanCodexConfig(text: string): { lines: string[]; headers: (string[] | null)[] } {
   const lines = text.split("\n");
-  const headers: (string | null)[] = [];
-  let multi: Multi = null;        // 複数行の文字列の中にいるか (その区切り)
-  let table: string | null = null;   // 今いる表 (null = ルート)
+  const headers: (string[] | null)[] = [];
+  let multi: Multi = null;           // 複数行の文字列の中にいるか (その区切り)
+  let table: string[] | null = null;   // 今いる表 (null = ルート)
   for (const raw of lines) {
     const r = readTomlLine(raw, multi);
     multi = r.multi;
@@ -119,7 +119,7 @@ function scanCodexConfig(text: string): { lines: string[]; headers: (string | nu
     const keys = parseAssignmentKeys(r.kept);
     if (!keys) continue;
     if (table === null && keys[0] === "mcp_servers") throw new Error("config.toml defines mcp_servers as a value at the top level; replace the Boxglow entry by hand");
-    if (table === "mcp_servers" && keys[0] === "boxglow") throw new Error("config.toml defines boxglow inline under [mcp_servers]; replace it by hand");
+    if (table !== null && table.length === 1 && table[0] === "mcp_servers" && keys[0] === "boxglow") throw new Error("config.toml defines boxglow inline under [mcp_servers]; replace it by hand");
   }
   return { lines, headers };
 }
@@ -157,7 +157,10 @@ export function mergeCodexConfig(existing: string | null, server: string, token:
   let before: Record<string, unknown>;
   try { before = parseToml(text) as Record<string, unknown>; } catch (e) { throw new Error("config.toml could not be parsed (" + (e instanceof Error ? e.message : String(e)) + "); replace the Boxglow entry by hand"); }
   const { lines, headers } = scanCodexConfig(text);
-  const starts = headers.flatMap((h, i) => h === "mcp_servers.boxglow" ? [i] : []);
+  // Boxglow の表 = ["mcp_servers", "boxglow"] ちょうど。子の表 = その 2 つを先頭に持つ 3 つ以上 ("boxglow.archive" のような 1 つのキーは別の表)
+  const isBoxglow = (h: string[] | null) => h !== null && h.length === 2 && h[0] === "mcp_servers" && h[1] === "boxglow";
+  const isBoxglowChild = (h: string[] | null) => h !== null && h.length > 2 && h[0] === "mcp_servers" && h[1] === "boxglow";
+  const starts = headers.flatMap((h, i) => isBoxglow(h) ? [i] : []);
   if (starts.length > 1) throw new Error("config.toml has [mcp_servers.boxglow] more than once; the file was not changed");
   const start = starts[0] ?? -1;
   let merged: string;
@@ -165,7 +168,7 @@ export function mergeCodexConfig(existing: string | null, server: string, token:
   else {
     // 次の表 ([...]) の手前までが boxglow の表。boxglow の子の表 (mcp_servers.boxglow.*) はその中身ごと含める
     let end = start + 1;
-    while (end < lines.length && (headers[end] === null || headers[end]!.startsWith("mcp_servers.boxglow."))) end++;
+    while (end < lines.length && (headers[end] === null || isBoxglowChild(headers[end]))) end++;
     merged = [...lines.slice(0, start), ...block.trimEnd().split("\n"), ...lines.slice(end)].join("\n").replace(/\n*$/, "\n");
   }
   // 書き戻す前に確かめる: 結果が TOML として読める・Boxglow 以外の値が前後で同じ・Boxglow の表が期待どおり

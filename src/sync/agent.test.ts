@@ -117,6 +117,13 @@ describe("Codex の config.toml の併合 (見出しの揺れと壊れた形。C
     expect(doc.projects["/work/[demo]"].trust_level).toBe("trusted");
     expect(doc.mcp_servers.boxglow.url).toBe("https://sync.example/mcp");
   });
+  it("引用符の中のドットを階層の区切りにしない ([mcp_servers.\"boxglow.archive\"] は別のサーバーとして残す。Codex レビュー 29e R29e-01)", () => {
+    const before = `[mcp_servers.boxglow]\nurl = "https://old.invalid/mcp"\n\n[mcp_servers."boxglow.archive"]\ncommand = "keep-this-server"\n`;
+    const out = mergeCodexConfig(before, S, T);
+    expect(out).toContain(`[mcp_servers."boxglow.archive"]\ncommand = "keep-this-server"`);
+    expect(out).not.toContain("old.invalid");
+    expect((parseToml(out) as { mcp_servers: Record<string, { command?: string }> }).mcp_servers["boxglow.archive"].command).toBe("keep-this-server");
+  });
   it("成功した結果は TOML として読め、Boxglow 以外の値は前後で同じ (独立したパーサーで確認)", () => {
     const before = `model = "x"\n[profiles.a]\nmcp_servers = "x"\n[mcp_servers.other]\ncommand = "y"\nargs = ["[a]", "# b"]\n[mcp_servers.boxglow]\nurl = "https://old.invalid/mcp"\n[projects."/w"]\ntrust_level = "trusted"\n`;
     const out = mergeCodexConfig(before, S, T);
