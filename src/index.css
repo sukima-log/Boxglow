@@ -1691,6 +1691,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .sync-startup { display:flex; flex-direction:column; gap:8px; padding:8px 0; }
 .sync-project-row { display:flex; flex-direction:column; align-items:flex-start; gap:4px; width:100%; text-align:left; white-space:normal; overflow-wrap:anywhere; padding:8px; }
 .sync-project-row span { font-size:11px; opacity:.75; }
+.sync-project-row__summary { color: var(--accent); opacity: 1 !important; }
 
 /* 一覧が20件あっても、画面外へ操作を押し出さず、同期パネルの中をスクロールする。 */
 .sync-panel { max-height: calc(100dvh - 96px); overflow-y: auto; }

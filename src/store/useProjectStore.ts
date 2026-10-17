@@ -775,6 +775,10 @@ export const useProjectStore = create<State>((set, get) => {
       // セッションが変わった (裏方が起動し直した) ら、通し番号は初期化して受け入れる
       if (current && current.session === status.session && status.seq < current.seq) return;
       set({ syncStatus: status });
+      // チームの計画: チームでの自分の表示名と同じ名前の担当者がいれば、このブラウザの「自分」にする (まだ決めていないときだけ。B81-5)
+      const myName = status.file?.binding?.team?.myName?.trim().toLowerCase();
+      const p = get().project;
+      if (myName && p && get().meId === null) { const m = p.members.find((x) => x.name.trim().toLowerCase() === myName); if (m) get().setMe(m.id); }
     }
   , syncAct: async (action) => {
       const { source } = get();

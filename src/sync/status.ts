@@ -1,5 +1,6 @@
 import type { AgentTarget } from "./agent";
 import type { TeamAction, TeamRef, TeamsState } from "./teams";
+import type { PlanSummary } from "./summary";
 import type { Billing } from "./billing";
 import type { AgentTokenEntry } from "./agent";
 /**
@@ -55,7 +56,7 @@ export interface SyncStatus {
   /** 常駐の同期の所有者: self = この裏方 / external = 別のプロセス / unknown = ロックの持ち主を判定できない / none = まだ取っていない */
   owner: "self" | "external" | "unknown" | "none";
   /** 今の画面のファイル (開いていなければ null) */
-  file: { path: string; enabled: boolean; binding: { server: string; remoteId: string; /** チームに置いた計画なら、そのチーム (B81) */ team?: TeamRef } | null } | null;
+  file: { path: string; enabled: boolean; binding: { server: string; remoteId: string; /** チームに置いた計画なら、そのチーム (B81)。myName = そのチームでの自分の表示名 (計画の担当者と照合して「自分」にする) */ team?: TeamRef & { myName?: string } } | null } | null;
   state: "off" | "signed-out" | "unbound" | "synced" | "unsent" | "syncing" | "halted" | "problem" | "offline" | "paused" | "external" | "unsupported";
   /** 最後にそろえたサーバーの版 (詳細の欄にだけ出す) */
   revision: string | null;
@@ -84,7 +85,7 @@ export interface SyncStatus {
     /** 置く先 / 受け取る元の候補 (自分のチーム。サインイン済みで読めたとき) と、選んだチーム (無ければ個人) */
     teams?: { teamId: string; name: string; role: string }[];
     team?: TeamRef;
-    projects?: {id:string;name:string;revision:string;updatedAt:string|null;bytes:number}[];
+    projects?: {id:string;name:string;revision:string;updatedAt:string|null;bytes:number; /** 要約 (横断の一覧用。B81-5) */ summary?: PlanSummary}[];
     nextCursor?:string|null;
     unsupported?:boolean;
     error?:string;

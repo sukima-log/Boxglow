@@ -349,6 +349,7 @@ describe("サインインとサインアウト", () => {
     op = b.status(bFile).startup!;
     expect(op.stage).toBe("list");
     expect(op.projects?.map((p) => p.id)).toEqual([remoteId]);
+    expect(op.projects?.[0].summary).toEqual({ total: 2, done: 0, inProgress: 0, now: 0, pending: 0 });   // 横断の一覧用の要約 (プロジェクトの箱を除く: 区切りと A)
     await b.act(bFile, { kind: "openProject", operationId: op.operationId, projectId: remoteId, destination: "current" });
     expect(b.status(bFile).file?.binding).toMatchObject({ remoteId, team: { id: teamId, name: "開発" } });
     expect(read(bFile).name).toBe("p1");
@@ -358,6 +359,9 @@ describe("サインインとサインアウト", () => {
     as("acc-a");
     await a.act(file, { kind: "syncNow" });
     expect(read(file).name).toBe("チームで改名");
+    // チームでの自分の表示名 (計画の担当者と照合して「自分」にするため) が結び付けに付く
+    for (let i = 0; i < 20 && !a.status(file).file?.binding?.team?.myName; i++) await new Promise((r) => setTimeout(r, 25));
+    expect(a.status(file).file?.binding?.team?.myName).toBe("acc-a");
     // viewer に落とすと、b は書けない (サーバーが 403 で断る)
     s = await a.act(file, { kind: "setMember", id: teamId, accountId: "acc-b", role: "viewer" });
     expect([s.teams?.error, s.teams?.open?.members.find((m) => m.accountId === "acc-b")?.role]).toEqual([undefined, "viewer"]);

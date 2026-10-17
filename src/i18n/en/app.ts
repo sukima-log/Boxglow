@@ -210,6 +210,8 @@ export const app: Record<string, string> = {
 , "人数の変更": "Change seats"
 , "参加": "Join"
 , "チーム": "Team"
+, "進捗 {p}%": "{p}% done"
+, "NOW {n}": "NOW {n}"
 , "選んだワークスペースが見つかりません。選び直してください": "The chosen workspace was not found. Choose again"
 , "チームが見つかりません (メンバーでないか、ID が違います): {id}": "Team not found (you are not a member, or the ID is wrong): {id}"
 , "作りました: {name} ({id})": "Created: {name} ({id})"

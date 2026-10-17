@@ -13,6 +13,7 @@
  * 置き換えは「同じ操作の結果があればそれを返す → 無ければ前提の版を確かめる → 合えば確定」を、割り込まれない 1 つの処理で行う。
  * 本番のサーバー (別のリポジトリ) も、同じ約束を守る
  */
+import { summarizePlanText } from "../../src/sync/summary";
 import { createHash } from "node:crypto";
 import { validateProjectText } from "../../src/model/validate-file";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -365,7 +366,7 @@ export class TestSyncServer {
       const raw = listUrl.searchParams.get("limit") ?? "20", limit = Number(raw), cursor = listUrl.searchParams.get("cursor") ?? "";
       if (!/^[0-9]+$/.test(raw) || !Number.isInteger(limit) || limit < 1 || limit > 100 || cursor.length > 256) { send(400, JSON.stringify({code:"bad-page"})); return; }
       const rows = [...projects.entries()].filter(([id,p]) => !p.deleted && p.head && id > cursor).sort(([a],[b]) => a < b ? -1 : a > b ? 1 : 0);
-      send(200, JSON.stringify({ projects: rows.slice(0,limit).map(([id,p]) => ({id, name:JSON.parse(p.head!.text).name, revision:p.head!.revision, updatedAt:p.head!.updatedAt ?? null, bytes:Buffer.byteLength(p.head!.text)})), nextCursor: rows.length > limit ? rows[limit-1][0] : null }));
+      send(200, JSON.stringify({ projects: rows.slice(0,limit).map(([id,p]) => ({id, name:JSON.parse(p.head!.text).name, revision:p.head!.revision, updatedAt:p.head!.updatedAt ?? null, bytes:Buffer.byteLength(p.head!.text), summary: summarizePlanText(p.head!.text)})), nextCursor: rows.length > limit ? rows[limit-1][0] : null }));
       return;
     }
     // 操作の結果を確定させる: 受理済みならその版。未受理なら、その操作 ID を今後も受理しないと記録する (割り込まれない 1 つの処理)

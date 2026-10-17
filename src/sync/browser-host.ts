@@ -18,7 +18,8 @@ import { applyRevert, parseVersionList, planNameOf } from "./versions";
 import { parseBilling } from "./billing";
 import { parseShareList, shareUrl } from "./shares";
 import { parseAgentTokens } from "./agent";
-import { parseTeams, performTeamAction, teamApiBase, type TeamsState } from "./teams";
+import { parseTeamDetail, parseTeams, performTeamAction, teamApiBase, type TeamsState } from "./teams";
+import { parseSummary } from "./summary";
 import { SyncPaymentError } from "./run";
 import { haltView } from "./halt-view";
 import { runSync, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncOptions, type SyncResult } from "./run";
@@ -215,7 +216,7 @@ export class BrowserSyncHost {
   private async signOut(): Promise<void> {
     this.cancelSignIn();
     try { await this.doFetch(`${this.server}/v1/session`, { method: "DELETE", redirect: "error" }); } catch { /* Cookie が消えれば、サーバー側のトークンは期限で消える */ }
-    this.generation++; this.account = null; this.startups.clear(); this.choices.clear(); this.results.clear(); this.message = undefined; this.billingLink = undefined; this.agent = undefined; this.teams = undefined;
+    this.generation++; this.account = null; this.startups.clear(); this.choices.clear(); this.results.clear(); this.message = undefined; this.billingLink = undefined; this.agent = undefined; this.teams = undefined; this.myNames.clear();
     this.emit();
   }
 
@@ -291,7 +292,7 @@ export class BrowserSyncHost {
       if (Array.isArray(body) || !Array.isArray((body as { projects?: unknown }).projects)) { op.unsupported = true; op.projects = []; return; }
       const list = (body as { projects: unknown[]; nextCursor?: unknown }).projects;
       op.projects = list.filter((p): p is { id: string; name: string; revision: string; updatedAt: string | null; bytes: number } => typeof p === "object" && p !== null && typeof (p as { id?: unknown }).id === "string")
-        .map((p) => ({ id: p.id, name: String(p.name ?? ""), revision: String(p.revision ?? ""), updatedAt: typeof p.updatedAt === "string" ? p.updatedAt : null, bytes: Number(p.bytes) || 0 }));
+        .map((p) => ({ id: p.id, name: String(p.name ?? ""), revision: String(p.revision ?? ""), updatedAt: typeof p.updatedAt === "string" ? p.updatedAt : null, bytes: Number(p.bytes) || 0, ...(parseSummary((p as { summary?: unknown }).summary) ? { summary: parseSummary((p as { summary?: unknown }).summary) } : {}) }));
       op.nextCursor = typeof (body as { nextCursor?: unknown }).nextCursor === "string" ? (body as { nextCursor: string }).nextCursor : null;
       op.unsupported = false;
     } catch (e) { op.error = t("一覧を取得できませんでした: {error}", { error: e instanceof Error ? e.message : String(e) }); }
@@ -360,7 +361,7 @@ export class BrowserSyncHost {
       this.results.set(file, { result, at: this.now(), credentials });
       this.network = null;
       // 結び付け (サーバー側の計画の ID) は、保存した状態から読む (初回の送りで決まる)
-      try { const state = await io.readState(); if (state) this.knownBindings.set(file, { server: this.server, remoteId: state.binding.remoteId, ...(state.binding.team ? { team: state.binding.team } : {}) }); } catch { /* 状態が読めないときは、次の結果で */ }
+      try { const state = await io.readState(); if (state) { this.knownBindings.set(file, { server: this.server, remoteId: state.binding.remoteId, ...(state.binding.team ? { team: state.binding.team } : {}) }); if (state.binding.team && !this.myNames.has(state.binding.team.id)) void this.loadMyName(state.binding.team.id); } } catch { /* 状態が読めないときは、次の結果で */ }
       // 受け取った・手元だけを直した: 画面に読み直してもらう。そろったときの手元のハッシュも控える
       if ((result.status === "synced" || result.status === "halted") && (result.pulled > 0 || result.edited > 0)) this.options.onLocalChanged?.(file);
       if (result.status === "synced") this.localHashes.set(file, result.localHash);
@@ -626,7 +627,22 @@ export class BrowserSyncHost {
   }
   /** 結び付け (状態を読まずに、最後の結果から) */
   private readonly knownBindings = new Map<string, { server: string; remoteId: string; team?: { id: string; name: string } }>();
-  private bindingOf(file: string): { server: string; remoteId: string; team?: { id: string; name: string } } | null { return this.knownBindings.get(file) ?? null; }
+  private bindingOf(file: string): { server: string; remoteId: string; team?: { id: string; name: string; myName?: string } } | null {
+    const b = this.knownBindings.get(file);
+    if (!b) return null;
+    return b.team ? { ...b, team: { ...b.team, ...(this.myNames.get(b.team.id) ? { myName: this.myNames.get(b.team.id)! } : {}) } } : b;
+  }
+  /** チームでの自分の表示名 (チーム ID ごと)。計画の担当者と照合して「自分」にするため */
+  private readonly myNames = new Map<string, string>();
+  private async loadMyName(teamId: string): Promise<void> {
+    try {
+      const res = await this.doFetch(`${this.server}/v1/teams/${encodeURIComponent(teamId)}`, { redirect: "error" });
+      if (!res.ok) return;
+      const d = parseTeamDetail(await res.json());
+      const me = d.members.find((x) => x.accountId === this.account?.account?.accountId);
+      if (me) { this.myNames.set(teamId, me.displayName || me.login); this.emit(); }
+    } catch { /* 次の機会に */ }
+  }
   /** 開いた計画の結び付けを、保存した状態から読む (起動時。結果が無くても「結び付け済み」と出すため) */
   async loadBinding(projectId: string): Promise<void> {
     const state = await browserSyncIO(projectId, this.server).readState();

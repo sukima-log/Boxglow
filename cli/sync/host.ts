@@ -22,7 +22,8 @@ import { SyncPaymentError } from "../../src/sync/run";
 import { parseBilling } from "../../src/sync/billing";
 import { parseShareList, shareUrl } from "../../src/sync/shares";
 import { parseAgentTokens } from "../../src/sync/agent";
-import { parseTeamAction, parseTeams, performTeamAction, teamApiBase, type TeamsState } from "../../src/sync/teams";
+import { parseTeamAction, parseTeams, parseTeamDetail, performTeamAction, teamApiBase, type TeamsState } from "../../src/sync/teams";
+import { parseSummary } from "../../src/sync/summary";
 import { writeAgentConfig } from "./agent-config";
 import { dirname } from "node:path";
 import { haltView, type SyncAction } from "./command";
@@ -389,7 +390,7 @@ export class SyncHost {
       await runLogout({ server: this.server, allowEnvironmentToken: this.options.allowEnvironmentToken, out: (line) => lines.push(line), fetch: this.doFetch });
       this.account = null;
       this.billingLink = undefined;
-      this.agent = undefined; this.teams = undefined; this.pendingTeam.clear();
+      this.agent = undefined; this.teams = undefined; this.pendingTeam.clear(); this.myNames.clear();
       this.results.clear();
       this.message = lines.at(-1);
     } finally {
@@ -429,6 +430,19 @@ export class SyncHost {
   /** エージェント用トークン: 一覧 / 作る / 失効 (本人のトークンで /v1/agent-tokens を呼ぶ)。結果は status.agent */
   /** チーム (ワークスペース) の状態 */
   private teams: TeamsState | undefined;
+  /** チームでの自分の表示名 (チーム ID ごと) */
+  private readonly myNames = new Map<string, string>();
+  private async loadMyName(teamId: string): Promise<void> {
+    const creds = this.resolveCredentials();
+    if (!creds) return;
+    try {
+      const res = await this.doFetch(`${this.server}/v1/teams/${encodeURIComponent(teamId)}`, { headers: { authorization: `Bearer ${creds.token}` }, redirect: "error" });
+      if (!res.ok) return;
+      const d = parseTeamDetail(await res.json());
+      const me = d.members.find((x) => x.login === creds.login) ?? d.members.find((x) => x.accountId === creds.login);
+      if (me) { this.myNames.set(teamId, me.displayName || me.login); this.emit(); }
+    } catch { /* 次の機会に */ }
+  }
   /** 開始の手順で選んだチーム (ファイルごと。結び付けを作るまで) */
   private readonly pendingTeam = new Map<string, { id: string; name: string }>();
   /** チームの操作 (本人のトークンで /v1/teams... を呼ぶ。中身はホスト共通の performTeamAction) */
@@ -673,7 +687,8 @@ export class SyncHost {
       const projects = body.projects.map((p: Record<string, unknown>) => {
         if (!p || typeof p.id !== "string" || !p.id || p.id.length > 256 || typeof p.name !== "string" || typeof p.revision !== "string" || typeof p.bytes !== "number" || !Number.isSafeInteger(p.bytes) || p.bytes < 0)
           throw new Error("Invalid project list");
-        return { id: p.id, name: p.name.slice(0, 512), revision: p.revision, bytes: p.bytes, updatedAt: typeof p.updatedAt === "string" ? p.updatedAt : null };
+        const summary = parseSummary((p as { summary?: unknown }).summary);
+        return { id: p.id, name: p.name.slice(0, 512), revision: p.revision, bytes: p.bytes, updatedAt: typeof p.updatedAt === "string" ? p.updatedAt : null, ...(summary ? { summary } : {}) };
       });
       op.projects = projects;
       op.nextCursor = body.nextCursor as string | null;
@@ -893,6 +908,8 @@ export class SyncHost {
       this.results.set(file, { result, at: this.wall(), credentials });
       if ("localBackup" in result && result.localBackup) this.localBackups.set(file, { path: result.localBackup, credentials });
       this.rememberSuccessfulSync(file);
+      // チームの計画: そのチームでの自分の表示名を 1 度だけ読む (計画の担当者と照合して「自分」にするため)
+      try { const b = bindingsOf(file).bindings.find((x) => x.server === this.server); if (b?.team && !this.myNames.has(b.team.id)) void this.loadMyName(b.team.id); } catch { /* 読めなければ次の機会に */ }
       // (この資格情報で同期できた: 同じ世代の認証の失敗は解ける。R40-05)
       if (this.authProblem === credentials) this.authProblem = null;
     } catch (e) {
@@ -944,7 +961,7 @@ export class SyncHost {
       : saved ? { accountId: saved.account, display: saved.login, signedInWith: "unknown" as const } : undefined;
     const credentials: SyncStatus["credentials"] = { source: credentialsSource, ...(account ? { account } : {}) };
     let binding: { server: string; remoteId: string } | null = null;
-    if (real) { try { const b = bindingsOf(real).bindings.find((x) => x.server === this.server); if (b) binding = { server: b.server, remoteId: b.remoteId, ...(b.team ? { team: b.team } : {}) }; } catch { /* 読めない状態は problem に出る */ } }
+    if (real) { try { const b = bindingsOf(real).bindings.find((x) => x.server === this.server); if (b) binding = { server: b.server, remoteId: b.remoteId, ...(b.team ? { team: { ...b.team, ...(this.myNames.get(b.team.id) ? { myName: this.myNames.get(b.team.id)! } : {}) } } : {}) }; } catch { /* 読めない状態は problem に出る */ } }
     const enabled = real !== null && this.enabled.has(real);
     const status: SyncStatus = {
       session: this.session, seq: ++this.seq, support: this.support, credentials, owner: this.owner,
