@@ -17,7 +17,7 @@ import { commitFile, describeLock, FileConflict, inspectLock, lockTokenOf, remov
 import { planIO } from "./plan-io";
 import { briefReceipt, contextReceipt, isCurrentToken, requireContext } from "./context";
 import { checkAgentSetup, oneTimeSteps, setupAgent } from "./setup-agent";
-import { parseHookInput, runHook, type HookEvent } from "./hooks";
+import { parseHookInput, readHookLog, recordHook, runHook, type HookEvent } from "./hooks";
 import { runSyncCommand, runUnbindCommand, runWatchCommand } from "./sync/command";
 import { runLinkIdentity, runLogin, runLogout, runWhoami, runGoogleLogin } from "./sync/login";
 import { runBilling } from "./sync/billing";
@@ -655,7 +655,10 @@ function main(argv: string[]): void {
     try { if (!process.stdin.isTTY) input = readFileSync(0, "utf8"); } catch { /* stdin が無ければ空の入力 */ }
     let plan: Project | null = null;
     try { const hp = locateFile(str(options.file)); plan = load(hp); setLang(explicitLang(options) ?? plan.lang ?? "ja"); } catch { plan = null; }
-    const r = runHook(rest[0] as HookEvent, parseHookInput(input), plan, actor);
+    const parsed = parseHookInput(input);
+    const r = runHook(rest[0] as HookEvent, parsed, plan, actor);
+    // 発火したことを記録する (人が --check で確かめられるように。識別子の値は残さない)
+    recordHook({ at: new Date().toISOString(), event: String(rest[0]), actor, cwd: process.cwd(), result: !r.stdout ? "none" : r.stdout.trimStart().startsWith("{") ? "block" : "context", session: !!(parsed.session_id ?? parsed.thread_id ?? parsed["thread-id"]) });
     if (r.stdout) process.stdout.write(r.stdout);
     process.exitCode = r.exitCode;
     return;
@@ -1008,6 +1011,10 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       if (options.check) {
         // 入っているものと足りないものを一覧にする (書かない)
         out(checkAgentSetup(root, agent).join("\n"));
+        // 実際に発火した記録 (このリポジトリで。hooks.log)。無ければ、まだ発火していないか、承認されていない
+        const fired = readHookLog(root);
+        const byEvent = ["session-start", "stop", "pre-tool"].map((e) => { const last = fired.find((x) => x.event === e); return last ? t("{event}: 最後の発火 {at} ({actor}、結果 {result}、セッションの識別子 {session})", { event: e, at: new Date(last.at).toLocaleString(), actor: last.actor, result: last.result, session: last.session ? t("あり") : t("なし") }) : t("{event}: 発火の記録なし", { event: e }); });
+        out(t("発火の記録 (このリポジトリ):") + "\n- " + byEvent.join("\n- "));
         out(t("利用者が一度だけ行うこと:") + "\n- " + oneTimeSteps(agent).join("\n- "));
         return;
       }

@@ -334,4 +334,9 @@ export const cli: Record<string, string> = {
 , "Codex: 利用者設定にも MCP を入れるなら (プロジェクトの信頼の前から使える): codex mcp add boxglow -- npx -y boxglow mcp --actor codex": "Codex: to register the MCP server in your user config too (works before the project is trusted): codex mcp add boxglow -- npx -y boxglow mcp --actor codex"
 , "Claude Code: プロジェクトを信頼して開き、/mcp で boxglow の接続状態を確かめる (承認待ち・拒否があれば表示に従う)": "Claude Code: open the project as trusted and check the boxglow connection with /mcp (follow the prompt if it is pending approval or denied)"
 , "検査 (前回の完了のとき)": "Verification (from the previous done)"
+, "{event}: 最後の発火 {at} ({actor}、結果 {result}、セッションの識別子 {session})": "{event}: last fired {at} ({actor}, result {result}, session id {session})"
+, "{event}: 発火の記録なし": "{event}: no record of firing"
+, "発火の記録 (このリポジトリ):": "Hook firings (this repository):"
+, "あり": "present"
+, "なし": "absent"
 };

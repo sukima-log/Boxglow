@@ -9,10 +9,44 @@
  */
 import { resumeReport } from "../src/model/resume";
 import type { Project } from "../src/model/types";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { configDir } from "./sync/state-store";
 import { t } from "../src/i18n/core";
 
 export type HookEvent = "session-start" | "stop" | "pre-tool";
+
+/** 発火の記録の 1 行 (設定フォルダの hooks.log。発火したかを人が確かめるため。中身や識別子の値は書かない) */
+export interface HookLogEntry { at: string; event: string; actor: string; cwd: string; result: "context" | "block" | "none"; session: boolean }
+
+/** 発火の記録のファイル。Input: なし。Output: パス */
+export const hookLogPath = (): string => join(configDir(), "hooks.log");
+
+/**
+ * 発火を記録する (最新 200 行だけ残す)。失敗しても何もしない (フックは止めない)
+ * Input : entry。Output: なし
+ */
+export function recordHook(entry: HookLogEntry): void {
+  try {
+    const path = hookLogPath();
+    mkdirSync(configDir(), { recursive: true });
+    const lines = existsSync(path) ? readFileSync(path, "utf8").split("\n").filter(Boolean) : [];
+    lines.push(JSON.stringify(entry));
+    writeFileSync(path, lines.slice(-200).join("\n") + "\n");
+  } catch { /* 記録できなくても、フックの結果は返す */ }
+}
+
+/**
+ * 発火の記録を読む (新しい順)。Input: cwd = このリポジトリに絞るとき。Output: 行の一覧
+ */
+export function readHookLog(cwd?: string): HookLogEntry[] {
+  try {
+    const path = hookLogPath();
+    if (!existsSync(path)) return [];
+    const all = readFileSync(path, "utf8").split("\n").filter(Boolean).map((l) => { try { return JSON.parse(l) as HookLogEntry; } catch { return null; } }).filter((x): x is HookLogEntry => !!x);
+    return all.filter((e) => !cwd || e.cwd === cwd).reverse();
+  } catch { return []; }
+}
 
 /** フックの入力 (stdin の JSON のうち、使う項目だけ) */
 export interface HookInput {
