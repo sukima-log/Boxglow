@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-_Changes after 0.6.1 go here._
+- **setup-agent installs everything an agent needs, for Claude Code and Codex** (B209): besides the instructions and the skill, Claude Code gets `.claude/settings.json` hooks (SessionStart injects the plan's resume summary after start / resume / compaction; Stop tells the agent to record (done / checkpoint / log) before finishing when a box it started has no record; PreToolUse blocks direct edits of `boxglow.json`), the CLI pre-approved in `permissions.allow`, `.mcp.json` auto-approved (`enableAllProjectMcpServers`), and a review subagent `.claude/agents/boxglow-review.md`. Codex gets `.codex/config.toml` (the local MCP server, tools auto-approved), `.codex/hooks.json` (the same three hooks), `.agents/skills/boxglow/agents/openai.yaml` (declares the MCP dependency) and `.codex/agents/boxglow-review.toml`; when the `codex` command is available, the MCP server is also registered in the user config (`codex mcp add`). The plan gets `policy --unprepared reject` unless already set (people are not affected). `setup-agent --check` lists what is installed, what is missing and the one-time steps a person still has to do (Codex: trust the project once and approve the hooks in `/hooks`). The hooks run `boxglow hook session-start|stop|pre-tool` and never stop the agent on their own failure.
+- **Verification at done** (B160): `boxglow done --checked "<checks run and results>" [--not-checked "<not tried>"] [--limits "<remaining limits>"]` keeps the verification on the box (shown by `show`, `context`, the Status tab, and part of the context token). An agent that finishes without it is reminded. MCP `boxglow_done` has the same fields.
+- The agent instructions and the skill now agree (five scope fields incl. constraints, verification at done, what the hooks do, the review subagent); the skill points to boxglow.app.
 
 ## 0.6.1 (2026-10-18)
 

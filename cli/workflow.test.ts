@@ -77,6 +77,15 @@ describe("CLIの範囲と再開",()=>{
     expect(context.workScope.target.goal).toBe("実装");expect(context.focus.blockId).toBe(id);
     expect(cli("scope","対象").status).toBe(0);
     expect(cli("scope","対象","--non-goals","none","--context-token",token()).status).toBe(0);expect(read().blocks[id].scope.nonGoals).toBeUndefined();
+    // 完了のときの検査結果 (B160): done --checked / --not-checked / --limits が箱に残り、context・show に出る
+    const ctxBefore=JSON.parse(cli("context","対象").stdout).contextToken;
+    expect(cli("start","対象","--context-token",ctxBefore).status).toBe(0);
+    const d=cli("done","対象","--artifact","成果=docs/x.md","--checked","vitest 3 件成功","--not-checked","実機","--limits","同時編集は未対応","--context-token",token());
+    expect(d.status).toBe(0);expect(d.stdout).not.toContain("検査結果が付いていません");
+    expect(read().blocks[id].verification).toMatchObject({checked:"vitest 3 件成功",notChecked:"実機",limits:"同時編集は未対応"});
+    expect(JSON.parse(cli("context","対象").stdout).context.blocks.find((b: {id: string})=>b.id===id).verification.checked).toBe("vitest 3 件成功");
+    expect(cli("show","対象").stdout).toContain("未実施: 実機");
+    expect(cli("validate").status).toBe(0);
     // 制約 (constraints): 設定すると表示と context に入り、none で消える
     expect(cli("scope","対象","--constraints","初回表示 1 秒以内","--context-token",token()).status).toBe(0);expect(read().blocks[id].scope.constraints).toBe("初回表示 1 秒以内");
     expect(cli("scope","対象").stdout).toContain("初回表示 1 秒以内");expect(JSON.parse(cli("context","対象").stdout).context.workScope.target.constraints).toBe("初回表示 1 秒以内");

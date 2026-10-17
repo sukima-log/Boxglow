@@ -73,7 +73,7 @@ npx boxglow done "Build it" --artifact "app=src/App.tsx"                    # de
 
 Recommended flow for a new project: the agent reads the brief (README, request) and creates 3-7 top-level boxes with concrete outputs, asks the human to confirm the split (`ask`), and only then decomposes the box it starts (`split`). Decisions keep the candidates that were not chosen; `reopen` lets you change course later without losing the history.
 
-Then run `npx boxglow setup-agent` once. It installs agent instructions and skills and enables the context guard described below. Claude Code also receives a SessionStart hook and `.mcp.json`; Codex MCP registration is separate. Open `npx boxglow serve --open` or the [VS Code extension](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode) to edit the same repository file as the agent.
+Then run `npx boxglow setup-agent` once. It installs everything the agents need so you do not have to know the mechanisms: the instructions (`CLAUDE.md` / `AGENTS.md`), the skill, the hooks (the plan's resume summary is injected when a session starts, resumes or is compacted; an agent that is about to finish with an unrecorded box is told to record first; direct edits of `boxglow.json` are blocked), the MCP server registration (`.mcp.json` for Claude Code, `.codex/config.toml` and `codex mcp add` for Codex), a review subagent, and the context guard described below. `npx boxglow setup-agent --check` lists what is installed and the one-time steps left to you (Codex: trust the project and approve the hooks in `/hooks` once). Open `npx boxglow serve --open` or the [VS Code extension](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode) to edit the same repository file as the agent.
 
 ### Remember decisions across sessions
 
@@ -98,7 +98,8 @@ MCP provides `boxglow_context`, `boxglow_checkpoint`, and `contextToken` on guar
 
 | Command | What it does |
 |---|---|
-| `setup-agent [--agent codex\|claude-code\|all]` | Install only the selected agent’s instructions and skill (default: `all`). Claude Code also gets a SessionStart hook and `.mcp.json`. Existing unrelated settings are preserved; malformed settings stop setup. |
+| `setup-agent [--agent codex\|claude-code\|all] [--check]` | Install the selected agent's instructions, skill, hooks, MCP registration and review subagent (default: `all`). `--check` lists what is installed / missing. Existing unrelated settings are preserved; malformed settings stop setup. |
+| `hook session-start\|stop\|pre-tool` | Called by the agents' hooks (registered by setup-agent; JSON on stdin). Never stops the agent on its own failure. |
 | `mcp [--file path]` | MCP server over stdio: every command above as a tool (`boxglow_status`, `boxglow_add`, `boxglow_split`, `boxglow_start`, `boxglow_done`, `boxglow_ask`, `boxglow_answer`, ... and `boxglow_run` for the rest) |
 | `serve [--port 4174] [--open]` | Local server: the bundled web app at `http://localhost:4174/?serve=1` reading and writing your `boxglow.json` through a small API, with live reload when the CLI or an agent changes the file. Works in any browser (Firefox, Safari) |
 | `context <block> [--brief]` / `checkpoint <block> --note ... --context-token ...` | Read persistent context with a receipt (`--brief`: short form to read first, same token) / record a durable handoff |
@@ -131,15 +132,9 @@ npx boxglow setup-agent --agent codex
 npx boxglow status --brief
 ```
 
-This installs `AGENTS.md` and `.agents/skills/boxglow/SKILL.md`; it does not create Claude Code settings. `--agent claude-code` installs only Claude Code files; omit `--agent` to install both. The CLI is sufficient for either agent. `status --brief` keeps decisions, unacknowledged answers, activity and next candidates while omitting the complete tree; `status --json` still returns the full project.
+This installs `AGENTS.md`, `.agents/skills/boxglow/SKILL.md` (with `agents/openai.yaml` declaring the MCP dependency), `.codex/config.toml` (the local MCP server `boxglow`, tools auto-approved), `.codex/hooks.json` (session-start / stop / pre-tool) and `.codex/agents/boxglow-review.toml`; it does not create Claude Code settings. `--agent claude-code` installs only Claude Code files; omit `--agent` to install both. When the `codex` command is available, the MCP server is also registered in your user config (`codex mcp add boxglow -- npx -y boxglow mcp --actor codex`), so the tools work before the project is trusted.
 
-For Codex MCP tools, register the server separately with an absolute path to your plan (run this in the same environment as Codex):
-
-```bash
-codex mcp add boxglow -- npx -y boxglow mcp --file /absolute/path/to/boxglow.json --actor codex
-```
-
-Use `codex mcp list` to verify the registration. `.mcp.json` in a repository is the Claude Code setup; it is not the Codex MCP registration. MCP `boxglow_status` accepts `brief: true`, and validation failures are returned with `isError: true` so the agent can act on them.
+Two things Codex asks you to do once: trust the project when you first open it (project-level MCP and hooks only run in trusted projects), and approve the Boxglow hooks in `/hooks`. `npx boxglow setup-agent --check` shows these and what is installed. `.mcp.json` in a repository is the Claude Code setup; it is not the Codex MCP registration. MCP `boxglow_status` accepts `brief: true`.
 
 See the official [Codex skills locations](https://learn.chatgpt.com/docs/build-skills) and [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
 

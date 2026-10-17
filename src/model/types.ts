@@ -191,8 +191,25 @@ export interface WorkflowPolicy {
   startUnprepared?: "warn" | "reject";
 }
 
+/**
+ * 完了のときの検査結果 (B160): 実行した検査と結果 / 未実施 / 残る制限 を決まった形で残す。
+ * done --checked / --not-checked / --limits で書き、context と確認トークンに入る (人が後から「何を確かめたか」を読める)
+ */
+export interface BlockVerification {
+  /** 実行した検査と結果 (例: "vitest 53 件成功; e2e home 34/34") */
+  checked: string;
+  /** 試していないこと (例: "実機の iPhone では未確認") */
+  notChecked?: string;
+  /** 残る制限・注意 (例: "同時編集では競合し得る") */
+  limits?: string;
+  at: string;
+  by: string;
+}
+
 export interface Block {
   scope?: WorkScope;
+  /** 完了のときの検査結果 (done --checked ...)。未完了に戻しても残す (次の完了で上書き) */
+  verification?: BlockVerification;
   /** 説明を実際に変えた日時。古い記録には推測で補わない。 */
   descriptionUpdatedAt?: string;
   /** New / In Progress / Done を最後に変えた日時。 */

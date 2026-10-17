@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "boxglow": {
+      "command": "node",
+      "args": [
+        "bin/boxglow.js",
+        "mcp",
+        "--actor",
+        "claude-code"
+      ]
+    }
+  }
+}

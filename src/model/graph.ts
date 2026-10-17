@@ -33,8 +33,7 @@ import {
 , type Project
 , type TemplateNode
 , type TemplateOrigin
-, type WorkScope
-} from "./types";
+, type WorkScope, type BlockVerification } from "./types";
 
 /** ログに残す上限 (古いものから落とす) */
 export const LOG_LIMIT = 500;
@@ -1290,7 +1289,7 @@ export function finishBlock(
   p: Project
 , blockId: string
 , actor: string
-, args: { artifacts?: ({ title: string; url?: string } | Artifact)[]; outputName?: string; note?: string } = {}
+, args: { artifacts?: ({ title: string; url?: string } | Artifact)[]; outputName?: string; note?: string; verification?: BlockVerification } = {}
 ): { project: Project; error?: string } {
   const b = p.blocks[blockId];
   if (!b || blockId === ROOT_ID) return { project: p, error: t("ブロックが見つかりません") };
@@ -1308,8 +1307,10 @@ export function finishBlock(
   q.blocks[blockId].activity = null;
   if (q.blocks[blockId].status !== "white") q.blocks[blockId].statusChangedAt = now();
   q.blocks[blockId].status = "white";
+  // 検査結果 (B160): 書かれたときだけ置き換える (書かれなければ前の完了の分を残す)
+  if (args.verification) q.blocks[blockId].verification = args.verification;
   const arts = (args.artifacts ?? []).map((a) => a.title).join(", ");
-  appendLog(q, { actor, kind: "done", blockId, message: `${t("「{title}」完了", { title: b.title })}${arts ? " (" + arts + ")" : ""}${args.note ? ": " + args.note : ""}` });
+  appendLog(q, { actor, kind: "done", blockId, message: `${t("「{title}」完了", { title: b.title })}${arts ? " (" + arts + ")" : ""}${args.note ? ": " + args.note : ""}${args.verification ? " " + t("[検査: {checked}]", { checked: args.verification.checked }) : ""}` });
   return { project: q };
 }
 

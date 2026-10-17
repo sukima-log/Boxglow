@@ -19,7 +19,7 @@ export interface HostedPlan { text: string | null; write: boolean; actor?: strin
 /** 読むだけのコマンド (読み取り専用のトークンで許すもの) */
 const READ_ONLY = new Set(["status", "resume", "show", "context", "lint", "validate", "claims", "review-split", "review-box", "export", "help", "version", "log"]);
 /** 使わせないコマンド (ファイル・ネットワーク・常駐が要る) */
-const NOT_HOSTED = new Set(["serve", "mcp", "sync", "login", "logout", "whoami", "billing", "remote", "setup-agent", "merge", "init", "unlock", "import", "template"]);
+const NOT_HOSTED = new Set(["serve", "mcp", "sync", "login", "logout", "whoami", "billing", "remote", "setup-agent", "merge", "init", "unlock", "import", "template", "hook"]);
 
 export async function handleMcpRequest(request: Request, plan: HostedPlan): Promise<{ response: Response; text: string | null; changed: boolean }> {
   setLang(plan.lang ?? "ja");

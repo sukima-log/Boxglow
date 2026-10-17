@@ -16,7 +16,8 @@ import { startServe } from "./serve";
 import { commitFile, describeLock, FileConflict, inspectLock, lockTokenOf, removeLock, revisionOf, sleepSync } from "./file-store";
 import { planIO } from "./plan-io";
 import { briefReceipt, contextReceipt, isCurrentToken, requireContext } from "./context";
-import { setupAgent } from "./setup-agent";
+import { checkAgentSetup, oneTimeSteps, setupAgent } from "./setup-agent";
+import { parseHookInput, runHook, type HookEvent } from "./hooks";
 import { runSyncCommand, runUnbindCommand, runWatchCommand } from "./sync/command";
 import { runLinkIdentity, runLogin, runLogout, runWhoami, runGoogleLogin } from "./sync/login";
 import { runBilling } from "./sync/billing";
@@ -384,8 +385,9 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   init [--name <名前>] [--file <path>] [--from <計画ファイル>]   boxglow.json を作る (--from で別の計画の構造だけを写して始める = テンプレート)
   combine <計画ファイル>... --out <path>          複数の計画を 1 つにまとめる (最初のファイルを土台に、残りを別のプロジェクトの箱として取り込む。判断・成果物・記録も残す)
   split-file <プロジェクトの箱> --out <path>       プロジェクトの箱を別の計画に切り出す (またぐ線は両側の最上位の入力 / 出力に由来を残す)
-  setup-agent [--agent codex|claude-code|all] [--dir <path>]                     AI が自律的に使えるように設定する: AGENTS.md / CLAUDE.md に手順を追記、
-                                                 Codex は AGENTS.md と .agents/skills、Claude Code は CLAUDE.md・スキル・フック・.mcp.json (既定: all)
+  setup-agent [--agent codex|claude-code|all] [--dir <path>] [--check]           AI が自律的に使えるように設定する: AGENTS.md / CLAUDE.md に手順を追記、
+                                                 Codex は AGENTS.md・.agents/skills・.codex (MCP・hooks・サブエージェント)、Claude Code は CLAUDE.md・スキル・hooks・.mcp.json・サブエージェント (既定: all)。--check は入っているものと足りないものを表示
+  hook session-start|stop|pre-tool [--actor <名前>]   エージェントの hooks から呼ばれる (setup-agent が登録する。stdin に JSON)。失敗してもエージェントを止めない
   claims                                        受け持ち一覧 (自分・他者・期限切れ)
   claim-policy --mode reject|warn|off [--minutes 30] --actor human  計画ごとの有効化 (人の操作)
   start <block> --instance <固定ID> [--scope subtree]              取得して実行中にする、受領証 CLAIM を表示
@@ -457,8 +459,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   now [<block>|none] [--off]                     今ここ (本当にいま作業しているボックス。複数の AI や人がいれば、いくつでも) を付ける / 外す (--off) / 全部消す (none) / 見る。start で自動で付き、done / leave で外れる。画面では太い枠と NOW の札
   start <block> [--note <何をするか>] [--reason <理由>]  入力待ちは既定で警告。理由を記録すると警告なしで開始。今ここにもこのボックスが付く。
                                                  要具体化 (自身が作る出力が無い、出力の予定成果物 expect・完了条件 acceptance が未定) も既定は警告 (policy --unprepared reject で AI は開始不可。理由では通れない)
-  done <block> [--artifact <題名>=<URL またはパス>]... [--output <出力名>] [--note]   完了 (成果物を付けて white)
-                                                 パスが Git 管理下なら「コミット + パス + blob」で記録する (アップロードしない)
+  done <block> [--artifact <題名>=<URL またはパス>]... [--output <出力名>] [--note] [--checked <実行した検査と結果>] [--not-checked <未実施>] [--limits <残る制限>]   完了 (成果物を付けて white)
+                                                 パスが Git 管理下なら「コミット + パス + blob」で記録する (アップロードしない)。--checked 以下は検査結果として箱に残る (context・show に出る)
   artifact <block> <URL またはパス> [--title <題名>] [--output <出力名>]   成果物だけ付ける (完了にはしない)
   check                                          Git の成果物が今も見つかるか確認し、移動していればパスを付け替える。未コミットのときに記録した成果物は、コミット済みになっていれば Git の参照に補完する
   blocked <block> --note <困っていること>          詰まり
@@ -578,8 +580,8 @@ Usage (npx boxglow <command> ...):
   now [<block>|none] [--off]                     The boxes being worked on right now (any number: several agents or people). start adds one, done / leave remove it, --off removes one, none clears all. Shown on the canvas with a thick frame and a NOW tag
   start <block> [--note <what you will do>] [--reason <reason>]  Missing inputs warn by default; a recorded reason allows starting without a warning. Also marks this box as "now".
                                                  A box that still needs detail (no output of its own, or an output without expect / acceptance) warns by default too (policy --unprepared reject blocks AI starts; a reason does not bypass it)
-  done <block> [--artifact <title>=<URL or path>]... [--output <output name>] [--note]   Finish (attach artifacts and turn it white)
-                                                 If the path is tracked by Git, it is recorded as "commit + path + blob" (nothing is uploaded)
+  done <block> [--artifact <title>=<URL or path>]... [--output <output name>] [--note] [--checked <checks run and results>] [--not-checked <not tried>] [--limits <remaining limits>]   Finish (attach artifacts and turn it white)
+                                                 If the path is tracked by Git, it is recorded as "commit + path + blob" (nothing is uploaded). --checked etc. stay on the box as its verification (shown by context / show)
   artifact <block> <URL or path> [--title <title>] [--output <output name>]   Attach an artifact only (does not finish the box)
   check                                          Check that Git artifacts can still be found, and update the path if they moved. Artifacts recorded while uncommitted become Git references once they are committed
   blocked <block> --note <what is blocking you>    Blocked
@@ -647,6 +649,17 @@ function main(argv: string[]): void {
   const actor = actorOf(str(options.actor));
   claimRequest=claimCommand(cmd,rest[0],options,actor);
 
+  if (cmd === "hook") {
+    // AI エージェントのフック (setup-agent が Claude Code / Codex の hooks に登録する)。失敗してもエージェントを止めない (出力なし・終了コード 0)
+    let input = "";
+    try { if (!process.stdin.isTTY) input = readFileSync(0, "utf8"); } catch { /* stdin が無ければ空の入力 */ }
+    let plan: Project | null = null;
+    try { const hp = locateFile(str(options.file)); plan = load(hp); setLang(explicitLang(options) ?? plan.lang ?? "ja"); } catch { plan = null; }
+    const r = runHook(rest[0] as HookEvent, parseHookInput(input), plan, actor);
+    if (r.stdout) process.stdout.write(r.stdout);
+    process.exitCode = r.exitCode;
+    return;
+  }
   if (cmd === "unlock") {
     // 残った保存ロックの状態を見る / 人の判断で解除する。計画の中身は読まない (壊れた計画でも使えるように)
     const path = locateFile(str(options.file));
@@ -991,7 +1004,25 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     case "setup-agent": {
       // AI エージェント側の設定を 1 回で入れる (何度実行しても同じ結果になるよう、印の間だけを書き換える。本体は cli/setup-agent.ts)
       const root = str(options.dir) ? resolve(str(options.dir)!) : dirname(path);
-      const done = setupAgent({ root, agent: str(options.agent) ?? "all", snippet: AGENTS_SNIPPET(), skill: SKILL_MD() });
+      const agent = str(options.agent) ?? "all";
+      if (options.check) {
+        // 入っているものと足りないものを一覧にする (書かない)
+        out(checkAgentSetup(root, agent).join("\n"));
+        out(t("利用者が一度だけ行うこと:") + "\n- " + oneTimeSteps(agent).join("\n- "));
+        return;
+      }
+      const done = setupAgent({ root, agent, snippet: AGENTS_SNIPPET(), skill: SKILL_MD() });
+      // Codex の利用者設定にも MCP を登録する (codex コマンドがあるとき。プロジェクトの .codex/config.toml は信頼した後にしか読まれないため)
+      if (agent !== "claude-code") {
+        try {
+          execFileSync("codex", ["mcp", "get", "boxglow"], { stdio: "ignore" });
+        } catch {
+          try { execFileSync("codex", ["mcp", "add", "boxglow", "--", "npx", "-y", "boxglow", "mcp", "--actor", "codex"], { stdio: "ignore" }); out(t("Codex の利用者設定に MCP サーバ boxglow を登録しました (codex mcp add)")); }
+          catch { /* codex コマンドが無い・失敗: プロジェクトの .codex/config.toml で足りる */ }
+        }
+      }
+      // 要具体化のボックスを AI が始められないようにする (人は影響なし)。利用者が明示的に決めていれば変えない
+      if (!p.workflowPolicy?.startUnprepared) { p.workflowPolicy = { ...p.workflowPolicy, startUnprepared: "reject" }; out(t("要具体化のボックス (予定成果物・完了条件が未定) は AI が始められない設定にしました (policy --unprepared reject。人の操作は影響なし。warn に戻せます)")); }
       // 指示書に「context を読んでトークンを付ける」手順が入るので、計画の側でも確認トークンの要求を有効にする
       const guardWasOn = !!p.contextGuard;
       p.contextGuard = true;
@@ -999,6 +1030,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       // 既存の計画で setup-agent をやり直した場合も動作が変わるので、有効にしたことと次の手順を必ず伝える
       if (!guardWasOn) out(t("確認トークン (guard) を有効にしました。AI は作業の前に boxglow context <ボックス> を読み、返ってきたトークンを --context-token で渡します。人の操作 (--actor human) には不要です。外すときは boxglow guard off --actor human"));
       out(t("設定しました: {list}\nAI は作業の始まり・終わり・判断待ちを boxglow.json に記録し、セッションの最初に計画を読みます。人は画面で見て判断してください (編集と回答は npx boxglow serve --open か VS Code 拡張で。boxglow.json を直接開いた画面は閲覧専用です)", { list: done.join(", ") }));
+      out(t("利用者が一度だけ行うこと:") + "\n- " + oneTimeSteps(agent).join("\n- "));
       return;
     }
     case "project": {
@@ -1385,13 +1417,18 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const artifacts = specs.map((s) => artifactFrom(s));
       const check = checkDone(p, b.id, artifacts.length, actor);
       if (check.error) throw new Error(check.error);
-      const r = finishBlock(p, b.id, actor, { artifacts, outputName: str(options.output), note: str(options.note) });
+      // 検査結果 (B160): 実行した検査と結果 / 未実施 / 残る制限 を決まった形で残す
+      const checked = str(options.checked), notChecked = str(options["not-checked"]), limits = str(options.limits);
+      const verification = checked || notChecked || limits ? { checked: checked ?? "", ...(notChecked ? { notChecked } : {}), ...(limits ? { limits } : {}), at: new Date().toISOString(), by: actor } : undefined;
+      const r = finishBlock(p, b.id, actor, { artifacts, outputName: str(options.output), note: str(options.note), verification });
       if (r.error) throw new Error(r.error);
       // 今ここだったら消す (完了した)
       save(path, setNow(r.project, b.id, actor, false)); // 今ここに付いていれば外す (完了した)
       out(t("完了: 「{title}」", { title: b.title }) + `${artifacts.length ? t(" 成果物: ") + artifacts.map((a) => a.title + (a.kind === "git" ? ` (git ${a.path} @ ${(a.commit ?? "").slice(0, 7)})` : "")).join(", ") : ""}`);
       // 成果物の無い完了は「何ができたか」が後から分からない。具体的な物 (ファイル・URL・コミット) を付けるよう促す
       if (check.warning) out(check.warning);
+      // 検査結果が無い完了は、後から「何を確かめたか」が分からない (拒否はしない。promptで促す)
+      if (!verification && !isHumanActor(actor)) out(t("検査結果が付いていません。--checked \"<実行した検査と結果>\" (必要なら --not-checked / --limits) で残すと、人が後から確かめられます"));
       const reminder = descriptionReminder(r.project.blocks[b.id]);
       if (reminder) out(reminder);
       return;

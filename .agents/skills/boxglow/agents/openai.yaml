@@ -1,0 +1,11 @@
+interface:
+  display_name: Boxglow
+  short_description: boxglow.json の計画に作業の開始・完了・判断待ちを記録する
+  default_prompt: Boxglow の計画を読んで、今の作業を記録してください
+policy:
+  allow_implicit_invocation: true
+dependencies:
+  tools:
+    - type: mcp
+      value: boxglow
+      transport: stdio

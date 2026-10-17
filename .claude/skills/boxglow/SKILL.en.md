@@ -5,7 +5,7 @@ description: Share the plan and progress with humans through Boxglow (boxglow.js
 
 # Share the plan and progress with Boxglow
 
-`boxglow.json` at the repository root is the source of truth for the plan. Humans watch it on the Boxglow screen (https://boxglow.pages.dev/, "Open boxglow.json").
+`boxglow.json` at the repository root is the source of truth for the plan. Humans watch it on the Boxglow screen (https://boxglow.app/, "Open boxglow.json").
 Do not edit it directly; update it with `npx boxglow`.
 
 ## Making the first plan (for a new project)
@@ -31,7 +31,7 @@ Do not edit it directly; update it with `npx boxglow`.
 4. Once ready, read `npx boxglow context <block>` again and run `npx boxglow start <block> --note "<what you will do>"`.
    On a plan with the context guard on, pass the `contextToken` (context token) from the context output as `--context-token <context token>`.
    Starting a box that still needs detail warns by default; on a plan with `policy --unprepared reject` it is refused (`--reason` does not bypass it). A parent whose outputs are all made by its children has nothing to run itself: start the child instead
-5. When the deliverable exists, run `npx boxglow done <block> --artifact "<name>=<URL or path>"` (with the guard on, add `--context-token <context token>`; if your previous command printed "New context token: <token>", use that one)
+5. When the deliverable exists, run `npx boxglow done <block> --artifact "<name>=<URL or path>" --checked "<checks run and results>"` (record the verification in three fixed fields: `--checked` checks run and results / `--not-checked` what was not tried / `--limits` remaining limits; for non-code deliverables write what you confirmed) (with the guard on, add `--context-token <context token>`; if your previous command printed "New context token: <token>", use that one)
 6. When a human decision is needed, run `npx boxglow ask <block> "<question>" --options "A|B"` and move on to another box
 7. When you are stuck: If the cause is a missing input (a deliverable of an earlier box, or material), do not mark the box as blocked. Check its input wires with `npx boxglow show <block>`; if no box produces what is missing, create one outside (upstream) with `npx boxglow add` and wire it to this box's input with `npx boxglow connect` (the wire stays in the waiting color, so the diagram shows what the box is waiting for). If a choice between options would let you continue, use `ask`. Record only obstacles outside the plan (an environment that does not work, missing permissions or keys, waiting for an outside reply, a failure with no known cause) with `npx boxglow blocked <block> --note "<what is in the way>"`
 8. Before an interruption, context compaction or a handoff, save a handoff note with `npx boxglow checkpoint <block> --note "Findings; next steps; unresolved questions"`
@@ -51,6 +51,11 @@ Do not edit it directly; update it with `npx boxglow`.
 - Always connect boxes as "input → output". Add missing inputs / outputs with `port`, remove a wire with `disconnect`, and remove a box itself with `remove`. Export a document with `export --out docs/ROADMAP.md`
 - When you add a box, give it a kind of work with `--category` (design / build / verify / evaluate / study / research / ui / improve / fix / docs / ops / other). On the screen it becomes a colored band and a tag
 - If boxglow.json does not exist yet, create it with `npx boxglow init --name "<project name>"` and place the final deliverable and the top-level boxes with `add`
+
+## What runs automatically (hooks)
+
+`setup-agent` registers `boxglow hook` in the Claude Code / Codex hooks. After a session starts, resumes or is compacted, the plan's resume summary is injected into the context. When you are about to finish a reply while a box you started has no record (done / checkpoint / log), you are told to record first and continue. Editing boxglow.json directly (Edit / Write / apply_patch) is blocked. This is a safety net; keep recording as the steps above say.
+Reviews of a split or of readiness can be delegated to the subagent `boxglow-review` (it reads review-split / review-box, evaluates, and records with split-ok / box-ok).
 
 ## Context token and handoff
 

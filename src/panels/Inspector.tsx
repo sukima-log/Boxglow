@@ -343,6 +343,17 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         {suggest && !readonly && (
           <button className="btn btn-primary btn-sm w-full" onClick={() => setStatus("white")} title={t("下の階層が全部完了し、出力に成果物が付いています")}>{t("→ Done")}</button>
         )}
+        {/* 完了のときの検査結果 (B160): done --checked / --not-checked / --limits で残したもの */}
+        {b.verification && (
+          <section className="sec verification">
+            <div className="sec__head"><span className="label">{t("検査 (完了のとき)")}</span><span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{b.verification.by} · {new Date(b.verification.at).toLocaleString()}</span></div>
+            <dl className="text-[12px] flex flex-col gap-1">
+              <div><dt className="font-bold inline">{t("検査")}: </dt><dd className="inline whitespace-pre-wrap break-words">{b.verification.checked}</dd></div>
+              {b.verification.notChecked && <div><dt className="font-bold inline">{t("未実施")}: </dt><dd className="inline whitespace-pre-wrap break-words">{b.verification.notChecked}</dd></div>}
+              {b.verification.limits && <div><dt className="font-bold inline">{t("制限")}: </dt><dd className="inline whitespace-pre-wrap break-words">{b.verification.limits}</dd></div>}
+            </dl>
+          </section>
+        )}
         {/* 着手の準備: 要具体化 (自身が作る出力・予定成果物・完了条件) と、必須の入力の状況を別々に出す (I/O タブの 必須 / 任意 と expect がここに効く) */}
         {b.status !== "white" && kindOf(b) !== "project" && !b.merge && (() => {
           const reasons = unpreparedReasons(project, blockId);

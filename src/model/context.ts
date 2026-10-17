@@ -84,6 +84,8 @@ export function agentContext(p: Project, blockId: string) {
       // 日時と現在の状態は読む人に示すが、確認トークンからは除く。
       , freshness: { status: b.status, descriptionUpdatedAt: b.descriptionUpdatedAt, statusChangedAt: b.statusChangedAt, description: freshnessText(b, b.descriptionUpdatedAt), handoff: p.handoffs?.[id] ? freshnessText(b, p.handoffs[id].at) : undefined, reminder: descriptionReminder(b) }
       , artifacts: b.artifacts
+      // 完了のときの検査結果 (実行した検査・未実施・制限)。次の作業が「何を確かめ済みか」を読める
+      , verification: b.verification
         // 判断は確認済み (ack 済み) のものも含める。確認の印 (ackedBy / ackedAt) は入れない (ack してもトークンは変わらない)
       , decisions: b.decisions.map((d) => ({ id: d.id, question: d.question, context: d.context, options: d.options, answer: d.answer, history: d.history }))
       , handoff: p.handoffs?.[id]

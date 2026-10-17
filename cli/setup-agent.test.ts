@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { setupAgent } from "./setup-agent";
+import { checkAgentSetup, setupAgent } from "./setup-agent";
 
 const dirs: string[] = [];
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
@@ -28,7 +28,8 @@ describe("agent setup", () => {
     writeFileSync(join(opts.root, ".mcp.json"), JSON.stringify({ mcpServers: { other: { command: "other" }, boxglow: { command: "custom-boxglow" } } }));
     setupAgent(opts); setupAgent(opts);
     const settings = JSON.parse(readFileSync(join(opts.root, ".claude/settings.json"), "utf8"));
-    expect(settings.permissions.allow).toEqual(["Read"]);
+    expect(settings.permissions.allow).toContain("Read");   // 既存の許可は残し、Boxglow の CLI の許可が足される
+    expect(settings.permissions.allow).toContain("Bash(npx boxglow *)");
     expect(settings.hooks.SessionStart).toHaveLength(2);
     const mcp = JSON.parse(readFileSync(join(opts.root, ".mcp.json"), "utf8"));
     expect(mcp.mcpServers.boxglow.command).toBe("custom-boxglow");
@@ -67,4 +68,44 @@ it("生成する両エージェントの指示に明示actorを付け、再実�
     expect(readFileSync(join(root,"CLAUDE.md"),"utf8")).toContain("--actor claude-code");
     expect(setupAgent({root,agent:"all",snippet:"---\nInstructions\n---",skill:"Skill"})).toHaveLength(1);
   } finally { rmSync(root,{recursive:true,force:true}); }
+});
+
+describe("hooks・サブエージェント・Codex の設定 (利用者が仕組みを知らなくても全部入る)", () => {
+  it("Claude Code: 3 つの hooks、CLI の許可、.mcp.json の自動承認、レビュー用のサブエージェントが入り、古い SessionStart (npx boxglow status) は置き換わる", () => {
+    const opts = { ...fixture(), agent: "claude-code" };
+    mkdirSync(join(opts.root, ".claude"));
+    writeFileSync(join(opts.root, ".claude/settings.json"), JSON.stringify({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "npx boxglow status" }] }] } }));
+    setupAgent(opts);
+    const settings = JSON.parse(readFileSync(join(opts.root, ".claude/settings.json"), "utf8"));
+    const all = JSON.stringify(settings.hooks);
+    expect(all).not.toContain('"npx boxglow status"');
+    for (const e of ["session-start", "stop", "pre-tool"]) expect(all).toContain(`npx boxglow hook ${e} --actor claude-code`);
+    expect(settings.hooks.SessionStart[0].matcher).toContain("compact");
+    expect(settings.hooks.PreToolUse[0].matcher).toContain("Edit");
+    expect(settings.enableAllProjectMcpServers).toBe(true);
+    expect(readFileSync(join(opts.root, ".claude/agents/boxglow-review.md"), "utf8")).toContain("name: boxglow-review");
+    expect(JSON.parse(readFileSync(join(opts.root, ".mcp.json"), "utf8")).mcpServers.boxglow.args).toContain("--actor");
+    // もう一度実行しても増えない
+    expect(setupAgent(opts)).toHaveLength(1);
+    expect(JSON.parse(readFileSync(join(opts.root, ".claude/settings.json"), "utf8")).hooks.Stop).toHaveLength(1);
+    expect(checkAgentSetup(opts.root, "claude-code").every((l) => l.startsWith("OK"))).toBe(true);
+  });
+  it("Codex: .codex/config.toml の MCP、.codex/hooks.json、openai.yaml、レビュー用のサブエージェントが入り、既存の config.toml は残る", () => {
+    const opts = { ...fixture(), agent: "codex" };
+    mkdirSync(join(opts.root, ".codex"));
+    writeFileSync(join(opts.root, ".codex/config.toml"), 'model = "x"\n');
+    setupAgent(opts);
+    const toml = readFileSync(join(opts.root, ".codex/config.toml"), "utf8");
+    expect(toml.startsWith('model = "x"')).toBe(true);
+    expect(toml).toContain("[mcp_servers.boxglow]");
+    const hooks = JSON.parse(readFileSync(join(opts.root, ".codex/hooks.json"), "utf8"));
+    expect(JSON.stringify(hooks.hooks)).toContain("npx boxglow hook stop --actor codex");
+    expect(hooks.hooks.PreToolUse[0].matcher).toContain("apply_patch");
+    expect(readFileSync(join(opts.root, ".agents/skills/boxglow/agents/openai.yaml"), "utf8")).toContain("value: boxglow");
+    expect(readFileSync(join(opts.root, ".codex/agents/boxglow-review.toml"), "utf8")).toContain('name = "boxglow-review"');
+    expect(setupAgent(opts)).toHaveLength(1);
+    expect(toml).toBe(readFileSync(join(opts.root, ".codex/config.toml"), "utf8"));
+    expect(checkAgentSetup(opts.root, "codex").every((l) => l.startsWith("OK"))).toBe(true);
+    expect(checkAgentSetup(opts.root, "claude-code").some((l) => l.startsWith("NG"))).toBe(true);
+  });
 });

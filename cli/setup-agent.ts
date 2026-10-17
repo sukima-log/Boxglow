@@ -1,13 +1,20 @@
 /**
- * setup-agent の本体: AI エージェント側の設定を 1 回で入れる
- * (指示書 AGENTS.md / CLAUDE.md への追記、スキル、Claude Code のフックと .mcp.json)
- * 何度実行しても同じ結果になるよう、指示書は印 (boxglow:begin 〜 boxglow:end) の間だけを書き換える。
+ * setup-agent の本体: AI エージェント側の設定を 1 回で入れる (利用者が仕組みを知らなくても、エージェントが自動で正しい手順を踏むように)
+ *   Claude Code: CLAUDE.md (印の間)、.claude/skills/boxglow/SKILL.md、.claude/settings.json (hooks・CLI の許可・.mcp.json の自動承認)、
+ *                .claude/agents/boxglow-review.md (レビュー用のサブエージェント)、.mcp.json (手元の MCP サーバ)
+ *   Codex      : AGENTS.md (印の間)、.agents/skills/boxglow/SKILL.md + agents/openai.yaml (MCP への依存)、.codex/config.toml (MCP サーバ)、
+ *                .codex/hooks.json (hooks)、.codex/agents/boxglow-review.toml (レビュー用のサブエージェント)
+ *   hooks は `boxglow hook <event>` を呼ぶ: session-start (再開の概要を注入) / stop (記録の無い作業中の箱があれば続行を指示) / pre-tool (boxglow.json の直接編集を止める)
+ * 何度実行しても同じ結果になるよう、指示書は印 (boxglow:begin 〜 boxglow:end) の間だけを書き換え、設定ファイルは自分の項目だけを足す。
  * 既存の設定ファイルが壊れているときは、何も書かずにエラーにする (利用者の設定を黙って捨てない)
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 // 文言を今の言語 (日本語 / 英語) で出す
 import { t } from "../src/i18n/core";
+
+const BEGIN = "<!-- boxglow:begin -->";
+const END = "<!-- boxglow:end -->";
 
 /**
  * JSON の設定ファイルをオブジェクトとして読む
@@ -32,6 +39,69 @@ function object(value: unknown, label: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+/** hooks の 1 件 (Claude Code と Codex で同じ形: { matcher?, hooks: [{ type: "command", command }] }) */
+interface HookEntry { matcher?: string; hooks: { type: "command"; command: string; timeout?: number }[] }
+
+/**
+ * エージェントごとの hooks の定義 (イベント → 項目)
+ * Input : actor = "claude-code" | "codex" (hook のコマンドの --actor に付ける)
+ * Output: イベント名 → HookEntry[]
+ */
+export function hookDefinitions(actor: "claude-code" | "codex"): Record<string, HookEntry[]> {
+  const cmd = (event: string) => `npx boxglow hook ${event} --actor ${actor}`;
+  return {
+    // 開始・再開・圧縮の後に、計画の再開の概要を文脈として注入する
+    SessionStart: [{ matcher: "startup|resume|clear|compact|fork", hooks: [{ type: "command", command: cmd("session-start") }] }]
+    // 応答を終える前に、作業中にした箱に記録が無ければ続行を指示する
+  , Stop: [{ hooks: [{ type: "command", command: cmd("stop") }] }]
+    // boxglow.json の直接編集を止める (CLI か MCP で更新させる)
+  , PreToolUse: [{ matcher: actor === "codex" ? "apply_patch|Edit|Write" : "Edit|Write|MultiEdit|NotebookEdit", hooks: [{ type: "command", command: cmd("pre-tool") }] }]
+  };
+}
+
+/**
+ * hooks の設定 (JSON のオブジェクト) に Boxglow の項目を足す。既存の項目は残し、同じコマンドがあれば足さない。
+ * 古い setup-agent が入れた `npx boxglow status` の SessionStart は、新しい session-start に置き換える
+ * Input : hooks = 設定の hooks オブジェクト (変更する), actor。Output: 変えたか
+ */
+function mergeHooks(hooks: Record<string, unknown>, actor: "claude-code" | "codex"): boolean {
+  let changed = false;
+  for (const [event, entries] of Object.entries(hookDefinitions(actor))) {
+    const cur = hooks[event] ?? [];
+    if (!Array.isArray(cur)) throw new Error(t("設定の形が正しくありません: {where}", { where: "hooks." + event }));
+    const kept: unknown[] = [];
+    for (const h of cur) {
+      const entry = object(h, event + " entry");
+      if (entry.hooks !== undefined && !Array.isArray(entry.hooks)) throw new Error(t("設定の形が正しくありません: {where}", { where: event + " hooks" }));
+      const commands = (entry.hooks as unknown[] | undefined ?? []).map((x) => String(object(x, "hook").command ?? ""));
+      // 古い形 (npx boxglow status) は置き換える
+      if (event === "SessionStart" && commands.length === 1 && commands[0] === "npx boxglow status") { changed = true; continue; }
+      kept.push(h);
+    }
+    for (const e of entries) {
+      // 同じイベントの Boxglow の hook が (コマンドの呼び方が違っても: npx boxglow / node bin/boxglow.js) 既にあれば足さない
+      const eventName = /boxglow hook (session-start|stop|pre-tool)/.exec(e.hooks[0].command)![1];
+      const exists = kept.some((h) => (object(h, event).hooks as { command?: string }[] | undefined ?? []).some((x) => new RegExp(`boxglow(\\.js)? hook ${eventName}\\b`).test(x.command ?? "")));
+      if (!exists) { kept.push(e); changed = true; }
+    }
+    if (changed || kept.length !== cur.length) hooks[event] = kept;
+  }
+  return changed;
+}
+
+/** レビュー用のサブエージェントの説明と手順 (Claude Code の .md と Codex の .toml で同じ文) */
+function reviewAgentText(actor: "claude-code" | "codex"): { description: string; body: string } {
+  return {
+    description: t("Boxglow の分解 (review-split) と着手準備 (review-box) のレビュー。親ボックスを分解した後や着手の前に、材料とチェック項目を読んで評価し、根拠を split-ok / box-ok で記録する")
+  , body: t(`手順:
+1. 対象のボックスを受け取り、\`npx boxglow context <box> --actor {actor}-review\` を読んで確認トークンを控える
+2. 分解のレビューなら \`npx boxglow review-split <親> --actor {actor}-review\`、着手準備のレビューなら \`npx boxglow review-box <box> --actor {actor}-review\` で材料とチェック項目を読む
+3. チェック項目ごとに、材料のどこを見て何と判断したかを書く。直すべき点があれば、直す内容を具体的に (ボックスの key・出力名・期待する文) 返す
+4. 問題が無ければ \`npx boxglow split-ok <親> --note "<根拠>" --context-token <確認トークン>\` または \`npx boxglow box-ok <box> --note "<根拠>" --context-token <確認トークン>\` で記録する
+5. boxglow.json は直接編集しない。判断が要ることは \`npx boxglow ask\` で残す`, { actor })
+  };
+}
+
 /**
  * 選んだエージェントの分だけ設定ファイルを作る / 更新する。書く前に既存の設定をすべて検査する (途中まで書いて失敗しない)
  * Input : root = 置き場 (リポジトリの直下), agent = "codex" | "claude-code" | "all",
@@ -45,13 +115,11 @@ export function setupAgent(opts: { root: string; agent: string; snippet: string;
   const claude = agent !== "codex";
   // 書く内容を先にすべて作る (相対パス → 中身)。検査が全部通ってから最後にまとめて書く
   const files = new Map<string, string>();
-  const BEGIN = "<!-- boxglow:begin -->";
-  const END = "<!-- boxglow:end -->";
   // 同梱の指示書は前置きが付いているので、「---」で挟まれた本文だけを貼る
   const parts = snippet.split(/^---$/m);
   const body = (parts.length >= 3 ? parts.slice(1, -1).join("---") : snippet).trim();
 
-  // 既定 (all) は今までどおり両方の指示書に書く。Codex だけ・Claude Code だけも選べる
+  // 既定 (all) は両方の指示書に書く。Codex だけ・Claude Code だけも選べる
   for (const name of [...(codex ? ["AGENTS.md"] : []), ...(claude ? ["CLAUDE.md"] : [])]) {
     const actor = name === "AGENTS.md" ? "codex" : "claude-code";
     // WSLなどへ渡ると識別環境が失われることがある。人のシェル設定にも依存しない。
@@ -66,32 +134,48 @@ export function setupAgent(opts: { root: string; agent: string; snippet: string;
     // 印があればその間だけを入れ替え、無ければ末尾に足す (利用者が書いた部分は残す)
     files.set(name, begin >= 0 ? cur.slice(0, begin) + block + cur.slice(end + END.length).replace(/^\r?\n/, "") : (cur ? cur.replace(/\s*$/, "\n\n") : "") + block);
   }
-  // Codex のスキル (記録者の名前の例を codex に置き換える)
-  if (codex) files.set(".agents/skills/boxglow/SKILL.md", skill.replaceAll("--by claude-code", "--by codex"));
+  if (codex) {
+    // Codex のスキル (記録者の名前の例を codex に置き換える) と、MCP への依存の宣言
+    files.set(".agents/skills/boxglow/SKILL.md", skill.replaceAll("--by claude-code", "--by codex"));
+    files.set(".agents/skills/boxglow/agents/openai.yaml", `interface:\n  display_name: Boxglow\n  short_description: ${t("boxglow.json の計画に作業の開始・完了・判断待ちを記録する")}\n  default_prompt: ${t("Boxglow の計画を読んで、今の作業を記録してください")}\npolicy:\n  allow_implicit_invocation: true\ndependencies:\n  tools:\n    - type: mcp\n      value: boxglow\n      transport: stdio\n`);
+    // プロジェクトの .codex/config.toml に手元の MCP サーバ (信頼したプロジェクトで読まれる)。既に boxglow の表があれば触らない
+    const tomlPath = join(root, ".codex/config.toml");
+    const toml = existsSync(tomlPath) ? readFileSync(tomlPath, "utf8") : "";
+    if (!/^\s*\[mcp_servers\.boxglow\]/m.test(toml)) {
+      const block = `[mcp_servers.boxglow]\ncommand = "npx"\nargs = ["-y", "boxglow", "mcp", "--actor", "codex"]\ndefault_tools_approval_mode = "auto"\n`;
+      files.set(".codex/config.toml", (toml.trim() ? toml.replace(/\s*$/, "\n\n") : "") + block);
+    }
+    // hooks (.codex/hooks.json。他の hooks は残す)
+    const hooksFile = readObject(join(root, ".codex/hooks.json"));
+    const hooks = object(hooksFile.hooks, "hooks");
+    if (mergeHooks(hooks, "codex")) { hooksFile.hooks = hooks; files.set(".codex/hooks.json", JSON.stringify(hooksFile, null, 2) + "\n"); }
+    // レビュー用のサブエージェント
+    const r = reviewAgentText("codex");
+    files.set(".codex/agents/boxglow-review.toml", `name = "boxglow-review"\ndescription = ${JSON.stringify(r.description)}\ndeveloper_instructions = """\n${r.body.replace(/"""/g, '\\"\\"\\"')}\n"""\n`);
+  }
   if (claude) {
     // Claude Code のスキル
     files.set(".claude/skills/boxglow/SKILL.md", skill);
-    // セッション開始時に計画を読むフック (Claude Code の settings.json に追記。他の設定は残す)
+    // settings.json: hooks、Boxglow の CLI の許可 (確認を減らす)、.mcp.json の自動承認。他の設定は残す
     const settings = readObject(join(root, ".claude/settings.json"));
     const hooks = object(settings.hooks, "hooks");
-    const start = hooks.SessionStart ?? [];
-    if (!Array.isArray(start)) throw new Error(t("設定の形が正しくありません: {where}", { where: "hooks.SessionStart" }));
-    const command = "npx boxglow status";
-    const exists = start.some((h: unknown) => {
-      const entry = object(h, "SessionStart entry");
-      if (entry.hooks !== undefined && !Array.isArray(entry.hooks)) throw new Error(t("設定の形が正しくありません: {where}", { where: "SessionStart hooks" }));
-      return (entry.hooks as unknown[] | undefined ?? []).some((x) => object(x, "hook").command === command);
-    });
-    if (!exists) {
-      hooks.SessionStart = [...start, { hooks: [{ type: "command", command }] }];
-      settings.hooks = hooks;
-      files.set(".claude/settings.json", JSON.stringify(settings, null, 2) + "\n");
-    }
+    let changed = mergeHooks(hooks, "claude-code");
+    if (changed) settings.hooks = hooks;
+    const permissions = object(settings.permissions, "permissions");
+    const allow = permissions.allow ?? [];
+    if (!Array.isArray(allow)) throw new Error(t("設定の形が正しくありません: {where}", { where: "permissions.allow" }));
+    for (const rule of ["Bash(npx boxglow *)", "Bash(boxglow *)"]) if (!allow.includes(rule)) { allow.push(rule); changed = true; }
+    permissions.allow = allow; settings.permissions = permissions;
+    if (settings.enableAllProjectMcpServers !== true) { settings.enableAllProjectMcpServers = true; changed = true; }
+    if (changed) files.set(".claude/settings.json", JSON.stringify(settings, null, 2) + "\n");
+    // レビュー用のサブエージェント
+    const r = reviewAgentText("claude-code");
+    files.set(".claude/agents/boxglow-review.md", `---\nname: boxglow-review\ndescription: ${r.description}\ntools: Bash, Read\n---\n\n${r.body}\n`);
     // MCP サーバの登録 (Claude Code はプロジェクトの .mcp.json を読む。他のサーバの設定は残す)
     const mcp = readObject(join(root, ".mcp.json"));
     const servers = object(mcp.mcpServers, "mcpServers");
     if (!servers.boxglow) {
-      servers.boxglow = { command: "npx", args: ["-y", "boxglow", "mcp"] };
+      servers.boxglow = { command: "npx", args: ["-y", "boxglow", "mcp", "--actor", "claude-code"] };
       mcp.mcpServers = servers;
       files.set(".mcp.json", JSON.stringify(mcp, null, 2) + "\n");
     }
@@ -106,4 +190,48 @@ export function setupAgent(opts: { root: string; agent: string; snippet: string;
     changed.push(name);
   }
   return changed.length ? changed : [t("変更なし")];
+}
+
+/**
+ * setup-agent --check: 入っているものと足りないものを一覧にする (書かない)
+ * Input : root, agent。Output: 行の一覧 ("OK <項目>" / "NG <項目>")
+ */
+export function checkAgentSetup(root: string, agent: string): string[] {
+  const codex = agent !== "claude-code";
+  const claude = agent !== "codex";
+  const lines: string[] = [];
+  const has = (rel: string, test?: (text: string) => boolean) => { const p = join(root, rel); if (!existsSync(p)) return false; return test ? test(readFileSync(p, "utf8")) : true; };
+  const hooksOk = (rel: string, actor: "claude-code" | "codex") => has(rel, (text) => { try { const o = JSON.parse(text) as { hooks?: Record<string, unknown> }; const s = JSON.stringify(o.hooks ?? {}); return ["session-start", "stop", "pre-tool"].every((e) => new RegExp(`boxglow(\\.js)? hook ${e} --actor ${actor}`).test(s)); } catch { return false; } });
+  const row = (ok: boolean, label: string) => lines.push(`${ok ? "OK" : "NG"} ${label}`);
+  if (claude) {
+    row(has("CLAUDE.md", (s) => s.includes(BEGIN)), "CLAUDE.md " + t("(Boxglow の手順)"));
+    row(has(".claude/skills/boxglow/SKILL.md"), ".claude/skills/boxglow/SKILL.md");
+    row(hooksOk(".claude/settings.json", "claude-code"), ".claude/settings.json " + t("(hooks: session-start / stop / pre-tool)"));
+    row(has(".claude/settings.json", (s) => s.includes("Bash(npx boxglow *)") && s.includes("enableAllProjectMcpServers")), ".claude/settings.json " + t("(CLI の許可と .mcp.json の自動承認)"));
+    row(has(".claude/agents/boxglow-review.md"), ".claude/agents/boxglow-review.md");
+    row(has(".mcp.json", (s) => s.includes('"boxglow"')), ".mcp.json " + t("(MCP サーバ boxglow)"));
+  }
+  if (codex) {
+    row(has("AGENTS.md", (s) => s.includes(BEGIN)), "AGENTS.md " + t("(Boxglow の手順)"));
+    row(has(".agents/skills/boxglow/SKILL.md"), ".agents/skills/boxglow/SKILL.md");
+    row(has(".agents/skills/boxglow/agents/openai.yaml"), ".agents/skills/boxglow/agents/openai.yaml " + t("(MCP への依存)"));
+    row(has(".codex/config.toml", (s) => /^\s*\[mcp_servers\.boxglow\]/m.test(s)), ".codex/config.toml " + t("(MCP サーバ boxglow)"));
+    row(hooksOk(".codex/hooks.json", "codex"), ".codex/hooks.json " + t("(hooks: session-start / stop / pre-tool)"));
+    row(has(".codex/agents/boxglow-review.toml"), ".codex/agents/boxglow-review.toml");
+  }
+  return lines;
+}
+
+/**
+ * 利用者が一度だけ行うこと (自動化できないもの) の案内
+ * Input : agent。Output: 行の一覧
+ */
+export function oneTimeSteps(agent: string): string[] {
+  const lines: string[] = [];
+  if (agent !== "claude-code") {
+    lines.push(t("Codex: このプロジェクトを初めて開くときに「信頼しますか」と聞かれたら信頼する (.codex の MCP と hooks は信頼したプロジェクトでだけ動く)"));
+    lines.push(t("Codex: 一度 /hooks を開いて Boxglow の hooks を承認する (未承認の hooks は動かない)"));
+  }
+  if (agent !== "codex") lines.push(t("Claude Code: 追加の操作はありません (次に開いたときから有効)"));
+  return lines;
 }

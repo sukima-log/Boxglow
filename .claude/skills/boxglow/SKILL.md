@@ -5,7 +5,7 @@ description: Boxglow (boxglow.json) で計画と進捗を人間と共有する�
 
 # Boxglow で計画と進捗を共有する
 
-リポジトリ直下の `boxglow.json` が計画の正本。人間は Boxglow の画面 (https://boxglow.pages.dev/ で「boxglow.json を開く」) で見ている。
+リポジトリ直下の `boxglow.json` が計画の正本。人間は Boxglow の画面 (https://boxglow.app/ で「boxglow.json を開く」) で見ている。
 直接編集せず `npx boxglow` で更新する。
 
 ## 最初の計画づくり (新しいプロジェクトのとき)
@@ -31,7 +31,7 @@ description: Boxglow (boxglow.json) で計画と進捗を人間と共有する�
 4. 準備ができたら `npx boxglow context <block>` を読み直し、`npx boxglow start <block> --note "<何をするか>"`。
    確認トークンの要求 (guard) が有効な計画では、出力の `contextToken` (確認トークン) を `--context-token <確認トークン>` で付ける。
    要具体化のボックスへの start は既定では警告、`policy --unprepared reject` の計画では開始できない (`--reason` では通れない)。出力を子に任せきりの親は実行するものが無いので、子を start する
-5. 成果物ができたら `npx boxglow done <block> --artifact "<名前>=<URL またはパス>"` (guard が有効なら `--context-token <確認トークン>` を付ける。直前の自分の操作の出力に「新しい確認トークン: <token>」が出ていれば、それを使う)
+5. 成果物ができたら `npx boxglow done <block> --artifact "<名前>=<URL またはパス>" --checked "<実行した検査と結果>"` (検査結果は `--checked` 実行した検査と結果 / `--not-checked` 試していないこと / `--limits` 残る制限 の 3 つで残す。コード以外の成果物は「確認したこと」を書く。guard が有効なら `--context-token <確認トークン>` を付ける。直前の自分の操作の出力に「新しい確認トークン: <token>」が出ていれば、それを使う)
 6. 人間の判断が要るときは `npx boxglow ask <block> "<質問>" --options "A|B"` して他のボックスへ移る
 7. 詰まったら: 入力 (前のボックスの成果物・資料) が足りないことが原因なら、詰まりにしない。`npx boxglow show <block>` で入力の配線を確かめ、足りないものを作るボックスが無ければ `npx boxglow add` で外 (上流) に作り、`npx boxglow connect` でこのボックスの入力につなぐ (配線が「待ち」の色で残り、何を待っているかが図で見える)。選択肢から選んでもらえば進めるなら `ask`。それ以外の、計画の外にある障害 (環境が動かない、権限やキーが無い、外部の返事待ち、原因の分からない失敗) だけを `npx boxglow blocked <block> --note "<困っていること>"` で記録する
 8. 中断・コンテキストの圧縮・引き継ぎの前に `npx boxglow checkpoint <block> --note "分かったこと; 次にすること; 未解決のこと"` で引き継ぎメモを残す
@@ -51,6 +51,11 @@ description: Boxglow (boxglow.json) で計画と進捗を人間と共有する�
 - ボックスは必ず「入力 → 出力」でつなぐ。足りない入出力は `port`、外すのは `disconnect`、ボックスそのものを消すのは `remove`。文書化は `export --out docs/ROADMAP.md`
 - ボックスを add するときは仕事の種類を `--category` で付ける (design 設計 / build 実装 / verify 検証 / evaluate 評価 / study 検討 / research 調査 / ui デザイン / improve 改善 / fix 課題解決 / docs 文書 / ops 運用 / other その他)。画面では色の帯と札になる
 - boxglow.json がまだ無ければ `npx boxglow init --name "<プロジェクト名>"` で作り、最終成果物と最上位のボックスを `add` で置く
+
+## 自動で動く仕組み (hooks)
+
+`setup-agent` が Claude Code / Codex の hooks に `boxglow hook` を登録している。セッションの開始・再開・圧縮の後に計画の再開の概要 (resume) が文脈に入る。応答を終えるとき、自分が start した箱に記録 (done / checkpoint / log) が無ければ「記録してから終える」よう続行が指示される。boxglow.json を直接書き換える操作 (Edit / Write / apply_patch) は止められる。これは忘れたときの保険で、上の手順どおりに自分で記録する。
+分解や着手準備のレビューは、サブエージェント `boxglow-review` に任せられる (review-split / review-box の材料を読んで評価し、split-ok / box-ok で記録する)。
 
 ## 確認トークンと引き継ぎ
 

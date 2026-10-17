@@ -27,7 +27,7 @@ Status: BlackBox (only the output is decided) → GrayBox (being broken down or 
    On a plan with the context guard on, pass the `contextToken` (context token) from the context output:
    `npx boxglow start <block> --note "<what you will do>" --context-token <context token>` (see "Context token and handoff" below)
    Starting a box that still needs detail warns by default (with the reasons and the next commands). On a plan with `policy --unprepared reject` it is refused (`--reason` does not bypass it; human actions are allowed). A parent whose outputs are all made by its children has nothing to run itself: start the child instead
-5. **Record completion**: when the output's deliverable exists, run `npx boxglow done <block> --artifact "<name>=<path in the repository>"`.
+5. **Record completion**: when the output's deliverable exists, run `npx boxglow done <block> --artifact "<name>=<path in the repository>"`. Record the verification in three fixed fields: `--checked` (checks run and their results, e.g. "vitest 53 passed; e2e home 34/34"), `--not-checked` (what was not tried), `--limits` (remaining limits / caveats). For non-code deliverables (documents etc.) write what you confirmed in `--checked`. It stays on the box and shows in context / show.
    With the guard on, add `--context-token <context token>` (if your previous command printed "New context token: <token>", use that one).
    An unchanged file already committed to HEAD is recorded as "commit + path + content hash" (nothing is uploaded). Uncommitted or untracked files remain local file references, and `npx boxglow check` turns them into Git references once they are committed; do not create a commit solely to satisfy Boxglow. Use full `npx boxglow status` when you need the entire tree. For PRs and external material, a URL is fine.
    To attach a deliverable ahead of completion, use `npx boxglow artifact <block> <path>`. Record progress along the way with `npx boxglow set <block> --progress 60`
@@ -103,6 +103,10 @@ To manage several repositories with one plan, put boxglow.json in the folder abo
 Inputs are required by default. On the screen, mark an input as "Optional" if work can start without it. "Next candidates" in status lists boxes whose required inputs are ready first (each is marked "ready to start" or "waiting for required inputs").
 Do not write descriptions for inputs (the description of the connected output is used). Write the format and constraints in the output's description.
 
+
+### What runs automatically (hooks)
+
+`setup-agent` registers `boxglow hook` in the Claude Code / Codex hooks. After a session starts, resumes or is compacted, the plan's resume summary is injected into the context automatically. When you are about to finish a reply while a box you started has no record (done / checkpoint / log), you are told to record first and continue. Editing boxglow.json directly with Edit / Write / apply_patch is blocked (update it through the CLI or MCP). These are a safety net, not a substitute for the steps above: keep recording as instructed.
 
 ### Context token and handoff
 
