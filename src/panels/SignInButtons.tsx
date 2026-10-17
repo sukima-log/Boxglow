@@ -12,23 +12,23 @@ import { useProjectStore } from "../store/useProjectStore";
 export const useAutoOpened = (code: NonNullable<SyncStatus["signIn"]>): boolean => useProjectStore((s) => s.signInOpened) === (code.provider === "google" ? code.url : code.userCode);
 
 /**
- * サインイン (または手段の追加) を 1 回の押下で始める
- *   押した瞬間に空のタブを開いておき (利用者の操作の中なので遮られない)、裏方からページの URL (Google) か、コードと許可ページ (GitHub) が届いたらそのタブを移す。
- *   GitHub はコードの入力が要るので、コードをクリップボードにも入れる (入らなければ画面のコードを使う)。
- *   タブを開けない環境 (VS Code の webview など) では、今までどおり画面のリンク / ボタンから開く
+ * サインイン (または手段の追加) を始める
+ *   Google: 押した瞬間に空のタブを開いておき (利用者の操作の中なので遮られない)、裏方からページの URL が届いたらそのタブを移す = 1 回の押下で Google のページへ。
+ *   GitHub: 自動では開かない。コードを先に見てもらい、「コードをコピーして GitHub を開く」で移る (先にページへ飛ばすと、コードを探すことになる。利用者の指摘 2026-10-17)
+ *   タブを開けない環境 (VS Code の webview など) では、今までどおり画面のリンクから開く
  * Input : act = ホストへの操作, provider, link = サインイン済みのアカウントに手段を足す。Output: なし
  */
 export async function signInOneStep(act: (a: HostAction) => Promise<unknown>, provider: "github" | "google", link = false): Promise<void> {
   let tab: Window | null = null;
-  try { tab = window.open("about:blank", "_blank"); } catch { tab = null; }
+  if (provider === "google") { try { tab = window.open("about:blank", "_blank"); } catch { tab = null; } }
   await act(link ? { kind: "linkIdentity", provider } : { kind: "signIn", provider });
+  if (provider === "github") return;
   // 裏方がページを用意するまで待つ (通信があるので少し遅れる)
   for (let i = 0; i < 150; i++) {
     const code = useProjectStore.getState().syncStatus?.signIn;
     if (code && code.provider === provider) {
       if (tab) {
         if (code.provider === "google") { tab.location.href = code.url; useProjectStore.setState({ signInOpened: code.url }); }
-        else { void navigator.clipboard?.writeText(code.userCode).catch(() => {}); tab.location.href = code.verificationUrl; useProjectStore.setState({ signInOpened: code.userCode }); }
       }
       return;
     }

@@ -655,22 +655,21 @@ export function SignInCode({ code, onCancel }: { code: NonNullable<SyncStatus["s
   }
   return (
     <div className="sync-panel__signin">
-      {opened
-        ? <div>{t("開いた GitHub のページに、このコードを入力してください (コピー済み)")} <a href={code.verificationUrl} target="_blank" rel="noreferrer">{t("(開かなかった場合はこちら)")}</a></div>
-        : <div>{code.link ? t("GitHub を足す: ブラウザで次のページを開き、コードを入力してください") : t("ブラウザで次のページを開き、コードを入力してください")}</div>}
-      {!opened && <button className="btn btn-primary btn-sm" onClick={()=>{
-        // クリック内で行う。コピーを先に始めてからページを開く (先に開くと、この画面の焦点が外れてコピーが断られる)。
-        // コピーできない環境でもコードを残し、認可を代行しない。
-        const copied = navigator.clipboard?.writeText(code.userCode);
-        if (copied) copied.then(()=>setCopyFailed(false)).catch(()=>setCopyFailed(true)); else setCopyFailed(true);
-        window.open(code.verificationUrl,"_blank","noopener,noreferrer");
-      }}>{t("コードをコピーして許可のページを開く")}</button>}
-      {copyFailed&&<p role="status">{t("コピーできませんでした。下のコードを入力してください。")}</p>}
+      {/* GitHub はコードを先に見せる (ページへ先に飛ばすと、コードを探すことになる)。コードの下のボタンで、コピーしてから GitHub を開く */}
+      <div>{code.link ? t("GitHub を足す: このコードを GitHub のページで入力します") : t("このコードを GitHub のページで入力します")}</div>
       <div className="sync-panel__code-row">
         <span className="sync-panel__code">{code.userCode}</span>
         {/* 貼り付けられなかったときのために、コードだけをコピーする手段も置く */}
         <button className="btn btn-ghost btn-sm" onClick={()=>{ void navigator.clipboard?.writeText(code.userCode).then(()=>setCopyFailed(false)).catch(()=>setCopyFailed(true)); }}>{t("コピー")}</button>
       </div>
+      {<button className="btn btn-primary btn-sm" onClick={()=>{
+        // クリック内で行う。コピーを先に始めてからページを開く (先に開くと、この画面の焦点が外れてコピーが断られる)。
+        // コピーできない環境でもコードを残し、認可を代行しない。
+        const copied = navigator.clipboard?.writeText(code.userCode);
+        if (copied) copied.then(()=>setCopyFailed(false)).catch(()=>setCopyFailed(true)); else setCopyFailed(true);
+        window.open(code.verificationUrl,"_blank","noopener,noreferrer");
+      }}>{t("コードをコピーして GitHub を開く")}</button>}
+      {copyFailed&&<p role="status">{t("コピーできませんでした。上のコードを入力してください。")}</p>}
       <button className="btn btn-ghost btn-sm" onClick={onCancel}>
         {t("中止")}
       </button>

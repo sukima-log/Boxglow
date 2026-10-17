@@ -70,8 +70,8 @@ const ROOT = path.resolve(__dirname, '..');
     check('同期: サインインのコードが欄に出る', /^TEST-/.test((await code.textContent()) ?? ''));
     // 認可ページの実接続はしない。クリック時のコピー失敗と公開URLだけを検査する。
     await page.evaluate(()=>{window.open=(...args)=>{window.__authOpen=args;return null;};Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw new Error('clipboard denied');}}});});
-    await page.getByRole('button',{name:'コードをコピーして許可のページを開く',exact:true}).click();
-    await page.getByText('コピーできませんでした。下のコードを入力してください。',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'コードをコピーして GitHub を開く',exact:true}).click();
+    await page.getByText('コピーできませんでした。上のコードを入力してください。',{exact:true}).waitFor();
     check('同期D: コピー不可でもコードが残り、認可ページを開く操作を保つ',await code.isVisible()&&await page.evaluate((u)=>window.__authOpen[0]===u+'/fake/github/login/device', server.url));
     // 招待されていない (招待制の試験中): やり直しを促さず、理由と順番待ちのリンクを出す。その後、もう一度サインインして続ける
     server.deviceCodes.set([...server.deviceCodes.keys()].at(-1), 'not-invited');
