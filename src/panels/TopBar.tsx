@@ -1,3 +1,4 @@
+import type React from "react";
 /**
  * 上の帯: ☰ (引き出し)、Home、プロジェクト名 (押すと設定)、保存の札、状況の札、表示モード、検索、追加、Auto Layout、Undo / Redo、メニュー、テーマ
  * 狭い幅 (760px 以下) では、追加・Auto Layout・Undo / Redo を ⋯ メニューの中へ移す
@@ -50,6 +51,21 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
     return () => observer.disconnect();
   }, []);
   const [menu, setMenu] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const menuRef = useRef<HTMLButtonElement>(null);
+  const addRef = useRef<HTMLDivElement>(null);
+  /**
+   * 開き物を、その入口の下に画面基準 (position: fixed) で置くためのスタイル
+   *   帯 (header.topbar) は横にスクロールする領域なので、絶対配置の開き物は領域の外で切れる。固定配置なら切れない
+   * Input : el = 入口の要素 (右端をそろえる)。Output: style (fixed, top, right)。入口が無ければ空
+   */
+  const below = (el: HTMLElement | null): React.CSSProperties => {
+    if (!el) return {};
+    const r = el.getBoundingClientRect();
+    return { position: "fixed", top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) };
+  };
+  /** 帯を横にスクロールしたら、開いている開き物を閉じる (入口が動くので、位置がずれたまま残さない) */
+  const closeAll = () => { setMenu(false); setAddOpen(false); setSearchOpen(false); };
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -139,7 +155,6 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   // 分岐を足すダイアログを開いているか
   const [branchOpen, setBranchOpen] = useState(false);
   // + Block の「足すものを選ぶ」メニューを開いているか (外を押すと閉じる)
-  const [addOpen, setAddOpen] = useState(false);
   useEffect(() => {
     if (!addOpen) return;
     const close = () => setAddOpen(false);
@@ -162,7 +177,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   // 帯は 2 つのまとまり: 左 (topbar-identity) = 引き出し・Home・計画名・保存の札、右 (topbar-tools) = 状況・モード・検索・追加・メニュー。
   // 幅が狭いと右のまとまりが次の行へ折り返す (index.css の .topbar。検索やメニューが画面の外に出ないように)
   return (
-    <header className="topbar" data-editing={editMode}>
+    <header className="topbar" data-editing={editMode} onScroll={closeAll}>
       <div className="topbar-identity">
       {/* 文字を置かない入口にも名前と制御先を与え、読み上げ・ツールチップで用途と現在の開閉を伝える。 */}
       <button className="tree-toggle btn btn-ghost btn-sm" onClick={onToggleTree} aria-pressed={treeOpen} aria-controls="project-tree" aria-label={treeOpen ? t("サイドバーを隠す") : t("サイドバーを表示")} title={treeOpen ? t("サイドバーを隠す") : t("サイドバーを表示")}><TreeIcon name="sidebar" /></button>
@@ -227,7 +242,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
             onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && hits[0]) jump(hits[0].id); if (e.key === "Escape") { setSearchOpen(false); setQuery(""); (e.target as HTMLInputElement).blur(); } }}
             onBlur={() => setTimeout(() => setSearchOpen(false), 150)} />
           {searchOpen && query.trim() && hits.length > 0 && (
-            <div className="card absolute right-0 mt-1 p-1 flex flex-col z-30" style={{ width: "min(320px, calc(100vw - 32px))", maxHeight: 320, overflow: "auto" }}>
+            <div className="card p-1 flex flex-col z-30" style={{ ...below(searchRef.current), width: "min(320px, calc(100vw - 32px))", maxHeight: 320, overflow: "auto" }}>
               {hits.map((h) => (
                 <button key={h.id} className="btn btn-ghost btn-sm justify-start" onMouseDown={(e) => e.preventDefault()} onClick={() => jump(h.id)}>
                   <span className="chip" style={{ fontFamily: "ui-monospace, monospace", marginRight: 6 }}>{h.key}</span>
@@ -237,7 +252,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
             </div>
           )}
           {searchOpen && query.trim() && hits.length === 0 && (
-            <div className="card absolute right-0 mt-1 p-2 text-[12px] z-30" style={{ minWidth: 200, color: "var(--text-muted)" }}>{t("見つかりません")}</div>
+            <div className="card p-2 text-[12px] z-30" style={{ ...below(searchRef.current), minWidth: 200, color: "var(--text-muted)" }}>{t("見つかりません")}</div>
           )}
         </div>
         {!readonly && (
@@ -245,11 +260,11 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
             {/* よく使う編集の操作は帯に出す (通常の幅)。760px 以下では帯から外し、⋯ メニューの中に同じ操作を出す (index.css の .desktop-action / .menu-actions)。
                 Auto Layout は帯に置かず、いつも ⋯ メニューに入れる (モードで出し入れすると帯の幅が変わり、折り返しが切り替わって表示が揺れるため) */}
             {/* + Block: 押すと、足すものを選ぶ小さなメニューが浮かぶ (ふつうのボックス / 分岐 (IF) / 合流 (Merge))。キーボードの N はすぐにふつうのボックスを足す */}
-            <div className="relative desktop-action add-menu">
+            <div className="relative desktop-action add-menu" ref={addRef}>
               <button className="btn btn-primary btn-sm" aria-haspopup="menu" aria-expanded={addOpen} onClick={(e) => { e.stopPropagation(); setAddOpen(!addOpen); }}
                 onKeyDown={(e) => { if (e.key === "Escape") setAddOpen(false); }} title={t("足すものを選ぶ (N でふつうのボックスをすぐに足す)")}>+ Block</button>
               {addOpen && (
-                <div className="card add-menu__pop" role="menu" aria-label={t("足すもの")}>
+                <div className="card add-menu__pop" role="menu" aria-label={t("足すもの")} style={below(addRef.current)}>
                   <button role="menuitem" className="add-menu__item" onClick={() => { setAddOpen(false); addSibling(); }} title={t("ふつうの作業")}>
                     <span className="add-menu__icon block" aria-hidden="true" /><b>Block</b><kbd className="add-menu__key">N</kbd>
                   </button>
@@ -267,9 +282,9 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
           </>
         )}
         <div className="relative">
-          <button className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setMenu(!menu); }} title="Menu" aria-expanded={menu} onKeyDown={(e) => { if (e.key === "Escape") setMenu(false); }}>⋯</button>
+          <button ref={menuRef} className="btn btn-ghost btn-sm" onClick={(e) => { e.stopPropagation(); setMenu(!menu); }} title="Menu" aria-expanded={menu} onKeyDown={(e) => { if (e.key === "Escape") setMenu(false); }}>⋯</button>
           {menu && (
-            <div className="card absolute right-0 mt-1 p-1 flex flex-col z-30" style={{ minWidth: 220, maxHeight: "min(480px, 65dvh)", overflowY: "auto" }}>
+            <div className="card p-1 flex flex-col z-30" style={{ ...below(menuRef.current), minWidth: 220, maxHeight: "min(480px, 65dvh)", overflowY: "auto" }}>
               {/* 編集の操作: 帯に出せない狭い幅 (760px 以下) のときだけ、ここに出す (通常の幅では帯のボタンを使う) */}
               {!readonly && <div className="menu-actions">
                 <button className="btn btn-primary btn-sm" onClick={addSibling}>+ Block</button>

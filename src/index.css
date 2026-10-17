@@ -968,13 +968,13 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 
 /* 上の帯: 幅が狭くなっても操作が画面の外に出ないよう、折り返す (高さは可変、最小 64px)。
    右パネルはキャンバスと同じ行に置くので、保存エラーの帯や折り返した帯がパネルの見出しに被らない */
-.app-top > header.topbar { height: auto; min-height: 64px; display: flex; flex-wrap: wrap; gap: 8px 16px; padding: 8px 16px; border-bottom: 2px solid var(--line); background: var(--bg-card); }
-.topbar-identity, .topbar-tools { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.topbar-identity { flex: 1 1 320px; }
-.topbar-tools { flex: 1 1 auto; justify-content: flex-end; flex-wrap: wrap; }
+/* 帯は 1 行のまま横にスクロールする (折り返さない。利用者の指定 2026-10-17)。開き物は画面基準の固定配置 (TopBar.tsx の below) */
+.app-top > header.topbar { height: auto; min-height: 64px; display: flex; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; gap: 8px 16px; padding: 8px 16px; border-bottom: 2px solid var(--line); background: var(--bg-card); }
+.topbar-identity, .topbar-tools { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; flex-wrap: nowrap; }
+.topbar-tools { justify-content: flex-end; margin-left: auto; }
 .topbar-tools > button, .topbar-tools > .relative:not(.topbar-search) { flex-shrink: 0; }
 .project-name { font-weight: 700; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 40px; max-width: 240px; flex: 1; cursor: pointer; }
-.topbar-search { min-width: 96px; flex: 1; max-width: 240px; }
+.topbar-search { min-width: 96px; flex: 0 0 200px; max-width: 240px; }
 .topbar-search .search-box { width: 100%; }
 .topbar .summary-chip { flex-wrap: wrap; white-space: normal; gap: 4px 8px; min-height: 32px; }
 .topbar .summary-chip__txt { display: inline; }
@@ -985,19 +985,12 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .panel.right .input { min-width: 0; }
 .panel.right { overflow-wrap: anywhere; }
 .topbar button:focus-visible, .panel button:focus-visible { outline: 2px solid var(--primary-strong); outline-offset: 2px; }
-@media (max-width: 1100px) {
-  .topbar-tools { flex-basis: 100%; }
-  .topbar-search { max-width: none; }
-}
 @media (max-width: 900px) {
   .app-grid > .panel.right { position: relative; grid-column: 1; grid-row: 2; justify-self: end; top: auto; bottom: auto; right: auto; width: min(var(--right-w, 320px), 92vw); z-index: 20; }
 }
 @media (max-width: 600px) {
   .app-top > header.topbar { padding: 8px; }
   .topbar-identity, .topbar-tools { gap: 8px; }
-  /* 狭い画面では、左のまとまり (名前・保存の札・更新・Save) も折り返す (ボタンが画面の外へ出ないように) */
-  .topbar-identity { flex-wrap: wrap; }
-  .topbar .summary-chip { flex-basis: 100%; justify-content: center; order: 2; }
   .topbar .save-chip { max-width: 144px; white-space: normal; font-size: 11px; }
   .topbar .save-chip__file { display: none; }
   .app-grid > .panel.right { width: 100%; border-left: 0; }
@@ -1070,12 +1063,9 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .btn:hover { box-shadow: none; transform: none; border-color: var(--primary); }
 .card { border-width: 1px; border-color: var(--line-soft); }
 .app-top > header.topbar { border-bottom: 1px solid var(--line-soft); min-height: 64px; }
-/* 左のまとまりは、幅が足りなければ中で折り返す (同期の印などが右のまとまりの下へ潜り込んで重ならないように)。右は内容の幅のまま */
-.topbar-identity { flex: 1 1 360px; flex-wrap: wrap; min-width: 0; }
-.topbar-tools { flex: 0 1 auto; }
-.topbar-search { flex: 0 1 200px; }
-/* 狭い幅では右のまとまりを次の行へ (上の .topbar-tools の指定が、前の方にある同じ指定を打ち消すので、ここでもう一度書く) */
-@media (max-width: 1100px) { .topbar-tools { flex-basis: 100%; } }
+.topbar-search { flex: 0 0 200px; }
+/* 退避した編集の取り込みの欄: 帯の中の絶対配置だと横スクロールの領域で切れるので、画面基準で中央に出す */
+.sync-chip-wrap > .restore-dialog { position: fixed; top: 72px; left: 50%; right: auto; transform: translateX(-50%); width: min(560px, calc(100vw - 16px)); z-index: 80; }
 /* ⋯ メニューの中の編集の操作 (+ Block・Undo・Redo。Auto Layout は幅に関係なくいつもメニューにある): 帯に出せない狭い幅 (760px 以下) のときだけ出す。
    通常の幅では帯にボタンがあるので、メニューには出さない (同じ操作を 2 か所に置かない) */
 .menu-actions { display: none; flex-direction: column; gap: 4px; }

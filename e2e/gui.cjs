@@ -1,5 +1,5 @@
 /**
- * 画面の部品の検査: 幅 320 / 390 / 768 / 1280px で上の帯の操作が画面内に収まること、
+ * 画面の部品の検査: 幅 320 / 390 / 768 / 1280px で上の帯が 1 行のまま横にスクロールでき、操作に到達できること、
  * 通常の幅では Undo / Redo が帯に出て (Auto Layout はいつも ⋯ メニュー)、Edit / View の切り替えで帯の形が変わらず、狭い幅では ⋯ メニューに入ること、質問が詳細パネルの先頭に出ること、
  * 別のボックスを選んでも詳細パネルのタブを保つこと、Activity の Resume タブと Claims タブ (受け持ちの一覧)、担当の一覧 (表、左下の切り替えから)、保存の競合で左右を比べて選べること。
  * 使い方: e2e/run.sh から呼ばれる (PLAYWRIGHT と LD_LIBRARY_PATH は run.sh が設定。プレビューが 4173 番で動いていること)
@@ -14,9 +14,18 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     const search=page.getByRole('textbox',{name:'ブロックを検索'});
     for (const width of [320,390,768,1280]) {
       await page.setViewportSize({width,height:844});
-      check(`上の帯 ${width}px: 検索・メニュー・保存の札が画面内に収まる`, await page.evaluate(()=> {
+      // 帯は折り返さず 1 行のまま横にスクロールする (2026-10-17 の指定)。操作は帯のスクロール範囲の中にあり、端までスクロールすれば画面内に来る
+      check(`上の帯 ${width}px: 1 行のまま横にスクロールでき、検索・メニュー・保存の札はスクロール範囲の中にある`, await page.evaluate(()=> {
+        const bar=document.querySelector('header.topbar');
         const controls=[...document.querySelectorAll('.topbar button,.topbar input,.save-chip')].filter(e=>e.getClientRects().length);
-        return controls.every(e=>{const r=e.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth+1;});
+        const top=controls[0].getBoundingClientRect().top;
+        const oneRow=controls.every(e=>Math.abs(e.getBoundingClientRect().top-top)<24);
+        const canScroll=bar.scrollWidth<=bar.clientWidth || getComputedStyle(bar).overflowX==='auto';
+        bar.scrollLeft=bar.scrollWidth;
+        const menu=document.querySelector('.topbar button[title="Menu"]').getBoundingClientRect();
+        const reachable=menu.right<=innerWidth+1 && menu.left>=0;
+        bar.scrollLeft=0;
+        return oneRow && canScroll && reachable;
       }));
     }
     // Auto Layout はモードに関係なく ⋯ メニューにある (帯に出し入れすると帯の幅が変わり、折り返しが切り替わって揺れるため)
