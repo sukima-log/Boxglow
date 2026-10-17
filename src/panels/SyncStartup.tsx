@@ -37,14 +37,31 @@ export function SyncStartup({ status, act, unsaved, receive = false }: {
   useEffect(() => {
     if (receive && op?.stage === "choose" && !op.error) void act({ kind: "continueStart", operationId: op.operationId, intent: "existing" });
   }, [receive, op?.stage, op?.operationId, op?.error, act]);
+  /** 開始の手順を始めて、そのまま選んだ道へ進む (「同期を始める」を押してから選ぶ 2 段を 1 段に) */
+  const startWith = async (intent: "new" | "existing") => {
+    await request({ kind: "beginSync" });
+    // 開始の手順の ID が状態に届くまで待つ (VS Code では拡張への操作が応答を待たずに戻るので、少し遅れて届く)
+    let opId: string | undefined;
+    for (let i = 0; i < 50 && !opId; i++) {
+      opId = useProjectStore.getState().syncStatus?.startup?.operationId;
+      if (!opId) await new Promise((r) => setTimeout(r, 100));
+    }
+    if (opId) await request({ kind: "continueStart", operationId: opId, intent });
+  };
   if (!op)
-    return <>
-      <button className="btn btn-primary btn-sm" disabled={unsaved || pending} onClick={() => void request({ kind: "beginSync" })}>{pending ? t("準備中…") : receive ? t("サーバーの計画を受け取る") : t("同期を始める")}</button>
-      {!receive && <p className="muted">{t("次に、今の計画を送るか、サーバーの計画を受け取るか選びます")}</p>}
-      {unsaved && <p className="muted">{t("先に保存してください")}</p>}
+    return receive ? <>
+      <button className="btn btn-primary btn-sm" disabled={unsaved || pending} onClick={() => void request({ kind: "beginSync" })}>{pending ? t("準備中…") : t("サーバーの計画を受け取る")}</button>
       {/* Boxglow の同期サーバーは招待制の試験中: 押す前に分かるよう 1 行だけ添える (自分のサーバーでは出さない) */}
       {status.isDefaultServer && !status.credentials.account && <p className="muted">{t("Boxglow の同期サーバーは招待制の試験中です")}</p>}
-    </>;
+    </> : <section className="sync-startup" aria-label={t("同期を始める")}>
+      <p>{t("送り先")}: <span className="break-all">{status.isDefaultServer ? t("Boxglow の同期サーバー") : status.server}</span></p>
+      <div className="sync-panel__choices sync-startup__choices">
+        <button aria-label={t("この計画を新しくサーバーに置く")} className="btn btn-primary btn-sm" disabled={unsaved || pending} onClick={() => void startWith("new")}><strong>{t("この計画を新しくサーバーに置く")}</strong><span>{t("今の計画を送り、ほかの端末でも続きを開けます")}</span></button>
+        <button aria-label={t("サーバーの計画を開く")} className="btn btn-sm" disabled={unsaved || pending} onClick={() => void startWith("existing")}><strong>{t("サーバーの計画を開く")}</strong><span>{t("保存済みの計画を一覧から選んで受け取ります")}</span></button>
+      </div>
+      {unsaved && <p className="muted">{t("先に保存してください")}</p>}
+      {status.isDefaultServer && !status.credentials.account && <p className="muted">{t("Boxglow の同期サーバーは招待制の試験中です")}</p>}
+    </section>;
   const filename = status.file?.path.split(/[\\/]/).pop();
   const busy = pending || op.stage === "working";
   return <section className="sync-startup" aria-label={t("同期を始める")}>

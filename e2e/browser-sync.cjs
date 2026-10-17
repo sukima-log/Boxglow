@@ -48,7 +48,6 @@ const ROOT = path.resolve(__dirname, '..');
     await page.waitForFunction(() => document.querySelector('.sync-chip')?.getAttribute('data-state') === 'signed-out', null, { timeout: 15000 });
     check('ブラウザ同期: 裏方なしでも同期の印が出て、サインインしていない', (await chip.getAttribute('data-state')) === 'signed-out');
     await chip.click();
-    await page.getByRole('button', { name: '同期を始める', exact: true }).click();
     await page.getByRole('button', { name: 'この計画を新しくサーバーに置く', exact: true }).click();
     await page.getByRole('button', { name: 'GitHub でサインイン', exact: true }).click();
     const code = page.locator('.sync-panel__code'); await code.waitFor({ timeout: 15000 });

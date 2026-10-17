@@ -127,7 +127,7 @@ describe("サインインとサインアウト", () => {
     host.signIn("github");
     await settle();
     const during = host.status(file);
-    expect(during.signIn).toMatchObject({ provider: "github", userCode: expect.stringMatching(/^TEST-/), verificationUrl: "https://github.com/login/device" });
+    expect(during.signIn).toMatchObject({ provider: "github", userCode: expect.stringMatching(/^TEST-/), verificationUrl: expect.stringContaining("/fake/github/login/device") });
     // サーバー側で許可する
     const code = [...server.deviceCodes.keys()].at(-1)!;
     server.deviceCodes.set(code, { account: "acc-alice", login: "alice" });

@@ -12,7 +12,7 @@ import { ConflictGroups } from "./ConflictGroups";
 import { useEffect, useRef, useState } from "react";
 import { useProjectStore } from "../store/useProjectStore";
 import { planLabel } from "../sync/billing";
-import { SignInButtons } from "./SignInButtons";
+import { SignInButtons, signInOneStep, useAutoOpened } from "./SignInButtons";
 import { t } from "../i18n";
 import type { HaltItem, SyncStatus, HostAction } from "../sync/status";
 
@@ -404,7 +404,7 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
               <div className="sync-panel__row sync-panel__identities" title={t("このアカウントのサインインの手段。もう一方を足すと、どちらでサインインしても同じアカウントになります")}>
                 {(["github", "google"] as const).map((p) => account.identities!.includes(p)
                   ? <span key={p} className="sync-panel__identity" data-on="true">{p === "github" ? "GitHub" : "Google"} ✓</span>
-                  : <button key={p} className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "linkIdentity", provider: p })} title={p === "github" ? t("GitHub でもサインインできるようにする") : t("Google でもサインインできるようにする")}>+ {p === "github" ? "GitHub" : "Google"}</button>)}
+                  : <button key={p} className="btn btn-ghost btn-sm" onClick={() => void signInOneStep(act, p, true)} title={p === "github" ? t("GitHub でもサインインできるようにする") : t("Google でもサインインできるようにする")}>+ {p === "github" ? "GitHub" : "Google"}</button>)}
               </div>
             </div>
           )}
@@ -637,13 +637,16 @@ function RestoreEntry() {
  * 出力: 認可ページへのリンク、必要ならユーザーコード、取消ボタン。トークン保存・認可の監視はホストに任せる。 */
 export function SignInCode({ code, onCancel }: { code: NonNullable<SyncStatus["signIn"]>; onCancel: () => void }) {
   const [copyFailed,setCopyFailed] = useState(false);
+  const opened = useAutoOpened(code);
   if (code.provider === "google") {
     return (
       <div className="sync-panel__signin">
-        <div>{code.link ? t("Google を足す: ブラウザで次のページを開き、Google のアカウントで許可してください") : t("ブラウザで次のページを開き、Google のアカウントで許可してください")}</div>
-        <a href={code.url} target="_blank" rel="noreferrer">
-          {t("Google のサインインのページを開く")}
-        </a>
+        {opened
+          ? <div>{t("開いた Google のページで許可してください。終わると、ここに戻って続きます")} <a href={code.url} target="_blank" rel="noreferrer">{t("(開かなかった場合はこちら)")}</a></div>
+          : <>
+            <div>{code.link ? t("Google を足す: ブラウザで次のページを開き、Google のアカウントで許可してください") : t("ブラウザで次のページを開き、Google のアカウントで許可してください")}</div>
+            <a href={code.url} target="_blank" rel="noreferrer">{t("Google のサインインのページを開く")}</a>
+          </>}
         <button className="btn btn-ghost btn-sm" onClick={onCancel}>
           {t("中止")}
         </button>
@@ -652,14 +655,16 @@ export function SignInCode({ code, onCancel }: { code: NonNullable<SyncStatus["s
   }
   return (
     <div className="sync-panel__signin">
-      <div>{code.link ? t("GitHub を足す: ブラウザで次のページを開き、コードを入力してください") : t("ブラウザで次のページを開き、コードを入力してください")}</div>
-      <button className="btn btn-primary btn-sm" onClick={()=>{
+      {opened
+        ? <div>{t("開いた GitHub のページに、このコードを入力してください (コピー済み)")} <a href={code.verificationUrl} target="_blank" rel="noreferrer">{t("(開かなかった場合はこちら)")}</a></div>
+        : <div>{code.link ? t("GitHub を足す: ブラウザで次のページを開き、コードを入力してください") : t("ブラウザで次のページを開き、コードを入力してください")}</div>}
+      {!opened && <button className="btn btn-primary btn-sm" onClick={()=>{
         // クリック内で行う。コピーを先に始めてからページを開く (先に開くと、この画面の焦点が外れてコピーが断られる)。
         // コピーできない環境でもコードを残し、認可を代行しない。
         const copied = navigator.clipboard?.writeText(code.userCode);
         if (copied) copied.then(()=>setCopyFailed(false)).catch(()=>setCopyFailed(true)); else setCopyFailed(true);
         window.open(code.verificationUrl,"_blank","noopener,noreferrer");
-      }}>{t("コードをコピーして許可のページを開く")}</button>
+      }}>{t("コードをコピーして許可のページを開く")}</button>}
       {copyFailed&&<p role="status">{t("コピーできませんでした。下のコードを入力してください。")}</p>}
       <div className="sync-panel__code-row">
         <span className="sync-panel__code">{code.userCode}</span>

@@ -58,11 +58,12 @@ const ROOT = path.resolve(__dirname, '..');
     // サインイン: 欄の GitHub のボタン → コードが出る → (サーバー側で許可) → 印が「未接続」
     await chip.click();
     check('同期D: 起動だけでは有効化しない', !(await status()).file.enabled);
-    await page.getByRole('button', {name:'同期を始める',exact:true}).click();
     check('同期D: 開始前に送り先を表示', (await page.locator('.sync-startup').textContent()).includes(server.url));
     check('同期D3: 詳細欄を1つに集約', await page.locator('.sync-panel summary').filter({hasText:/^(接続の詳細|詳細と設定|その他)$/}).count() === 1);
     if(process.env.BOXGLOW_E2E_SHOTS){fs.mkdirSync(process.env.BOXGLOW_E2E_SHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.BOXGLOW_E2E_SHOTS,'serve-start.png')});}
     await page.getByRole('button', {name:'この計画を新しくサーバーに置く',exact:true}).click();
+    // (この検査では、押下で開くタブを塞ぎ、画面のボタン・リンクから開く経路 (タブを開けない環境) を確かめる)
+    await page.evaluate(()=>{window.open=(...args)=>{window.__authOpen=args;return null;};});
     await page.getByRole('button', { name: 'GitHub でサインイン', exact: true }).click();
     const code = page.locator('.sync-panel__code');
     await code.waitFor({ timeout: 10000 });
@@ -71,7 +72,7 @@ const ROOT = path.resolve(__dirname, '..');
     await page.evaluate(()=>{window.open=(...args)=>{window.__authOpen=args;return null;};Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async()=>{throw new Error('clipboard denied');}}});});
     await page.getByRole('button',{name:'コードをコピーして許可のページを開く',exact:true}).click();
     await page.getByText('コピーできませんでした。下のコードを入力してください。',{exact:true}).waitFor();
-    check('同期D: コピー不可でもコードが残り、認可ページを開く操作を保つ',await code.isVisible()&&await page.evaluate(()=>window.__authOpen[0]==='https://github.com/login/device'));
+    check('同期D: コピー不可でもコードが残り、認可ページを開く操作を保つ',await code.isVisible()&&await page.evaluate((u)=>window.__authOpen[0]===u+'/fake/github/login/device', server.url));
     // 招待されていない (招待制の試験中): やり直しを促さず、理由と順番待ちのリンクを出す。その後、もう一度サインインして続ける
     server.deviceCodes.set([...server.deviceCodes.keys()].at(-1), 'not-invited');
     const refused = await page.getByText('同期は招待制の試験中です。このアカウントはまだ招待されていません。', { exact: true }).waitFor({ timeout: 20000 }).then(() => true).catch(() => false);
@@ -209,7 +210,6 @@ const ROOT = path.resolve(__dirname, '..');
     const pageD=await browser.newPage({viewport:{width:1280,height:900}});
     await pageD.goto(`http://localhost:${portD}/?serve=1&lang=ja`);
     await pageD.locator('.sync-chip').click();
-    await pageD.getByRole('button',{name:'同期を始める',exact:true}).click();
     await pageD.getByRole('button',{name:'サーバーの計画を開く',exact:true}).click();
     await pageD.locator('.sync-project-row').first().waitFor();
     check('同期D: 2台目の一覧に計画名が出る', (await pageD.locator('.sync-project-row').first().textContent()).includes('同期の画面の検査'));

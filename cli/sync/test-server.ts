@@ -134,7 +134,7 @@ export class TestSyncServer {
     if (req.method === "POST" && req.url === "/v1/auth/device") {
       const code = "dc" + String(++this.codes).padStart(38, "0");
       this.deviceCodes.set(code, "pending");
-      plain(200, { device_code: code, user_code: "TEST-" + this.codes, verification_uri: "https://github.com/login/device", interval: 1, expires_in: 900 });
+      plain(200, { device_code: code, user_code: "TEST-" + this.codes, verification_uri: `${this.url}/fake/github/login/device`, interval: 1, expires_in: 900 });
       return;
     }
     // ---- Google のサインイン (取引の仲立ち。本番と同じ約束。試験は googleTx の状態を直接変えて「許可された」ことにする) ----

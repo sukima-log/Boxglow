@@ -6,6 +6,38 @@
  */
 import { t } from "../i18n";
 import type { HostAction, SyncStatus } from "../sync/status";
+import { useProjectStore } from "../store/useProjectStore";
+
+/** 自動で開いたサインインのページか (Google = URL、GitHub = コード)。store の印で描き直される */
+export const useAutoOpened = (code: NonNullable<SyncStatus["signIn"]>): boolean => useProjectStore((s) => s.signInOpened) === (code.provider === "google" ? code.url : code.userCode);
+
+/**
+ * サインイン (または手段の追加) を 1 回の押下で始める
+ *   押した瞬間に空のタブを開いておき (利用者の操作の中なので遮られない)、裏方からページの URL (Google) か、コードと許可ページ (GitHub) が届いたらそのタブを移す。
+ *   GitHub はコードの入力が要るので、コードをクリップボードにも入れる (入らなければ画面のコードを使う)。
+ *   タブを開けない環境 (VS Code の webview など) では、今までどおり画面のリンク / ボタンから開く
+ * Input : act = ホストへの操作, provider, link = サインイン済みのアカウントに手段を足す。Output: なし
+ */
+export async function signInOneStep(act: (a: HostAction) => Promise<unknown>, provider: "github" | "google", link = false): Promise<void> {
+  let tab: Window | null = null;
+  try { tab = window.open("about:blank", "_blank"); } catch { tab = null; }
+  await act(link ? { kind: "linkIdentity", provider } : { kind: "signIn", provider });
+  // 裏方がページを用意するまで待つ (通信があるので少し遅れる)
+  for (let i = 0; i < 150; i++) {
+    const code = useProjectStore.getState().syncStatus?.signIn;
+    if (code && code.provider === provider) {
+      if (tab) {
+        if (code.provider === "google") { tab.location.href = code.url; useProjectStore.setState({ signInOpened: code.url }); }
+        else { void navigator.clipboard?.writeText(code.userCode).catch(() => {}); tab.location.href = code.verificationUrl; useProjectStore.setState({ signInOpened: code.userCode }); }
+      }
+      return;
+    }
+    if (!useProjectStore.getState().syncStatus) break;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  // ページが届かなかった (失敗・中止): 空のタブは閉じる
+  if (tab) { try { tab.close(); } catch { /* 閉じられなくてもよい */ } }
+}
 
 /** 各社の印 (GitHub のマーク / Google の G)。装飾なので読み上げない */
 export function ProviderIcon({ provider }: { provider: "github" | "google" }) {
@@ -30,10 +62,10 @@ export function ProviderIcon({ provider }: { provider: "github" | "google" }) {
 export function SignInButtons({ act }: { act: (a: HostAction) => Promise<unknown> }) {
   return (
     <div className="signin-buttons">
-      <button className="btn signin-btn signin-btn--github" onClick={() => void act({ kind: "signIn", provider: "github" })}>
+      <button className="btn signin-btn signin-btn--github" onClick={() => void signInOneStep(act, "github")}>
         <ProviderIcon provider="github" /><span>{t("GitHub でサインイン")}</span>
       </button>
-      <button className="btn signin-btn signin-btn--google" onClick={() => void act({ kind: "signIn", provider: "google" })}>
+      <button className="btn signin-btn signin-btn--google" onClick={() => void signInOneStep(act, "google")}>
         <ProviderIcon provider="google" /><span>{t("Google でサインイン")}</span>
       </button>
     </div>

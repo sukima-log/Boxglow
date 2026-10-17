@@ -163,6 +163,8 @@ interface State {
   saveError: string | null;
   /** VS Code の中で、保存できない理由 (拡張がファイルを直接読み書きできない窓など)。あれば閲覧専用にして、この文を帯に出す */
   readonlyReason: string | null;
+  /** 1 段のサインインで自動で開いたページの印 (Google = URL、GitHub = コード)。SignInCode が案内を切り替えるために持つ */
+  signInOpened: string | null;
   /** VS Code の中で、拡張からファイルの中身をまだ受け取れていないときの案内 (Home 画面に出す)。受け取れたら null */
   hostNotice: string | null;
   /**
@@ -840,6 +842,7 @@ export const useProjectStore = create<State>((set, get) => {
     }
   , peerVersion: null
   , readonlyReason: null
+  , signInOpened: null
   , hostNotice: null
   , vscodeFile: null
   , createInVsCode: (name) => {

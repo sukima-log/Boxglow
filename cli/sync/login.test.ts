@@ -74,7 +74,7 @@ describe("boxglow login", () => {
     expect(modeOf(dirname(credentialsPath(server.url)))).toBe(0o700);
     const shown = lines.join("\n");
     expect(shown).toContain("TEST-1");
-    expect(shown).toContain("https://github.com/login/device");
+    expect(shown).toContain("/fake/github/login/device");
     expect(shown).toContain("alice");
     expect(shown).not.toContain(saved.token);
     // 控え・一時ファイルは残っていない
