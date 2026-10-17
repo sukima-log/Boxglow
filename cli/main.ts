@@ -3,7 +3,7 @@ import { selectSyncServer } from "./sync/server-config";
 import { findClaimBlock, claimCommand, prepareClaimSave, type ClaimCommand } from "./claims";
 import { covers, activeClaim, claimSummary, claimToken, claimsEnabled } from "../src/model/claims";
 import { randomUUID } from "node:crypto";
-import { actorOf } from "./actor";
+import { actorOf, sessionIdFromEnv } from "./actor";
 /**
  * boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポジトリ内の boxglow.json を操作する入口
  *
@@ -37,6 +37,7 @@ import { lint, lintCounts } from "../src/model/lint";
 import { boxMaterial, changedText, makeRecord, reviewStatus, reviewable, splitMaterial, staleAdvice } from "../src/model/review";
 import type { Block, ExpectKind } from "../src/model/types";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import AGENTS_SNIPPET_JA from "../docs/AGENTS_SNIPPET.md";
 import AGENTS_SNIPPET_EN from "../docs/AGENTS_SNIPPET.en.md";
 import { getLang, setLang, t, type Lang } from "../src/i18n/core";
@@ -46,7 +47,6 @@ import { CATEGORIES, findCategory } from "../src/model/categories";
 import { projectToMarkdown } from "../src/model/export";
 import { blockSize } from "../src/model/size";
 import { mergeProjects } from "../src/model/merge";
-import { execFileSync } from "node:child_process";
 
 /**
  * 人が入れたカテゴリ名をキーにする (知らない名前なら一覧を出して止める)
@@ -1012,15 +1012,6 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
         return;
       }
       const done = setupAgent({ root, agent, snippet: AGENTS_SNIPPET(), skill: SKILL_MD() });
-      // Codex の利用者設定にも MCP を登録する (codex コマンドがあるとき。プロジェクトの .codex/config.toml は信頼した後にしか読まれないため)
-      if (agent !== "claude-code") {
-        try {
-          execFileSync("codex", ["mcp", "get", "boxglow"], { stdio: "ignore" });
-        } catch {
-          try { execFileSync("codex", ["mcp", "add", "boxglow", "--", "npx", "-y", "boxglow", "mcp", "--actor", "codex"], { stdio: "ignore" }); out(t("Codex の利用者設定に MCP サーバ boxglow を登録しました (codex mcp add)")); }
-          catch { /* codex コマンドが無い・失敗: プロジェクトの .codex/config.toml で足りる */ }
-        }
-      }
       // 要具体化のボックスを AI が始められないようにする (人は影響なし)。利用者が明示的に決めていれば変えない
       if (!p.workflowPolicy?.startUnprepared) { p.workflowPolicy = { ...p.workflowPolicy, startUnprepared: "reject" }; out(t("要具体化のボックス (予定成果物・完了条件が未定) は AI が始められない設定にしました (policy --unprepared reject。人の操作は影響なし。warn に戻せます)")); }
       // 指示書に「context を読んでトークンを付ける」手順が入るので、計画の側でも確認トークンの要求を有効にする
@@ -1383,7 +1374,11 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       // 理由は活動とログの両方に残る。警告を消すだけの一時オプションにはしない。
       const note = [str(options.note), reason ? t("入力待ちで開始する理由: {reason}", { reason }) : ""].filter(Boolean).join("\n");
       // 今ここ (本当にいま作業しているボックス) は start したボックスに移る (now で手動でも切り替えられる)
-      save(path, setNow(setActivity(p, b.id, actor, "working", note), b.id, actor));
+      let started = setActivity(p, b.id, actor, "working", note);
+      // 始めたセッションの識別子を活動に残す (Stop フックが「このセッションの作業」だけを見るため。環境に無ければ付けない)
+      const session = sessionIdFromEnv();
+      if (session && started.blocks[b.id].activity) started = { ...started, blocks: { ...started.blocks, [b.id]: { ...started.blocks[b.id], activity: { ...started.blocks[b.id].activity!, session } } } };
+      save(path, setNow(started, b.id, actor));
       out(t("開始: 「{title}」({actor})", { title: b.title, actor }));
       return;
     }

@@ -167,7 +167,7 @@ export function blockReport(p: Project, blockId: string): string {
   if (descriptionReminder(b)) lines.push("", descriptionReminder(b));
   if (p.handoffs?.[blockId]) lines.push("", "## " + t("AI への引き継ぎ"), freshnessText(b, p.handoffs[blockId].at), p.handoffs[blockId].note);
   // 完了のときの検査結果 (B160)
-  if (b.verification) lines.push("", "## " + t("検査 (完了のとき)"), `${t("検査")}: ${b.verification.checked}`, ...(b.verification.notChecked ? [`${t("未実施")}: ${b.verification.notChecked}`] : []), ...(b.verification.limits ? [`${t("制限")}: ${b.verification.limits}`] : []), `(${b.verification.by}, ${b.verification.at})`);
+  if (b.verification) lines.push("", "## " + (b.status === "white" ? t("検査 (完了のとき)") : t("検査 (前回の完了のとき)")), `${t("検査")}: ${b.verification.checked}`, ...(b.verification.notChecked ? [`${t("未実施")}: ${b.verification.notChecked}`] : []), ...(b.verification.limits ? [`${t("制限")}: ${b.verification.limits}`] : []), `(${b.verification.by}, ${b.verification.at})`);
   lines.push("", "## " + t("入力"));
   for (const q of portsOf(p, blockId, "in")) {
     const src = incomingEdges(p, { portId: q.id, side: "outer" }).map((e) => `${name(p.ports[e.from.portId].blockId)}.${p.ports[e.from.portId].name}${e.auto ? ` (${t("自動")})` : ""}`);

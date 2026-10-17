@@ -54,8 +54,8 @@ Do not edit it directly; update it with `npx boxglow`.
 
 ## What runs automatically (hooks)
 
-`setup-agent` registers `boxglow hook` in the Claude Code / Codex hooks. After a session starts, resumes or is compacted, the plan's resume summary is injected into the context. When you are about to finish a reply while a box you started has no record (done / checkpoint / log), you are told to record first and continue. Editing boxglow.json directly (Edit / Write / apply_patch) is blocked. This is a safety net; keep recording as the steps above say.
-Reviews of a split or of readiness can be delegated to the subagent `boxglow-review` (it reads review-split / review-box, evaluates, and records with split-ok / box-ok).
+`setup-agent` registers `boxglow hook` in the Claude Code / Codex hooks. After a session starts, resumes or is compacted, the plan's resume summary is injected into the context. When you are about to finish a reply while a box started in this session has no handoff (done or checkpoint), you are told to record first and continue (a log entry is a progress note, not a handoff). Editing boxglow.json directly (Edit / Write / apply_patch) is blocked. This is a safety net; keep recording as the steps above say.
+Reviews of a split or of readiness can be delegated to the subagent `boxglow-review` (it reads review-split / review-box and returns its evaluation and reasoning; you, the parent, record split-ok / box-ok with that reasoning).
 
 ## Context token and handoff
 

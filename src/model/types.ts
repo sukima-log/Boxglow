@@ -125,6 +125,8 @@ export interface Activity {
   note: string;
   /** 始めた日時 (ISO) */
   since: string;
+  /** 始めたセッションの識別子 (Claude Code / Codex の環境変数から。Stop フックが「このセッションの作業」だけを見るため。無ければ対応付けない) */
+  session?: string;
 }
 
 /** 人間への質問と回答 */

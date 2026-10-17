@@ -82,13 +82,14 @@ describe("hooks・サブエージェント・Codex の設定 (利用者が仕組
     for (const e of ["session-start", "stop", "pre-tool"]) expect(all).toContain(`npx boxglow hook ${e} --actor claude-code`);
     expect(settings.hooks.SessionStart[0].matcher).toContain("compact");
     expect(settings.hooks.PreToolUse[0].matcher).toContain("Edit");
-    expect(settings.enableAllProjectMcpServers).toBe(true);
+    expect(settings.enableAllProjectMcpServers).toBeUndefined();   // ほかの MCP サーバの承認方針は変えない (R30-03)
+    expect(settings.enabledMcpjsonServers).toEqual(["boxglow"]);
     expect(readFileSync(join(opts.root, ".claude/agents/boxglow-review.md"), "utf8")).toContain("name: boxglow-review");
     expect(JSON.parse(readFileSync(join(opts.root, ".mcp.json"), "utf8")).mcpServers.boxglow.args).toContain("--actor");
     // もう一度実行しても増えない
     expect(setupAgent(opts)).toHaveLength(1);
     expect(JSON.parse(readFileSync(join(opts.root, ".claude/settings.json"), "utf8")).hooks.Stop).toHaveLength(1);
-    expect(checkAgentSetup(opts.root, "claude-code").every((l) => l.startsWith("OK"))).toBe(true);
+    expect(checkAgentSetup(opts.root, "claude-code").filter((l) => /^(OK|NG)/.test(l)).every((l) => l.startsWith("OK"))).toBe(true);
   });
   it("Codex: .codex/config.toml の MCP、.codex/hooks.json、openai.yaml、レビュー用のサブエージェントが入り、既存の config.toml は残る", () => {
     const opts = { ...fixture(), agent: "codex" };
@@ -105,7 +106,35 @@ describe("hooks・サブエージェント・Codex の設定 (利用者が仕組
     expect(readFileSync(join(opts.root, ".codex/agents/boxglow-review.toml"), "utf8")).toContain('name = "boxglow-review"');
     expect(setupAgent(opts)).toHaveLength(1);
     expect(toml).toBe(readFileSync(join(opts.root, ".codex/config.toml"), "utf8"));
-    expect(checkAgentSetup(opts.root, "codex").every((l) => l.startsWith("OK"))).toBe(true);
+    expect(checkAgentSetup(opts.root, "codex").filter((l) => /^(OK|NG)/.test(l)).every((l) => l.startsWith("OK"))).toBe(true);
     expect(checkAgentSetup(opts.root, "claude-code").some((l) => l.startsWith("NG"))).toBe(true);
+  });
+  it("Codex: 引用符付きの [mcp_servers.\"boxglow\"] も同じ表と見なして足さない。壊れた TOML なら何も書かない (R30-02)", () => {
+    const quoted = { ...fixture(), agent: "codex" };
+    mkdirSync(join(quoted.root, ".codex"));
+    writeFileSync(join(quoted.root, ".codex/config.toml"), '[mcp_servers."boxglow"]\ncommand = "custom-boxglow"\n');
+    setupAgent(quoted);
+    expect(readFileSync(join(quoted.root, ".codex/config.toml"), "utf8")).toBe('[mcp_servers."boxglow"]\ncommand = "custom-boxglow"\n');
+    expect(checkAgentSetup(quoted.root, "codex").some((l) => l.startsWith("OK .codex/config.toml"))).toBe(true);
+    const broken = { ...fixture(), agent: "codex" };
+    mkdirSync(join(broken.root, ".codex"));
+    writeFileSync(join(broken.root, ".codex/config.toml"), "model =\n");
+    expect(() => setupAgent(broken)).toThrow();
+    expect(existsSync(join(broken.root, "AGENTS.md"))).toBe(false);
+    expect(existsSync(join(broken.root, ".codex/hooks.json"))).toBe(false);
+    // mcp_servers がインラインの表だと、追記で二重定義になるので止める
+    const inline = { ...fixture(), agent: "codex" };
+    mkdirSync(join(inline.root, ".codex"));
+    writeFileSync(join(inline.root, ".codex/config.toml"), 'mcp_servers = { other = { command = "x" } }\n');
+    expect(() => setupAgent(inline)).toThrow();
+  });
+  it("--check は hooks の構造 (イベントと matcher) を見る", () => {
+    const opts = { ...fixture(), agent: "claude-code" };
+    setupAgent(opts);
+    const path = join(opts.root, ".claude/settings.json");
+    const settings = JSON.parse(readFileSync(path, "utf8"));
+    settings.hooks.PreToolUse[0].matcher = "^NeverThisTool$";
+    writeFileSync(path, JSON.stringify(settings));
+    expect(checkAgentSetup(opts.root, "claude-code").some((l) => l.startsWith("NG .claude/settings.json (hooks"))).toBe(true);
   });
 });

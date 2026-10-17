@@ -106,7 +106,7 @@ boxglow.json はリポジトリ直下に置く (`npx boxglow init --name "<プ�
 
 ### 自動で動く仕組み (hooks)
 
-`setup-agent` は Claude Code / Codex の hooks に `boxglow hook` を登録する。セッションの開始・再開・圧縮の後には計画の再開の概要 (resume) が自動で文脈に入る。応答を終えるとき、自分が start した箱に記録 (done / checkpoint / log) が無ければ「記録してから終える」よう続行が指示される。boxglow.json を Edit / Write / apply_patch で直接書き換える操作は止められる (CLI か MCP で更新する)。これらは指示の代わりではなく、忘れたときの保険なので、上の手順どおりに自分で記録する。
+`setup-agent` は Claude Code / Codex の hooks に `boxglow hook` を登録する。セッションの開始・再開・圧縮の後には計画の再開の概要 (resume) が自動で文脈に入る。応答を終えるとき、このセッションで start した箱に引き継ぎ (done か checkpoint) が無ければ「記録してから終える」よう続行が指示される (log は進捗のメモで、引き継ぎの代わりにならない)。boxglow.json を Edit / Write / apply_patch で直接書き換える操作は止められる (CLI か MCP で更新する)。これらは指示の代わりではなく、忘れたときの保険なので、上の手順どおりに自分で記録する。
 
 ### 確認トークンと引き継ぎ
 

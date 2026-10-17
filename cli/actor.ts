@@ -20,6 +20,11 @@ export function actorOf(explicit?: string, env: Environment = process.env): stri
   return executionAgent(env) ?? named ?? "agent";
 }
 
+/** 入力: 環境。出力: 実行中のエージェントのセッションの識別子 (無ければ undefined)。Claude Code は CLAUDE_SESSION_ID、Codex は CODEX_THREAD_ID / CODEX_SESSION_ID。BOXGLOW_SESSION_ID で明示もできる */
+export function sessionIdFromEnv(env: Environment = process.env): string | undefined {
+  return env.BOXGLOW_SESSION_ID || env.CLAUDE_SESSION_ID || env.CLAUDE_CODE_SESSION_ID || env.CODEX_THREAD_ID || env.CODEX_SESSION_ID || undefined;
+}
+
 /** 入力: 明示actorと環境。出力: 同期の案内先。操作権限は明示actorで別に判定する。 */
 export function syncAudienceFor(explicit?: string, env: Environment = process.env): "ai" | "human" {
   if (explicit && isHumanActor(explicit)) return "human";

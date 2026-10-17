@@ -39,5 +39,7 @@
       "Bash(boxglow *)"
     ]
   },
-  "enableAllProjectMcpServers": true
+  "enabledMcpjsonServers": [
+    "boxglow"
+  ]
 }

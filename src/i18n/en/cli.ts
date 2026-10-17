@@ -327,4 +327,11 @@ export const cli: Record<string, string> = {
 , "利用者が一度だけ行うこと:": "One-time steps for you:"
 , "Codex の利用者設定に MCP サーバ boxglow を登録しました (codex mcp add)": "Registered the MCP server boxglow in your Codex user config (codex mcp add)"
 , "要具体化のボックス (予定成果物・完了条件が未定) は AI が始められない設定にしました (policy --unprepared reject。人の操作は影響なし。warn に戻せます)": "Boxes that still need detail (no planned deliverable / acceptance) can no longer be started by an agent (policy --unprepared reject; people are not affected; set it back to warn if you prefer)"
+, "Boxglow: このセッションで作業中にしたボックスに引き継ぎがありません: {list}。終わる前に、完了なら `npx boxglow done <ボックス> --artifact \"<名前>=<パス>\" --checked \"<実行した検査と結果>\"`、続きがあるなら `npx boxglow checkpoint <ボックス> --note \"分かったこと; 次にすること; 未解決のこと\"` を実行する (guard が有効なら --context-token を付ける)。": "Boxglow: boxes started in this session have no handoff: {list}. Before finishing, run `npx boxglow done <box> --artifact \"<name>=<path>\" --checked \"<checks run and results>\"` if done, or `npx boxglow checkpoint <box> --note \"findings; next steps; open questions\"` if work continues (add --context-token when the guard is on)."
+, "(CLI の許可と、.mcp.json の boxglow の承認)": "(CLI allowed, boxglow approved in .mcp.json)"
+, "(OK = 設定ファイルが入っている。エージェント側の承認・信頼と、実際に発火したかは、ここでは確認できない)": "(OK = the file is in place. Approval / trust on the agent side, and whether the hooks actually fired, cannot be checked here)"
+, "Codex: /hooks を開いて Boxglow の hooks を承認する (初回と、hooks の定義が変わったとき。未承認の hooks は動かない)": "Codex: open /hooks and approve the Boxglow hooks (the first time, and again when the hook definitions change; unapproved hooks do not run)"
+, "Codex: 利用者設定にも MCP を入れるなら (プロジェクトの信頼の前から使える): codex mcp add boxglow -- npx -y boxglow mcp --actor codex": "Codex: to register the MCP server in your user config too (works before the project is trusted): codex mcp add boxglow -- npx -y boxglow mcp --actor codex"
+, "Claude Code: プロジェクトを信頼して開き、/mcp で boxglow の接続状態を確かめる (承認待ち・拒否があれば表示に従う)": "Claude Code: open the project as trusted and check the boxglow connection with /mcp (follow the prompt if it is pending approval or denied)"
+, "検査 (前回の完了のとき)": "Verification (from the previous done)"
 };

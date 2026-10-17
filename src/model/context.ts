@@ -249,6 +249,7 @@ export function briefContext(p: Project, blockId: string) {
     , handoff: target.handoff
     , inputs, outputs
     , artifacts: target.artifacts
+    , verification: target.verification
       // 入力の不足を、先頭で分かるようにまとめる
     , missingInputs: inputs.filter((i) => i.missing).map((i) => i.name)
     }

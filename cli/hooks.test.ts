@@ -32,25 +32,31 @@ describe("session-start", () => {
 });
 
 describe("stop", () => {
-  it("自分が作業中にした箱に記録が無ければ続行を指示する。記録があれば・2 回目なら何も出さない", () => {
+  it("このセッションが作業中にした箱に引き継ぎが無ければ続行を指示する。別セッション・識別子無し・2 回目・引き継ぎ済みなら何も出さない", () => {
     const { p, id } = plan();
-    const started = setActivity(p, id, "claude-code", "working", "着手");
-    const r = runHook("stop", {}, started, "claude-code");
+    const started0 = setActivity(p, id, "claude-code", "working", "着手");
+    // セッションの識別子が無い作業 (古い版・別プロセス) は対象にしない (別セッションの作業を引き取らせない。Codex レビュー 30 R30-04)
+    expect(runHook("stop", { session_id: "s1" }, started0, "claude-code").stdout).toBe("");
+    const started = { ...started0, blocks: { ...started0.blocks, [id]: { ...started0.blocks[id], activity: { ...started0.blocks[id].activity!, session: "s1" } } } };
+    const r = runHook("stop", { session_id: "s1" }, started, "claude-code");
     const parsed = JSON.parse(r.stdout) as { decision: string; reason: string };
     expect(parsed.decision).toBe("block");
     expect(parsed.reason).toContain("実装する");
     expect(parsed.reason).toContain("checkpoint");
+    // 別のセッション・識別子の無い入力・別の記録者は止めない
+    expect(runHook("stop", { session_id: "s2" }, started, "claude-code").stdout).toBe("");
+    expect(runHook("stop", {}, started, "claude-code").stdout).toBe("");
+    expect(runHook("stop", { session_id: "s1" }, started, "codex").stdout).toBe("");
+    // Codex の thread-id でも対応付ける
+    expect(JSON.parse(runHook("stop", { "thread-id": "s1" }, started, "claude-code").stdout).decision).toBe("block");
     // 2 回目 (stop_hook_active) は止めない
-    expect(runHook("stop", { stop_hook_active: true }, started, "claude-code").stdout).toBe("");
-    // 別の記録者の作業は見ない
-    expect(runHook("stop", {}, started, "codex").stdout).toBe("");
-    // 引き継ぎメモ (checkpoint) があれば止めない
-    const withHandoff = { ...started, handoffs: { [id]: { note: "途中", actor: "claude-code", at: new Date(Date.now() + 1000).toISOString() } } };
-    expect(unrecordedWork(withHandoff, "claude-code")).toEqual([]);
-    expect(runHook("stop", {}, withHandoff, "claude-code").stdout).toBe("");
-    // 作業記録 (log) でもよい。サブエージェント (claude-code-xxx) の記録も自分の分
-    const withLog = { ...started, blocks: { ...started.blocks, [id]: { ...started.blocks[id], log: [{ id: "l1", at: new Date(Date.now() + 1000).toISOString(), by: "claude-code-review", text: "確認" }] } } };
-    expect(unrecordedWork(withLog, "claude-code")).toEqual([]);
+    expect(runHook("stop", { session_id: "s1", stop_hook_active: true }, started, "claude-code").stdout).toBe("");
+    // 引き継ぎメモ (checkpoint) があれば止めない。サブエージェント (claude-code-xxx) の引き継ぎも自分の分
+    const withHandoff = { ...started, handoffs: { [id]: { note: "途中", actor: "claude-code-review", at: new Date(Date.now() + 1000).toISOString() } } };
+    expect(unrecordedWork(withHandoff, "claude-code", "s1")).toEqual([]);
+    // 作業記録 (log) は引き継ぎの代わりにならない (開始直後の 1 行で通らない。R30-06)
+    const withLog = { ...started, blocks: { ...started.blocks, [id]: { ...started.blocks[id], log: [{ id: "l1", at: new Date(Date.now() + 1000).toISOString(), by: "claude-code", text: "確認" }] } } };
+    expect(unrecordedWork(withLog, "claude-code", "s1")).toHaveLength(1);
   });
 });
 
@@ -60,6 +66,11 @@ describe("pre-tool", () => {
     expect(editsPlanFile("Write", { file_path: "sub/boxglow.json" })).toBe(true);
     expect(editsPlanFile("Edit", { file_path: "/repo/src/app.ts" })).toBe(false);
     expect(editsPlanFile("Edit", { file_path: "/repo/boxglow.json.bak" })).toBe(false);
+    // Codex の公式の入力は command (R30-01)。移動先も見る。myboxglow.json は対象にしない
+    expect(editsPlanFile("apply_patch", { command: "*** Begin Patch\n*** Update File: boxglow.json\n@@\n-old\n+new\n*** End Patch" })).toBe(true);
+    expect(editsPlanFile("apply_patch", { command: "*** Begin Patch\n*** Update File: sub/dir/boxglow.json\n*** End Patch" })).toBe(true);
+    expect(editsPlanFile("apply_patch", { command: "*** Begin Patch\n*** Update File: src/a.ts\n*** Move to: boxglow.json\n*** End Patch" })).toBe(true);
+    expect(editsPlanFile("apply_patch", { command: "*** Begin Patch\n*** Update File: myboxglow.json\n*** End Patch" })).toBe(false);
     expect(editsPlanFile("apply_patch", { patch: "*** Begin Patch\n*** Update File: boxglow.json\n@@\n*** End Patch" })).toBe(true);
     expect(editsPlanFile("apply_patch", { patch: "*** Begin Patch\n*** Update File: src/a.ts\n*** End Patch" })).toBe(false);
     expect(editsPlanFile("Bash", { command: "cat boxglow.json" })).toBe(false);

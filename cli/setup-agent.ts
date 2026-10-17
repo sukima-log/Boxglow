@@ -10,6 +10,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { parse as parseToml } from "smol-toml";
 // 文言を今の言語 (日本語 / 英語) で出す
 import { t } from "../src/i18n/core";
 
@@ -97,8 +98,8 @@ function reviewAgentText(actor: "claude-code" | "codex"): { description: string;
 1. 対象のボックスを受け取り、\`npx boxglow context <box> --actor {actor}-review\` を読んで確認トークンを控える
 2. 分解のレビューなら \`npx boxglow review-split <親> --actor {actor}-review\`、着手準備のレビューなら \`npx boxglow review-box <box> --actor {actor}-review\` で材料とチェック項目を読む
 3. チェック項目ごとに、材料のどこを見て何と判断したかを書く。直すべき点があれば、直す内容を具体的に (ボックスの key・出力名・期待する文) 返す
-4. 問題が無ければ \`npx boxglow split-ok <親> --note "<根拠>" --context-token <確認トークン>\` または \`npx boxglow box-ok <box> --note "<根拠>" --context-token <確認トークン>\` で記録する
-5. boxglow.json は直接編集しない。判断が要ることは \`npx boxglow ask\` で残す`, { actor })
+4. 評価・根拠・対象のボックス (key) を親へ返す。記録は親が行う: 親が最新の \`context\` を読み、自分の記録者名と受け持ちで \`split-ok <親> --note "<根拠>"\` / \`box-ok <box> --note "<根拠>"\` を実行する (受け持ち制御が有効な計画では、子が親の受け持ちで書くことはできない)
+5. boxglow.json は直接編集しない。判断が要ることは親に返し、親が \`npx boxglow ask\` で残す`, { actor })
   };
 }
 
@@ -141,9 +142,16 @@ export function setupAgent(opts: { root: string; agent: string; snippet: string;
     // プロジェクトの .codex/config.toml に手元の MCP サーバ (信頼したプロジェクトで読まれる)。既に boxglow の表があれば触らない
     const tomlPath = join(root, ".codex/config.toml");
     const toml = existsSync(tomlPath) ? readFileSync(tomlPath, "utf8") : "";
-    if (!/^\s*\[mcp_servers\.boxglow\]/m.test(toml)) {
+    // TOML として読んで判定する (引用符付きのキー・空白も同じ表。壊れた TOML なら何も書かずに止める。Codex レビュー 30 R30-02)
+    let parsed: Record<string, unknown>;
+    try { parsed = parseToml(toml) as Record<string, unknown>; } catch (e) { throw new Error(t("設定の形が正しくありません: {where}", { where: tomlPath + " (" + (e instanceof Error ? e.message.split("\n")[0] : String(e)) + ")" })); }
+    const servers = object(parsed.mcp_servers, "mcp_servers");
+    if (!Object.hasOwn(servers, "boxglow")) {
       const block = `[mcp_servers.boxglow]\ncommand = "npx"\nargs = ["-y", "boxglow", "mcp", "--actor", "codex"]\ndefault_tools_approval_mode = "auto"\n`;
-      files.set(".codex/config.toml", (toml.trim() ? toml.replace(/\s*$/, "\n\n") : "") + block);
+      const candidate = (toml.trim() ? toml.replace(/\s*$/, "\n\n") : "") + block;
+      // 単純な追記で不正になる形 (mcp_servers がインラインの表など) は、書く前に止める
+      try { parseToml(candidate); } catch { throw new Error(t("設定の形が正しくありません: {where}", { where: tomlPath + " (mcp_servers)" })); }
+      files.set(".codex/config.toml", candidate);
     }
     // hooks (.codex/hooks.json。他の hooks は残す)
     const hooksFile = readObject(join(root, ".codex/hooks.json"));
@@ -166,7 +174,10 @@ export function setupAgent(opts: { root: string; agent: string; snippet: string;
     if (!Array.isArray(allow)) throw new Error(t("設定の形が正しくありません: {where}", { where: "permissions.allow" }));
     for (const rule of ["Bash(npx boxglow *)", "Bash(boxglow *)"]) if (!allow.includes(rule)) { allow.push(rule); changed = true; }
     permissions.allow = allow; settings.permissions = permissions;
-    if (settings.enableAllProjectMcpServers !== true) { settings.enableAllProjectMcpServers = true; changed = true; }
+    // .mcp.json の boxglow だけを承認済みにする (ほかの MCP サーバの承認方針は変えない。既存の拒否も残す。R30-03)
+    const enabled = settings.enabledMcpjsonServers ?? [];
+    if (!Array.isArray(enabled) || enabled.some((x) => typeof x !== "string")) throw new Error(t("設定の形が正しくありません: {where}", { where: "enabledMcpjsonServers" }));
+    if (!enabled.includes("boxglow")) { settings.enabledMcpjsonServers = [...enabled, "boxglow"]; changed = true; }
     if (changed) files.set(".claude/settings.json", JSON.stringify(settings, null, 2) + "\n");
     // レビュー用のサブエージェント
     const r = reviewAgentText("claude-code");
@@ -201,13 +212,22 @@ export function checkAgentSetup(root: string, agent: string): string[] {
   const claude = agent !== "codex";
   const lines: string[] = [];
   const has = (rel: string, test?: (text: string) => boolean) => { const p = join(root, rel); if (!existsSync(p)) return false; return test ? test(readFileSync(p, "utf8")) : true; };
-  const hooksOk = (rel: string, actor: "claude-code" | "codex") => has(rel, (text) => { try { const o = JSON.parse(text) as { hooks?: Record<string, unknown> }; const s = JSON.stringify(o.hooks ?? {}); return ["session-start", "stop", "pre-tool"].every((e) => new RegExp(`boxglow(\\.js)? hook ${e} --actor ${actor}`).test(s)); } catch { return false; } });
+  // hooks の構造を見る: イベントごとに、期待する matcher (SessionStart は compact を含む、PreToolUse は編集のツール名) と、そのイベントの中に Boxglow のコマンドがあること
+  const hooksOk = (rel: string, actor: "claude-code" | "codex") => has(rel, (text) => {
+    try {
+      const o = JSON.parse(text) as { hooks?: Record<string, { matcher?: string; hooks?: { command?: string }[] }[]> };
+      const hooks = o.hooks ?? {};
+      const hasCmd = (event: string, name: string, matcherNeeds: string[]) => (hooks[event] ?? []).some((entry) =>
+        matcherNeeds.every((m) => (entry.matcher ?? "").includes(m)) && (entry.hooks ?? []).some((h) => new RegExp(`boxglow(\\.js)? hook ${name} --actor ${actor}`).test(h.command ?? "")));
+      return hasCmd("SessionStart", "session-start", ["compact"]) && hasCmd("Stop", "stop", []) && hasCmd("PreToolUse", "pre-tool", actor === "codex" ? ["apply_patch"] : ["Edit", "Write"]);
+    } catch { return false; }
+  });
   const row = (ok: boolean, label: string) => lines.push(`${ok ? "OK" : "NG"} ${label}`);
   if (claude) {
     row(has("CLAUDE.md", (s) => s.includes(BEGIN)), "CLAUDE.md " + t("(Boxglow の手順)"));
     row(has(".claude/skills/boxglow/SKILL.md"), ".claude/skills/boxglow/SKILL.md");
     row(hooksOk(".claude/settings.json", "claude-code"), ".claude/settings.json " + t("(hooks: session-start / stop / pre-tool)"));
-    row(has(".claude/settings.json", (s) => s.includes("Bash(npx boxglow *)") && s.includes("enableAllProjectMcpServers")), ".claude/settings.json " + t("(CLI の許可と .mcp.json の自動承認)"));
+    row(has(".claude/settings.json", (s) => { try { const o = JSON.parse(s) as { permissions?: { allow?: string[] }; enableAllProjectMcpServers?: boolean; enabledMcpjsonServers?: string[]; disabledMcpjsonServers?: string[] }; return !!o.permissions?.allow?.includes("Bash(npx boxglow *)") && (o.enableAllProjectMcpServers === true || !!o.enabledMcpjsonServers?.includes("boxglow")) && !o.disabledMcpjsonServers?.includes("boxglow"); } catch { return false; } }), ".claude/settings.json " + t("(CLI の許可と、.mcp.json の boxglow の承認)"));
     row(has(".claude/agents/boxglow-review.md"), ".claude/agents/boxglow-review.md");
     row(has(".mcp.json", (s) => s.includes('"boxglow"')), ".mcp.json " + t("(MCP サーバ boxglow)"));
   }
@@ -215,10 +235,11 @@ export function checkAgentSetup(root: string, agent: string): string[] {
     row(has("AGENTS.md", (s) => s.includes(BEGIN)), "AGENTS.md " + t("(Boxglow の手順)"));
     row(has(".agents/skills/boxglow/SKILL.md"), ".agents/skills/boxglow/SKILL.md");
     row(has(".agents/skills/boxglow/agents/openai.yaml"), ".agents/skills/boxglow/agents/openai.yaml " + t("(MCP への依存)"));
-    row(has(".codex/config.toml", (s) => /^\s*\[mcp_servers\.boxglow\]/m.test(s)), ".codex/config.toml " + t("(MCP サーバ boxglow)"));
+    row(has(".codex/config.toml", (s) => { try { return Object.hasOwn(object((parseToml(s) as Record<string, unknown>).mcp_servers, "mcp_servers"), "boxglow"); } catch { return false; } }), ".codex/config.toml " + t("(MCP サーバ boxglow)"));
     row(hooksOk(".codex/hooks.json", "codex"), ".codex/hooks.json " + t("(hooks: session-start / stop / pre-tool)"));
     row(has(".codex/agents/boxglow-review.toml"), ".codex/agents/boxglow-review.toml");
   }
+  lines.push(t("(OK = 設定ファイルが入っている。エージェント側の承認・信頼と、実際に発火したかは、ここでは確認できない)"));
   return lines;
 }
 
@@ -230,8 +251,9 @@ export function oneTimeSteps(agent: string): string[] {
   const lines: string[] = [];
   if (agent !== "claude-code") {
     lines.push(t("Codex: このプロジェクトを初めて開くときに「信頼しますか」と聞かれたら信頼する (.codex の MCP と hooks は信頼したプロジェクトでだけ動く)"));
-    lines.push(t("Codex: 一度 /hooks を開いて Boxglow の hooks を承認する (未承認の hooks は動かない)"));
+    lines.push(t("Codex: /hooks を開いて Boxglow の hooks を承認する (初回と、hooks の定義が変わったとき。未承認の hooks は動かない)"));
+    lines.push(t("Codex: 利用者設定にも MCP を入れるなら (プロジェクトの信頼の前から使える): codex mcp add boxglow -- npx -y boxglow mcp --actor codex"));
   }
-  if (agent !== "codex") lines.push(t("Claude Code: 追加の操作はありません (次に開いたときから有効)"));
+  if (agent !== "codex") lines.push(t("Claude Code: プロジェクトを信頼して開き、/mcp で boxglow の接続状態を確かめる (承認待ち・拒否があれば表示に従う)"));
   return lines;
 }
