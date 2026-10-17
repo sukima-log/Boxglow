@@ -230,7 +230,7 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
         <SignInCode code={status.signIn} onCancel={() => void act({ kind: "cancelSignIn" })} />
       ) : (
         <div className="sync-panel__row">
-          {status.support === "ok" && !account && status.credentials.source !== "env" && (!status.server || file?.binding || status.startup?.stage === "signin") && (
+          {status.support === "ok" && !account && status.credentials.source !== "env" && (!status.server || file?.binding) && !status.startup && (
             <SignInButtons act={act} />
           )}
           {file && ready && !file.enabled && !status.startup && (!status.server || file.binding) && (

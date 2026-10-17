@@ -41,12 +41,11 @@ export function SyncStartup({ status, act, unsaved, receive = false }: {
    <button className="btn btn-primary btn-sm" disabled={unsaved} onClick={() => void act({ kind: "continueStart", operationId: op.operationId, intent: "new" })}>{t("この計画を新しくサーバーに置く")}</button>
    <button className="btn btn-sm" disabled={unsaved} onClick={() => void act({ kind: "continueStart", operationId: op.operationId, intent: "existing" })}>{t("サーバーの計画を開く")}</button>
   </div>}
-  {op.stage === "signin" && !receive && <p>{t("サインイン後、選んだ手順を続けます。")}</p>}
-  {/* 受け取り専用のときは、サインインの手段とコードをここに出す (同期パネルが無い Home から使うため) */}
-  {op.stage === "signin" && receive && (status.signIn
+  {/* サインインの段階: ボタンは中止より前のここに出す。コードは、受け取り専用 (同期パネルが無い Home) のときだけここに出す (ふつうは同期パネルが出す) */}
+  {op.stage === "signin" && (receive && status.signIn
     ? <SignInCode code={status.signIn} onCancel={() => void act({ kind: "cancelSignIn" })} />
-    : <div className="sync-startup__signin">
-        <p>{t("サインインすると、サーバーにある自分の計画を選べます。")}</p>
+    : !status.signIn && <div className="sync-startup__signin">
+        <p>{receive ? t("サインインすると、サーバーにある自分の計画を選べます。") : t("サインイン後、選んだ手順を続けます。")}</p>
         <SignInButtons act={act} />
       </div>)}
   {busy && <p role="status">{t("処理しています…")}</p>}
