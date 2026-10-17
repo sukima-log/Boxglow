@@ -12,7 +12,7 @@ const BASE = "__BASE__";
 const ASSETS = __ASSETS__;
 const CACHE = "boxglow-" + VERSION;
 const SHELL_KEY = BASE;   // 入口の控えの鍵 (どの経路の入口でもこの 1 つに控える)
-const EXTRA = [BASE + "manifest.webmanifest", BASE + "icon-192.png", BASE + "icon-512.png", BASE + "favicon.svg"];
+const EXTRA = [BASE + "manifest.webmanifest", BASE + "icon-192.png", BASE + "icon-512.png", BASE + "icon-512-maskable.png", BASE + "favicon.svg"];
 
 /** 1 つずつ取って控える (失敗しても続ける)。Input: 控え, URL の一覧 */
 async function precache(cache, urls) {

@@ -95,7 +95,7 @@ const { chromium, BASE, check, result } = require('./lib.cjs');
         const sw = await fetch(base + 'sw.js').then((r) => r.ok ? r.text() : '').catch(() => '');
         return { manifest: manifest?.display, icons: manifest?.icons?.length ?? 0, sw: sw.includes('boxglow-') && !sw.includes('__BUILD__'), registered: !!navigator.serviceWorker?.controller };
       }, BASE);
-      check('PWA: マニフェスト (standalone・アイコン 2 つ) と sw.js (版入り) が配信される', pwa.manifest === 'standalone' && pwa.icons === 2 && pwa.sw, JSON.stringify(pwa));
+      check('PWA: マニフェスト (standalone・アイコン 3 つ) と sw.js (版入り) が配信される', pwa.manifest === 'standalone' && pwa.icons === 3 && pwa.sw, JSON.stringify(pwa));
       check('PWA: 試験環境では Service Worker を登録しない', pwa.registered === false);
       await context.close();
       // ?pwa=1 で登録し、最初の起動 (まだ制御されていない読み込み) の後に機内モード相当にしても開ける

@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- アプリのアイコン (PWA / ホーム画面用): ティールの角丸タイルの上に、黒 → 斜線 → 白 (光る) の 3 つの箱 (New → In Progress → Done)。
+       箱は中央 60% に収める (iOS の角丸と maskable の切り抜きで端が切れない)。maskable 版は render-icons.cjs が背景だけ外周まで伸ばして描く -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#17a0a0"/>
+      <stop offset="1" stop-color="#085c5c"/>
+    </linearGradient>
+    <radialGradient id="shine" cx="0.3" cy="0.25" r="0.8">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="0.6" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="16"/></filter>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="6" stdDeviation="8" flood-color="#000" flood-opacity="0.28"/></filter>
+    <pattern id="hatch" width="18" height="18" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="18" height="18" fill="#e9edf0"/><rect width="6" height="18" fill="#9aa4ad"/>
+    </pattern>
+  </defs>
+  <rect id="tile" x="0" y="0" width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="url(#shine)"/>
+  <!-- 箱の列 (中央 60%: 102〜410) -->
+  <g id="boxes" filter="url(#shadow)">
+    <!-- 黒の箱 (New) -->
+    <rect x="104" y="286" width="122" height="122" rx="28" fill="#20262c" stroke="#5c646c" stroke-width="12"/>
+    <!-- 斜線の箱 (In Progress) -->
+    <rect x="195" y="195" width="122" height="122" rx="28" fill="url(#hatch)" stroke="#20262c" stroke-width="12"/>
+    <!-- 白の箱 (Done): 光る -->
+    <rect x="286" y="104" width="122" height="122" rx="28" fill="#dffafa" opacity="0.9" filter="url(#glow)"/>
+    <rect x="286" y="104" width="122" height="122" rx="28" fill="#fbfdfd" stroke="#20262c" stroke-width="12"/>
+    <!-- 済みの印 -->
+    <path d="M318 164 l20 20 l40 -44" fill="none" stroke="#0d8080" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

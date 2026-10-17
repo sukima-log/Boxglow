@@ -193,10 +193,11 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('担当の一覧: 表を出している間も、左下の同じ切り替えが表示され、表の記号が押された状態',await page.locator('.task-table-view__switch .view-switch__table').getAttribute('aria-pressed')==='true');
     check('担当の一覧: 自分を決めていなければ「全員」で開き、担当の列が出る',await page.locator('.task-table-view select').inputValue()==='__everyone' && await page.locator('.task-table thead').getByRole('button',{name:/^担当/}).count()===1 && await page.locator('.task-table tbody tr').count()===12,String(await page.locator('.task-table tbody tr').count()));
     await page.locator('.task-table-view select').selectOption({label:'さとう'});await page.waitForTimeout(300);
+    check('担当の一覧: 今ここ (NOW) の箱に NOW の札が出る', (await page.locator('.task-table .task-table__now').count()) === 1);
     check('担当の一覧: 1 人を選ぶと担当の列は出ない',await page.locator('.task-table thead').getByRole('button',{name:/^担当/}).count()===0);
     const tableRows=(await page.locator('.task-table tbody tr').allInnerTexts()).map((x)=>x.replace(/\s+/g,' ').trim());
     // さとうの担当: 実装する (期日あり) が先頭、期日の無いものは B 番号の順。中の深い階層の箱 (GitHub OAuth の道) も出る
-    check('担当の一覧: さとうの未完了の担当が期日の近い順に並ぶ (期日の無いものは後ろ)',tableRows.length===4 && /^B4 実装する/.test(tableRows[0]) && /^B7 バックエンド/.test(tableRows[1]) && /^B14 GitHub OAuth/.test(tableRows[2]) && /^B16 トークンを保存する .*実装する › バックエンド › GitHub OAuth で実装する/.test(tableRows[3]),JSON.stringify(tableRows));
+    check('担当の一覧: さとうの未完了の担当が期日の近い順に並ぶ (期日の無いものは後ろ)',tableRows.length===4 && /^B4 実装する/.test(tableRows[0]) && /^B7 バックエンド/.test(tableRows[1]) && /^B14 GitHub OAuth/.test(tableRows[2]) && /^B16 NOW ?トークンを保存する .*実装する › バックエンド › GitHub OAuth で実装する/.test(tableRows[3]),JSON.stringify(tableRows));
     await page.locator('.task-table-view__toggle input').first().check();
     check('担当の一覧: 完了済みも表示すると、完了済みの担当も出る',await page.locator('.task-table tbody tr').count()===7);
     // 準備の列: 要具体化 (予定成果物・完了条件が無い) / 待ち n / ✓。「要具体化のみ」で絞れる

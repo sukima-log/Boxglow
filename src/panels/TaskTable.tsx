@@ -63,6 +63,8 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
   const member = project.members.find((m) => m.id === target);
   const everyone = !member && target !== "__unassigned";
   const effective: AssigneeTarget = member ? { memberId: member.id } : everyone ? { everyone: true } : { unassigned: true };
+  // 今ここ (NOW) の箱: 表でも、図と同じ橙の NOW の札で分かるようにする
+  const nowIds = useMemo(() => new Set((project.now ?? []).map((n) => n.blockId)), [project.now]);
   const rows = useMemo(() => {
     const list = assignmentRows(project, effective, { includeDone, onlyUnprepared });
     const sorted = [...list].sort((x, y) => compareBy(sort.key, x, y));
@@ -148,7 +150,7 @@ export function TaskTable({ project, initial }: { project: Project; initial: Ass
               {rows.map((r) => (
                 <tr key={r.id} onClick={() => open(r.id)} tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter") open(r.id); }} title={t("右に詳細を開く")} aria-selected={r.id === selectedId} data-selected={r.id === selectedId}>
                   <td><span className="dec-key">{r.key}</span></td>
-                  <td className="task-table__title">{r.title}</td>
+                  <td className="task-table__title">{nowIds.has(r.id) && <span className="task-table__now" title={t("今ここ: 本当にいま作業しているボックス")}>NOW</span>}{r.title}</td>
                   <td className="task-table__where">{r.where}</td>
                   {everyone && <td className="task-table__assignees">{r.assignees.length ? r.assignees.join(", ") : <span className="task-table__none">{t("未担当")}</span>}</td>}
                   <td><span className={`task-table__status ${r.status}`}>{STATUS_LABEL[r.status]}</span></td>
