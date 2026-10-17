@@ -16,7 +16,7 @@ In View mode the boxes are laid out in dependency order as numbered stages, left
 
 ## What you see
 
-- **Where the agent is working**: the box it is on carries a "Working" tag; the top bar counts what is in progress and what needs a decision.
+- **Where the agent is working**: the box it is on says "Working" (and the NOW marker shows the box being worked on right now); the top bar counts what is in progress and what needs a decision, and the heading strip names the final deliverable and the first pending decision.
 - **What is done and what is not**: the card header shows the state: teal for in progress, light for done, slate for new. Green wires carry a finished deliverable, amber wires (and the "Waiting" label on an input) are still waiting.
 - **The block tree**: the sidebar button opens the whole hierarchy. Jump to a box, or add, rename, move and delete boxes right from the tree.
 

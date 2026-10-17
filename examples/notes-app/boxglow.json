@@ -39,7 +39,10 @@
       "collapsed": false,
       "artifacts": [],
       "activity": null,
-      "decisions": []
+      "decisions": [],
+      "scope": {
+        "acceptance": "The released URL works end to end (B5)"
+      }
     },
     "ZMFSNdn0cY": {
       "id": "ZMFSNdn0cY",
@@ -75,7 +78,10 @@
       "artifacts": [],
       "activity": null,
       "decisions": [],
-      "category": "build"
+      "category": "build",
+      "scope": {
+        "acceptance": "All API boxes done and the deployed URL answers (B14)"
+      }
     },
     "3u5hKihF4D": {
       "id": "3u5hKihF4D",
@@ -93,7 +99,10 @@
       "artifacts": [],
       "activity": null,
       "decisions": [],
-      "category": "ui"
+      "category": "ui",
+      "scope": {
+        "acceptance": "All screens done and bundled (B18)"
+      }
     },
     "0fkP95FsUN": {
       "id": "0fkP95FsUN",
@@ -111,7 +120,10 @@
       "artifacts": [],
       "activity": null,
       "decisions": [],
-      "category": "ops"
+      "category": "ops",
+      "scope": {
+        "acceptance": "E2E report green, guide written, production deployed (B19-B21)"
+      }
     },
     "LYc11K8ruJ": {
       "id": "LYc11K8ruJ",
@@ -235,7 +247,10 @@
         "note": "Indexing titles and bodies with SQLite FTS5",
         "since": "2026-10-03T14:45:46.115Z"
       },
-      "decisions": []
+      "decisions": [],
+      "scope": {
+        "acceptance": "Searching a word in a title or body returns the note; the FTS index is rebuilt on write (unit tests in src/api/search.test.ts)"
+      }
     },
     "TH10H5-u24": {
       "id": "TH10H5-u24",
@@ -270,7 +285,10 @@
           "askedAt": "2026-10-03T14:45:46.216Z",
           "context": "Magic link: no password to store, needs an email sender (about 2 days). GitHub OAuth: fastest for developers, excludes non-developers (about 1 day). Both: covers everyone, about 4 days and two flows to test. The choice decides what the sign-in screen looks like."
         }
-      ]
+      ],
+      "scope": {
+        "acceptance": "A user can sign in with the chosen method and the session survives a reload; unauthenticated requests get 401"
+      }
     },
     "22rKT8w03M": {
       "id": "22rKT8w03M",
@@ -287,7 +305,10 @@
       "collapsed": false,
       "artifacts": [],
       "activity": null,
-      "decisions": []
+      "decisions": [],
+      "scope": {
+        "acceptance": "GET /notes on the deployed URL returns 200 with the seed data; the deploy is repeatable from CI"
+      }
     },
     "YidubvffQz": {
       "id": "YidubvffQz",
@@ -305,7 +326,10 @@
       "artifacts": [],
       "activity": null,
       "decisions": [],
-      "dueDate": "2026-10-20"
+      "dueDate": "2026-10-20",
+      "scope": {
+        "acceptance": "A note can be created, edited and saved through the API; autosave within 2 s of the last keystroke"
+      }
     },
     "XDtu3zwWAn": {
       "id": "XDtu3zwWAn",
@@ -322,7 +346,10 @@
       "collapsed": false,
       "artifacts": [],
       "activity": null,
-      "decisions": []
+      "decisions": [],
+      "scope": {
+        "acceptance": "The list shows the latest notes first and the search box filters through the Search API"
+      }
     },
     "xYvOHBC1DN": {
       "id": "xYvOHBC1DN",
@@ -339,7 +366,10 @@
       "collapsed": false,
       "artifacts": [],
       "activity": null,
-      "decisions": []
+      "decisions": [],
+      "scope": {
+        "acceptance": "Sign-in works with the method chosen in B13 and redirects back to the list"
+      }
     },
     "uZTNlTes5s": {
       "id": "uZTNlTes5s",
@@ -356,7 +386,10 @@
       "collapsed": false,
       "artifacts": [],
       "activity": null,
-      "decisions": []
+      "decisions": [],
+      "scope": {
+        "acceptance": "npm run build produces dist/web under 500 KB gzipped and the app loads from it"
+      }
     },
     "yxW1zNrZz8": {
       "id": "yxW1zNrZz8",
@@ -373,7 +406,10 @@
       "collapsed": false,
       "artifacts": [],
       "activity": null,
-      "decisions": []
+      "decisions": [],
+      "scope": {
+        "acceptance": "Create, search, edit and sign-in flows pass in Chromium; the report is attached to the release"
+      }
     },
     "lBs6ymPFkU": {
       "id": "lBs6ymPFkU",
@@ -390,7 +426,10 @@
       "collapsed": false,
       "artifacts": [],
       "activity": null,
-      "decisions": []
+      "decisions": [],
+      "scope": {
+        "acceptance": "A new user can create a note and find it again by following the guide only"
+      }
     },
     "w5GL5rLmcl": {
       "id": "w5GL5rLmcl",
@@ -407,7 +446,10 @@
       "collapsed": false,
       "artifacts": [],
       "activity": null,
-      "decisions": []
+      "decisions": [],
+      "scope": {
+        "acceptance": "The production URL serves the built app against the deployed API; rollback is documented"
+      }
     }
   },
   "ports": {
@@ -427,7 +469,11 @@
       "name": "Released notes app (URL)",
       "description": "",
       "required": true,
-      "artifacts": []
+      "artifacts": [],
+      "expect": {
+        "kind": "url",
+        "hint": "https://notes.example.com"
+      }
     },
     "PSs2GnRQRn": {
       "id": "PSs2GnRQRn",
@@ -491,7 +537,11 @@
       "name": "API (src/api, deployed)",
       "description": "",
       "required": true,
-      "artifacts": []
+      "artifacts": [],
+      "expect": {
+        "kind": "url",
+        "hint": "https://notes-api.example.workers.dev"
+      }
     },
     "LZ1_Z0bw-y": {
       "id": "LZ1_Z0bw-y",
@@ -500,7 +550,11 @@
       "name": "Web app (src/web, built)",
       "description": "",
       "required": true,
-      "artifacts": []
+      "artifacts": [],
+      "expect": {
+        "kind": "dir",
+        "hint": "dist/web"
+      }
     },
     "tUS4gnPoks": {
       "id": "tUS4gnPoks",
@@ -509,7 +563,11 @@
       "name": "Released notes app (URL)",
       "description": "",
       "required": true,
-      "artifacts": []
+      "artifacts": [],
+      "expect": {
+        "kind": "url",
+        "hint": "https://notes.example.com"
+      }
     },
     "kRGZ8bJsm_": {
       "id": "kRGZ8bJsm_",
@@ -746,7 +804,11 @@
       "name": "Search API (src/api/search.ts)",
       "description": "",
       "required": true,
-      "artifacts": []
+      "artifacts": [],
+      "expect": {
+        "kind": "file",
+        "hint": "src/api/search.ts"
+      }
     },
     "sbj2_geCFp": {
       "id": "sbj2_geCFp",
@@ -764,7 +826,11 @@
       "name": "Auth (src/api/auth.ts)",
       "description": "",
       "required": true,
-      "artifacts": []
+      "artifacts": [],
+      "expect": {
+        "kind": "file",
+        "hint": "src/api/auth.ts"
+      }
     },
     "icdYMYD9rs": {
       "id": "icdYMYD9rs",
@@ -782,7 +848,11 @@
       "name": "API (src/api, deployed)",
       "description": "",
       "required": true,
-      "artifacts": []
+      "artifacts": [],
+      "expect": {
+        "kind": "url",
+        "hint": "https://notes-api.example.workers.dev"
+      }
     },
     "i_49kXPJfx": {
       "id": "i_49kXPJfx",
@@ -809,7 +879,11 @@
       "name": "Editor (src/web/Editor.tsx)",
       "description": "",
       "required": true,
-      "artifacts": []
+      "artifacts": [],
+      "expect": {
+        "kind": "file",
+        "hint": "src/web/Editor.tsx"
+      }
     },
     "h-iarMzqdp": {
       "id": "h-iarMzqdp",
@@ -836,7 +910,11 @@
       "name": "List (src/web/List.tsx)",
       "description": "",
       "required": true,
-      "artifacts": []
+      "artifacts": [],
+      "expect": {
+        "kind": "file",
+        "hint": "src/web/List.tsx"
+      }
     },
     "LpjkcfJmGt": {
       "id": "LpjkcfJmGt",
@@ -863,7 +941,11 @@
       "name": "Sign-in (src/web/SignIn.tsx)",
       "description": "",
       "required": true,
-      "artifacts": []
+      "artifacts": [],
+      "expect": {
+        "kind": "file",
+        "hint": "src/web/SignIn.tsx"
+      }
     },
     "YS3uMOQeJ9": {
       "id": "YS3uMOQeJ9",
@@ -881,7 +963,11 @@
       "name": "Web app (src/web, built)",
       "description": "",
       "required": true,
-      "artifacts": []
+      "artifacts": [],
+      "expect": {
+        "kind": "dir",
+        "hint": "dist/web"
+      }
     },
     "XW_sE-OnYM": {
       "id": "XW_sE-OnYM",
@@ -917,7 +1003,11 @@
       "name": "Test report (e2e/report.html)",
       "description": "",
       "required": true,
-      "artifacts": []
+      "artifacts": [],
+      "expect": {
+        "kind": "file",
+        "hint": "e2e/report.html"
+      }
     },
     "SgY1T3yM5i": {
       "id": "SgY1T3yM5i",
@@ -944,7 +1034,11 @@
       "name": "Guide (docs/guide.md)",
       "description": "",
       "required": true,
-      "artifacts": []
+      "artifacts": [],
+      "expect": {
+        "kind": "doc",
+        "hint": "docs/guide.md"
+      }
     },
     "o5XAY1mhi6": {
       "id": "o5XAY1mhi6",
@@ -962,7 +1056,11 @@
       "name": "Released notes app (URL)",
       "description": "",
       "required": true,
-      "artifacts": []
+      "artifacts": [],
+      "expect": {
+        "kind": "url",
+        "hint": "https://notes.example.com"
+      }
     },
     "5wPahGjQb0": {
       "id": "5wPahGjQb0",
