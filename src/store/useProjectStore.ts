@@ -17,7 +17,7 @@ import { BrowserSyncHost } from "../sync/browser-host";
 import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeCollapsed, normalizeInputNames, resolveChangedOverlaps, resolveAllOverlaps, scopeFor, toJSON, wireNetTabs, withIndex } from "../model/graph";
 export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
-import { ensurePermission, readLocalFile } from "../lib/localfile";
+import { ensurePermission, readLocalFile, writeLocalFile } from "../lib/localfile";
 import { mergeProjects } from "../model/merge";
 import { applyRestore, editorCaughtUp, prepareRestore, readRecovery, type Recovery, type RestoreConflict, type RestorePicks, type RestoreStep } from "../sync/recovery";
 import { buildSampleProject } from "../model/sample";
@@ -243,6 +243,8 @@ interface State {
   openExample: () => void;
   /** ローカルの boxglow.json を開く (監視と書き戻しを始める) */
   openLocalFile: (handle: FileSystemFileHandle) => Promise<boolean>;
+  /** 直接開いたファイルを編集できるようにする (書き込みの許可を取る。1 人で使うとき向け。B155) */
+  enableLocalEdit: () => Promise<boolean>;
   /** ローカルサーバ (npx boxglow serve) の boxglow.json を開く (API で読み書き。変更は SSE で受ける) */
   openFromServer: () => Promise<boolean>;
   /** VS Code 拡張の webview の中で開く (拡張とメッセージで読み書き。ファイルの変更は拡張から届く) */
@@ -512,7 +514,22 @@ export const useProjectStore = create<State>((set, get) => {
             throw error;
           }
         } else if (source === "file") {
-          throw new Error(t("共同編集は npx boxglow serve --open または VS Code 拡張で開いてください。"));
+          // 直接開いたファイルへの保存 (B155): 書く直前に読み直し、最後に読んだ / 書いた後に外 (CLI や AI) から変わっていたら、上書きせずに競合として扱う
+          // (ブラウザは CLI・serve・VS Code の保存ロックに参加できないので、読み直しと書き込みの間の隙間は残る。同時に使う場面は serve か VS Code を案内する)
+          if (!fileHandle) throw new Error(t("ファイルを開き直してください"));
+          const f = await fileHandle.getFile();
+          if (generation !== epoch) return;
+          if (f.lastModified !== fileLastModified) {
+            const theirs = await f.text();
+            if (generation !== epoch) return;
+            fileLastModified = f.lastModified;
+            if (theirs !== text && theirs !== baseText) {
+              attempts++;
+              if (markConflict(theirs, String(f.lastModified))) continue;
+              throw new Error(t("ファイルが外から変わりました。両方の変更を保持しているので、統合方法を選んでください。"));
+            }
+          }
+          fileLastModified = await writeLocalFile(fileHandle, text);
         } else { await saveProject(project); void get().refreshList(); browserHost?.noteLocalContent(project.id, project); }
         if (generation !== epoch) return;
         // 保存応答を待つ間に届いた新しい版を、古い保存の応答で巻き戻さない。
@@ -1086,6 +1103,13 @@ export const useProjectStore = create<State>((set, get) => {
       refreshExternal = async () => { try { await reloadNow?.(); } catch { /* 次の機会に */ } };
     }
 
+  , enableLocalEdit: async () => {
+      if (!fileHandle || get().source !== "file") return false;
+      // 書き込みの許可は利用者の操作の中で求める (ブラウザの制約)
+      if (!(await ensurePermission(fileHandle, "readwrite"))) { set({ toast: t("ファイルへの書き込みが許可されませんでした") }); return false; }
+      set({ readonly: false, editMode: true });
+      return true;
+    }
   , openLocalFile: async (handle) => {
       if (!canLeave()) return false;
       if (!(await ensurePermission(handle, "read"))) {

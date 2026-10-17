@@ -164,6 +164,40 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
       check('VS Code timeout: Load again asks the host again', true);
       await page.context().close();
     }
+
+    // ---- 直接開いたファイルの保存 (B155): 閲覧専用で開く → 「このファイルを編集する」 → 保存がファイルに入る → 外から変わると上書きせず両方残す ----
+    {
+      const { page: fp } = await open(browser, { lang: 'ja' });
+      await fp.evaluate((text) => {
+        // File System Access API の偽物 (メモリ上の 1 ファイル。lastModified は書くたびに進む)
+        const files = { 'boxglow.json': text }; let mod = 1000;
+        window.__files = files; window.__touch = (t) => { files['boxglow.json'] = t; mod++; };
+        window.__handle = { kind: 'file', name: 'boxglow.json', queryPermission: async () => 'granted', requestPermission: async () => 'granted',
+          getFile: async () => ({ text: async () => files['boxglow.json'], lastModified: mod }),
+          createWritable: async () => ({ write: async (t) => { files['boxglow.json'] = t; mod++; }, close: async () => {} }) };
+      }, original);
+      await fp.evaluate(() => window.boxglow.store.getState().openLocalFile(window.__handle));
+      await fp.waitForFunction(() => window.boxglow.store.getState().source === 'file');
+      const fstate = () => fp.evaluate(() => { const s = window.boxglow.store.getState(); return { readonly: s.readonly, save: s.saveState, conflict: !!s.conflict, name: s.project?.name, description: s.project?.description }; });
+      check('直接開いたファイル: まず閲覧専用で、帯に「このファイルを編集する」が出る', (await fstate()).readonly === true && await fp.getByRole('button', { name: 'このファイルを編集する', exact: true }).isVisible());
+      await fp.getByRole('button', { name: 'このファイルを編集する', exact: true }).click();
+      await fp.waitForFunction(() => window.boxglow.store.getState().readonly === false);
+      await fp.evaluate(() => window.boxglow.store.getState().apply((p) => ({ ...p, description: 'ブラウザで編集' })));
+      await fp.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved', null, { timeout: 10000 });
+      check('直接開いたファイル: 編集がそのファイルに保存される', (await fp.evaluate(() => JSON.parse(window.__files['boxglow.json']).description)) === 'ブラウザで編集');
+      // 外 (CLI) が別の項目を変える → 保存済みなら監視が取り込む
+      await fp.evaluate(() => { const j = JSON.parse(window.__files['boxglow.json']); j.name = 'CLI が改名'; window.__touch(JSON.stringify(j)); });
+      await fp.waitForFunction(() => window.boxglow.store.getState().project?.name === 'CLI が改名', null, { timeout: 10000 });
+      check('直接開いたファイル: 外からの変更を取り込む (保存済みのとき)', (await fstate()).description === 'ブラウザで編集');
+      // 外から変わった直後に手元を編集 → 保存の直前の読み直しか監視で気づき、上書きせずに両方を残す (自動で統合できる変更なら統合、できなければ競合の帯)
+      await fp.evaluate(() => { const j = JSON.parse(window.__files['boxglow.json']); j.name = 'CLI が 2 回目'; window.__touch(JSON.stringify(j)); window.boxglow.store.getState().apply((p) => ({ ...p, description: 'ブラウザの 2 回目' })); });
+      await fp.waitForFunction(() => { const s = window.boxglow.store.getState(); return !!s.conflict || (s.saveState === 'saved' && s.project?.name === 'CLI が 2 回目'); }, null, { timeout: 15000 });
+      if ((await fstate()).conflict) await fp.getByRole('button', { name: '両方の変更を統合', exact: true }).click();
+      await fp.waitForFunction(() => { const s = window.boxglow.store.getState(); return !s.conflict && s.saveState === 'saved' && s.project?.name === 'CLI が 2 回目' && s.project?.description === 'ブラウザの 2 回目'; }, null, { timeout: 15000 });
+      const merged = await fp.evaluate(() => JSON.parse(window.__files['boxglow.json']));
+      check('直接開いたファイル: 外からの変更を上書きせず、両方の変更がファイルに入る', merged.name === 'CLI が 2 回目' && merged.description === 'ブラウザの 2 回目', JSON.stringify({ name: merged.name, description: merged.description }));
+      await fp.context().close();
+    }
   } finally { await browser.close(); }
   const {passed,failed}=result();console.log(`${passed}/${passed+failed} passed`);process.exitCode=failed?1:0;
 })().catch(e=>{console.error(e);process.exitCode=1;});

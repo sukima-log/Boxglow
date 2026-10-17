@@ -170,7 +170,7 @@ export function HomeDialog() {
           <h2 id="home-shared" className="font-head text-[18px]">{t("ファイルを開く")}</h2>
           <p className="home-description">{t("手元の boxglow.json を開きます。")}</p>
           <div className="flex flex-wrap gap-2">
-            {canOpenLocalFile() && <button className="btn btn-primary" onClick={() => void openFile()} title={t("ファイルを開いて、図として見ます (閲覧専用。ファイルが変わると、画面も変わります)")}>{t("開いて見る")}</button>}
+            {canOpenLocalFile() && <button className="btn btn-primary" onClick={() => void openFile()} title={t("ファイルを開いて、図として見ます (まず閲覧専用。帯の「このファイルを編集する」で、そのファイルに保存できます)")}>{t("開いて見る")}</button>}
             {canOpenLocalFile() && last && <button className="btn" onClick={() => void openFile(last)} title={t("前回開いたファイル")}>Reopen {last.name}</button>}
             <button className="btn" onClick={() => void doImport()} title={t("ファイルの中身を、このブラウザにコピーして編集します (元のファイルは変わりません)")}>{t("コピーして編集")}</button>
           </div>

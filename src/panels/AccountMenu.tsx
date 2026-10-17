@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { t } from "../i18n";
 import { useProjectStore } from "../store/useProjectStore";
-import { TEAM_PLAN_AVAILABLE, billingStatusLabel, planLabel } from "../sync/billing";
+import { billingStatusLabel, planLabel } from "../sync/billing";
 import { openBilling } from "./accountActions";
 import { SignInButtons, signInOneStep } from "./SignInButtons";
 import { SignInCode } from "./SyncPanel";
@@ -131,7 +131,6 @@ export function AccountButton() {
                   {billing.checkout && (!billing.plan || !billing.entitled) && (
                     <div className="sync-panel__row">
                       <button className="btn btn-primary btn-sm" onClick={() => void openBilling(act, { kind: "billingCheckout", plan: "personal" })}>{t("Personal を申し込む (月 500 円)")}</button>
-                      {TEAM_PLAN_AVAILABLE && <button className="btn btn-sm" onClick={() => void openBilling(act, { kind: "billingCheckout", plan: "team", seats: 2 })}>{t("Team を申し込む (1 人 月 800 円)")}</button>}
                     </div>
                   )}
                   {billing.portal && (

@@ -100,7 +100,7 @@ export function RestoreNoticeView({ notice, onSave, onDismiss }: { notice: { kin
 }
 
 export function SaveNotice() {
-  const { project, source, saveError, conflict, resolveConflict, previewConflict, saveNow, readonlyReason, evacuate, evacuateAndTakeLatest, evacuated, contentHash } = useProjectStore();
+  const { project, source, saveError, conflict, resolveConflict, previewConflict, saveNow, readonlyReason, evacuate, evacuateAndTakeLatest, evacuated, contentHash, readonly, enableLocalEdit } = useProjectStore();
   // 退避の操作の途中 (VS Code の保存先の選択を待つ間、ボタンを押せなくする)
   const [busy, setBusy] = useState(false);
   // 今の画面の中身のハッシュ (退避した中身と同じか = 退避の後に編集していないか、を見る。R49-04)
@@ -123,7 +123,14 @@ export function SaveNotice() {
   const [compare, setCompare] = useState(false);
   // 出すのは 2 つの場合だけ: 保存に失敗している (saveError)、または直接開いたファイル (source = "file"。閲覧専用) を見ている
   // (VS Code の中で、拡張がファイルを読み書きできない窓も閲覧専用。理由と対処を出す)
-  if (!project || (!saveError && source !== "file" && !readonlyReason)) return null;
+  // 直接開いたファイル: 編集を始めるまでは閲覧専用 (1 人で使うなら、そのファイルに直接保存できる。B155)
+  if (project && source === "file" && readonly && !saveError && !readonlyReason) return (
+    <div className="save-notice" role="status">
+      <span>{t("閲覧専用で開いています。1 人で使うなら、このファイルに直接保存できます (CLI や AI と同時に使うときは npx boxglow serve --open か VS Code 拡張で開いてください)")}</span>
+      <button className="btn btn-primary btn-sm" onClick={() => void enableLocalEdit()}>{t("このファイルを編集する")}</button>
+    </div>
+  );
+  if (!project || (!saveError && !(source === "file" && readonly) && !readonlyReason)) return null;
   // VS Code のエディタに未保存の編集があるときの衝突: 統合・置き換えはさせず、退避と開き直しだけを案内する (R49-01 / R49-02)
   if (conflict?.editorDirty) {
     const upToDate = evacuated !== null && evacuated.hash === current;

@@ -36,8 +36,6 @@ export function billingStatusLabel(status: string): string {
   }
 }
 
-/** Team プランを申し込めるか (チームの機能 B81 ができるまでは出さない。サーバー側の対応はある) */
-export const TEAM_PLAN_AVAILABLE = false;
 
 /** 画面に出すプランの名前 */
 export function planLabel(plan: string | null): string {

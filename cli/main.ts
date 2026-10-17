@@ -935,6 +935,8 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       return;
     }
     case "log": {
+      // 引数なし: 最近の活動の一覧 (以前は 2 つ目の case に書かれていて届かなかった)
+      if (!rest[0]) { out(logReport(p, Number(str(options.n) ?? 20))); return; }
       // 作業記録: 日付・書き手つきの Markdown を、ボックスに積む (進捗・気づき・経緯。引き継ぎメモとは別に残る)
       const b = mustFind(p, rest[0]);
       const text = (str(options.note) ?? rest.slice(1).join(" ")).trim();
@@ -1086,10 +1088,6 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const q = rest[0] ? layoutScope(normalizeCollapsed(p), mustFind(p, rest[0]).id) : layoutAll(normalizeCollapsed(p));
       save(path, q);
       out(rest[0] ? t("整列: 「{title}」の中", { title: mustFind(p, rest[0]).title }) : t("整列: 全体"));
-      return;
-    }
-    case "log": {
-      out(logReport(p, Number(str(options.n) ?? 20)));
       return;
     }
     case "prompt": {
