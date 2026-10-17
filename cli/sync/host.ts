@@ -13,7 +13,7 @@ import { listTrash, previewLifecycle, commitLifecycle, listVersions, previewReve
 import { isDefaultSyncServer } from "./server-policy";
 import { parseConflictResolution, type ConflictResolution } from "../../src/model/conflict-groups";
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { APP_VERSION } from "../../src/model/version";
 import { t } from "../../src/i18n/core";
 import { inspectLock } from "../file-store";
@@ -30,7 +30,8 @@ import { haltView, type SyncAction } from "./command";
 import { credentialsPath, readCredentials, resolveToken } from "./credentials";
 import { dpapiAvailable } from "./dpapi";
 import { runGoogleLogin, runLinkIdentity, runLogin, runLogout, serverProblem } from "./login";
-import { bindingDir, bindingsOf, hashOf, normalizeServer, realFile, SyncStateUnreadable } from "./state-store";
+import { bindingsOf, hashOf, normalizeServer, realFile, SyncStateUnreadable } from "./state-store";
+import { removeNodeSyncState, setSyncStopped } from "./node-io";
 import { lockWatch, SyncWatcher, type WatchEvent } from "./watch";
 
 import type { HostAction, SyncStatus } from "../../src/sync/status";
@@ -147,6 +148,7 @@ export class SyncHost {
     if (this.stopping || this.stopped) { this.message = t("同期を止めています。終わってから、もう一度操作してください"); this.emit(); return; }
     const real = realFile(file);
     this.enabled.add(real);
+    setSyncStopped(real, this.server, false);   // (「止めている」の印を外す。別のプロセスの見張りも再開する)
     this.rememberSuccessfulSync(real);
     this.ensureWatcher();
     this.applyTargets();
@@ -165,6 +167,7 @@ export class SyncHost {
   disable(file: string): void {
     this.enabled.delete(realFile(file));
     this.remembered.delete(realFile(file));
+    setSyncStopped(realFile(file), this.server, true);   // (別のプロセスの見張り (sync --watch) も、この計画を送受信しない)
     this.options.onEnabled?.(realFile(file), false);
     this.applyTargets();
     this.emit();
@@ -176,9 +179,12 @@ export class SyncHost {
   unbind(file: string): void {
     const real = realFile(file);
     if (this.busy > 0) { this.message = t("送受信が終わってから、もう一度押してください"); this.emit(); return; }
-    this.disable(real);
-    try { rmSync(bindingDir(real, this.server), { recursive: true, force: true }); }
+    let result: "ok" | "busy" | "pending";
+    try { result = removeNodeSyncState(real, this.server); }
     catch (e) { this.message = t("同期の状態を消せませんでした: {reason}", { reason: e instanceof Error ? e.message : String(e) }); this.emit(); return; }
+    if (result === "busy") { this.message = t("送受信が終わってから、もう一度押してください"); this.emit(); return; }
+    if (result === "pending") { this.message = t("同期の復旧が済んでから、もう一度押してください"); this.emit(); return; }
+    this.disable(real);
     this.results.delete(real);
     this.message = t("この端末での同期をやめました。サーバーの計画は「サーバーの計画を開く」で受け取り直せます");
     this.emit();

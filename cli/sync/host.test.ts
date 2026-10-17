@@ -13,7 +13,7 @@ import { SyncHost, type SyncStatus, parseHostAction } from "./host";
 import { lockWatch } from "./watch";
 import { TestSyncServer } from "./test-server";
 import { setDpapi } from "./dpapi";
-import { bindingDir } from "./state-store";
+import { bindingDir, StateStore } from "./state-store";
 
 let server: TestSyncServer;
 let root: string;
@@ -102,6 +102,18 @@ describe("状態の判定", () => {
     await host.act(file, { kind: "enable" });
     await settle();
     expect(host.status(file)).toMatchObject({ state: "synced", file: { enabled: true } });
+    // 止めている印 (別のプロセスの見張りが守る): 止めると置かれ、再開で消える
+    await host.act(file, { kind: "disable" });
+    expect(existsSync(join(dir, "stopped"))).toBe(true);
+    await host.act(file, { kind: "enable" }); await settle();
+    expect(existsSync(join(dir, "stopped"))).toBe(false);
+    // 別の同期がロックを持っている間は、解除しない (状態は残る)
+    const held = new StateStore(dir).lock();
+    expect(held).not.toBeNull();
+    await host.act(file, { kind: "unbind" });
+    expect(existsSync(join(dir, "state.json"))).toBe(true);
+    expect(host.status(file).message).toContain("送受信が終わってから");
+    held!();
     // やめる: 結び付けのフォルダが消え、ファイルは残る。状態は「オフ」(結び付け無し・無効)
     await host.act(file, { kind: "unbind" });
     expect(existsSync(dir)).toBe(false);

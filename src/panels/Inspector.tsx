@@ -12,7 +12,7 @@ import { unpreparedReasons } from "../model/readiness";
 import { ReviewState } from "./ReviewState";
 import { ReadinessFields } from "./ReadinessFields";
 import { CloseButton } from "./CloseButton";
-import { WorkScopePanel, WorkflowSettings } from "./WorkScope";
+import { ConstraintsField, WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
 import { isAcked as decisionIsAcked } from "../model/graph";
 import { useEffect, useRef, useState } from "react";
@@ -492,6 +492,8 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       {tab === "io" && (<>
       <PortsEditor project={project} blockId={blockId} direction="in" readonly={readonly} title="Inputs" />
       <PortsEditor project={project} blockId={blockId} direction="out" readonly={readonly} title="Outputs" allowAdd={canAddOutput(project, blockId)} />
+      {/* 制約: 出力を作るうえで守る条件。出力のすぐ下に置く (利用者の要望 2026-10-18: More の中では見つからない)。作業範囲の編集と同じ値 */}
+      <ConstraintsField project={project} blockId={blockId} />
       </>)}
 
       {/* AI */}
@@ -515,7 +517,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         <p className="sec__hint">{t("このボックスに対する操作: 範囲の編集、今回の対象、部品として保存、AI に渡す文、分岐への変換")}</p>
         <div className="more-actions">
           {/* 開いている間はもう一度押すと閉じる (✓ が付く) */}
-          <button className="btn btn-sm" data-on={scopeEditing} onClick={() => setScopeEditing(!scopeEditing)} title={t("今回達成すること・扱わないこと・制約・完了条件・相談する条件")}>{t("作業範囲を編集")}</button>
+          <button className="btn btn-sm" data-on={scopeEditing} onClick={() => setScopeEditing(!scopeEditing)} title={t("今回達成すること・扱わないこと・制約・完了条件・相談する条件")}>{t("作業範囲・制約を編集")}</button>
           <button className="btn btn-sm" data-on={project.focusBlockId === blockId} onClick={() => apply(p => ({ ...p, focusBlockId: p.focusBlockId === blockId ? undefined : blockId }))} title={t("このボックスと配下を、次の候補の先頭にする")}>{project.focusBlockId === blockId ? t("今回の範囲を解除") : t("今回の範囲にする")}</button>
           {!isProject && <button className="btn btn-sm" onClick={saveAsTemplate} title={t("ほかの計画でも使い回せる部品として保存する")}>{t("部品として保存")}</button>}
           <button className="btn btn-sm" data-on={showPrompt !== null} onClick={() => setShowPrompt(showPrompt ? null : "plan")} title={t("このボックスの入出力と位置づけを Markdown にして表示する (コピーして AI に渡す)")}>{t("AI に渡す文")}</button>

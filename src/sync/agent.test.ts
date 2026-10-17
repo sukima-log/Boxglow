@@ -64,6 +64,24 @@ describe("Codex の config.toml の併合 (見出しの揺れと壊れた形。C
     expect(out).not.toContain("boxglow.http_headers"); expect(out).not.toContain("old");
     expect(out).toContain(`[mcp_servers.other]\ncommand = "y"`);
   });
+  it("複数行の文字列の中に書かれた見出しは表として扱わない (文字列を壊さず、本物の表を 1 つ足す)", () => {
+    const q3 = '"""';
+    const before = `developer_instructions = ${q3}\nUse this example:\n[mcp_servers.boxglow]\nurl = "https://example.invalid/mcp"\n${q3}\n\n[projects."/work"]\ntrust_level = "trusted"\n`;
+    const out = mergeCodexConfig(before, S, T);
+    expect(out.startsWith(before.trimEnd())).toBe(true);                    // 元の中身はそのまま
+    expect(out.split(q3).length - 1).toBe(2);                               // 文字列は閉じたまま
+    expect(out.endsWith(`[mcp_servers.boxglow]\nurl = "https://sync.example/mcp"\nhttp_headers = { Authorization = "Bearer bga_x.y" }\n`)).toBe(true);
+    // もう一度つなぎ直しても、文字列の中の例は触らず、本物の表だけ置き換わる
+    const again = mergeCodexConfig(out, S, "bga_new.z");
+    expect(again.split(q3).length - 1).toBe(2); expect(again).toContain("bga_new.z"); expect(again).not.toContain("bga_x.y");
+  });
+  it("ルートの値 (mcp_servers = { ... } / mcp_servers.boxglow.url = ...) や、エスケープ付きの見出しは、書き戻さずに例外", () => {
+    expect(() => mergeCodexConfig(`mcp_servers = { boxglow = { url = "https://old.invalid/mcp" } }\n`, S, T)).toThrow(/top level/);
+    expect(() => mergeCodexConfig(`mcp_servers.boxglow.url = "https://old.invalid/mcp"\n`, S, T)).toThrow(/top level/);
+    expect(() => mergeCodexConfig(`[mcp_servers."box\\u0067low"]\nurl = "https://old.invalid/mcp"\n`, S, T)).toThrow(/escaped/);
+    // 別の表の中の mcp_servers = ... は、その表のキーなので関係ない
+    expect(mergeCodexConfig(`[profiles.a]\nmcp_servers = "x"\n`, S, T)).toContain("[mcp_servers.boxglow]");
+  });
   it("同じ表が 2 つある / [mcp_servers] の中にインラインで書いてあるときは、書き戻さずに例外", () => {
     expect(() => mergeCodexConfig(`[mcp_servers.boxglow]\nurl = "a"\n[mcp_servers.boxglow]\nurl = "b"\n`, S, T)).toThrow(/more than once/);
     expect(() => mergeCodexConfig(`[mcp_servers]\nboxglow = { url = "a" }\n`, S, T)).toThrow(/inline/);

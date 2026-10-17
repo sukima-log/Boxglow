@@ -16,6 +16,7 @@ import { serverProblem } from "./server-policy";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { FileBusy, lockFile } from "../file-store";
+import { isSyncStopped } from "./node-io";
 import { fetchHeads, syncOnce, SyncConfigurationError, SyncAuthError, SyncNetworkError, type SyncResult } from "./client";
 import { teamApiBase } from "../../src/sync/teams";
 import { bindingDir, configDir, hashOf, normalizeServer, StateStore, type Binding, type StoredState } from "./state-store";
@@ -312,7 +313,8 @@ export class SyncWatcher {
   private refreshBindings(): void {
     const { states, unreadable } = bindingsFor(this.options.server);
     // (対象に入っていない計画は、結び付いていても見張らない。対象から外れた計画は、ここで見張りから外す)
-    this.states = new Map(states.filter((s) => this.targeted(s.state.binding.file)).map((s) => [s.state.binding.file, s.state] as const));
+    // (画面で「同期を止める」と置かれた印 (stopped) のある計画も見張らない。別のプロセスから止めた停止を、ここでも守る)
+    this.states = new Map(states.filter((s) => this.targeted(s.state.binding.file) && !isSyncStopped(s.dir)).map((s) => [s.state.binding.file, s.state] as const));
     for (const file of [...this.watched.keys()]) if (!this.targeted(file)) this.watched.delete(file);
     const broken = new Set(unreadable);
     for (const [file, w] of [...this.watched]) {

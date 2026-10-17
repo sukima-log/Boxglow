@@ -68,8 +68,10 @@ export function attachSync(context: vscode.ExtensionContext, document: vscode.Te
       if (!action) return;
       // 未保存のテキストを開く・置く操作で上書きさせない。比較の選択も保存後にやり直す。
       if (document.isDirty && ["continueStart","openProject","choose","resolveGroups"].includes(action.kind)) return;
-      if (action.kind === "disable" || action.kind === "unbind") await context.globalState.update(enabledKey(document.uri, server), undefined);
+      if (action.kind === "disable") await context.globalState.update(enabledKey(document.uri, server), undefined);
       const status = await host.act(path, action);
+      // 解除は、消せたとき (結び付けが無くなったとき) だけ「有効」の記憶も消す (ロックや復旧待ちで拒まれたら残す)
+      if (action.kind === "unbind" && status.file?.binding === null) await context.globalState.update(enabledKey(document.uri, server), undefined);
       void panel.webview.postMessage({ type: "sync-status", status });
       return;
     }

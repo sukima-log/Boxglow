@@ -39,6 +39,30 @@ export function WorkScopePanel({ project, blockId, editing, onClose }: { project
   </section>;
 }
 
+/**
+ * 制約の欄 (入出力タブの出力の下): 出力を作るうえで守る条件 (性能・再現の品質・ファイルサイズ・寸法・消費電力など)。
+ * 作業範囲 (scope.constraints) と同じ値で、作業範囲の編集からも変えられる
+ * Input : project, blockId。Output: 欄の JSX (閲覧専用で空なら null)
+ */
+export function ConstraintsField({ project, blockId }: { project: Project; blockId: string }) {
+  useLang();
+  const apply = useProjectStore(s => s.apply);
+  const readonly = useProjectStore(s => s.readonly);
+  const b = project.blocks[blockId];
+  const change = (value: string) => apply(p => {
+    const scope = { ...p.blocks[blockId].scope };
+    if (value.trim()) scope.constraints = value.trim(); else delete scope.constraints;
+    return updateBlock(p, blockId, { scope: Object.keys(scope).length ? scope : undefined });
+  });
+  if (readonly && !b.scope?.constraints) return null;
+  return <section className="sec constraints-field">
+    <div className="sec__head"><span className="label">{t("制約")}</span></div>
+    <p className="sec__hint">{t("出力を作るうえで守る条件 (性能・再現の品質・ファイルサイズ・寸法・消費電力など)。完了条件 (何を確かめれば完了か) とは分けて書く")}</p>
+    {readonly ? <p className="whitespace-pre-wrap break-words text-[12px]">{b.scope?.constraints}</p>
+      : <DebouncedText multiline className="input" rows={2} aria-label={t("制約")} placeholder={t("例: 初回表示 1 秒以内、ビルド成果物 2 MB 以下")} value={b.scope?.constraints ?? ""} onCommit={change} />}
+  </section>;
+}
+
 /** Input: 計画 / Output: プロジェクト設定の中で必要時に開く確認方法。人の操作は常に許可する。 */
 export function WorkflowSettings({ project }: { project: Project }) {
   useLang();

@@ -386,7 +386,7 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
             <div className="sync-panel__group">
               <div className="sync-panel__group-title">{t("この端末での同期")}</div>
               <div className="sync-panel__row">
-                <button className="btn btn-sm" disabled={status.lifecycle?.busy} onClick={() => void act({ kind: "unbind" })} title={t("結び付けを消します。計画とサーバーの控えは残り、「サーバーの計画を開く」で受け取り直せます")}>{t("この計画の同期をやめる (サーバーの控えは残す)")}</button>
+                <button className="btn btn-sm" disabled={status.lifecycle?.busy} onClick={() => void act({ kind: "unbind" })} title={t("結び付けを消します。計画とサーバーの控えは残り、「サーバーの計画を開く」で受け取り直せます")}>{t("この端末の結び付けを解除する (サーバーの控えは残す)")}</button>
               </div>
             </div>
           )}

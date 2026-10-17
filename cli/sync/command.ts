@@ -21,9 +21,10 @@ import { isHumanActor } from "../../src/model/graph";
 import { blockResolutionKey, parseConflictResolution, type ConflictResolution, type ResolutionInput } from "../../src/model/conflict-groups";
 import { t } from "../../src/i18n/core";
 import { parseTeams } from "../../src/sync/teams";
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { syncOnce, SyncConfigurationError, HumanSyncRequired, SyncAuthError, SyncNetworkError, SyncRejectedError, type SyncResult } from "./client";
-import { SyncStateUnreadable, bindingDir, bindingsOf, hashOf, normalizeServer, realFile } from "./state-store";
+import { SyncStateUnreadable, bindingsOf, hashOf, normalizeServer, realFile } from "./state-store";
+import { removeNodeSyncState } from "./node-io";
 import { resolveToken } from "./credentials";
 import { authHint } from "./login";
 import { bindingsFor, lockWatch, SyncWatcher, type WatchEvent } from "./watch";
@@ -126,7 +127,9 @@ export function runUnbindCommand(o: { file: string; server?: string }, out: (tex
   const targets = o.server ? bindings.filter((b) => normalizeServer(b.server) === normalizeServer(o.server!)) : bindings;
   if (targets.length === 0) { out(t("この計画は結び付いていません (やめるものはありません)")); return 0; }
   if (targets.length > 1) { out(t("結び付きが複数あります。--server で選んでください: {list}", { list: targets.map((b) => b.server).join(", ") })); return 1; }
-  rmSync(bindingDir(real, targets[0].server), { recursive: true, force: true });
+  const result = removeNodeSyncState(real, targets[0].server);
+  if (result === "busy") { out(t("別の同期 (boxglow sync --watch など) が動いています。終わってから、もう一度実行してください")); return 1; }
+  if (result === "pending") { out(t("結果未確認の操作 (送信の応答待ち・結び直し) が残っています。boxglow sync で復旧してから、もう一度実行してください")); return 1; }
   out(t("この端末での同期をやめました ({server})。計画のファイルとサーバーの控えは残っています。受け取り直すには boxglow sync --project <ID> --actor human", { server: targets[0].server }));
   return 0;
 }

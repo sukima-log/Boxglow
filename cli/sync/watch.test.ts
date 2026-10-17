@@ -14,6 +14,7 @@ import { relinkStarted } from "../../src/sync/engine";
 import { createHash } from "node:crypto";
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 import { TestSyncServer } from "./test-server";
+import { setSyncStopped } from "./node-io";
 import { DEBOUNCE_MS, IDLE_POLL_MS, lockWatch, MAX_WAIT_MS, POLL_MS, SyncWatcher, type WatchEvent } from "./watch";
 
 let server: TestSyncServer;
@@ -120,6 +121,22 @@ describe("見張る対象の指定 (画面の裏方が使う selected)", () => {
     await advance(w, 100); await advance(w, DEBOUNCE_MS + 100);
     expect(JSON.parse(server.project("p1")!.head!.text).blocks[p1.a].title).toBe("外した後の編集");
     expect(requests.p2).toBe(0);
+  });
+
+  it("画面で「同期を止める」と置かれた印 (stopped) のある計画は、all でも見張らない。印を外すと次の tick から見張る (Codex レビュー 29 R29-05)", async () => {
+    const { p1, p2, requests, counting } = await twoPlans();
+    setSyncStopped(p2.file, server.url, true);
+    const w = watcher({ fetch: counting, targets: { mode: "all" } });
+    await w.tick();
+    expect(w.files()).toEqual([p1.file]);
+    edit(p2.file, (p) => updateBlock(p, p2.a, { title: "止めている間の編集" }));
+    await advance(w, 100); await advance(w, DEBOUNCE_MS + 100);
+    expect(JSON.parse(server.project("p2")!.head!.text).blocks[p2.a].title).toBe("A");   // 送られない
+    expect(requests.p2).toBe(0);
+    setSyncStopped(p2.file, server.url, false);
+    await advance(w, 100); await advance(w, DEBOUNCE_MS + 100);
+    expect(w.files().sort()).toEqual([p1.file, p2.file].sort());
+    expect(JSON.parse(server.project("p2")!.head!.text).blocks[p2.a].title).toBe("止めている間の編集");   // 再開で送られる
   });
 
   it("all (CLI の --watch) は今までどおり全部を見張る。selected で、同期の待ちの間に外した計画は、次の 1 回を始めない", async () => {

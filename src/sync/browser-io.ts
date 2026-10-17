@@ -60,8 +60,21 @@ async function acquire(name: string): Promise<(() => void) | null> {
  * Input : projectId = ブラウザ内の計画の ID, server = サーバーの場所
  * Output: なし
  */
-export async function removeBrowserSyncState(projectId: string, server: string): Promise<void> {
-  await del(stateKey(projectId, server), db().state);
+export async function removeBrowserSyncState(projectId: string, server: string): Promise<"ok" | "busy" | "pending"> {
+  // 同期 (runSync) と同じ順番でロックを取り、別のタブの送受信に割り込まない (Codex レビュー 29 R29-04)
+  const io = browserSyncIO(projectId, server);
+  const unlockLocal = await io.lockLocal();
+  if (!unlockLocal) return "busy";
+  let unlockState: (() => void) | null = null;
+  try {
+    unlockState = await io.lockState();
+    if (!unlockState) return "busy";
+    // 結果未確認の操作 (送った応答待ち・結び直しの途中) は復旧に要るので消さない
+    const current = await io.readState();
+    if (current?.pending || current?.relink) return "pending";
+    await del(stateKey(projectId, server), db().state);
+    return "ok";
+  } finally { unlockState?.(); unlockLocal(); }
 }
 
 export function browserSyncIO(projectId: string, server: string): SyncIO {

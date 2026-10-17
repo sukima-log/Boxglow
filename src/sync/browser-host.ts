@@ -85,6 +85,8 @@ export class BrowserSyncHost {
     this.doFetch = (input, init) => base(input, { ...init, credentials: "include" });
     this.timer = setInterval(() => { void this.tick(); }, TICK_MS);
     if (typeof document !== "undefined") document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") void this.tick(); });
+    // 別のタブで「同期を止める」「解除」をしたら、このタブも従う (有効の集まりは localStorage で共有。解除なら結び付けの覚えも捨てる)
+    if (typeof window !== "undefined") window.addEventListener("storage", (e) => { if (e.key === ENABLED_KEY) void this.followEnabled(); });
   }
   get server(): string { return this.options.server; }
 
@@ -346,10 +348,24 @@ export class BrowserSyncHost {
    */
   private async unbind(file: string): Promise<void> {
     if (this.busy > 0) { this.message = t("送受信が終わってから、もう一度押してください"); this.emit(); return; }
+    let result: "ok" | "busy" | "pending";
+    try { result = await removeBrowserSyncState(file, this.server); } catch (e) { this.message = t("同期の状態を消せませんでした: {reason}", { reason: e instanceof Error ? e.message : String(e) }); this.emit(); return; }
+    if (result === "busy") { this.message = t("送受信が終わってから、もう一度押してください"); this.emit(); return; }
+    if (result === "pending") { this.message = t("同期の復旧が済んでから、もう一度押してください"); this.emit(); return; }
+    // 消せてから、有効の記憶と手元の覚えを外す
     this.enabled.delete(file); saveEnabled(this.enabled);
-    try { await removeBrowserSyncState(file, this.server); } catch (e) { this.message = t("同期の状態を消せませんでした: {reason}", { reason: e instanceof Error ? e.message : String(e) }); this.emit(); return; }
     this.knownBindings.delete(file); this.results.delete(file);
     this.message = t("この端末での同期をやめました。サーバーの計画は「サーバーの計画を開く」で受け取り直せます");
+    this.emit();
+  }
+  /** 別のタブが変えた有効の集まりに合わせる。有効でなくなった計画は、結び付けが消えていれば覚えも捨てる (次の同期で結び直さないため) */
+  private async followEnabled(): Promise<void> {
+    const next = new Set(loadEnabled());
+    const dropped = [...this.enabled].filter((id) => !next.has(id));
+    this.enabled.clear(); for (const id of next) this.enabled.add(id);
+    for (const id of dropped) {
+      try { if ((await browserSyncIO(id, this.server).readState()) === null) { this.knownBindings.delete(id); this.results.delete(id); } } catch { /* 読めないときは次の結果で */ }
+    }
     this.emit();
   }
   /** 常時の同期の 1 回 (開いていて有効な計画を順に)。file を渡すと、その計画だけ */
