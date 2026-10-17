@@ -291,7 +291,7 @@ export const app: Record<string, string> = {
 , "登録コマンドをコピー": "Copy the command"
 , "あと 3 手順で Codex から使えます": "3 steps left to use it from Codex"
 , "設定をコピー": "Copy the config"
-, "ホームフォルダの .codex/config.toml を開き (無ければ作る)、末尾に貼り付けて保存する": "Open .codex/config.toml in your home folder (create it if missing), paste at the end and save"
+, "ホームフォルダの .codex/config.toml を開く (無ければ作る)。boxglow の MCP 設定があればその設定を置き換え、無ければ末尾に追加して保存する": "Open .codex/config.toml in your home folder (create it if missing). Replace the existing boxglow MCP configuration, or append it if none exists, then save"
 , "Codex を開き直す": "Reopen Codex"
 , "設定ファイルを書けませんでした ({reason})。下の手順で手で置いてください": "Could not write the config file ({reason}). Place it by hand with the steps below"
 , "VS Code 拡張やデスクトップアプリの Claude Code 向け。作業フォルダの直下に .mcp.json として保存する": "For Claude Code in VS Code or the desktop app: save it as .mcp.json at the root of the working folder"
@@ -446,4 +446,5 @@ export const app: Record<string, string> = {
 , "この計画は結び付いていません (やめるものはありません)": "This plan is not bound (nothing to stop)"
 , "結び付きが複数あります。--server で選んでください: {list}": "More than one binding. Choose with --server: {list}"
 , "この端末での同期をやめました ({server})。計画のファイルとサーバーの控えは残っています。受け取り直すには boxglow sync --project <ID> --actor human": "Stopped syncing on this machine ({server}). The plan file and the server copy stay. To receive it again: boxglow sync --project <ID> --actor human"
+, "制約 (constraints: 性能・品質・サイズ・寸法・消費電力など) があるなら、成果物がそれを守れる作りか": "If there are constraints (performance, quality, size, dimensions, power, ...), can the deliverable respect them"
 };

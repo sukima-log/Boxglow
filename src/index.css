@@ -1241,7 +1241,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .account-button--static { cursor: default; }
 .account-button__initial { font-weight: 700; font-size: 14px; }
 .account-button__dot { position: absolute; right: -1px; bottom: -1px; width: 9px; height: 9px; border-radius: 50%; background: #2e9e6b; border: 2px solid var(--bg-card); }
-.account-menu { position: fixed; z-index: 85; width: min(340px, calc(100vw - 16px)); padding: 12px 14px; display: grid; gap: 4px; font-size: 13px; }
+.account-menu { position: fixed; z-index: 85; width: min(340px, calc(100vw - 16px)); padding: 12px 14px; display: grid; gap: 4px; font-size: 13px; max-height: calc(100vh - var(--menu-top, 60px) - 8px); max-height: calc(100dvh - var(--menu-top, 60px) - 8px); overflow-y: auto; }
 .account-menu__head { display: flex; align-items: center; gap: 10px; padding-bottom: 4px; }
 .account-menu__who { display: flex; flex-direction: column; min-width: 0; }
 .account-menu .sync-panel__group:first-of-type { border-top: 0; }

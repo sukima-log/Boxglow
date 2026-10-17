@@ -77,6 +77,10 @@ describe("CLIの範囲と再開",()=>{
     expect(context.workScope.target.goal).toBe("実装");expect(context.focus.blockId).toBe(id);
     expect(cli("scope","対象").status).toBe(0);
     expect(cli("scope","対象","--non-goals","none","--context-token",token()).status).toBe(0);expect(read().blocks[id].scope.nonGoals).toBeUndefined();
+    // 制約 (constraints): 設定すると表示と context に入り、none で消える
+    expect(cli("scope","対象","--constraints","初回表示 1 秒以内","--context-token",token()).status).toBe(0);expect(read().blocks[id].scope.constraints).toBe("初回表示 1 秒以内");
+    expect(cli("scope","対象").stdout).toContain("初回表示 1 秒以内");expect(JSON.parse(cli("context","対象").stdout).context.workScope.target.constraints).toBe("初回表示 1 秒以内");
+    expect(cli("scope","対象","--constraints","none","--context-token",token()).status).toBe(0);expect(read().blocks[id].scope.constraints).toBeUndefined();
     expect(cli("focus","none","--context-token",token()).status).toBe(0);expect(read().focusBlockId).toBeUndefined();
   });
   it("policyの変更にもguardが必要で、表示だけは保存しない",()=>{

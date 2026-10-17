@@ -139,6 +139,7 @@ export function buildSampleProject(): Project {
   p.blocks[impl.blockId].scope = {
     goal: "設計書どおりに画面と API を作り、結合テストが通る状態にする"
   , nonGoals: "デザインの作り込み、多言語対応"
+  , constraints: "初回表示 1 秒以内、ビルド成果物 2 MB 以下"
   , acceptance: "結合テストがすべて通り、ビルドが作れる"
   };
 

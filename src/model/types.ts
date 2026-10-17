@@ -177,6 +177,8 @@ export interface TemplateOrigin {
 export interface WorkScope {
   goal?: string;
   nonGoals?: string;
+  /** 制約: 出力を作るうえで守る条件 (性能・再現の品質・ファイルサイズ・寸法・消費電力など)。完了条件 (何を確かめれば完了か) とは分ける (利用者の要望 2026-10-18) */
+  constraints?: string;
   acceptance?: string;
   consult?: string;
 }

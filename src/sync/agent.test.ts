@@ -41,6 +41,37 @@ describe("Codex の config.toml の併合", () => {
   });
 });
 
+describe("Codex の config.toml の併合 (見出しの揺れと壊れた形。Codex レビュー 29 R29-01)", () => {
+  const T2 = "bga_new.z";
+  it("コメント付き・引用符付き・空白付きの見出しも同じ表として置き換え、2 つ目を足さない", () => {
+    for (const header of ["[mcp_servers.boxglow] # 接続先", '[mcp_servers."boxglow"]', "[ mcp_servers . 'boxglow' ]  # x"]) {
+      const before = `model = "x"\n\n${header}\nurl = "https://old/mcp"\nhttp_headers = { Authorization = "Bearer old" }\n\n[mcp_servers.other]\ncommand = "y"\n`;
+      const out = mergeCodexConfig(before, S, T2);
+      expect(out.match(/boxglow/g)?.length, header).toBe(1);
+      expect(out).not.toContain("old");
+      expect(out).toContain(`[mcp_servers.other]\ncommand = "y"`);
+    }
+  });
+  it("もう一度つなぎ直しても表は 1 つのまま (冪等)", () => {
+    const once = mergeCodexConfig("model = \"x\"\n", S, T);
+    const twice = mergeCodexConfig(once, S, T2);
+    expect(twice.match(/\[mcp_servers\.boxglow\]/g)?.length).toBe(1);
+    expect(twice).toContain(T2); expect(twice).not.toContain(T);
+  });
+  it("boxglow の子の表 ([mcp_servers.boxglow.http_headers]) も一緒に置き換える", () => {
+    const before = `[mcp_servers.boxglow]\nurl = "https://old/mcp"\n\n[mcp_servers.boxglow.http_headers]\nAuthorization = "Bearer old"\n\n[mcp_servers.other]\ncommand = "y"\n`;
+    const out = mergeCodexConfig(before, S, T2);
+    expect(out).not.toContain("boxglow.http_headers"); expect(out).not.toContain("old");
+    expect(out).toContain(`[mcp_servers.other]\ncommand = "y"`);
+  });
+  it("同じ表が 2 つある / [mcp_servers] の中にインラインで書いてあるときは、書き戻さずに例外", () => {
+    expect(() => mergeCodexConfig(`[mcp_servers.boxglow]\nurl = "a"\n[mcp_servers.boxglow]\nurl = "b"\n`, S, T)).toThrow(/more than once/);
+    expect(() => mergeCodexConfig(`[mcp_servers]\nboxglow = { url = "a" }\n`, S, T)).toThrow(/inline/);
+    // [mcp_servers] の中でも、別のサーバーのインラインなら足せる
+    expect(mergeCodexConfig(`[mcp_servers]\nother = { command = "y" }\n`, S, T)).toContain("[mcp_servers.boxglow]");
+  });
+});
+
 describe(".gitignore", () => {
   it("無ければ足し、あれば触らない", () => {
     expect(gitignoreWithMcpJson("node_modules\n")).toBe("node_modules\n# Claude Code の MCP 設定 (Boxglow のトークンを含む)\n.mcp.json\n");

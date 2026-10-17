@@ -4,7 +4,7 @@
  *   同期パネルは同期の状態と計画の操作だけにし、アカウントに関わる設定はここにまとめる (利用者の要望 2026-10-17)
  * Input : なし (店の syncStatus / syncAct を使う)。Output: JSX
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { t } from "../i18n";
 import { useProjectStore } from "../store/useProjectStore";
 import { billingStatusLabel, planLabel } from "../sync/billing";
@@ -99,8 +99,9 @@ export function AccountButton() {
         {initial ? <span className="account-button__initial">{initial}</span> : <PersonIcon />}
         {account && <span className="account-button__dot" aria-hidden="true" />}
       </button>
+      {/* 画面の下端までを高さの上限にして中を縦にスクロールさせる (メンバーが増えると招待・抜ける・消すに届かなかった。Codex レビュー 29 R29-02) */}
       {open && (
-        <div className="account-menu card" role="dialog" aria-label={t("アカウント")} style={{ top: position.top, right: position.right }}>
+        <div className="account-menu card" role="dialog" aria-label={t("アカウント")} style={{ top: position.top, right: position.right, "--menu-top": `${position.top}px` } as CSSProperties}>
           {!status ? (
             <p className="muted">{t("このページではアカウントと同期を使えません (boxglow.app か、npx boxglow serve --sync、VS Code の拡張で使えます)")}</p>
           ) : !account ? (
@@ -232,7 +233,7 @@ export function AccountButton() {
                               <strong>{t("あと 3 手順で Codex から使えます")}</strong>
                               <ol className="agent-connect__steps">
                                 <li><button className="btn btn-primary btn-sm" onClick={() => { void navigator.clipboard?.writeText(codexConfig(status.server!, status.agent!.newToken!.token)).then(() => setCopied("codex")).catch(() => setCopied(null)); }}>{copied === "codex" ? t("コピーしました") : t("設定をコピー")}</button></li>
-                                <li>{t("ホームフォルダの .codex/config.toml を開き (無ければ作る)、末尾に貼り付けて保存する")}</li>
+                                <li>{t("ホームフォルダの .codex/config.toml を開く (無ければ作る)。boxglow の MCP 設定があればその設定を置き換え、無ければ末尾に追加して保存する")}</li>
                                 <li>{t("Codex を開き直す")}</li>
                               </ol>
                             </>

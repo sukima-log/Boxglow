@@ -1571,7 +1571,7 @@ function parseExpectSpec(v: Expect | string | undefined): Expect | null | undefi
 
 /**
  * ブロックを分解する (子ブロックをまとめて足し、名前で結線する)
- * Input : parentId, spec = { blocks: [{ title, description?, inputs?, outputs?, expect?, acceptance?, goal? }], connections?: [{ from: "題名.出力名", to: "題名.入力名" }], parentMakes?: [親の出力名] }
+ * Input : parentId, spec = { blocks: [{ title, description?, inputs?, outputs?, expect?, acceptance?, constraints?, goal? }], connections?: [{ from: "題名.出力名", to: "題名.入力名" }], parentMakes?: [親の出力名] }
  *         from / to の題名に親の題名 (または "parent") を使うと、親の入力/出力 (内側) につながる
  *         expect = 子の出力の予定成果物 ({ kind, hint } または "kind:hint")、acceptance = 完了条件、goal = 今回行う処理 (scope に入る)。
  *         どれも任意 (無い子は「要具体化」として残り、着手の前に決める)。parentMakes = 子に任せず親自身が作る出力の名前 (owner: "self" を付ける)。
@@ -1585,7 +1585,7 @@ function parseExpectSpec(v: Expect | string | undefined): Expect | null | undefi
 export function splitBlock(
   p: Project
 , parentId: string
-, spec: { blocks: { title: string; description?: string; inputs?: string[]; outputs?: string[]; expect?: Expect | string; acceptance?: string; goal?: string; branch?: { question: string; options: string[]; context?: string }; join?: boolean }[]; connections?: { from: string; to: string }[]; parentMakes?: string[]; splitBy?: string }
+, spec: { blocks: { title: string; description?: string; inputs?: string[]; outputs?: string[]; expect?: Expect | string; acceptance?: string; constraints?: string; goal?: string; branch?: { question: string; options: string[]; context?: string }; join?: boolean }[]; connections?: { from: string; to: string }[]; parentMakes?: string[]; splitBy?: string }
 , actor: string
 , makers?: {
     branch: (p: Project, args: { parentId: string; title: string; question: string; options: string[]; context?: string; actor: string }) => { project: Project; blockId: string }
@@ -1626,6 +1626,7 @@ export function splitBlock(
     if (expect) { const o = portsOf(q, r.blockId, "out")[0]; if (o) q.ports[o.id] = { ...o, expect }; }
     const scope: WorkScope = { ...q.blocks[r.blockId].scope };
     if (b.acceptance?.trim()) scope.acceptance = b.acceptance.trim();
+    if (b.constraints?.trim()) scope.constraints = b.constraints.trim();
     if (b.goal?.trim()) scope.goal = b.goal.trim();
     if (Object.keys(scope).length) q.blocks[r.blockId].scope = scope;
     if ((b.outputs ?? []).length > 1) errors.push(t("「{title}」の出力は 1 本にしました (下の階層を持たないボックスの出力は 1 本。{omitted} は省略)", { title: b.title, omitted: b.outputs!.slice(1).join(", ") }));

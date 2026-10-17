@@ -145,6 +145,14 @@ const ROOT = path.resolve(__dirname, '..');
     await page.locator('.teams').getByRole('button', { name: 'ワークスペースを作る', exact: true }).click();
     await page.locator('.teams__detail').waitFor({ timeout: 10000 });
     check('チーム: 作ると一覧と詳細に出る (管理)', ((await page.locator('.teams').textContent()) ?? '').includes('開発') && ((await page.locator('.teams__detail').textContent()) ?? '').includes('管理'));
+    // 低い画面 (390x600) でも、メニューは画面の下端で止まり、中をスクロールして下の操作 (消す) に届く (Codex レビュー 29 R29-02)
+    await page.setViewportSize({ width: 390, height: 600 }); await page.waitForTimeout(400);
+    const menuBox = await page.locator('.account-menu').evaluate((el) => ({ bottom: el.getBoundingClientRect().bottom, scrolls: el.scrollHeight > el.clientHeight }));
+    const deleteBtn = page.locator('.teams__detail').getByRole('button', { name: 'ワークスペースを消す…', exact: true });
+    await deleteBtn.scrollIntoViewIfNeeded();
+    const deleteBox = await deleteBtn.evaluate((el) => { const r = el.getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight; });
+    check('チーム: 低い画面でもメニューが画面内に収まり、スクロールして「消す」に届く', menuBox.bottom <= 600 && menuBox.scrolls && deleteBox, JSON.stringify({ menuBox, deleteBox }));
+    await page.setViewportSize({ width: 1280, height: 900 }); await page.waitForTimeout(400);
     const teamId = [...server.teams.keys()][0];
     await page.locator('.teams__detail').getByRole('button', { name: '招待リンクを作る', exact: true }).click();
     await page.locator('.teams__detail .agent-tokens__secret').waitFor({ timeout: 10000 });

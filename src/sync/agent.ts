@@ -47,19 +47,53 @@ export function mergeMcpJson(existing: string | null, server: string, token: str
 }
 
 /**
+ * TOML の表の見出し行 ([a.b] / [[a.b]]) を、正規化した名前 ("a.b") にする
+ *   引用符付きのキー ([mcp_servers."boxglow"])・見出しの中や前後の空白・末尾のコメント (# ...) も同じ表として扱う
+ * Input : line = 1 行。Output: 表の名前。見出しでなければ null
+ */
+function tomlHeader(line: string): string | null {
+  const m = /^\s*\[\[?\s*([^\]]*?)\s*\]\]?\s*(?:#.*)?$/.exec(line);
+  if (!m) return null;
+  return m[1].split(".").map((k) => k.trim().replace(/^(["'])(.*)\1$/, "$2")).join(".");
+}
+
+/**
  * 既存の ~/.codex/config.toml に [mcp_servers.boxglow] を足す / 置き換える (その表の行だけを差し替え、ほかは残す)
+ *   - 見出しにコメントや引用符が付いていても同じ表と見なす (気づかずに 2 つ目を足すと、Codex が設定を読めなくなる。Codex レビュー 29 R29-01)
+ *   - boxglow の表の下の子の表 ([mcp_servers.boxglow.http_headers] など) も、まとめて置き換える
+ *   - 同じ表が 2 つある、[mcp_servers] の中に boxglow = { ... } と書いてある、置き換えた結果に表が 1 つにならない、のどれかなら
+ *     書き戻さずに例外 (呼び出し側が「設定ファイルを書けませんでした (理由)」と手で置く手順を出す)
  * Input : existing = 今のファイルの中身 (無ければ null)。Output: 書き戻す中身
  */
 export function mergeCodexConfig(existing: string | null, server: string, token: string): string {
   const block = codexConfig(server, token);
   const text = existing ?? "";
   const lines = text.split("\n");
-  const start = lines.findIndex((l) => /^\s*\[mcp_servers\.boxglow\]\s*$/.test(l));
-  if (start < 0) return text.trim() ? text.replace(/\s*$/, "\n\n") + block : block;
-  // 次の表 ([...]) の手前までが boxglow の表
-  let end = start + 1;
-  while (end < lines.length && !/^\s*\[/.test(lines[end])) end++;
-  return [...lines.slice(0, start), ...block.trimEnd().split("\n"), ...lines.slice(end)].join("\n").replace(/\n*$/, "\n");
+  const headers = lines.map(tomlHeader);
+  const starts = headers.flatMap((h, i) => h === "mcp_servers.boxglow" ? [i] : []);
+  if (starts.length > 1) throw new Error("config.toml has [mcp_servers.boxglow] more than once; the file was not changed");
+  // [mcp_servers] の表の中に boxglow = { ... } (インラインの表) があると、[mcp_servers.boxglow] を足した時点で二重定義になる
+  const parentAt = headers.indexOf("mcp_servers");
+  if (parentAt >= 0) {
+    for (let i = parentAt + 1; i < lines.length && headers[i] === null; i++) {
+      if (/^\s*(["']?)boxglow\1\s*=/.test(lines[i])) throw new Error("config.toml defines boxglow inline under [mcp_servers]; replace it by hand");
+    }
+  }
+  const start = starts[0] ?? -1;
+  let merged: string;
+  if (start < 0) merged = text.trim() ? text.replace(/\s*$/, "\n\n") + block : block;
+  else {
+    // 次の表 ([...]) の手前までが boxglow の表。boxglow の子の表 (mcp_servers.boxglow.*) はその中身ごと含める
+    let end = start + 1;
+    while (end < lines.length && (headers[end] === null || headers[end]!.startsWith("mcp_servers.boxglow."))) end++;
+    merged = [...lines.slice(0, start), ...block.trimEnd().split("\n"), ...lines.slice(end)].join("\n").replace(/\n*$/, "\n");
+  }
+  // 書き戻す前に確かめる: boxglow の表が 1 つだけで、子の表が残っていない
+  const after = merged.split("\n").map(tomlHeader);
+  if (after.filter((h) => h === "mcp_servers.boxglow").length !== 1 || after.some((h) => h !== null && h.startsWith("mcp_servers.boxglow."))) {
+    throw new Error("config.toml could not be merged safely; the file was not changed");
+  }
+  return merged;
 }
 
 /** .gitignore に .mcp.json を足す (トークンを含むので)。既に書いてあれば null (変更なし) */

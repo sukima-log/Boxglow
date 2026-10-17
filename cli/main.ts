@@ -397,8 +397,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   自動で引き上げる入力は元のボックスの範囲。他者の実行ID・受領証を借りない。
   checkpoint は延長、done/leave は解放。同じ共有ファイルの協調制御。別端末の同期は排他しない。
   resume [--json] [--include-completed]           現況・着手できる候補・入力待ちを表示。完了済みの引き継ぎは件数のみ (指定で展開)
-  scope <block> [--goal <本文>] [--non-goals <本文>] [--acceptance <本文>] [--consult <本文>]
-                                                 今回達成すること / 対象外 / 完了条件 / 相談条件。省略は表示、none で項目を消す
+  scope <block> [--goal <本文>] [--non-goals <本文>] [--constraints <本文>] [--acceptance <本文>] [--consult <本文>]
+                                                 今回達成すること / 対象外 / 制約 (性能・品質・サイズ・寸法・消費電力など、出力を作るうえで守る条件) / 完了条件 / 相談条件。省略は表示、none で項目を消す
   focus [<block>|none]                           今回優先するボックスとその配下を指定 (候補内で着手可・入力待ちを区別)。省略は表示
   policy [--start warn|reject] [--done warn|reject] [--unprepared warn|reject]  入力待ちの開始 / 成果物なしの完了 / 要具体化の開始。既定 warn。人の操作は拒否しない
                                                  --start reject は --reason があれば通す。--unprepared reject は理由では通れない (先に具体化する)。done は既存の出力成果物も数える。set --status white にも適用
@@ -518,8 +518,8 @@ Usage (npx boxglow <command> ...):
   Promoted inputs use the original box scope. Never borrow another instance ID or receipt.
   checkpoint renews; done/leave releases. Coordination for one shared file, not a distributed lease.
   resume [--json] [--include-completed]           Current work, ready/waiting candidates, then handoffs; completed notes are counted unless requested
-  scope <block> [--goal <text>] [--non-goals <text>] [--acceptance <text>] [--consult <text>]
-                                                 Goal / non-goals / acceptance / consult before expansion. No flags reads; none clears a field
+  scope <block> [--goal <text>] [--non-goals <text>] [--constraints <text>] [--acceptance <text>] [--consult <text>]
+                                                 Goal / non-goals / constraints (performance, quality, size, dimensions, power: what the output must respect) / acceptance / consult. No flags reads; none clears a field
   focus [<block>|none]                           Prioritize this box and descendants, separating ready/waiting within each scope. No argument reads
   policy [--start warn|reject] [--done warn|reject] [--unprepared warn|reject]  Missing-input starts / artifact-free completion / starts that still need detail; default warn. Human actions are never rejected
                                                  A start reason overrides --start reject, but not --unprepared reject (add detail first). Existing output artifacts count for done; set --status white also checks policy
@@ -790,7 +790,7 @@ function main(argv: string[]): void {
 }
 
 /** Input: CLIの範囲フラグ / Output: 保存する WorkScope の項目名。 */
-const SCOPE_OPTIONS = { goal: "goal", "non-goals": "nonGoals", acceptance: "acceptance", consult: "consult" } as const;
+const SCOPE_OPTIONS = { goal: "goal", "non-goals": "nonGoals", constraints: "constraints", acceptance: "acceptance", consult: "consult" } as const;
 /** guard が有効な計画で、AI に確認トークンを要求するコマンド (作業を記録するもの) */
 const GUARDED_COMMANDS = ["start", "done", "set", "split", "artifact", "ack", "blocked", "review", "leave", "checkpoint", "split-ok", "box-ok"];
 /** 確認トークンは要求しないが、ボックスのコンテキストを変えるコマンド (最新のトークンを付けて実行すると、新しいトークンを返す) */

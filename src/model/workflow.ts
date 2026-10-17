@@ -12,6 +12,7 @@ import { t } from "../i18n/core";
 export const SCOPE_FIELDS = [
   ["goal", "今回達成すること"],
   ["nonGoals", "今回は扱わないこと"],
+  ["constraints", "制約 (性能・品質・サイズ・寸法・消費電力など)"],
   ["acceptance", "完了と判断する条件"],
   ["consult", "範囲を広げる前に相談する条件"],
 ] as const;

@@ -52,11 +52,11 @@ export function registerTools(server: McpServer, run: Run): void {
   server.registerTool("boxglow_status", { description: t("計画の今の状況: 判断待ち・作業中・次の候補・階層の一覧 (セッションの最初に読む)"), inputSchema: { brief: z.boolean().optional().describe(t("階層の一覧を省く (判断・活動・次の候補は残す)")) }, annotations: { readOnlyHint: true } }, async ({ brief }) => safe(run, brief ? ["status", "--brief"] : ["status"]));
   server.registerTool("boxglow_resume", { description: t("再開の概要: 現況・準備状況別の候補・未完了の引き継ぎ。完了した引き継ぎは指定した場合だけ読む"), inputSchema: { includeCompleted: z.boolean().optional() }, annotations: { readOnlyHint: true } }, async ({ includeCompleted }) => safe(run, ["resume", "--json", ...(includeCompleted ? ["--include-completed"] : [])]));
   server.registerTool("boxglow_scope", {
-    description: t("今回達成すること・対象外・完了条件・相談条件。省略は表示、none で項目を消す"),
-    inputSchema: { block, contextToken: z.string().optional(), goal: z.string().optional(), nonGoals: z.string().optional(), acceptance: z.string().optional(), consult: z.string().optional() },
+    description: t("今回達成すること・対象外・制約・完了条件・相談条件。省略は表示、none で項目を消す"),
+    inputSchema: { block, contextToken: z.string().optional(), goal: z.string().optional(), nonGoals: z.string().optional(), constraints: z.string().optional(), acceptance: z.string().optional(), consult: z.string().optional() },
   }, async a => {
     const argv = ["scope", a.block];
-    for (const [key, flag] of [["goal","goal"],["nonGoals","non-goals"],["acceptance","acceptance"],["consult","consult"]] as const) {
+    for (const [key, flag] of [["goal","goal"],["nonGoals","non-goals"],["constraints","constraints"],["acceptance","acceptance"],["consult","consult"]] as const) {
       // 空文字も「消す」として CLI に渡す。opt は空文字を省くため、ここだけ直接追加する。
       if (a[key] !== undefined) argv.push("--" + flag, a[key]!);
     }
@@ -82,7 +82,7 @@ export function registerTools(server: McpServer, run: Run): void {
   , inputSchema: { title: z.string(), out: z.string().describe(t("出力の名前 (具体的な成果物: ファイル・URL・PR)")), parent: block.optional(), in: z.array(z.string()).optional().describe(t("入力の名前")), category: z.string().optional().describe("design/build/verify/evaluate/study/research/ui/improve/fix/docs/ops/other"), note: z.string().optional() }
   }, async (a) => { const argv = ["add", a.title]; opt(argv, "out", a.out); opt(argv, "parent", a.parent); opt(argv, "in", a.in); opt(argv, "category", a.category); opt(argv, "note", a.note); return safe(run, argv); });
   server.registerTool("boxglow_split", {
-    description: t("大きいボックスを中のボックスに分解する。spec は { blocks: [{ title, inputs?: [名前], outputs: [名前], expect?: \"kind:hint\", acceptance?, goal? }], connections: [{ from: \"A.出力名\", to: \"B\" }], parentMakes?: [親の出力名], splitBy?: \"工程\" } の形。子に branch: { question, options } で分岐のボックス (出力は選択肢ごとの道)、join: true で合流の部品を作れる (to は題名だけでよい: 出力名と同じ入力が作られる。親の入力からは from: \"parent.入力名\"、親の出力へは to: \"parent.出力名\")。expect / acceptance は今回着手する子だけに書けばよい (無い子は要具体化として残る)")
+    description: t("大きいボックスを中のボックスに分解する。spec は { blocks: [{ title, inputs?: [名前], outputs: [名前], expect?: \"kind:hint\", acceptance?, constraints?, goal? }], connections: [{ from: \"A.出力名\", to: \"B\" }], parentMakes?: [親の出力名], splitBy?: \"工程\" } の形。子に branch: { question, options } で分岐のボックス (出力は選択肢ごとの道)、join: true で合流の部品を作れる (to は題名だけでよい: 出力名と同じ入力が作られる。親の入力からは from: \"parent.入力名\"、親の出力へは to: \"parent.出力名\")。expect / acceptance は今回着手する子だけに書けばよい (無い子は要具体化として残る)")
   , inputSchema: { block, contextToken: z.string().optional(), spec: z.record(z.string(), z.unknown()).describe(t("分解の指定 (JSON)")) }
   }, async ({ block: b, spec, contextToken }) => safe(run, ["split", b, "--spec", JSON.stringify(spec), ...(contextToken ? ["--context-token", contextToken] : [])]));
   server.registerTool("boxglow_connect", { description: t("線をつなぐ: <題名.出力名> から <題名> へ (受け側は題名だけでよい。出力名と同じ名前の入力が作られる。<題名.入力名> で既存の入力を指定してもよい。親の入力は project.入力名、親の出力へは 題名.出力名 -> project)"), inputSchema: { from: z.string(), to: z.string() } }, async ({ from, to }) => safe(run, ["connect", from, to]));
