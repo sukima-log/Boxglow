@@ -80,8 +80,7 @@ const ROOT = path.resolve(__dirname, '..');
     const headName = head ? JSON.parse(head.text).name : null;
     check('ブラウザ同期: 画面の編集がサーバーに届く', headName === 'ブラウザで改名', JSON.stringify(Object.keys(head ?? {})));
     // 履歴: 「サーバーの計画を管理」→ 履歴 → 1 つ前の版 (2 台目が改名) に戻す → 確認 → 画面が戻り、サーバーに新しい版として送られる
-    await page.locator('.sync-panel__management > summary').click();
-    await page.getByRole('button', { name: '履歴', exact: true }).click();
+    await page.getByRole('button', { name: /^履歴/ }).click();
     await page.locator('.sync-version-row').nth(1).waitFor({ timeout: 10000 });
     const versionRows = await page.locator('.sync-version-row').count();
     check('ブラウザ同期: 履歴に 3 つの版が出る (置いた・2 台目・ブラウザ)', versionRows === 3, String(versionRows));
@@ -94,7 +93,7 @@ const ROOT = path.resolve(__dirname, '..');
     const reverted = server.project(remoteId, 'acc-browser');
     check('ブラウザ同期: 戻した中身が新しい版としてサーバーに届き、履歴は消えない', reverted.versions.length === 4 && JSON.parse(reverted.head.text).name === '2 台目が改名', String(reverted.versions.length));
     // 共有リンク: 作る → URL が出る → 別のブラウザ (サインインなし) でその URL を開くと閲覧専用で開く。失効すると開けない
-    await page.getByRole('button', { name: '共有リンク', exact: true }).click();
+    await page.getByRole('button', { name: /^共有リンク/ }).click();
     await page.getByRole('button', { name: 'リンクを作る', exact: true }).click();
     await page.locator('.sync-shares__url').waitFor({ timeout: 10000 });
     const shareUrl = await page.locator('.sync-shares__url').inputValue();

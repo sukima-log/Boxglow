@@ -1,5 +1,6 @@
 /** 削除・復元は対象と影響を確認してから実行する。手元のファイルを削除する入口ではない。 */
 import { useEffect, useRef, useState } from "react";
+import React from "react";
 import { t, getLang } from "../i18n";
 import type { HostAction, SyncStatus } from "../sync/status";
 export function SyncLifecycle({status,act}:{status:SyncStatus;act:(a:HostAction)=>Promise<unknown>}) {
@@ -13,15 +14,25 @@ export function SyncLifecycle({status,act}:{status:SyncStatus;act:(a:HostAction)
   else if(preview){setReplaced(previous.current!==null && previous.current!==state.choiceId);previous.current=state.choiceId;}
  },[state?.choiceId,!!preview]);
  const current=preview?.id===status.file?.binding?.remoteId;
- return <section className="sync-lifecycle" aria-label={t("サーバーの計画を管理")}>
-  <div className="sync-panel__row">
-   <button className="btn btn-sm" disabled={state?.busy} onClick={()=>void act({kind:"beginSync"})}>{t("サーバーの計画を開く")}</button>
-   <button className="btn btn-sm" disabled={state?.busy} onClick={()=>void act({kind:"listTrash"})}>{t("削除済みの計画")}</button>
-   {status.file?.binding && <button className="btn btn-sm" disabled={state?.busy} onClick={()=>void act({kind:"listVersions",projectId:status.file!.binding!.remoteId})}>{t("履歴")}</button>}
-   {status.file?.binding && <button className="btn btn-sm" disabled={state?.busy} onClick={()=>void act({kind:"listShares",projectId:status.file!.binding!.remoteId})}>{t("共有リンク")}</button>}
-   {status.file?.binding && <button className="btn btn-ghost btn-sm" disabled={state?.busy} onClick={()=>void act({kind:"previewDelete",projectId:status.file!.binding!.remoteId})}>{t("サーバーから削除…")}</button>}
-  </div>
-  {state && <div className="sync-lifecycle__body">
+ /** 行の一覧: 押すとその下に内容が開く。開いている行は印を付ける */
+ const remoteId=status.file?.binding?.remoteId;
+ const opened:"versions"|"shares"|"trash"|null=state?.versions ? "versions" : state?.shares ? "shares" : state?.projects ? "trash" : null;
+ const Row=({id,icon,label,hint,onClick}:{id:string;icon:React.ReactNode;label:string;hint:string;onClick:()=>void})=>
+  <button className="sync-action" data-open={opened===id ? "true" : "false"} disabled={state?.busy} onClick={onClick}>
+   <span className="sync-action__icon" aria-hidden="true">{icon}</span>
+   <span className="sync-action__text"><span className="sync-action__label">{label}</span><span className="sync-action__hint">{hint}</span></span>
+   <span className="sync-action__chev" aria-hidden="true">{opened===id ? "▾" : "▸"}</span>
+  </button>;
+ const rows:{id:"versions"|"shares"|"trash"|"open";icon:React.ReactNode;label:string;hint:string;onClick:()=>void}[]=[
+  ...(remoteId ? [
+   {id:"versions" as const,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>,label:t("履歴"),hint:t("前の版に戻す"),onClick:()=>void act({kind:"listVersions",projectId:remoteId})},
+   {id:"shares" as const,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>,label:t("共有リンク"),hint:t("閲覧専用のリンクを作る"),onClick:()=>void act({kind:"listShares",projectId:remoteId})},
+  ] : []),
+  {id:"trash" as const,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 14h10l1-14"/></svg>,label:t("ゴミ箱"),hint:t("削除した計画を戻す"),onClick:()=>void act({kind:"listTrash"})},
+  {id:"open" as const,icon:<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>,label:t("サーバーの計画を開く"),hint:t("別の計画を受け取る"),onClick:()=>void act({kind:"beginSync"})},
+ ];
+ /** 本文 (一覧・確認・結果)。開いている行の直下に挟む。どの行にも属さない内容 (その他からの削除の確認など) は末尾に */
+ const bodyEl=state ? <div className="sync-lifecycle__body">
    {state.busy && <p role="status">{t("処理しています…")}</p>}
    {state.error && <p role="alert">{state.error}</p>}
    {state.message && <p role="status">{state.message}</p>}
@@ -78,6 +89,14 @@ export function SyncLifecycle({status,act}:{status:SyncStatus;act:(a:HostAction)
    </div>}
    {state.nextCursor && <button className="btn btn-sm" disabled={state.busy} onClick={()=>void act({kind:"listTrash",cursor:state.nextCursor!})}>{t("次のページ")}</button>}
    <button className="btn btn-ghost btn-sm" disabled={state.busy} onClick={()=>void act({kind:"cancelLifecycle"})}>{t("閉じる")}</button>
-  </div>}
+  </div> : null;
+ return <section className="sync-lifecycle" aria-label={t("この計画の操作")}>
+  <div className="sync-actions">
+   {rows.map(r=><React.Fragment key={r.id}>
+    <Row id={r.id} icon={r.icon} label={r.label} hint={r.hint} onClick={r.onClick}/>
+    {opened===r.id && bodyEl}
+   </React.Fragment>)}
+   {opened===null && bodyEl}
+  </div>
  </section>;
 }

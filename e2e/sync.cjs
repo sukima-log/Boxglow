@@ -60,7 +60,7 @@ const ROOT = path.resolve(__dirname, '..');
     check('同期D: 起動だけでは有効化しない', !(await status()).file.enabled);
     await page.getByRole('button', {name:'同期を始める',exact:true}).click();
     check('同期D: 開始前に送り先を表示', (await page.locator('.sync-startup').textContent()).includes(server.url));
-    check('同期D3: 詳細欄を1つに集約', await page.locator('.sync-panel summary').filter({hasText:/^(接続の詳細|詳細と設定)$/}).count() === 1);
+    check('同期D3: 詳細欄を1つに集約', await page.locator('.sync-panel summary').filter({hasText:/^(接続の詳細|詳細と設定|その他)$/}).count() === 1);
     if(process.env.BOXGLOW_E2E_SHOTS){fs.mkdirSync(process.env.BOXGLOW_E2E_SHOTS,{recursive:true});await page.screenshot({path:path.join(process.env.BOXGLOW_E2E_SHOTS,'serve-start.png')});}
     await page.getByRole('button', {name:'この計画を新しくサーバーに置く',exact:true}).click();
     await page.getByRole('button', { name: 'GitHub でサインイン', exact: true }).click();

@@ -56,7 +56,7 @@ const { chromium, open, check, result } = require('./lib.cjs');
       await page.evaluate(()=>window.boxglow.store.setState({syncAct:async a=>{window.__uiCalls.push(a);}}));
       await page.getByRole('button',{name:ja?'今すぐ同期':'Sync now',exact:true}).click();
       check(`${prefix}: 応答のない要求を古い同期済みで成功扱いしない`,(await page.locator('.toast').innerText()).includes(ja?'同期を要求しました':'Sync requested'));
-      await page.locator('.sync-panel > details > summary').filter({hasText:ja?'詳細と設定':'Details and settings'}).click();
+      await page.locator('.sync-panel > details > summary').filter({hasText:ja?'その他':'More'}).click();
       check(`${prefix}: サインアウトは 1 回で、何が起きるかはツールチップで分かる`,((await page.getByRole('button',{name:ja?'サインアウト':'Sign out',exact:true}).getAttribute('title'))||'').includes(ja?'手元の計画は残ります':'local plans remain'));
       await page.evaluate(()=>window.boxglow.store.setState({syncStatus:{...window.boxglow.store.getState().syncStatus,state:'unbound',file:{path:'review.json',enabled:false,binding:null},startup:{operationId:'test',stage:'choose'}}}));
       check(`${prefix}: 送る・受け取るの違いを押す前に示す`,(await page.locator('.sync-startup__choices').innerText()).includes(ja?'ほかの端末':'another device') && (await page.locator('.sync-startup__choices').innerText()).includes(ja?'一覧':'list'));

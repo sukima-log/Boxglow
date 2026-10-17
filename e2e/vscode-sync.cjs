@@ -110,7 +110,7 @@ const CODE = process.env.BOXGLOW_E2E_VSCODE || path.join(os.homedir(), '.cache',
     await frame.locator('.sync-chip').click();
     await frame.getByRole('button',{name:/^(同期を始める|Start syncing)$/}).click();
     check('VS Code D: 開始前に送り先を表示', (await frame.locator('.sync-startup').textContent()).includes(server.url));
-    check('VS Code D3: 詳細欄を1つに集約', await frame.locator('.sync-panel summary').filter({hasText:/^(接続の詳細|詳細と設定|Connection details|Details and settings)$/}).count() === 1);
+    check('VS Code D3: 詳細欄を1つに集約', await frame.locator('.sync-panel summary').filter({hasText:/^(接続の詳細|詳細と設定|その他|Connection details|Details and settings|More)$/}).count() === 1);
     if(process.env.BOXGLOW_E2E_SHOTS){fs.mkdirSync(process.env.BOXGLOW_E2E_SHOTS,{recursive:true});await win.screenshot({path:path.join(process.env.BOXGLOW_E2E_SHOTS,'vscode-start.png')});}
     await frame.getByRole('button',{name:/^(この計画を新しくサーバーに置く|Upload this plan as new)$/}).click();
     await button('GitHub でサインイン').click();

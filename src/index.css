@@ -1189,6 +1189,40 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .sync-panel__choices { display: flex; gap: 6px; flex-wrap: wrap; }
 .sync-panel__details { font-size: 12px; color: var(--text-muted); white-space: pre-wrap; word-break: break-all; }
 .sync-panel__id { font-family: var(--font-mono, monospace); font-size: 11px; }
+/* 同期パネルの段: 知らせ / アカウント / 切替 / 操作の一覧 / その他 */
+.sync-panel__notes { display: grid; gap: 4px; }
+.sync-account { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: color-mix(in srgb, var(--bg-card) 70%, var(--line-soft)); border: 1px solid var(--line-soft); }
+.sync-account__dot { width: 8px; height: 8px; border-radius: 50%; background: #2e9e6b; flex: none; }
+.sync-account__who { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; flex: 1; }
+.sync-account__name { font-weight: 600; overflow-wrap: anywhere; }
+.sync-account__via { font-size: 11px; color: var(--text-muted); }
+.sync-account__plan { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--primary-soft); color: var(--primary-strong); }
+.sync-account__plan[data-entitled="false"] { background: var(--attention-bg); color: var(--attention-text); }
+.sync-account__out { flex: none; color: var(--text-muted); }
+/* 切替 (スイッチの見た目) */
+.sync-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.sync-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.sync-switch__track { width: 32px; height: 18px; border-radius: 999px; background: var(--line); position: relative; transition: background 0.15s; flex: none; }
+.sync-switch__knob { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--bg-card); transition: left 0.15s; }
+.sync-switch input:checked + .sync-switch__track { background: var(--primary); }
+.sync-switch input:checked + .sync-switch__track .sync-switch__knob { left: 16px; }
+.sync-switch input:focus-visible + .sync-switch__track { outline: 2px solid var(--primary-strong); outline-offset: 2px; }
+/* 操作の一覧: 印 + 名前 + 短い説明。押すと下に内容が開く */
+.sync-actions { display: grid; gap: 2px; }
+.sync-action { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px; border-radius: 8px; border: 1px solid transparent; background: transparent; text-align: left; cursor: pointer; color: var(--text); }
+.sync-action:hover, .sync-action:focus-visible { background: var(--primary-soft); outline: none; }
+.sync-action[data-open="true"] { border-color: var(--line-soft); background: color-mix(in srgb, var(--bg-card) 70%, var(--line-soft)); }
+.sync-action__icon { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-muted); flex: none; }
+.sync-action__text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.sync-action__label { font-size: 13px; font-weight: 600; }
+.sync-action__hint { font-size: 11px; color: var(--text-muted); }
+.sync-action__chev { color: var(--text-muted); flex: none; }
+.sync-panel__details > summary { color: var(--text-muted); cursor: pointer; }
+.sync-actions .sync-lifecycle__body { padding: 4px 8px 8px 38px; }
+/* (後ろにある .sync-project-row の縦並びより強くするため、.sync-actions を付ける) */
+.sync-actions .sync-version-row, .sync-actions .sync-share-row { flex-direction: row; align-items: center; gap: 8px; }
+.sync-actions .sync-version-row > strong, .sync-actions .sync-share-row > strong { font-weight: 500; font-size: 12px; }
+.sync-actions .sync-version-row > button, .sync-actions .sync-share-row > button { margin-left: auto; }
 /* 共有リンク: 作った直後の URL は選びやすい入力欄で。失効・期限切れの行は薄く */
 .sync-shares { display: grid; gap: 8px; }
 .sync-shares__expires { display: inline-flex; align-items: center; gap: 6px; }

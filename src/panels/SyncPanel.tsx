@@ -12,7 +12,7 @@ import { ConflictGroups } from "./ConflictGroups";
 import { useEffect, useRef, useState } from "react";
 import { useProjectStore } from "../store/useProjectStore";
 import { planLabel } from "../sync/billing";
-import { SignInButtons, SignedInLine } from "./SignInButtons";
+import { SignInButtons } from "./SignInButtons";
 import { t } from "../i18n";
 import type { HaltItem, SyncStatus, HostAction } from "../sync/status";
 
@@ -94,7 +94,7 @@ export function SyncChip() {
         });
     };
     // 入力: MouseEvent。出力: void。パネル内の操作は保ち、外側のクリックでだけ閉じる。
-    const close = (e: MouseEvent) => {
+    const close = (e: Event) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     // 入力: KeyboardEvent。出力: void。Escape で閉じた後は入口に戻し、キー操作を続けられるようにする。
@@ -109,12 +109,13 @@ export function SyncChip() {
     // 帯のスクロールに追従し、入口から離れた場所にパネルを残さない。
     const bar = ref.current?.closest(".topbar-scroll");
     bar?.addEventListener("scroll", place);
-    document.addEventListener("mousedown", close);
+    // (捕捉段階で受ける: キャンバスや他の部品が押下の伝播を止めても、外側の押下で閉じる)
+    document.addEventListener("pointerdown", close, true);
     document.addEventListener("keydown", escape);
     return () => {
       window.removeEventListener("resize", place);
       bar?.removeEventListener("scroll", place);
-      document.removeEventListener("mousedown", close);
+      document.removeEventListener("pointerdown", close, true);
       document.removeEventListener("keydown", escape);
     };
   }, [open, panelWidth]);
@@ -233,13 +234,16 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
         <strong>{status.startup ? t("同期を始める") : c.label}</strong>
       </div>
       {!status.startup && <div className="sync-panel__line">{explanation(status)}</div>}
-      {/* サインインの状態は、いつも同じ場所に出す (サインインしているかどうかが一目で分かるように) */}
-      {status.support === "ok" && status.server && <SignedInLine status={status} />}
-      {/* 契約の情報があるときだけ表示する。詳細を開かなくても、現在のプランと状態を確認できる。 */}
-      {account?.billing && (account.billing.required || account.billing.plan) && <div className="sync-panel__plan-summary">
-        <span>{t("プラン")}: {account.billing.plan ? planLabel(account.billing.plan) : t("未契約")}</span>
-        {account.billing.plan && account.billing.plan !== "comp" && <span>{billingStatusLabel(account.billing.status)}</span>}
-      </div>}
+      {/* 知らせ: 補足・停止の理由と直し方・控えの場所 (あるときだけ) */}
+      {(status.message || status.problem || extra.length > 0 || status.halt?.done.backup) && (
+        <div className="sync-panel__notes">
+          {status.message && <div className="sync-panel__line">{status.message}</div>}
+          {status.problem && <div className="sync-panel__line sync-panel__problem">{status.problem.text} {fixHint(status.problem.fix)}</div>}
+          {extra.map((item, n) => <div key={n}>{item.text}</div>)}
+          {status.halt?.done.backup && <div>{t("控え")}: {status.halt.done.backup}</div>}
+        </div>
+      )}
+      {/* 1 段目: 状態と、いちばんよく使う操作 (サインイン / 同期を始める / 今すぐ同期)。情報は最小限にする */}
       {unsaved && file?.enabled && (
         <div className="sync-panel__line muted">{t("未保存の編集があります。保存すると送られます")}</div>
       )}
@@ -342,124 +346,107 @@ function SyncPanel({ status, onClose }: { status: SyncStatus; onClose: () => voi
           )}
         </div>
       )}
-      {status.support === "ok" && status.credentials.source !== "none" && <details className="sync-panel__management" open={status.lifecycle ? true : undefined}><summary>{t("サーバーの計画を管理")}</summary><SyncLifecycle status={status} act={act}/></details>}
-      {/* 日常の操作を埋もれさせないよう設定を畳む。ホストの停止理由・控えの場所は省略しない。 */}
-      <details className="sync-panel__details">
-        <summary>{t("詳細と設定")}</summary>
-        {/* 知らせ (補足・停止の理由・控え): 組の上にまとめて出す */}
-        {(status.message || status.problem || extra.length > 0 || status.halt?.done.backup) && (
-          <div className="sync-panel__group sync-panel__group--notes">
-            {status.message && <div className="sync-panel__line">{status.message}</div>}
-            {status.problem && (
-              <div className="sync-panel__line sync-panel__problem">
-                {status.problem.text} {fixHint(status.problem.fix)}
-              </div>
-            )}
-            {extra.map((item, n) => (
-              <div key={n}>{item.text}</div>
-            ))}
-            {status.halt?.done.backup && (
-              <div>
-                {t("控え")}: {status.halt.done.backup}
-              </div>
-            )}
+      {/* 2 段目: アカウント (誰で・どの手段で・プラン)。サインアウトは右端の小さな文字 */}
+      {status.support === "ok" && status.server && (account || status.credentials.source === "env") && (
+        <div className="sync-account" aria-label={t("アカウント")}>
+          <span className="sync-account__dot" aria-hidden="true" />
+          <div className="sync-account__who">
+            {account ? <>
+              <span className="sync-account__name sync-panel__who">{account.display}</span>
+              <span className="sync-account__via">{account.signedInWith === "google" ? "Google" : account.signedInWith === "github" ? "GitHub" : ""}</span>
+              {account.billing && account.billing.plan && (
+                <span className="sync-account__plan" data-entitled={account.billing.entitled ? "true" : "false"} title={account.billing.plan !== "comp" ? billingStatusLabel(account.billing.status) : undefined}>
+                  {planLabel(account.billing.plan)}{account.billing.plan === "team" && account.billing.seats > 0 ? ` × ${account.billing.seats}` : ""}
+                </span>
+              )}
+            </> : <span className="sync-account__name">{t("環境変数のトークン")}</span>}
           </div>
-        )}
-        {/* 組 1: アカウント (誰で・どの手段でサインインしているか、サインアウト) */}
-        {(account || status.credentials.source === "env") && (
-          <section className="sync-panel__group" aria-label={t("アカウント")}>
-            <div className="sync-panel__group-title">{t("アカウント")}</div>
-            <div className="sync-panel__row">
-              {account ? (
-                <>
-                  <span className="sync-panel__who">{account.display}</span>
-                  {/* サインインの手段: 付いているものを記号で示し、無い方は「+」で足せる (本人の明示操作。保存したサインインのときだけ) */}
-                  {account.identities && status.credentials.source === "stored" && !status.signIn && (
-                    <span className="sync-panel__identities" title={t("このアカウントのサインインの手段。もう一方を足すと、どちらでサインインしても同じアカウントになります")}>
-                      {(["github", "google"] as const).map((p) => account.identities!.includes(p)
-                        ? <span key={p} className="sync-panel__identity" data-on="true">{p === "github" ? "GitHub" : "Google"} ✓</span>
-                        : <button key={p} className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "linkIdentity", provider: p })} title={p === "github" ? t("GitHub でもサインインできるようにする") : t("Google でもサインインできるようにする")}>+ {p === "github" ? "GitHub" : "Google"}</button>)}
-                    </span>
-                  )}
-                  {/* サインアウトは 1 回で (取り消しのきく操作なので確認は挟まない。何が起きるかはツールチップで) */}
-                  <button className="btn btn-ghost btn-sm" title={t("この端末の同期を止めてサインアウトします。手元の計画は残ります")} onClick={() => void act({ kind: "signOut" })}>
-                    {t("サインアウト")}
-                  </button>
-                </>
-              ) : (
-                <span>{t("環境変数のトークンで同期しています")}</span>
+          {account && (
+            <button className="btn btn-ghost btn-sm sync-account__out" title={t("この端末の同期を止めてサインアウトします。手元の計画は残ります")} onClick={() => void act({ kind: "signOut" })}>
+              {t("サインアウト")}
+            </button>
+          )}
+        </div>
+      )}
+      {/* 契約が要る (または切れている) ときだけ、申し込みをここに出す */}
+      {account?.billing?.checkout && (!account.billing.plan || !account.billing.entitled) && (
+        <div className="sync-panel__row sync-panel__billing">
+          <button className="btn btn-primary btn-sm" onClick={() => void openBilling({ kind: "billingCheckout", plan: "personal" })}>{t("Personal を申し込む (月 500 円)")}</button>
+          <button className="btn btn-sm" onClick={() => void openBilling({ kind: "billingCheckout", plan: "team", seats: 2 })}>{t("Team を申し込む (1 人 月 800 円)")}</button>
+        </div>
+      )}
+      {status.billingLink && (
+        <div className="sync-panel__row sync-panel__billing-link">
+          <a href={status.billingLink.url} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm">
+            {status.billingLink.kind === "checkout" ? t("申し込みの画面を開く (Stripe)") : t("契約の管理を開く (Stripe)")}
+          </a>
+          <button className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "billingDismiss" })}>{t("閉じる")}</button>
+        </div>
+      )}
+      {/* 3 段目: この計画の同期の切替 */}
+      {file && ready && (!status.server || file.binding) && (
+        <label className="sync-panel__toggle sync-switch">
+          <input type="checkbox" checked={file.enabled} onChange={(e) => void act({ kind: e.target.checked ? "enable" : "disable" })} />
+          <span className="sync-switch__track" aria-hidden="true"><span className="sync-switch__knob" /></span>
+          <span>{t("この計画を同期する")}</span>
+        </label>
+      )}
+      {/* 4 段目: 操作の一覧 (履歴・共有リンク・ゴミ箱・別の計画を開く)。押すと、その下に内容が開く */}
+      {status.support === "ok" && status.credentials.source !== "none" && <SyncLifecycle status={status} act={act}/>}
+      {/* 5 段目: その他 (技術情報・サインインの手段・契約の管理・取り返しのつかない操作)。ふだんは畳んでおく */}
+      {status.support === "ok" && status.server && (
+        <details className="sync-panel__details">
+          <summary>{t("その他")}</summary>
+          {account && account.identities && status.credentials.source === "stored" && !status.signIn && (
+            <div className="sync-panel__group">
+              <div className="sync-panel__group-title">{t("サインインの手段")}</div>
+              <div className="sync-panel__row sync-panel__identities" title={t("このアカウントのサインインの手段。もう一方を足すと、どちらでサインインしても同じアカウントになります")}>
+                {(["github", "google"] as const).map((p) => account.identities!.includes(p)
+                  ? <span key={p} className="sync-panel__identity" data-on="true">{p === "github" ? "GitHub" : "Google"} ✓</span>
+                  : <button key={p} className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "linkIdentity", provider: p })} title={p === "github" ? t("GitHub でもサインインできるようにする") : t("Google でもサインインできるようにする")}>+ {p === "github" ? "GitHub" : "Google"}</button>)}
+              </div>
+            </div>
+          )}
+          {account?.billing?.portal && (
+            <div className="sync-panel__group">
+              <div className="sync-panel__group-title">{t("契約")}</div>
+              <div className="sync-panel__row">
+                <span>{account.billing.plan ? planLabel(account.billing.plan) : t("未契約")}{account.billing.plan && account.billing.plan !== "comp" ? ` (${billingStatusLabel(account.billing.status)})` : ""}</span>
+                <button className="btn btn-ghost btn-sm" onClick={() => void openBilling({ kind: "billingPortal" })}>{t("契約の管理")}</button>
+              </div>
+            </div>
+          )}
+          <div className="sync-panel__group">
+            <div className="sync-panel__group-title">{t("技術情報")}</div>
+            <dl className="sync-panel__facts">
+              {status.server && <><dt>{t("送り先")}</dt><dd className="break-all">{status.server}</dd></>}
+              {file && <><dt>{t("ファイル")}</dt><dd className="break-all">{file.path}</dd></>}
+              {status.startup?.opened && <><dt>{t("保存先")}</dt><dd className="break-all">{status.startup.opened.path}</dd></>}
+              {file?.binding && status.state !== "signed-out" && <><dt>{t("サーバー ID")}</dt><dd className="sync-panel__id">{file.binding.remoteId}{status.revision ? ` (${t("版")} ${status.revision})` : ""}</dd></>}
+            </dl>
+            {/* R39-06: 開き直した後の VS Code で退避を取り込む入口。 */}
+            <RestoreEntry />
+          </div>
+          {(file?.binding || account) && (
+            <div className="sync-panel__group sync-panel__group--danger">
+              <div className="sync-panel__group-title">{t("取り返しのつかない操作")}</div>
+              <div className="sync-panel__row">
+                {file?.binding && <button className="btn btn-ghost btn-sm sync-panel__danger" disabled={status.lifecycle?.busy} onClick={() => void act({ kind: "previewDelete", projectId: file.binding!.remoteId })}>{t("この計画をサーバーから削除…")}</button>}
+                {account && !confirmDelete && <button className="btn btn-ghost btn-sm sync-panel__danger" onClick={() => setConfirmDelete(true)}>{t("アカウントを削除…")}</button>}
+              </div>
+              {account && confirmDelete && (
+                <div className="sync-panel__confirm-delete" role="group" aria-label={t("アカウントの削除の確認")}>
+                  <div>{t("サーバーの計画は 30 日後に消えます (それまでは support@boxglow.app への連絡で取り消せます)。手元のファイルは残ります。")}</div>
+                  <div className="sync-panel__actions">
+                    <button className="btn btn-sm btn-danger" onClick={() => { setConfirmDelete(false); void act({ kind: "deleteAccount" }); }}>{t("アカウントを削除する")}</button>
+                    <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(false)}>{t("やめる")}</button>
+                  </div>
+                </div>
               )}
             </div>
-          </section>
-        )}
-        {/* 組 2: プラン (契約の状態・申し込み・契約の管理)。サーバーが契約の状態を返したときだけ */}
-        {account?.billing && (account.billing.required || account.billing.plan || account.billing.checkout) && (
-          <section className="sync-panel__group" aria-label={t("プラン")}>
-            <div className="sync-panel__group-title">{t("プラン")}</div>
-            <div className="sync-panel__row sync-panel__billing">
-              <span className="sync-panel__plan" data-entitled={account.billing.entitled ? "true" : "false"}>
-                {account.billing.plan ? planLabel(account.billing.plan) : t("未契約")}{account.billing.plan === "team" && account.billing.seats > 0 ? ` × ${account.billing.seats}` : ""}
-                {account.billing.plan && account.billing.plan !== "comp" ? ` (${billingStatusLabel(account.billing.status)})` : ""}
-              </span>
-              {account.billing.portal && <button className="btn btn-ghost btn-sm" onClick={() => void openBilling({ kind: "billingPortal" })}>{t("契約の管理")}</button>}
-            </div>
-            {/* 申し込み: 契約が無い (試用中を含む) か、契約が切れているとき。契約を求めていない試用中は、契約が無くても同期は止まらない */}
-            {account.billing.checkout && (!account.billing.plan || !account.billing.entitled) && (
-              <div className="sync-panel__row">
-                <button className="btn btn-primary btn-sm" onClick={() => void openBilling({ kind: "billingCheckout", plan: "personal" })}>{t("Personal を申し込む (月 500 円)")}</button>
-                <button className="btn btn-sm" onClick={() => void openBilling({ kind: "billingCheckout", plan: "team", seats: 2 })}>{t("Team を申し込む (1 人 月 800 円)")}</button>
-              </div>
-            )}
-            {/* タブを開けなかったときだけ残る: 画面の URL をリンクとして出す (VS Code の webview では外のブラウザで開く) */}
-            {status.billingLink && (
-              <div className="sync-panel__row sync-panel__billing-link">
-                <a href={status.billingLink.url} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-sm">
-                  {status.billingLink.kind === "checkout" ? t("申し込みの画面を開く (Stripe)") : t("契約の管理を開く (Stripe)")}
-                </a>
-                <button className="btn btn-ghost btn-sm" onClick={() => void act({ kind: "billingDismiss" })}>{t("閉じる")}</button>
-              </div>
-            )}
-          </section>
-        )}
-        {/* 組 3: この計画 (同期の有無・送り先・ファイル・サーバーの ID と版) */}
-        <section className="sync-panel__group" aria-label={t("この計画")}>
-          <div className="sync-panel__group-title">{t("この計画")}</div>
-          {file && ready && (!status.server || file.binding) && (
-            <label className="sync-panel__toggle">
-              <input
-                type="checkbox"
-                checked={file.enabled}
-                onChange={(e) => void act({ kind: e.target.checked ? "enable" : "disable" })}
-              />
-              <span>{t("この計画を同期する")}</span>
-            </label>
           )}
-          <dl className="sync-panel__facts">
-            {status.server && <><dt>{t("送り先")}</dt><dd className="break-all">{status.server}</dd></>}
-            {file && <><dt>{t("ファイル")}</dt><dd className="break-all">{file.path}</dd></>}
-            {status.startup?.opened && <><dt>{t("保存先")}</dt><dd className="break-all">{status.startup.opened.path}</dd></>}
-            {file?.binding && status.state !== "signed-out" && <><dt>{t("サーバー ID")}</dt><dd className="sync-panel__id">{file.binding.remoteId}{status.revision ? ` (${t("版")} ${status.revision})` : ""}</dd></>}
-          </dl>
-          {/* R39-06: 開き直した後の VS Code で退避を取り込む入口。 */}
-          <RestoreEntry />
-        </section>
-        {/* 組 4: 取り返しのつかない操作 (アカウントの削除)。欄の中で 2 段階の確認 (window.confirm は VS Code の webview で使えない) */}
-        {account && (
-          <section className="sync-panel__group sync-panel__group--danger" aria-label={t("アカウントの削除")}>
-            {confirmDelete ? (
-              <div className="sync-panel__confirm-delete" role="group" aria-label={t("アカウントの削除の確認")}>
-                <div>{t("サーバーの計画は 30 日後に消えます (それまでは support@boxglow.app への連絡で取り消せます)。手元のファイルは残ります。")}</div>
-                <div className="sync-panel__actions">
-                  <button className="btn btn-sm btn-danger" onClick={() => { setConfirmDelete(false); void act({ kind: "deleteAccount" }); }}>{t("アカウントを削除する")}</button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(false)}>{t("やめる")}</button>
-                </div>
-              </div>
-            ) : (
-              <button className="btn btn-ghost btn-sm sync-panel__danger" onClick={() => setConfirmDelete(true)}>{t("アカウントを削除…")}</button>
-            )}
-          </section>
-        )}
-      </details>
+        </details>
+      )}
       <button className="sync-panel__close btn btn-ghost btn-sm" onClick={onClose} aria-label={t("閉じる")}>
         ×
       </button>
