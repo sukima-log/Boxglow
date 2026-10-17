@@ -10,10 +10,14 @@
  * 保存の要求には必ず requestId 付きで成功か失敗かを返す (画面は応答を待ってから「保存済み」にする)。手順の本体は save.ts
  */
 import * as vscode from "vscode";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
+import { tmpdir } from "node:os";
 import { saveDocument, diskAccess, conflictSnapshot, saveFailureBase } from "./save";
 import { FileConflict } from "../../cli/file-store";
+import { dpapiAvailable } from "../../cli/sync/dpapi";
+import { credentialsPath, inspectCredentials, removeCredentials, saveCredentials, withCredentialsLock } from "../../cli/sync/credentials";
+import { DEFAULT_SYNC_SERVER } from "../../cli/sync/server-policy";
 import { rewriteIndexHtml } from "./html";
 import { APP_VERSION, SAVE_PROTOCOL } from "../../src/model/version";
 // 保存の失敗の文言を計画の言語 (日本語 / 英語) で出す
@@ -44,6 +48,47 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     if (!target) { void vscode.window.showInformationMessage("boxglow.json が見つかりません (npx boxglow init で作れます)"); return; }
     await vscode.commands.executeCommand("vscode.openWith", target, VIEW_TYPE);
+  }));
+  // コマンド: サインインの保存の自己診断 (B187。Windows ローカルの VS Code での確認を、人の操作なしで行う)
+  //   この拡張ホスト (Node) で、OS・DPAPI の可否・資格情報の置き場・保存と読み出しの往復 (一時フォルダ、ダミーのトークン)・今の保存の状態を調べ、出力に出す
+  context.subscriptions.push(vscode.commands.registerCommand("boxglow.selfCheckSignIn", async () => {
+    const lines: string[] = [];
+    const ok = (name: string, pass: boolean, detail = "") => lines.push(`${pass ? "OK " : "NG "} ${name}${detail ? " " + detail : ""}`);
+    lines.push(`Boxglow sign-in self check  ${new Date().toISOString()}`);
+    lines.push(`platform=${process.platform} node=${process.version} vscode=${vscode.version} remote=${vscode.env.remoteName ?? "(local)"}`);
+    const win = process.platform === "win32";
+    const dpapiOk = dpapiAvailable();
+    ok("DPAPI (Windows PowerShell)", win ? dpapiOk : true, win ? (dpapiOk ? "使える" : "使えない: PowerShell を呼べない") : "Windows ではないので不要");
+    // 往復: 一時の設定フォルダにダミーを保存 → ファイルに平文が無い (Windows) → 読み出せる → 消す
+    const saved = process.env.BOXGLOW_CONFIG_DIR;
+    const tmp = mkdtempSync(join(tmpdir(), "boxglow-selfcheck-"));
+    process.env.BOXGLOW_CONFIG_DIR = join(tmp, "config");
+    try {
+      const server = "https://selfcheck.example.test";
+      await withCredentialsLock(server, async () => { saveCredentials({ server, account: "acc-selfcheck", login: "selfcheck", token: "bgl_selfcheck_token", createdAt: new Date().toISOString() }); });
+      const raw = readFileSync(credentialsPath(server), "utf8");
+      ok("保存できる (一時フォルダ)", true, credentialsPath(server));
+      if (win) ok("ファイルに平文のトークンが無い (DPAPI の暗号文だけ)", !raw.includes("bgl_selfcheck_token") && raw.includes("\"dpapi\""));
+      const back = inspectCredentials(server);
+      ok("読み出して復号できる", back.kind === "valid" && back.credentials.token === "bgl_selfcheck_token", back.kind === "valid" ? "" : JSON.stringify(back));
+      await withCredentialsLock(server, async () => { removeCredentials(server); });
+      ok("消せる", inspectCredentials(server).kind === "absent");
+    } catch (e) {
+      ok("保存の往復", false, e instanceof Error ? e.message : String(e));
+    } finally {
+      if (saved === undefined) delete process.env.BOXGLOW_CONFIG_DIR; else process.env.BOXGLOW_CONFIG_DIR = saved;
+      rmSync(tmp, { recursive: true, force: true });
+    }
+    // 今の保存の状態 (本番のサーバー向け): サインイン済みなら誰か。トークンは出さない
+    const current = inspectCredentials(DEFAULT_SYNC_SERVER);
+    lines.push(`今のサインイン (${DEFAULT_SYNC_SERVER}): ${current.kind === "valid" ? `あり (${current.credentials.login}, ${credentialsPath(DEFAULT_SYNC_SERVER)})` : current.kind === "absent" ? "なし" : `使えない: ${current.reason}`}`);
+    const failed = lines.filter((l) => l.startsWith("NG ")).length;
+    lines.push(failed === 0 ? "すべて OK" : `${failed} 件 NG`);
+    const text = lines.join("\n");
+    const channel = vscode.window.createOutputChannel("Boxglow");
+    channel.appendLine(text); channel.show(true);
+    await vscode.env.clipboard.writeText(text);
+    void vscode.window.showInformationMessage(failed === 0 ? "Boxglow: サインインの保存の自己診断はすべて OK です (結果をクリップボードにコピーしました)" : `Boxglow: 自己診断で ${failed} 件 NG (結果をクリップボードにコピーしました)`);
   }));
 }
 

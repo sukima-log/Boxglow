@@ -2,7 +2,8 @@
 
 ## Unreleased (next: 0.5.2)
 
-_Fixes found after 0.5.1 go here._
+- Sign-in can be stored on Windows itself (not only WSL): the token is encrypted with Windows DPAPI via Windows PowerShell under `%APPDATA%\boxglow\credentials\`.
+- New command "Boxglow: Self-check sign-in storage (Windows DPAPI)" runs the storage round trip in the extension host and copies the result to the clipboard.
 
 ## 0.5.1
 

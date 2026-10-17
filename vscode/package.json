@@ -63,6 +63,11 @@
         "title": "Boxglow: Open boxglow.json as a diagram",
         "category": "Boxglow",
         "icon": "$(graph)"
+      },
+      {
+        "command": "boxglow.selfCheckSignIn",
+        "title": "Boxglow: Self-check sign-in storage (Windows DPAPI)",
+        "category": "Boxglow"
       }
     ],
     "menus": {
