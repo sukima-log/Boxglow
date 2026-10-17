@@ -130,6 +130,7 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
     if (!canvas) return;
     const panels = [...document.querySelectorAll<HTMLElement>(".tree-panel, .drawer, .panel.right:not(.hidden-panel)")];
     const nextArea = availableCanvas(canvas.getBoundingClientRect(), panels.filter(p => p.getClientRects().length).map(p => p.getBoundingClientRect()));
+    const prevArea = area.current;
     area.current = nextArea;
     const nextFit = target();
     if (!nextFit || !nextArea) return;
@@ -153,11 +154,16 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
         void rf.setViewport(next);
     }
     else if (current.zoom < nextFit.zoom - .00001) {
-      // 領域が広がった場合だけ下限を引き上げる。Fit の中心への強制移動はしない。
+      // 領域が広がって下限が上がる場合: 縮小しきっていた (全体表示だった) なら新しい全体表示へ、そうでなければ倍率だけ引き上げる
+      if (wasFitted) { void rf.setViewport(nextFit); return; }
       const ratio = nextFit.zoom / current.zoom;
       const cx = nextArea.x + nextArea.width / 2;
       const cy = nextArea.y + nextArea.height / 2;
       void rf.setViewport({ x: cx - (cx - current.x) * ratio, y: cy - (cy - current.y) * ratio, zoom: nextFit.zoom });
+    }
+    else if (wasFitted && prevArea && (prevArea.x !== nextArea.x || prevArea.width !== nextArea.width || prevArea.height !== nextArea.height) && different(current, nextFit)) {
+      // 領域の広さが変わった (サイドバーや引き出しの開閉) 場合: 全体表示のままなら、新しい領域の中央に合わせ直す (片側に寄ったまま残さない)
+      void rf.setViewport(nextFit);
     }
   }, [rf, target, vertical, readingTarget]);
   // 監視の寿命をノード位置の変化から切り離す。ドラッグの各フレームで作り直さない。
@@ -211,7 +217,9 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
           void rf.setViewport(next);
       }
       else if (event.deltaY > 0 && fit && current.zoom <= fit.zoom + .0001 && (!vertical || zoomKey)) {
-        // 下限でさらに縮小しても、手で移動した viewport を Fit 中心へ戻さない。
+        // 下限でさらに縮小した = 全体を見たい、なので全体を中央に収める
+        // (下限に着いた後に領域の広さが変わったり、手で動かしたりして片側に寄っていても、ここで中央へ戻る)
+        if (different(current, fit)) void rf.setViewport(fit, { duration: 120 });
       }
       else if (!vertical) {
         return;

@@ -109,6 +109,17 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('Top の見出し行: NOW を押すとその箱が選ばれる',await page.evaluate(()=>window.boxglow.store.getState().selection.blockId)===nowId);
     await page.evaluate((prev)=>{const s=window.boxglow.store.getState();s.apply(p=>({...p,now:prev}));s.select({});s.setViewScope(null);},nowBefore);await page.waitForTimeout(400);
 
+    // ホイールで縮小しきると図が領域の中央に来る。最小倍率で図を動かした後にもう一度引いても中央に戻る
+    const centerGap=()=>page.evaluate(()=>{const c=document.querySelector('.react-flow').getBoundingClientRect();const side=(document.querySelector('.tree-panel')||document.querySelector('.drawer'))?.getBoundingClientRect();const left=side?side.right:c.left;const rs=[...document.querySelectorAll('.react-flow__node')].map(n=>n.getBoundingClientRect()).filter(r=>r.width>0);const bx=Math.min(...rs.map(r=>r.left)),bX=Math.max(...rs.map(r=>r.right));return Math.abs((left+c.right)/2-(bx+bX)/2);});
+    await page.mouse.move(1200,500);for(let i=0;i<5;i++){await page.mouse.wheel(0,-200);await page.waitForTimeout(50);}
+    await page.mouse.move(1400,700);for(let i=0;i<30;i++){await page.mouse.wheel(0,300);await page.waitForTimeout(30);}await page.waitForTimeout(700);
+    check('キャンバス: ホイールで縮小しきると図が中央に来る',(await centerGap())<3,String(await centerGap()));
+    await page.mouse.move(100,300);await page.mouse.down();await page.mouse.move(400,360,{steps:6});await page.mouse.up();await page.waitForTimeout(400); // 空いている場所から図を動かす
+    const movedGap=await centerGap();
+    await page.mouse.move(100,300);await page.mouse.wheel(0,300);await page.waitForTimeout(600); // 空き地でホイール (箱の上では箱側が受ける)
+    check('キャンバス: 最小倍率で動かした後にもう一度引くと中央に戻る',movedGap>100 && (await centerGap())<3,movedGap+' -> '+(await centerGap()));
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.select({});s.setViewScope(null);});await page.waitForTimeout(300);
+
     // 出力の詳細に「使う箱」(下流) が並び、押すとその箱へ
     await page.evaluate(()=>{const s=window.boxglow.store.getState();const b=Object.values(s.project.blocks).find(x=>x.title==='設計する');s.select({blockId:b.id,panelTab:'io'});});await page.waitForTimeout(500);
     const consumers=await page.locator('.port-consumers').first().innerText();
