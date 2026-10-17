@@ -264,7 +264,7 @@ describe("サインインとサインアウト", () => {
     expect(state.agent?.tokens?.[0]).toMatchObject({ id, revoked: true });
     // 結び付いていない計画の ID は 404 → error
     state = await host.act(file, { kind: "createAgentToken", projectId: "no-such", name: "x", write: false });
-    expect(state.agent?.error).toBeTruthy();
+    expect(state.agent?.error).toContain("この計画がサーバー上にありません");
     expect(parseHostAction(JSON.stringify({ kind: "createAgentToken", projectId: remoteId, name: "x".repeat(65), write: true }))).toBeNull();
     expect(parseHostAction(JSON.stringify({ kind: "revokeAgentToken", id: "../x" }))).toBeNull();
     await host.act(file, { kind: "signOut" });

@@ -27,7 +27,7 @@ export async function runAgentToken(o: AgentTokenOptions): Promise<number> {
       if (!o.projectId) { out(t("この計画はまだサーバーに置かれていません (boxglow sync で結び付けてから)")); return 1; }
       const res = await doFetch(`${server}/v1/agent-tokens`, { method: "POST", headers, redirect: "error", body: JSON.stringify({ name: o.name ?? "agent", projectId: o.projectId, write: o.write === true }), signal: AbortSignal.timeout(30000) });
       const body = await res.json().catch(() => ({})) as { id?: unknown; token?: unknown; code?: unknown; limit?: unknown };
-      if (!res.ok || typeof body.token !== "string") { out(res.status === 409 ? t("エージェント用トークンは {n} 個までです。使わないものを失効させてください", { n: String(body.limit ?? "") }) : t("トークンを作れませんでした (サーバーの応答: {status})", { status: res.status })); return 1; }
+      if (!res.ok || typeof body.token !== "string") { out(res.status === 409 ? t("エージェント用トークンは {n} 個までです。使わないものを失効させてください", { n: String(body.limit ?? "") }) : res.status === 404 ? t("今サインインしているアカウントには、この計画がサーバー上にありません (別のアカウントで置いた計画かもしれません)。その計画を置いたアカウントでサインインし直すか、このアカウントで計画を置き直してください") : t("トークンを作れませんでした (サーバーの応答: {status})", { status: res.status })); return 1; }
       out(t("トークンを作りました。この値は今だけ表示されます (控えてください)。"));
       out(body.token);
       out("");

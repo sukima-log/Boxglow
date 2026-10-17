@@ -437,6 +437,8 @@ export class SyncHost {
         const res = await this.doFetch(`${this.server}/v1/agent-tokens`, { method: "POST", headers, redirect: "error", body: JSON.stringify({ name: action.name, projectId: action.projectId, write: action.write }) });
         const body = await res.json().catch(() => ({})) as { id?: unknown; token?: unknown; code?: unknown; limit?: unknown };
         if (res.status === 409 && body.code === "quota") throw new Error(t("エージェント用トークンは {n} 個までです。使わないものを失効させてください", { n: String(body.limit ?? "") }));
+        // 404: 計画がこのアカウントに無い (別のアカウントで置いた計画を、違うアカウントで開いているとき)
+        if (res.status === 404) throw new Error(t("今サインインしているアカウントには、この計画がサーバー上にありません (別のアカウントで置いた計画かもしれません)。その計画を置いたアカウントでサインインし直すか、このアカウントで計画を置き直してください"));
         if (!res.ok || typeof body.id !== "string" || typeof body.token !== "string") throw new Error(t("トークンを作れませんでした (サーバーの応答: {status})", { status: res.status }));
         state.newToken = { id: body.id, name: action.name, token: body.token, projectId: action.projectId, write: action.write };
       }
