@@ -43,9 +43,15 @@ In View mode the boxes are laid out in dependency order as numbered stages, left
 
 The diagram follows the file: when the CLI or an agent writes it, the view updates. Edits in the diagram (Edit mode) are written back to the file. Light / dark follow the VS Code theme, and the UI is in English or Japanese following VS Code's display language.
 
+## Sync, workspaces and hosted agents (optional)
+
+- **Sync between machines**: the sync chip in the top bar starts syncing (sign in with GitHub or Google); the plan is kept on https://sync.boxglow.app and received on another machine or in the web app. "Stop syncing / Resume syncing" and "Disconnect this plan on this device" are in the same panel. On Windows the sign-in is stored with DPAPI.
+- **Workspaces**: the account menu (top right) creates a workspace, invites people with a link (viewer / editor) and puts plans in it so the whole team syncs the same plan.
+- **Agents without the file**: "Connect Claude Code / Connect Codex" in the account menu writes the config for the hosted MCP server, so an agent on another machine or in the cloud reads and writes the plan on the server.
+
 ## Good to know
 
-- Everything stays in your repository: the extension reads and writes `boxglow.json`. Nothing is uploaded unless you choose **Start syncing** (experimental sync between machines, off by default).
+- Everything stays in your repository: the extension reads and writes `boxglow.json`. Nothing is uploaded unless you start syncing (off by default).
 - Works without an agent too: you can build and track a plan by hand.
 - The plan format, the CLI, the MCP server and the web app are open source (MIT): https://github.com/sukima-log/Boxglow
 - Web version: https://boxglow.app/
