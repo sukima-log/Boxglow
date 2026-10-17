@@ -189,6 +189,7 @@ export const app: Record<string, string> = {
 , "読み取り専用": "read-only"
 , "{n} 回": "{n} calls"
 , "トークンはまだありません。": "No tokens yet."
+, "失効したトークン {n} 件 (30 日で消えます)": "{n} revoked tokens (removed after 30 days)"
 , "エージェント用トークンは {n} 個までです。使わないものを失効させてください": "Up to {n} agent tokens. Revoke ones you no longer use"
 , "トークンを作れませんでした (サーバーの応答: {status})": "Could not create the token (server responded {status})"
 , "トークンを失効できませんでした (サーバーの応答: {status})": "Could not revoke the token (server responded {status})"

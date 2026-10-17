@@ -238,13 +238,26 @@ export function AccountButton() {
                           <div className="sync-panel__row"><button className="btn btn-ghost btn-sm" onClick={() => { setCopied(null); setPicked(null); void act({ kind: "agentTokenDismiss" }); }}>{t("閉じる")}</button></div>
                         </div>
                       )}
-                      {status.agent?.tokens?.map((tk) => (
+                      {status.agent?.tokens?.filter((tk) => !tk.revoked).map((tk) => (
                         <div className="sync-project-row agent-tokens__row" key={tk.id} data-off={tk.revoked ? "true" : "false"}>
                           <strong>{tk.name}</strong>
                           <small>{tk.write ? t("読み書き") : t("読み取り専用")} · {tk.projectId}{tk.requests > 0 ? ` · ${t("{n} 回", { n: String(tk.requests) })}` : ""}{tk.revoked ? ` · ${t("失効")}` : ""}</small>
                           {!tk.revoked && <button className="btn btn-ghost btn-sm" disabled={status.agent?.busy} onClick={() => void act({ kind: "revokeAgentToken", id: tk.id })}>{t("失効")}</button>}
                         </div>
                       ))}
+                      {/* 失効したものは折りたたんで件数だけ (記録はサーバーが 30 日で消す) */}
+                      {(status.agent?.tokens?.filter((tk) => tk.revoked).length ?? 0) > 0 && (
+                        <details className="agent-tokens__revoked">
+                          <summary className="muted">{t("失効したトークン {n} 件 (30 日で消えます)", { n: String(status.agent!.tokens!.filter((tk) => tk.revoked).length) })}</summary>
+                          {status.agent!.tokens!.filter((tk) => tk.revoked).map((tk) => (
+                        <div className="sync-project-row agent-tokens__row" key={tk.id} data-off={tk.revoked ? "true" : "false"}>
+                          <strong>{tk.name}</strong>
+                          <small>{tk.write ? t("読み書き") : t("読み取り専用")} · {tk.projectId}{tk.requests > 0 ? ` · ${t("{n} 回", { n: String(tk.requests) })}` : ""}{tk.revoked ? ` · ${t("失効")}` : ""}</small>
+                          {!tk.revoked && <button className="btn btn-ghost btn-sm" disabled={status.agent?.busy} onClick={() => void act({ kind: "revokeAgentToken", id: tk.id })}>{t("失効")}</button>}
+                        </div>
+                      ))}
+                        </details>
+                      )}
                       {status.agent?.tokens?.length === 0 && <p className="muted">{t("トークンはまだありません。")}</p>}
                     </div>
                   )}

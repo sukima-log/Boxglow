@@ -1208,6 +1208,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .agent-tokens__row > strong, .agent-tokens__row > small { grid-column: 1; }
 .agent-tokens__row > button { grid-column: 2; grid-row: 1 / span 2; }
 .agent-tokens__row[data-off="true"] { opacity: 0.6; }
+.agent-tokens__revoked > summary { cursor: pointer; font-size: 12px; }
 /* 右上のアカウント: 丸いボタン (頭文字 / 人型) と、その下に開くメニュー */
 .account-wrap { position: relative; flex: none; }
 .account-button { position: relative; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: var(--bg-card); color: var(--text-muted); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
