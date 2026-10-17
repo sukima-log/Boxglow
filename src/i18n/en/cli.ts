@@ -339,4 +339,5 @@ export const cli: Record<string, string> = {
 , "発火の記録 (このリポジトリ):": "Hook firings (this repository):"
 , "あり": "present"
 , "なし": "absent"
+, "あり (印 {mark})": "present (mark {mark})"
 };

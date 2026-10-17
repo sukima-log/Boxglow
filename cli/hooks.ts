@@ -12,12 +12,17 @@ import type { Project } from "../src/model/types";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { configDir } from "./sync/state-store";
+import { createHash } from "node:crypto";
+
+/** セッションの識別子の印 (SHA-256 の先頭 8 文字)。Input: 識別子。Output: 印 (無ければ "") */
+export const sessionMark = (id: string | undefined): string => id ? createHash("sha256").update(id).digest("hex").slice(0, 8) : "";
 import { t } from "../src/i18n/core";
 
 export type HookEvent = "session-start" | "stop" | "pre-tool";
 
 /** 発火の記録の 1 行 (設定フォルダの hooks.log。発火したかを人が確かめるため。中身や識別子の値は書かない) */
-export interface HookLogEntry { at: string; event: string; actor: string; cwd: string; result: "context" | "block" | "none"; session: boolean }
+/** session = セッションの識別子の印 (SHA-256 の先頭 8 文字。値そのものは残さない。無ければ "") */
+export interface HookLogEntry { at: string; event: string; actor: string; cwd: string; result: "context" | "block" | "none"; session: string }
 
 /** 発火の記録のファイル。Input: なし。Output: パス */
 export const hookLogPath = (): string => join(configDir(), "hooks.log");
