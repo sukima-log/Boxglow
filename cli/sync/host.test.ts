@@ -174,7 +174,7 @@ describe("サインインとサインアウト", () => {
     const { host } = make();
     host.openFile(file);
     host.signIn("github");
-    await until(() => !!host.status(file).signIn?.userCode);
+    await until(() => host.status(file).signIn !== undefined);
     const during = host.status(file);
     expect(during.signIn).toMatchObject({ provider: "github", userCode: expect.stringMatching(/^TEST-/), verificationUrl: expect.stringContaining("/fake/github/login/device") });
     // サーバー側で許可する
@@ -634,7 +634,7 @@ describe("Google でのサインイン (裏方)", () => {
     const { host } = make();
     host.openFile(file);
     host.signIn("google");
-    await until(() => !!host.status(file).signIn?.url);
+    await until(() => host.status(file).signIn !== undefined);
     const during = host.status(file);
     expect(during.signIn).toMatchObject({ provider: "google", url: expect.stringContaining("accounts.google.com") });
     const id = [...server.googleTx.keys()].at(-1)!;
