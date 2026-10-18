@@ -63,6 +63,30 @@ export function ConstraintsField({ project, blockId }: { project: Project; block
   </section>;
 }
 
+/**
+ * 完了条件の欄 (I/O タブの出力の下。作業範囲の acceptance と同じ値)。
+ * 利用者の指摘 2026-10-18: 「保存先: 作業範囲」と言われても More タブの「作業範囲・制約を編集」の中は見つからない。制約と同じく出力のそばに置く
+ * Input : project, blockId / Output: 欄 (閲覧専用で空なら null)
+ */
+export function AcceptanceField({ project, blockId }: { project: Project; blockId: string }) {
+  useLang();
+  const apply = useProjectStore(s => s.apply);
+  const readonly = useProjectStore(s => s.readonly);
+  const b = project.blocks[blockId];
+  const change = (value: string) => apply(p => {
+    const scope = { ...p.blocks[blockId].scope };
+    if (value.trim()) scope.acceptance = value.trim(); else delete scope.acceptance;
+    return updateBlock(p, blockId, { scope: Object.keys(scope).length ? scope : undefined });
+  });
+  if (readonly && !b.scope?.acceptance) return null;
+  return <section className="sec acceptance-field">
+    <div className="sec__head"><span className="label">{t("完了条件")}</span></div>
+    <p className="sec__hint">{t("何をどう確かめれば完了か (出力の予定成果物とは別に、確かめ方を書く)。着手の準備の欄と同じ値")}</p>
+    {readonly ? <p className="whitespace-pre-wrap break-words text-[12px]">{b.scope?.acceptance}</p>
+      : <DebouncedText multiline className="input" rows={2} aria-label={t("完了条件")} placeholder={t("何をどう確かめれば完了か (例: 配信先の URL でアプリが開く)")} value={b.scope?.acceptance ?? ""} onCommit={change} />}
+  </section>;
+}
+
 /** Input: 計画 / Output: プロジェクト設定の中で必要時に開く確認方法。人の操作は常に許可する。 */
 export function WorkflowSettings({ project }: { project: Project }) {
   useLang();

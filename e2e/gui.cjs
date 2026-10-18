@@ -267,7 +267,13 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.locator('.readiness-fields select').first().selectOption('file');await page.waitForTimeout(300);
     const hint=page.locator('.readiness-fields input.input-plain').first();await hint.fill('src/x.ts');await hint.press('Enter');await page.waitForTimeout(600);
     const after=await page.evaluate(()=>({ready:!!document.querySelector('.readiness-fields--ready'),done:document.querySelectorAll('.readiness-fields__done').length,where:[...document.querySelectorAll('.readiness-fields__where')].map(e=>e.textContent)}));
-    check('着手の準備: 全部埋めても欄が ✓ 付きで残り、保存先 (I/O タブ / 作業範囲) が示される',after.ready&&after.done===2&&after.where.length===2,JSON.stringify(after));
+    check('着手の準備: 全部埋めても欄が ✓ 付きで残り、保存先 (I/O タブ) が示される',after.ready&&after.done===2&&after.where.length===2&&after.where.every(w=>w.includes('I/O')),JSON.stringify(after));
+    // Ready のボックスを選び直すと 1 行にたたまれる (場所を取らない)。見出しを押すと開く
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();const id=s.selection.blockId;s.select({});setTimeout(()=>s.select({blockId:id,panelTab:'status'}),50);});await page.waitForTimeout(500);
+    const foldedReady=await page.evaluate(()=>{const d=document.querySelector('.readiness-fields--ready');return !!d&&!d.open&&d.querySelector('summary').textContent.includes('Ready');});
+    check('着手の準備: Ready で選び直すと 1 行にたたまれる',foldedReady);
+    await page.locator('.readiness-fields--ready > summary').click();await page.waitForTimeout(300);
+    check('着手の準備: 見出しを押すと欄が開く',await page.evaluate(()=>document.querySelector('.readiness-fields--ready').open&&document.querySelectorAll('.readiness-fields textarea').length===1));
     await page.evaluate(()=>{const s=window.boxglow.store.getState();const id=s.selection.blockId;s.select({});s.apply(p=>{const q=structuredClone(p);for(const e of Object.values(q.edges)){const a=q.ports[e.from.portId],b=q.ports[e.to.portId];if(a?.blockId===id||b?.blockId===id)delete q.edges[e.id];}for(const k of Object.keys(q.ports))if(q.ports[k].blockId===id)delete q.ports[k];delete q.blocks[id];const parent=Object.values(q.blocks).find(x=>x.title==='設計する');parent.collapsed=true;return q;});s.setEditMode(false);});await page.waitForTimeout(400);
     // Top の Expand all / Collapse all: 大項目を全部展開して、すぐ 1 階層 (大項目だけ) に戻せる。View なので保存データは変えない
     await page.evaluate(()=>{const s=window.boxglow.store.getState();s.select({});s.setViewScope(null);});await page.waitForTimeout(400);

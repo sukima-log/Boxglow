@@ -12,7 +12,7 @@ import { outputOwners, unpreparedReasons } from "../model/readiness";
 import { ReviewState } from "./ReviewState";
 import { ReadinessFields } from "./ReadinessFields";
 import { CloseButton } from "./CloseButton";
-import { ConstraintsField, WorkScopePanel, WorkflowSettings } from "./WorkScope";
+import { AcceptanceField, ConstraintsField, WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
 import { isAcked as decisionIsAcked, isLastProjectBox } from "../model/graph";
 import { useEffect, useRef, useState } from "react";
@@ -367,7 +367,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           return (
             <div className="text-[12px] flex flex-col gap-1" style={{ color: "var(--text-muted)" }}>
               {/* 着手の準備: 不足している欄をその場で埋める (入出力タブ・作業範囲と同じ値)。埋まっても ✓ 付きで残す */}
-              {hasFields && <ReadinessFields project={project} blockId={blockId} onOpenIo={() => setTab("io")} onEditScope={() => setScopeEditing(true)} />}
+              {hasFields && <ReadinessFields key={blockId} project={project} blockId={blockId} onOpenIo={() => setTab("io")} />}
               {missing.length > 0 && <div>{t("待ち: {names}", { names: missing.join(", ") })}</div>}
             </div>
           );
@@ -506,7 +506,8 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       {tab === "io" && (<>
       <PortsEditor project={project} blockId={blockId} direction="in" readonly={readonly} title="Inputs" />
       <PortsEditor project={project} blockId={blockId} direction="out" readonly={readonly} title="Outputs" />
-      {/* 制約: 出力を作るうえで守る条件。出力のすぐ下に置く (利用者の要望 2026-10-18: More の中では見つからない)。作業範囲の編集と同じ値 */}
+      {/* 完了条件と制約: 出力のすぐ下に置く (利用者の要望 2026-10-18: More の作業範囲の中では見つからない)。作業範囲の編集・着手の準備の欄と同じ値 */}
+      <AcceptanceField project={project} blockId={blockId} />
       <ConstraintsField project={project} blockId={blockId} />
       </>)}
 
