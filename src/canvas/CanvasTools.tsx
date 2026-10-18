@@ -172,16 +172,13 @@ export function ViewSwitch() {
     <span className="flow-direction" role="group" aria-label={t("表示の切り替え")}>
       <button disabled={canEdit && !table} aria-pressed={!table && !vertical} aria-label={t("横フロー")} title={directionTitle(t("横フロー"))} onClick={() => direction("horizontal")}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="2" y="8" width="5" height="8" rx="1"/><path d="M9 12h6m-2-3 3 3-3 3"/><rect x="18" y="8" width="4" height="8" rx="1"/></svg>
-        <span className="flow-direction__label">{t("横")}</span>
       </button>
       <button disabled={canEdit && !table} aria-pressed={!table && vertical} aria-label={t("縦フロー")} title={directionTitle(t("縦フロー"))} onClick={() => direction("vertical")}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="8" y="2" width="8" height="5" rx="1"/><path d="M12 9v6m-3-2 3 3 3-3"/><rect x="8" y="18" width="8" height="4" rx="1"/></svg>
-        <span className="flow-direction__label">{t("縦")}</span>
       </button>
-      {/* 担当の一覧 (表): 記号に短い文字を添え、説明はツールチップに出す */}
+      {/* 担当の一覧 (表)。横 / 縦 / 表のボタンは記号だけ (文字は添えない: 押せば分かる。利用者の指摘 2026-10-18)。説明はツールチップ */}
       <button className="view-switch__table" aria-pressed={table} aria-label="In charge" title={t("In charge: 担当のボックスを表で見る")} onClick={toggleTable}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14h18M9 9v11"/></svg>
-        <span className="flow-direction__label">{t("表")}</span>
       </button>
     </span>
   );
