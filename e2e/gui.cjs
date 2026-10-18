@@ -258,6 +258,16 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.locator('.add-menu > button.btn-primary').click();await page.waitForTimeout(300);await page.locator('.add-menu__item',{hasText:'Block'}).first().click();await page.waitForTimeout(700); // + Block はメニューを開くので、その中の Block を押す
     const added=await page.evaluate(()=>{const s=window.boxglow.store.getState();const rf=window.boxglow.rf;const parent=Object.values(s.project.blocks).find(x=>x.title==='設計する');const b=s.project.blocks[s.selection.blockId];const node=rf.getNodes().find(n=>n.id===b?.id);return {scope:s.viewScope,parentOk:b?.parentId===parent.id,visible:!!node&&!node.hidden,expanded:!parent.collapsed};});
     check('Top で大項目の中にボックスを足してもタブへ飛ばない (親が展開して中に見える)',added.scope===null&&added.parentOk&&added.visible&&added.expanded,JSON.stringify(added));
+    // 着手の準備の欄: 1 文字打って手を止めても欄が消えず、埋めた後も ✓ 付きで残る (保存先の表示つき)
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.select({blockId:s.selection.blockId,panelTab:'status'});});await page.waitForTimeout(400);
+    const acc=page.locator('.readiness-fields textarea').first();
+    await acc.fill('a');await page.waitForTimeout(700);await acc.type('bc');await page.waitForTimeout(700);
+    const stillThere=await page.locator('.readiness-fields textarea').count()===1 && (await page.locator('.readiness-fields textarea').first().inputValue())==='abc';
+    check('着手の準備: 完了条件を打っている途中で欄が消えない',stillThere);
+    await page.locator('.readiness-fields select').first().selectOption('file');await page.waitForTimeout(300);
+    const hint=page.locator('.readiness-fields input.input-plain').first();await hint.fill('src/x.ts');await hint.press('Enter');await page.waitForTimeout(600);
+    const after=await page.evaluate(()=>({ready:!!document.querySelector('.readiness-fields--ready'),done:document.querySelectorAll('.readiness-fields__done').length,where:[...document.querySelectorAll('.readiness-fields__where')].map(e=>e.textContent)}));
+    check('着手の準備: 全部埋めても欄が ✓ 付きで残り、保存先 (I/O タブ / 作業範囲) が示される',after.ready&&after.done===2&&after.where.length===2,JSON.stringify(after));
     await page.evaluate(()=>{const s=window.boxglow.store.getState();const id=s.selection.blockId;s.select({});s.apply(p=>{const q=structuredClone(p);for(const e of Object.values(q.edges)){const a=q.ports[e.from.portId],b=q.ports[e.to.portId];if(a?.blockId===id||b?.blockId===id)delete q.edges[e.id];}for(const k of Object.keys(q.ports))if(q.ports[k].blockId===id)delete q.ports[k];delete q.blocks[id];const parent=Object.values(q.blocks).find(x=>x.title==='設計する');parent.collapsed=true;return q;});s.setEditMode(false);});await page.waitForTimeout(400);
     await page.setViewportSize({width:390,height:844});await page.waitForTimeout(300);
     await page.locator('.topbar button[aria-label="Menu"]').click();

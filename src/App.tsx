@@ -223,9 +223,11 @@ export function App() {
         } else if (sel.blockId) {
           const b = p.blocks[sel.blockId];
           const kids = Object.values(p.blocks).filter((x) => x.parentId === sel.blockId).length;
-          if (b && (kids === 0 || confirm(t("「{title}」と下の階層のブロックを削除します。よろしいですか?", { title: b.title })))) {
+          // 確認しない: 元に戻す操作で戻せる (VS Code の webview では confirm が出ない)。中にボックスがあるときだけ、消した旨と戻し方を知らせる
+          if (b) {
             select({});
             apply((q) => removeBlock(q, sel.blockId!));
+            if (kids > 0) useProjectStore.getState().setToast(t("「{title}」と下の階層のブロックを削除しました。元に戻す操作で戻せます", { title: b.title }));
           }
         }
       } else if (ev.key.toLowerCase() === "n" && !ev.ctrlKey && !ev.metaKey) {

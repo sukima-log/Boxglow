@@ -256,6 +256,24 @@ export function ResizeHandle({ side, width, min, max, onWidth, style }: { side: 
 }
 
 /**
+ * 2 段階の消すボタン: 1 回目で「本当に消す」に変わり、もう 1 回押すと実行する (3 秒たつと元に戻る)。
+ * confirm() を使わない: VS Code の webview では confirm / prompt が出ないので、押しても何も起きなくなる (利用者の指摘 2026-10-18 の総点検)。
+ * 元に戻せない削除 (部品のライブラリ・ブラウザの計画一覧) に使う。計画の中の削除は Undo で戻せるので確認しない
+ * Input : label = ふだんの表示, confirmLabel = 2 回目の表示, onConfirm = 実行する関数, className, title, ariaLabel
+ * Output: button
+ */
+export function ConfirmButton({ label, confirmLabel, onConfirm, className = "btn btn-ghost btn-sm", title, ariaLabel }: {
+  label: React.ReactNode; confirmLabel: React.ReactNode; onConfirm: () => void; className?: string; title?: string; ariaLabel?: string;
+}) {
+  const [armed, setArmed] = useState(false);
+  useEffect(() => { if (!armed) return; const id = setTimeout(() => setArmed(false), 3000); return () => clearTimeout(id); }, [armed]);
+  return (
+    <button type="button" className={`${className}${armed ? " btn-danger" : ""}`} title={armed ? t("もう一度押すと消します") : title} aria-label={ariaLabel}
+      onClick={(e) => { e.stopPropagation(); if (armed) { setArmed(false); onConfirm(); } else setArmed(true); }}>{armed ? confirmLabel : label}</button>
+  );
+}
+
+/**
  * 文字の入力欄: 打っている間は手元の値だけを変え、手を止めてから (またはフォーカスを外したとき / Enter で) 反映する。
  * 1 文字ごとに計画を更新すると図全体 (経路や重なりの解消) を作り直して重くなるため
  * Input : value = 今の値, onCommit = 反映する関数, multiline = textarea にするか, delay = 待ち時間 (ms)。ほかは input/textarea にそのまま渡す

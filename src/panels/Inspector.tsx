@@ -8,7 +8,7 @@ import { ClaimSettings, ClaimDetails } from "./Claims";
 import { BranchDialog } from "./BranchDialog";
 import { BranchPicker } from "./BranchPicker";
 import { branchDecision, canConvertToBranch } from "../model/branch";
-import { unpreparedReasons } from "../model/readiness";
+import { outputOwners, unpreparedReasons } from "../model/readiness";
 import { ReviewState } from "./ReviewState";
 import { ReadinessFields } from "./ReadinessFields";
 import { CloseButton } from "./CloseButton";
@@ -67,8 +67,9 @@ function ProjectInspector({ project }: { project: Project }) {
       <PanelHead title="Project" />
       <WorkflowSettings project={project} />
       <ClaimSettings project={project} />
-      <input className="input font-head text-[16px]" value={project.name} disabled={readonly}
-        onChange={(e) => apply((p) => ({ ...structuredClone(p), name: e.target.value }))} />
+      {/* 手を止めてから反映する (1 文字ごとに履歴を積むと、元に戻す操作が 1 文字ずつになる) */}
+      <DebouncedText className="input font-head text-[16px]" value={project.name} disabled={readonly}
+        onCommit={(v) => apply((p) => ({ ...structuredClone(p), name: v }))} />
       <DebouncedText multiline className="input" placeholder={t("ゴール (何を達成したいか)")} value={project.description} disabled={readonly}
         onCommit={(v) => apply((p) => ({ ...structuredClone(p), description: v }))} />
       <div>
@@ -91,9 +92,8 @@ function TerminalInspector({ project, which, groupId }: { project: Project; whic
   const title = which === "out" ? "Project Outputs" : group ? `Input Group` : "Project Inputs";
 
   const addGroup = () => {
-    const name = prompt(t("グループの名前 (例: PCIe 仕様書)"));
-    if (!name?.trim()) return;
-    apply((p) => { const r = addInputGroup(p, name.trim()); setTimeout(() => select({ terminal: "in", terminalGroup: r.groupId }), 0); return r.project; });
+    // 名前は prompt で聞かない (VS Code の webview では prompt が出ない)。仮の名前で作って、開いたグループの名前欄で直す
+    apply((p) => { const r = addInputGroup(p, t("新しいグループ")); setTimeout(() => select({ terminal: "in", terminalGroup: r.groupId }), 0); return r.project; });
   };
   const importGroup = async () => {
     const text = await pickTextFile(".json,application/json");
@@ -113,11 +113,11 @@ function TerminalInspector({ project, which, groupId }: { project: Project; whic
           <div className="sec__head"><span className="label">Group</span>
             <span className="flex gap-1">
               <button className="btn btn-ghost btn-sm" title={t("このグループを JSON に書き出す (他のプロジェクトで読み込める)")} onClick={() => downloadText(`${safeFilename(group.name)}.boxglow-inputs.json`, exportInputGroup(project, group.id), "application/json")}>Export</button>
-              {!readonly && <button className="btn btn-ghost btn-sm btn-danger" title={t("グループを消す (入力は Inputs に戻る)")} onClick={() => { if (confirm(t("グループ「{name}」を消しますか? (入力は Inputs に戻ります)", { name: group.name }))) { select({ terminal: "in" }); apply((p) => removeInputGroup(p, group.id)); } }}>Delete</button>}
+              {!readonly && <button className="btn btn-ghost btn-sm btn-danger" title={t("グループを消す (入力は Inputs に戻る)")} onClick={() => { select({ terminal: "in" }); apply((p) => removeInputGroup(p, group.id)); setToast(t("グループ「{name}」を消しました (入力は Inputs に戻りました)。元に戻す操作で戻せます", { name: group.name })); }}>Delete</button>}
             </span>
           </div>
-          <input className="input font-head text-[15px]" value={group.name} disabled={readonly} placeholder="Group name" onChange={(e) => apply((p) => updateInputGroup(p, group.id, { name: e.target.value }))} />
-          <input className="input" value={group.description} disabled={readonly} placeholder={t("説明 (任意。例: PCI-SIG の仕様書一式)")} onChange={(e) => apply((p) => updateInputGroup(p, group.id, { description: e.target.value }))} />
+          <DebouncedText className="input font-head text-[15px]" value={group.name} disabled={readonly} placeholder="Group name" onCommit={(v) => apply((p) => updateInputGroup(p, group.id, { name: v }))} />
+          <DebouncedText className="input" value={group.description} disabled={readonly} placeholder={t("説明 (任意。例: PCI-SIG の仕様書一式)")} onCommit={(v) => apply((p) => updateInputGroup(p, group.id, { description: v }))} />
         </section>
       )}
       <PortsEditor project={project} blockId={ROOT_ID} direction={which} readonly={readonly} title={which === "in" ? "Inputs" : "Outputs"} groupId={which === "in" ? (group ? group.id : null) : undefined} />
@@ -213,8 +213,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   const remove = () => {
     // 計画にはプロジェクトのボックスが 1 つは要る (最後の 1 つは消せない。中のボックスを消すか、ファイルごと作り直す)
     if (isLastProjectBox(project, blockId)) { setToast(t("最後のプロジェクトのボックスは消せません (中のボックスを消すか、ファイルごと作り直してください)")); return; }
-    // 下の階層があるときだけ確認する (子のないボックスは Undo で戻せる。VS Code の webview では confirm が使えないので、確認を増やすと消せなくなる)
-    if (kids.length > 0 && !confirm(t("「{title}」と下の階層のブロックを削除します。よろしいですか?", { title: b.title }))) return;
+    // 確認しない: 計画の中の削除は元に戻す操作で戻せる (VS Code の webview では confirm が出ないので、確認があると消せなくなる)
     select({});
     apply((p) => removeBlock(p, blockId));
     setToast(t("「{title}」を削除しました。元に戻す操作で戻せます", { title: b.title }));
@@ -227,8 +226,8 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   };
   const saveAsTemplate = async () => {
     setMenu(false);
-    const tags = prompt(t("部品の札 (例: 画像処理, 認証。カンマ区切り。省略可)")) ?? "";
-    const tpl = extractTemplate(project, blockId, { tags: tags.split(/[,、]/).map((s) => s.trim()).filter(Boolean) });
+    // 札 (tags) は聞かない (prompt は VS Code の webview で出ない。札は任意で、部品の JSON を直せば付けられる)
+    const tpl = extractTemplate(project, blockId, {});
     await saveTemplate(tpl);
     setToast(t("「{name}」を部品として保存しました (☰ の「部品」から挿入)", { name: tpl.name }));
   };
@@ -361,12 +360,14 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           const reasons = unpreparedReasons(project, blockId);
           // 必須の入力と、まだ答えていない分岐 (分岐待ち)
           const missing = waitingFor(project, blockId);
-          if (reasons.length === 0 && missing.length === 0) return portsOf(project, blockId, "in").length > 0 || portsOf(project, blockId, "out").length > 0
+          // 欄 (予定成果物・完了条件) は、自身が作る出力があるかぎり埋まっても出したままにする (打っている途中で消えない。何を書いたか・どこに入るかが見える)
+          const hasFields = reasons.length > 0 || outputOwners(project, blockId).some((o) => o.owner.kind === "self");
+          if (!hasFields && missing.length === 0) return portsOf(project, blockId, "in").length > 0 || portsOf(project, blockId, "out").length > 0
             ? <div className="text-[12px]" style={{ color: "var(--primary-strong)" }}>{t("✓ Ready")}</div> : null;
           return (
             <div className="text-[12px] flex flex-col gap-1" style={{ color: "var(--text-muted)" }}>
-              {/* 要具体化: 不足している欄をその場で埋める (入出力タブ・作業範囲と同じ値) */}
-              {reasons.length > 0 && <ReadinessFields project={project} blockId={blockId} onOpenIo={() => setTab("io")} />}
+              {/* 着手の準備: 不足している欄をその場で埋める (入出力タブ・作業範囲と同じ値)。埋まっても ✓ 付きで残す */}
+              {hasFields && <ReadinessFields project={project} blockId={blockId} onOpenIo={() => setTab("io")} onEditScope={() => setScopeEditing(true)} />}
               {missing.length > 0 && <div>{t("待ち: {names}", { names: missing.join(", ") })}</div>}
             </div>
           );
@@ -619,7 +620,7 @@ function WorkLog({ project, blockId, readonly, apply }: { project: Project; bloc
             <span className="worklog__by">{e.by}</span><span className="worklog__at">{when(e.at)}</span>
             {!readonly && <span className="worklog__tools">
               <button className="btn btn-ghost btn-sm" onClick={() => setEditing(editing === e.id ? null : e.id)} title={t("編集")}>✎</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => { if (confirm(t("この記録を消しますか?"))) apply((p) => removeLogEntry(p, blockId, e.id)); }} title={t("削除")}>×</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => removeLogEntry(p, blockId, e.id))} title={t("削除 (元に戻す操作で戻せます)")}>×</button>
             </span>}
           </header>
           {editing === e.id ? (

@@ -1995,6 +1995,13 @@ button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent)
 .readiness-fields__label { font-size: 12px; color: var(--text); }
 .readiness-fields__inputs { display: flex; gap: 4px; align-items: center; }
 .readiness-fields__note { font-size: 11px; color: var(--accent); }
+/* 全部埋まった後: 囲いを通常の色に戻して残す (欄は消さない) */
+.readiness-fields--ready { border-style: solid; border-color: var(--line-soft); }
+.readiness-fields--ready .readiness-fields__head { color: var(--primary-strong); }
+.readiness-fields__done { color: var(--primary-strong); font-weight: 700; margin-right: 4px; }
+/* 保存先 (入出力タブ / 作業範囲) への小さな入口 */
+.readiness-fields__where { margin-left: 8px; font-size: 11px; color: var(--text-muted); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline dotted; }
+.readiness-fields__where:hover { color: var(--text); }
 
 /* 出力の詳細の「使う箱」(下流)。押すとその箱へ */
 .port-consumers__item { background: none; border: 0; padding: 0; font: inherit; color: var(--primary-strong); cursor: pointer; text-decoration: underline dotted; text-underline-offset: 2px; }

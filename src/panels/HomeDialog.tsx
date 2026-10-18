@@ -14,6 +14,7 @@ import { copyText, pickTextFile } from "../lib/download";
 import { canOpenLocalFile, lastLocalFile, pickLocalFile } from "../lib/localfile";
 import { getLang, setLang, t, useLang } from "../i18n";
 import { SyncStartup } from "./SyncStartup";
+import { ConfirmButton } from "./parts";
 
 /**
  * Home 画面
@@ -226,9 +227,7 @@ export function HomeDialog() {
                   <span className="truncate font-head text-[15px]">{m.name}</span>
                   <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{new Date(m.updatedAt).toLocaleString(getLang() === "en" ? "en-US" : "ja-JP")}</span>
                 </button>
-                <button className="btn btn-ghost btn-sm btn-danger flex-none" aria-label={t("「{name}」を削除", { name: m.name })} onClick={() => {
-                  if (confirm(t("「{name}」を削除します。よろしいですか?", { name: m.name }))) void deleteProject(m.id);
-                }}>×</button>
+                <ConfirmButton className="btn btn-ghost btn-sm btn-danger flex-none" label="×" confirmLabel={t("本当に消す")} ariaLabel={t("「{name}」を削除", { name: m.name })} title={t("ブラウザから消す (元に戻せません)")} onConfirm={() => void deleteProject(m.id)} />
               </div>)}
             </div>
           )}

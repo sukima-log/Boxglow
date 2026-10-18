@@ -551,11 +551,10 @@ export function TreePanel({ project, filter, onClose }: { project: Project; filt
             disabled={isLastProjectBox(project, current.id)}
             title={isLastProjectBox(project, current.id) ? t("最後のプロジェクトのボックスは消せません (中のボックスを消すか、ファイルごと作り直してください)") : undefined}
             onClick={() => {
-              if (window.confirm(t("「{title}」と子ボックス・接続を削除しますか？", { title: current.title }))) {
-                apply((p) => removeBlock(p, current.id));
-                select({ blockId: null });
-                setMenu(null);
-              }
+              // 確認しない: 元に戻す操作で戻せる (VS Code の webview では confirm が出ない)
+              apply((p) => removeBlock(p, current.id));
+              select({ blockId: null });
+              setMenu(null);
             }}
           >
             {t("削除")}

@@ -51,7 +51,6 @@ export const app: Record<string, string> = {
 , "Boxglow で開く": "Open in Boxglow"
 , "ビルド日時 (日本時間)。古い場合は再読み込み (Ctrl+F5) してください": "Build time (JST). If it looks old, reload with Ctrl+F5"
   // TopBar: ボタンの説明
-, "追加するプロジェクトの名前 (リポジトリごとに 1 つなど)": "Name of the project to add (e.g. one per repository)"
 , "Mermaid をコピーしました": "Mermaid copied"
 , "コピーできませんでした": "Could not copy"
 , "サンプルは保存されません。Save で自分のプロジェクトとして保存": "The sample is not saved. Press Save to keep it as your own project"
@@ -81,7 +80,6 @@ export const app: Record<string, string> = {
 , "AI エージェントとチームの作業を、ボックスと線で一目で。": "See what AI agents and your team are doing, at a glance, as boxes and wires."
   // 太字の npx boxglow を挟むので 2 つに分かれている: "<前> npx boxglow <後>"
 , "前回開いたファイル": "The file you opened last time"
-, "「{name}」を削除します。よろしいですか?": "Delete \"{name}\"?"
   // リンク (sukimalog.com) を挟むので 2 つに分かれている: "<前> (sukimalog.com) <後>"
 , "すきま研究所日誌": "An app from Sukima Lab Diary"
   // store: toast など
@@ -462,4 +460,7 @@ export const app: Record<string, string> = {
 , "ファイルに書けませんでした: {error}": "Could not write the file: {error}"
 , "{file} に保存しました。以後はこのファイルに保存します (ブラウザの控えは Home の一覧に残ります)": "Saved to {file}. From now on the plan is saved to this file (the browser copy stays in the Home list)"
 , "{file} にコピーを保存しました (今の保存先は変わりません)": "Saved a copy to {file} (the current save location stays)"
+, "新しいプロジェクト": "New project"
+, "「{title}」と下の階層のブロックを削除しました。元に戻す操作で戻せます": "\"{title}\" and the blocks inside were deleted. Undo brings them back"
+, "ブラウザから消す (元に戻せません)": "Remove from this browser (cannot be undone)"
 };

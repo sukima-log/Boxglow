@@ -52,8 +52,6 @@ export const parts: Record<string, string> = {
 , "ボックスを選び、右の「⋯」から「Save as Part」すると、ここに並びます。": "Select a box and choose \"Save as Part\" from the \"...\" menu on the right to list it here."
 , "挿入": "Insert"
 , "JSON で保存 (他のリポジトリや人と共有)": "Save as JSON (share with other repositories or people)"
-, "ライブラリから消す": "Remove from library"
-, "テンプレート「{name}」を消しますか?": "Delete template \"{name}\"?"
   // ---- Drawer.tsx: メンバー ----
 , "このブラウザでは自分として扱う (自分の担当のボックスに帯が付く)": "Treat as me in this browser (your boxes get a stripe)"
 , "外す": "Remove"
@@ -95,4 +93,8 @@ export const parts: Record<string, string> = {
 , "使う箱:": "Used by:"
 , "消す (この入力を使う箱の入力も消えます: {list})": "Remove (the inputs of the boxes that use it are removed too: {list})"
 , "消す": "Remove"
+, "もう一度押すと消します": "Press again to delete"
+, "本当に消す": "Really delete"
+, "ライブラリから消す (元に戻せません)": "Remove from the library (cannot be undone)"
+, "問いを消す (答えずに取り下げる。元に戻す操作で戻せる)": "Remove the question (withdraw it unanswered; Undo brings it back)"
 };

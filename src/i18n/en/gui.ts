@@ -199,7 +199,6 @@ export const gui: Record<string, string> = {
   "記録を書く (Markdown 可。Ctrl+Enter で追記)": "Write an entry (Markdown; Ctrl+Enter to add)",
   "追記": "Add",
   "まだ記録はありません。進捗や気づきを、日付つきで残せます (AI は boxglow log で足します)": "No entries yet. Keep dated notes on progress and findings here (agents add them with boxglow log)",
-  "この記録を消しますか?": "Delete this entry?",
   "{title} の記録を開く": "Open the log of {title}",
   "記録を開く": "Open log",
   "ノート": "Notes",
@@ -217,11 +216,17 @@ export const gui: Record<string, string> = {
   "見た目": "Preview",
   "見た目 (打つと同時に反映)": "Preview (updates as you type)"
 , "最後のプロジェクトのボックスは消せません (中のボックスを消すか、ファイルごと作り直してください)": "The last project box cannot be deleted (delete the boxes inside it, or start a new file)"
-, "この問いを取り下げますか? (答えずに消します)": "Withdraw this question? (it is removed without an answer)"
-, "問いを消す (答えずに取り下げる)": "Remove the question (withdraw it unanswered)"
 , "取り下げる": "Withdraw"
 , "足す道 (選択肢) の名前": "Name of the path (option) to add"
 , "道 (選択肢) を足す": "Add a path (option)"
 , "道を足す": "Add path"
 , "この道を消す (線も外れる。先のボックスは残る)": "Remove this path (its wires too; the boxes after it stay)"
+, "着手の準備ができています (欄はここに残ります)": "Ready to start (the fields stay here)"
+, "着手の準備 ✓ Ready": "Ready to start ✓"
+, "記入済み": "filled in"
+, "入出力タブのこの出力の欄と同じ値です": "Same value as this output's field on the I/O tab"
+, "保存先: I/O タブ": "stored on: I/O tab"
+, "作業範囲の完了条件と同じ値です": "Same value as the acceptance criteria in the work scope"
+, "保存先: 作業範囲": "stored in: work scope"
+, "追加": "Add"
 };

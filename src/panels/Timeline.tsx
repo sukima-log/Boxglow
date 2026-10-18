@@ -25,6 +25,10 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
   const [text, setText] = useState("");
   // 答えたあとの編集 (null = 編集していない)
   const [editing, setEditing] = useState<string | null>(null);
+  // やり直しの理由 (null = 入力していない)。prompt は使わない (VS Code の webview では出ない)
+  const [reopenNote, setReopenNote] = useState<string | null>(null);
+  const setToast = useProjectStore((s) => s.setToast);
+  const doReopen = () => { apply((p) => reopenDecision(p, blockId, decisionId, "human", (reopenNote ?? "").trim())); setReopenNote(null); };
   const d = project.blocks[blockId]?.decisions.find((x) => x.id === decisionId);
   if (!d) return null;
   const answer = (value: string) => {
@@ -77,10 +81,19 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
               {t("履歴:")} {d.history!.map((h) => h.note ? t("{answer} ({by}、{note})", { answer: h.answer, by: h.by, note: h.note }) : `${h.answer} (${h.by})`).join(" → ")}
             </div>
           )}
-          {!readonly && editing === null && (
+          {!readonly && editing === null && reopenNote !== null && (
+            // やり直し: 理由 (任意) をその場で書く
+            <div className="flex gap-1 items-center">
+              <input className="input flex-1" autoFocus placeholder={t("やり直す理由 (任意)")} value={reopenNote} onChange={(e) => setReopenNote(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) doReopen(); if (e.key === "Escape") setReopenNote(null); }} />
+              <button className="btn btn-primary btn-sm" onClick={doReopen}>{t("Reopen")}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setReopenNote(null)}>Cancel</button>
+            </div>
+          )}
+          {!readonly && editing === null && reopenNote === null && (
             <div className="flex gap-1">
               <button className="btn btn-ghost btn-sm" onClick={() => setEditing(d.answer ?? "")} title={t("答えの文面を直す (書き間違いや補足。選び直しではない)")}>Edit</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => { const note = prompt(t("やり直す理由 (任意)")) ?? ""; apply((p) => reopenDecision(p, blockId, decisionId, "human", note)); }} title={t("方針転換: 答えを履歴に残して、候補から選び直す")}>{t("Reopen")}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setReopenNote("")} title={t("方針転換: 答えを履歴に残して、候補から選び直す")}>{t("Reopen")}</button>
             </div>
           )}
         </div>
@@ -101,7 +114,7 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
           {/* 取り下げ: 間違えて出した問いは消せる (未回答のときだけ。分岐の問いは道と一体なので消せない。回答済みは履歴として残す) */}
           {project.blocks[blockId]?.branch?.decisionId !== decisionId && (
             <div className="flex justify-end">
-              <button className="btn btn-ghost btn-sm" onClick={() => { if (confirm(t("この問いを取り下げますか? (答えずに消します)"))) apply((p) => removeDecision(p, blockId, decisionId).project); }} title={t("問いを消す (答えずに取り下げる)")}>{t("取り下げる")}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => { const r = removeDecision(p, blockId, decisionId); if (r.error) setToast(r.error); return r.project; })} title={t("問いを消す (答えずに取り下げる。元に戻す操作で戻せる)")}>{t("取り下げる")}</button>
             </div>
           )}
         </>

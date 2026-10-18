@@ -15,6 +15,7 @@ import { CATEGORIES } from "../model/categories";
 import { STATUS_LABEL } from "../model/status";
 // 言語切り替え: 日本語の文は t() で包み、英語の辞書 (src/i18n/en/parts.ts) で引く
 import { t, useLang } from "../i18n";
+import { ConfirmButton } from "./parts";
 
 /** メンバーのアバター色の候補 (テーマの色から) */
 export const MEMBER_COLORS = ["#0d8080", "#e8875e", "#3aa85a", "#6b7075", "#2f6fb3", "#a0522d"];
@@ -170,7 +171,7 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
             <span className="ml-auto flex gap-0.5">
               {!readonly && <button className="btn btn-ghost btn-sm" title={t("挿入")} onClick={() => insertTemplate(tpl)}>Insert</button>}
               <button className="btn btn-ghost btn-sm" title={t("JSON で保存 (他のリポジトリや人と共有)")} onClick={() => downloadText(`${safeFilename(tpl.name)}.boxglow-block.json`, JSON.stringify(tpl, null, 2), "application/json")}>↓</button>
-              <button className="btn btn-ghost btn-sm" title={t("ライブラリから消す")} onClick={() => { if (confirm(t("テンプレート「{name}」を消しますか?", { name: tpl.name }))) void deleteTemplate(tpl.id).then(refreshTemplates); }}>×</button>
+              <ConfirmButton label="×" confirmLabel={t("本当に消す")} title={t("ライブラリから消す (元に戻せません)")} onConfirm={() => void deleteTemplate(tpl.id).then(refreshTemplates)} />
             </span>
           </div>
         ))}

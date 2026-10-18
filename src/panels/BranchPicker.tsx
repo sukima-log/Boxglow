@@ -8,6 +8,7 @@
 import { answerDecision, portsOf, reopenDecision } from "../model/graph";
 import { branchDecision, chosenOption, addBranchOption, removeBranchOption } from "../model/branch";
 import type { Project } from "../model/types";
+import { useState } from "react";
 import { useProjectStore } from "../store/useProjectStore";
 import { t, useLang } from "../i18n";
 
@@ -20,6 +21,9 @@ export function BranchPicker({ project, blockId }: { project: Project; blockId: 
   useLang(); // 言語が変わったら描き直す
   const readonly = useProjectStore((s) => s.readonly);
   const apply = useProjectStore((s) => s.apply);
+  const setToast = useProjectStore((s) => s.setToast);
+  // 足す道の名前 (null = 入力していない)。prompt は使わない (VS Code の webview では出ない)
+  const [adding, setAdding] = useState<string | null>(null);
   const b = project.blocks[blockId];
   const d = b ? branchDecision(b) : undefined;
   if (!b?.branch || !d) return null;
@@ -42,13 +46,23 @@ export function BranchPicker({ project, blockId }: { project: Project; blockId: 
         )}
         {/* 答える前なら道を足せる (選択肢と出力が同時に増える) */}
         {!readonly && d.answer === undefined && (
-          <button className="btn btn-ghost btn-sm" onClick={() => { const name = prompt(t("足す道 (選択肢) の名前")); if (name?.trim()) apply((p) => addBranchOption(p, blockId, name).project); }}
-            title={t("道 (選択肢) を足す")}>＋ {t("道を足す")}</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setAdding(adding === null ? "" : null)} title={t("道 (選択肢) を足す")}>＋ {t("道を足す")}</button>
         )}
       </div>
       {/* 問い: 何を決めるのか (題名と同じなら出さない) */}
       {d.question && d.question !== b.title && <p className="branch-picker__question">{d.question}</p>}
       {answeredOther && <p className="branch-picker__note">{t("選択肢外の回答: {answer}", { answer: d.answer! })}</p>}
+      {adding !== null && (() => {
+        const submit = () => { const name = adding.trim(); if (!name) return; apply((p) => { const r = addBranchOption(p, blockId, name); if (r.error) setToast(r.error); return r.project; }); setAdding(null); };
+        return (
+          <div className="flex gap-1 items-center">
+            <input className="input flex-1" autoFocus placeholder={t("足す道 (選択肢) の名前")} value={adding} onChange={(e) => setAdding(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) submit(); if (e.key === "Escape") setAdding(null); }} />
+            <button className="btn btn-primary btn-sm" onClick={submit} disabled={!adding.trim()}>{t("追加")}</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setAdding(null)}>Cancel</button>
+          </div>
+        );
+      })()}
       <ul className="branch-picker__list">
         {paths.map((q) => {
           const option = q.branchOption!;
@@ -68,7 +82,7 @@ export function BranchPicker({ project, blockId }: { project: Project; blockId: 
               )}
               {/* 道を消す: 答える前で、残りが 2 つ以上になるときだけ (線も外れる。先のボックスは残る) */}
               {state === "open" && !readonly && d.answer === undefined && paths.length > 2 && (
-                <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => removeBranchOption(p, blockId, option).project)}
+                <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => { const r = removeBranchOption(p, blockId, option); if (r.error) setToast(r.error); return r.project; })}
                   title={t("この道を消す (線も外れる。先のボックスは残る)")}>×</button>
               )}
             </li>

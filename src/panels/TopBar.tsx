@@ -133,8 +133,8 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   /** ブロックを足す (選んでいるボックスの中。何も選んでいなければ最初のプロジェクトの中) */
   // 最上位にプロジェクトのボックスを足す (⋯ メニューの New Project。上の帯のボタンにはしない: 使う頻度が低い)
   const addProject = () => {
-    const name = prompt(t("追加するプロジェクトの名前 (リポジトリごとに 1 つなど)"));
-    if (name?.trim()) apply((p) => { const r = addProjectBlock(p, name.trim()); setTimeout(() => { select({ blockId: r.blockId }); focusBlock(r.blockId); }, 0); return r.project; });
+    // 名前は prompt で聞かない (VS Code の webview では prompt が出ない)。仮の名前で作って選び、右パネルの題名で直す
+    apply((p) => { const r = addProjectBlock(p, t("新しいプロジェクト")); setTimeout(() => { select({ blockId: r.blockId }); focusBlock(r.blockId); }, 0); return r.project; });
   };
   /**
    * Auto Layout: 依存関係の順に全体を並べ直す (畳んだ箱は畳んだ大きさで。Ctrl+Z で戻せる)

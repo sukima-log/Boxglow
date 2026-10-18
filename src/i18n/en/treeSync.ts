@@ -23,7 +23,6 @@ export const treeSync: Record<string, string> = {
   "移動先": "Destination",
   "移動先を選ぶ": "Choose destination",
   "移動": "Move",
-  "「{title}」と子ボックス・接続を削除しますか？": "Delete “{title}”, its children and connections?",
   "ファイル": "File",
   "送受信中": "Transferring",
   "確認が必要": "Needs review",
