@@ -38,6 +38,31 @@ export async function pickLocalFile(): Promise<FileSystemFileHandle | null> {
   return handle;
 }
 
+/** この環境で保存先を選んでファイルに書けるか (Chrome / Edge) */
+export const canSaveLocalFile = (): boolean => typeof window !== "undefined" && typeof window.showSaveFilePicker === "function";
+
+/**
+ * 保存先を選んでファイルのハンドルを得る (File System Access API。書き込みの許可も付く)
+ * Input : suggestedName = 既定のファイル名
+ * Output: ハンドル。キャンセルか未対応なら null。ブラウザが拒んだときは例外 (呼び出し側が理由を画面に出す)
+ */
+export async function pickSaveFile(suggestedName: string): Promise<FileSystemFileHandle | null> {
+  if (!window.showSaveFilePicker) return null;
+  let handle: FileSystemFileHandle;
+  try {
+    handle = await window.showSaveFilePicker({ suggestedName, types: [{ description: "Boxglow project", accept: { "application/json": [".json"] } }] });
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") return null; // 利用者がキャンセルした
+    throw e;
+  }
+  try {
+    await set(LAST_HANDLE_KEY, handle); // 次に Home を開いたとき「前回のファイル」として出す
+  } catch {
+    /* 覚えられなくても保存できる */
+  }
+  return handle;
+}
+
 /** 前回開いたファイルのハンドル (無ければ null) */
 export async function lastLocalFile(): Promise<FileSystemFileHandle | null> {
   try {

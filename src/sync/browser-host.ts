@@ -702,6 +702,8 @@ export class BrowserSyncHost {
   }
 }
 
+/** この計画がこのブラウザで同期を有効にしているか (ブラウザの控えが本体なので、ファイルへ移さない判断に使う) */
+export function isSyncEnabled(projectId: string): boolean { return loadEnabled().includes(projectId); }
 function loadEnabled(): string[] { try { return JSON.parse(localStorage.getItem(ENABLED_KEY) ?? "[]") as string[]; } catch { return []; } }
 function saveEnabled(set: Set<string>): void { try { localStorage.setItem(ENABLED_KEY, JSON.stringify([...set])); } catch { /* 保存できなくても動く */ } }
 function randomBase64url(bytes: number): string {

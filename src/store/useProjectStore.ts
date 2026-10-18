@@ -13,11 +13,12 @@ import type { ConflictChoices, MergeResult } from "../model/merge";
 import { useMemo } from "react";
 import { readingLayout } from "../model/readingLayout";
 import { create } from "zustand";
-import { BrowserSyncHost } from "../sync/browser-host";
+import { BrowserSyncHost, isSyncEnabled } from "../sync/browser-host";
 import { ancestorsOf, createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizePortNames, resolveChangedOverlaps, resolveAllOverlaps, scopeFor, toJSON, wireNetTabs, withIndex } from "../model/graph";
 export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
-import { ensurePermission, readLocalFile, writeLocalFile } from "../lib/localfile";
+import { downloadText, safeFilename } from "../lib/download";
+import { ensurePermission, readLocalFile, writeLocalFile, canSaveLocalFile, pickSaveFile } from "../lib/localfile";
 import { deletePlanTemplate, listPlanTemplates, savePlanTemplate, type PlanTemplate } from "../lib/templates";
 import { planTemplateFrom } from "../model/template";
 import { combineProjects, splitProject } from "../model/combine";
@@ -258,6 +259,8 @@ interface State {
   openExample: () => void;
   /** ローカルの boxglow.json を開く (監視と書き戻しを始める) */
   openLocalFile: (handle: FileSystemFileHandle) => Promise<boolean>;
+  /** ファイルとして保存する。"file" = ファイルに書いた, "download" = ダウンロードした, null = 取り消し / 失敗 (理由は通知に出す) */
+  saveAsFile: () => Promise<"file" | "download" | null>;
   /** 直接開いたファイルを編集できるようにする (書き込みの許可を取る。1 人で使うとき向け。B155) */
   enableLocalEdit: () => Promise<boolean>;
   /** ローカルサーバ (npx boxglow serve) の boxglow.json を開く (API で読み書き。変更は SSE で受ける) */
@@ -1172,6 +1175,42 @@ export const useProjectStore = create<State>((set, get) => {
       if (!(await ensurePermission(fileHandle, "readwrite"))) { set({ toast: t("ファイルへの書き込みが許可されませんでした") }); return false; }
       set({ readonly: false, editMode: true });
       return true;
+    }
+  , saveAsFile: async () => {
+      // ファイルとして保存 (利用者の要望 2026-10-18: ブラウザで作った計画は、ブラウザ内に自動保存されるだけでファイルにできないように見えた)
+      //   - Chrome / Edge: 保存先を選んで書く。ブラウザ内の計画 (同期していないもの) なら、以後はそのファイルに保存する (開いたファイルと同じ扱い)。
+      //     ブラウザの控えは消さない (Home の一覧に残る)
+      //   - 保存先を選べない環境 (Firefox / Safari / VS Code の中): ダウンロードする
+      // Input : なし / Output: "file" = ファイルに書いた, "download" = ダウンロードした, null = 取り消し・失敗
+      const { project, source } = get();
+      if (!project) return null;
+      const text = toJSON(project) + "\n";
+      const name = `${safeFilename(project.name)}.boxglow.json`;
+      if (!canSaveLocalFile()) { downloadText(name, text, "application/json"); return "download"; }
+      let handle: FileSystemFileHandle | null = null;
+      try {
+        handle = await pickSaveFile(name);
+      } catch (e) {
+        set({ toast: t("この場所には保存できませんでした ({error})", { error: e instanceof Error ? e.message : String(e) }) });
+        return null;
+      }
+      if (!handle) return null; // 取り消し
+      try {
+        await writeLocalFile(handle, text);
+      } catch (e) {
+        set({ toast: t("ファイルに書けませんでした: {error}", { error: e instanceof Error ? e.message : String(e) }) });
+        return null;
+      }
+      // 以後はこのファイルに保存する: ブラウザ内の計画で、同期していないときだけ (同期中はブラウザの控えが本体。serve / VS Code / 開いたファイルは今の保存先を保つ)
+      if (source === "idb" && !isSyncEnabled(project.id)) {
+        if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; } // ブラウザへの自動保存の予約は要らない (中身はファイルに書いた)
+        set({ saveState: "saved" });
+        if (await get().openLocalFile(handle)) await get().enableLocalEdit();
+        set({ toast: t("{file} に保存しました。以後はこのファイルに保存します (ブラウザの控えは Home の一覧に残ります)", { file: handle.name }) });
+      } else {
+        set({ toast: t("{file} にコピーを保存しました (今の保存先は変わりません)", { file: handle.name }) });
+      }
+      return "file";
     }
   , openLocalFile: async (handle) => {
       if (!canLeave()) return false;

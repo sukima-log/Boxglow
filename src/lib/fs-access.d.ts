@@ -29,6 +29,8 @@ interface FileSystemDirectoryHandle extends FileSystemHandle {
 }
 interface Window {
   showOpenFilePicker?(options?: OpenFilePickerOptions): Promise<FileSystemFileHandle[]>;
+  /** 保存先を選んでファイルのハンドルを得る (Chrome / Edge。書き込みの許可も付く) */
+  showSaveFilePicker?: (options?: { suggestedName?: string; types?: { description?: string; accept: Record<string, string[]> }[] }) => Promise<FileSystemFileHandle>;
   /** フォルダを選ばせる (Chrome / Edge。AI エージェントの設定 .mcp.json を、Claude Code で開くフォルダに直接書くために使う) */
   showDirectoryPicker?(options?: { mode?: "read" | "readwrite"; id?: string }): Promise<FileSystemDirectoryHandle>;
 }

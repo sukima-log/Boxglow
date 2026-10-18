@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { TreeIcon } from "./TreeIcon";
 import { RestoreDialog, SaveHeldChip, SyncChip } from "./SyncPanel";
 import { AccountButton } from "./AccountMenu";
-import { addBlock, addProjectBlock, searchBlocks, summarize, toJSON, projectBlocks } from "../model/graph";
+import { addBlock, addProjectBlock, searchBlocks, summarize, projectBlocks } from "../model/graph";
 import { layoutAll } from "../model/autolayout";
 import { projectToMarkdown, scopeToMermaid } from "../model/export";
 import { ROOT_ID, type Project } from "../model/types";
@@ -163,7 +163,6 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
     });
   };
 
-  const exportJSON = () => downloadText(`${safeFilename(project.name)}.boxglow.json`, toJSON(project), "application/json");
   const exportMd = () => downloadText(`${safeFilename(project.name)}.md`, projectToMarkdown(project), "text/markdown");
   const copyMermaid = async () => {
     setToast((await copyText(scopeToMermaid(project, selection.blockId ?? ROOT_ID))) ? t("Mermaid をコピーしました") : t("コピーできませんでした"));
@@ -211,6 +210,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   const editMode = useProjectStore((s) => s.editMode);
   const setEditMode = useProjectStore((s) => s.setEditMode);
   const saveNow = useProjectStore((s) => s.saveNow);
+  const saveAsFile = useProjectStore((s) => s.saveAsFile);
   const source = useProjectStore((s) => s.source);
   const reload = useProjectStore((s) => s.reload);
   const reloading = useProjectStore((s) => s.reloading);
@@ -220,7 +220,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   const saveIcon = readonly ? "◈" : ephemeral ? "○" : saveError ? "!" : saveState === "saving" ? "↻" : saveState === "unsaved" ? "○" : "✓";
   /** Input: なし。Output: 配置の編集モードと短い結果通知。ノートなどの編集可否とは区別する。 */
   const toggleMode = () => setEditMode(!editMode);
-  const saveTitle = readonly ? t("閲覧専用") : ephemeral ? t("サンプルは保存されません。Save で自分の計画のコピーを残せます") : source === "file" ? t("このファイルに直接保存します。別の画面・CLI・AI も同じファイルを編集するなら、serve か VS Code 拡張で開いてください") : fileName ? t("{file} に自動で保存します。Save で今すぐ書きます", { file: fileName }) : t("このブラウザに自動で保存します");
+  const saveTitle = readonly ? t("閲覧専用") : ephemeral ? t("サンプルは保存されません。Save で自分の計画のコピーを残せます") : source === "file" ? t("このファイルに直接保存します。別の画面・CLI・AI も同じファイルを編集するなら、serve か VS Code 拡張で開いてください") : fileName ? t("{file} に自動で保存します", { file: fileName }) : t("このブラウザに自動で保存します (ファイルにするなら Save to file)");
   const sum = summarize(project);
   const busy = sum.working.length; // 作業中の件数 (詰まり・確認待ちは別の札で数える)
 
@@ -259,7 +259,10 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
         </button>
       )}
       {ephemeral && !readonly && <button className="btn btn-sm" onClick={copyToMine} title={t("自分のプロジェクトとして保存")}>Save</button>}
-      {!ephemeral && !readonly && <button className="btn btn-sm" onClick={saveNow} disabled={saveState === "saved" || saveState === "saving"} title={saveTitle}>Save</button>}
+      {/* 保存は自動 (ブラウザ内 / ファイル / serve / VS Code のどれでも)。手動の Save は失敗したときの再試行だけ。
+          ブラウザ内の計画は「Save to file」でファイルにできる (Chrome / Edge は保存先を選んで以後そこに保存、ほかはダウンロード) */}
+      {!ephemeral && !readonly && saveError && <button className="btn btn-sm" onClick={saveNow} title={saveError}>Retry</button>}
+      {!ephemeral && !readonly && source === "idb" && <button className="btn btn-sm" onClick={() => void saveAsFile()} title={t("ファイルとして保存する (Chrome / Edge では保存先を選ぶと、以後そのファイルに保存します。ほかのブラウザではダウンロード)")}>Save to file</button>}
       {/* 画面からの同期の印 (裏方が状態を流しているときだけ出る) */}
       <SaveHeldChip />
       <SyncChip />
@@ -360,7 +363,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
               )}
               {!readonly && <div style={{ borderTop: "1px solid var(--line-soft)", margin: "4px 0" }} />}
               {!ephemeral && <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); void registerTemplate(project.name); }} title={t("今の計画の構造 (箱・出力・つながり・担当) を、進捗や記録を除いてテンプレートとして登録する。Home の「新しい計画を作る」で選べる")}>{t("テンプレートに登録")}</button>}
-              <button className="btn btn-ghost btn-sm justify-start" onClick={exportJSON}>Export JSON</button>
+              <button className="btn btn-ghost btn-sm justify-start" onClick={() => { setMenu(false); void saveAsFile(); }} title={source === "idb" ? t("ファイルとして保存する (Chrome / Edge では保存先を選ぶと、以後そのファイルに保存します。ほかのブラウザではダウンロード)") : t("コピーを別のファイルに保存する (今の保存先は変わりません)")}>{source === "idb" ? "Save to file…" : "Save a copy as file…"}</button>
               <button className="btn btn-ghost btn-sm justify-start" onClick={exportMd}>Export Markdown</button>
               <button className="btn btn-ghost btn-sm justify-start" onClick={copyMermaid}>Copy Mermaid</button>
               <button className="btn btn-ghost btn-sm justify-start" onClick={doImport}>Import JSON</button>
