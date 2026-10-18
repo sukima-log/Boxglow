@@ -20,6 +20,19 @@ const prepared = (p: Project, id: string): Project => {
   return updateBlock(q, id, { scope: { acceptance: "テストが通ること" } });
 };
 
+describe("中の誰にも配られていない入力", () => {
+  it("子を持つ箱の入力が中のどの箱にもつながっていなければ review", async () => {
+    const { addBlock, addPort, createProject, projectBlocks } = await import("./graph");
+    const { lint } = await import("./lint");
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const m = addBlock(p, { parentId: pj, title: "親" }); p = m.project;
+    p = addBlock(p, { parentId: m.blockId, title: "子" }).project;
+    p = addPort(p, { blockId: m.blockId, direction: "in", name: "資料" }).project;
+    expect(lint(p).some((i) => i.kind === "unused-input" && i.blockId === m.blockId)).toBe(true);
+  });
+});
+
 describe("lint", () => {
   it("予定成果物・完了条件の欠落は error、出力の未接続は review", () => {
     const { p, parentId } = base();

@@ -2173,7 +2173,14 @@ export function connectToBlock(p: Project, from: Endpoint, targetBlockId: string
   }
   if (!sameScope && !targetIsChildOfSource) return { project: p, error: t("同じ階層のボックス (または親子) にだけつなげます") };
   const ins = portsOf(p, targetBlockId, "in");
-  let target = ins.find((i) => incomingEdges(p, { portId: i.id, side: "outer" }).every((e) => e.auto) && !i.promotedFrom);
+  const free = (i: Port) => incomingEdges(p, { portId: i.id, side: "outer" }).every((e) => e.auto);
+  // つなぐ先の入力の選び方:
+  //   1. 同じ名前で、本物の線がまだ来ていない入力 (自動で上がった入力も含む。中の箱が待っている入力に、そのまま供給元を与える)
+  //   2. それ以外の、本物の線が来ていない手動の入力
+  //   3. 無ければ新しく足す
+  // 以前は自動で上がった入力を除いていたため、子持ちの箱へ親の入力を落とすと同名の入力が 2 本になり、新しい方は中の誰にもつながらなかった
+  // (利用者の指摘 2026-10-18: 中の箱に何もつながっていない配線ができる)
+  let target = ins.find((i) => i.name === fp.name && free(i)) ?? ins.find((i) => free(i) && !i.promotedFrom);
   let q = p;
   if (!target) {
     const r = addPort(p, { blockId: targetBlockId, direction: "in", name: fp.name });

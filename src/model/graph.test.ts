@@ -1152,6 +1152,24 @@ describe("消せるもの: 入力は使う箱の入力ごと、最後の出力�
   });
 });
 
+describe("箱へ線を落とすと、自動で上がった同名の入力につながる (同名の入力を 2 本にしない)", () => {
+  it("親の入力 (内側) を子持ちの箱へ落とすと、自動で上がった入力が供給元を得て、中の箱までつながる", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const m = addBlock(p, { parentId: pj, title: "モデリング" }); p = m.project;
+    const c = addBlock(p, { parentId: m.blockId, title: "キャラクターモデリング" }); p = c.project;
+    p = addPort(p, { blockId: c.blockId, direction: "in", name: "シナリオ" }).project; // モデリング → プロジェクトのボックス → 最上位まで自動で上がる
+    const pjIn = portsOf(p, pj, "in")[0];
+    const r = connectToBlock(p, { portId: pjIn.id, side: "inner" }, m.blockId); p = r.project;
+    expect(r.error).toBeUndefined();
+    const ins = portsOf(p, m.blockId, "in");
+    expect(ins).toHaveLength(1);
+    expect(incomingEdges(p, { portId: ins[0].id, side: "outer" }).some((e) => !e.auto)).toBe(true); // 本物の線が来た
+    expect(outgoingEdges(p, { portId: ins[0].id, side: "inner" })).toHaveLength(1); // 中の箱へ配られたまま
+    expect(portsOf(p, ROOT_ID, "in").map((x) => x.name)).toEqual(["シナリオ"]); // 最上位の入力は 1 本のまま
+  });
+});
+
 describe("normalizePortNames: 古い食い違いをそろえる", () => {
   it("供給元と違う名前の入力を、供給元の名前 (さらに上流があればその名前) にそろえる", () => {
     let p = createProject("t");

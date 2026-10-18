@@ -95,4 +95,5 @@ export const workflow: Record<string, string> = {
   "前回の着手準備の確認後に {what} が変わっています。対象・成果・確認方法と入力の根拠を見直し、整合すれば box-ok を更新してください": "{what} changed after the last readiness review. Re-check the target, deliverable, checks and input sources; if it still fits, update box-ok",
   "見送り中 (選ばなかった分岐の道) です。今は作業不要です。分岐の答えが変われば、準備を確かめ直してください": "Skipped (a branch path that was not chosen). No work is needed now. If the branch answer changes, check readiness again",
   "何をどう確かめれば完了か (出力の予定成果物とは別に、確かめ方を書く)。着手の準備の欄と同じ値": "How to check that it is done (separate from the planned deliverable: write how it is verified). Same value as the field under Before you start",
+  "入力「{name}」は中のどの箱にもつながっていません (中の箱の入力につなぐか、消します)": "Input \"{name}\" is not connected to any box inside (connect it to an inner box's input, or remove it)",
 };
