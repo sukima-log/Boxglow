@@ -269,6 +269,16 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     const after=await page.evaluate(()=>({ready:!!document.querySelector('.readiness-fields--ready'),done:document.querySelectorAll('.readiness-fields__done').length,where:[...document.querySelectorAll('.readiness-fields__where')].map(e=>e.textContent)}));
     check('着手の準備: 全部埋めても欄が ✓ 付きで残り、保存先 (I/O タブ / 作業範囲) が示される',after.ready&&after.done===2&&after.where.length===2,JSON.stringify(after));
     await page.evaluate(()=>{const s=window.boxglow.store.getState();const id=s.selection.blockId;s.select({});s.apply(p=>{const q=structuredClone(p);for(const e of Object.values(q.edges)){const a=q.ports[e.from.portId],b=q.ports[e.to.portId];if(a?.blockId===id||b?.blockId===id)delete q.edges[e.id];}for(const k of Object.keys(q.ports))if(q.ports[k].blockId===id)delete q.ports[k];delete q.blocks[id];const parent=Object.values(q.blocks).find(x=>x.title==='設計する');parent.collapsed=true;return q;});s.setEditMode(false);});await page.waitForTimeout(400);
+    // Top の Expand all / Collapse all: 大項目を全部展開して、すぐ 1 階層 (大項目だけ) に戻せる。View なので保存データは変えない
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.select({});s.setViewScope(null);});await page.waitForTimeout(400);
+    const beforeFold=await page.evaluate(()=>JSON.stringify(window.boxglow.store.getState().project));
+    await page.getByRole('button',{name:'Expand all',exact:true}).click();await page.waitForTimeout(600);
+    const expandedAll=await page.evaluate(()=>{const rf=window.boxglow.rf;const majors=new Set(rf.getNodes().filter(n=>n.type==='block'&&n.data.major).map(n=>n.id));return majors.size>0&&rf.getNodes().some(n=>majors.has(n.parentId)&&!n.hidden)&&window.boxglow.store.getState().viewScope===null;});
+    check('Top: Expand all で大項目の中が見える (Top のまま)',expandedAll);
+    await page.getByRole('button',{name:'Collapse all',exact:true}).click();await page.waitForTimeout(600);
+    const folded=await page.evaluate(()=>{const rf=window.boxglow.rf;const majors=new Set(rf.getNodes().filter(n=>n.type==='block'&&n.data.major).map(n=>n.id));return rf.getNodes().filter(n=>n.type==='block'&&majors.has(n.parentId)).every(n=>n.hidden);});
+    check('Top: Collapse all で 1 階層 (大項目だけ) に戻る',folded&&(await page.getByRole('button',{name:'Expand all',exact:true}).count())===1);
+    check('Top: View での Expand / Collapse all は保存データを変えない',beforeFold===await page.evaluate(()=>JSON.stringify(window.boxglow.store.getState().project)));
     await page.setViewportSize({width:390,height:844});await page.waitForTimeout(300);
     await page.locator('.topbar button[aria-label="Menu"]').click();
     check('狭い幅 (390px): 追加・Auto Layout・Undo / Redo は ⋯ メニューの中にある',await page.locator('.menu-actions').getByRole('button',{name:'+ Block',exact:true}).isVisible() && await page.getByRole('button',{name:'Auto Layout',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Undo',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Redo',exact:true}).isVisible());

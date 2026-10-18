@@ -31,4 +31,8 @@ export const canvasReview: Record<string, string> = {
   "自分の計画で始める": "Start with your own plan",
   "保存した計画はここから再開できます。": "Your saved plans will appear here.",
   "AI と同じ boxglow.json を見ながら作業できます。共同編集には、下のコマンドでローカルサーバーを起動してください。": "Work with the same boxglow.json as your AI agent. Start the local server below to edit together.",
+  "この階層の中のボックスを全部畳む": "Collapse every box inside this level",
+  "全部畳んで大項目だけにする (1 階層)": "Collapse everything down to the major boxes (one level)",
+  "この階層の中のボックスを全部展開する": "Expand every box inside this level",
+  "大項目を全部展開する": "Expand all major boxes",
 };

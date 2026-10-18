@@ -78,6 +78,8 @@ interface State {
   setReadingView: (enabled: boolean) => void;
   /** ボックスを畳む / 展開する。Top で大項目なら、そのタブを開く。Edit なら共有の配置として保存、View なら画面だけ */
   toggleCollapsed: (blockId: string) => void;
+  /** まとめて畳む / 展開する (Top の「Collapse all」など)。Edit は保存、View は画面だけ (toggleCollapsed と同じ) */
+  setCollapsedAll: (blockIds: string[], collapsed: boolean) => void;
   /** 大項目のタブを開く (Top でダブルクリック)。線を選んだまま接続先の大項目を開く流れも受ける */
   openTab: (blockId: string) => void;
   /** 開いているタブ (大項目のボックスの id)。null なら Top (大項目の一覧)。画面だけの状態で、プロジェクトごとにブラウザに記憶 */
@@ -980,6 +982,28 @@ export const useProjectStore = create<State>((set, get) => {
       get().setViewScope(blockId);
     }
     // 畳む / 展開 (Top の大項目も同じ。Top は全階層を見せる: 利用者の要望 2026-10-18。B93 で「Top は大項目だけ」にしていたのを戻した)
+  , setCollapsedAll: (blockIds, collapsed) => {
+      const { project, editMode, readonly, viewCollapsed } = get();
+      if (!project) return;
+      // 子を持つボックスだけが対象 (子が無ければ畳む意味が無い)
+      const ids = blockIds.filter((id) => project.blocks[id] && Object.values(project.blocks).some((b) => b.parentId === id));
+      if (ids.length === 0) return;
+      if (editMode && !readonly) {
+        const rest = { ...viewCollapsed };
+        for (const id of ids) delete rest[id];
+        set({ viewCollapsed: rest });
+        get().apply((p) => {
+          if (ids.every((id) => p.blocks[id].collapsed === collapsed)) return p;
+          const q = structuredClone(p);
+          for (const id of ids) q.blocks[id].collapsed = collapsed;
+          return q;
+        });
+        return;
+      }
+      const next = { ...viewCollapsed };
+      for (const id of ids) next[id] = collapsed;
+      set({ viewCollapsed: next });
+    }
   , toggleCollapsed: (blockId) => {
       const { project, editMode, readonly, viewCollapsed } = get();
       if (!project || !project.blocks[blockId]) return;

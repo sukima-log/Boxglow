@@ -8,6 +8,7 @@ import { useEffect, useRef } from "react";
 import { t, useLang } from "../i18n";
 import { layoutScope } from "../model/autolayout";
 import { useProjectStore } from "../store/useProjectStore";
+import { childrenOf, descendantsOf, majorBlocks } from "../model/graph";
 
 /**
  * キャンバスの操作欄
@@ -47,6 +48,13 @@ export function CanvasTools({ snap, onSnap, showMap, onMap, fit, readFromTop }: 
       ? [...new Set(rf.getEdges().filter((e) => !e.hidden && (e.id === selection.edgeId || e.data?.net)).flatMap((e) => [e.source, e.target]))]
       : [];
   const apply = useProjectStore((s) => s.apply);
+  const setCollapsedAll = useProjectStore((s) => s.setCollapsedAll);
+  const viewCollapsed = useProjectStore((s) => s.viewCollapsed);
+  const project = useProjectStore((s) => s.project);
+  // まとめて畳む対象: Top なら大項目 (1 階層だけ残す)、タブの中ならその階層の下にある子持ちのボックス全部 (開いているボックス自身は除く)。
+  // 利用者の要望 2026-10-18: Top で全階層を見られるようにした代わりに、すぐ 1 階層に戻せるように
+  const foldTargets = project ? (scope ? descendantsOf(project, scope) : majorBlocks(project)).filter((b) => b.id !== scope && childrenOf(project, b.id).length > 0) : [];
+  const anyExpanded = foldTargets.some((b) => !(viewCollapsed[b.id] ?? b.collapsed));
   const toast = useProjectStore((s) => s.setToast);
   /** 結線の途中をやめる (ドラッグ中の線と、クリックで選んだ出力の両方を取り消す)。Input / Output: なし */
   const cancel = () => {
@@ -97,6 +105,14 @@ export function CanvasTools({ snap, onSnap, showMap, onMap, fit, readFromTop }: 
             <path d="M3 6h12a5 5 0 0 1 0 10H9m3-3-3 3 3 3M3 11h5M3 16h2" />
           </svg>
         </button>}
+        {/* まとめて畳む / 展開する: Top は大項目だけを残す。畳み方は ▸ と同じ (Edit は保存、View は画面だけ) */}
+        {foldTargets.length > 0 && (
+          <button className="canvas-tools__fold" onClick={() => { setCollapsedAll(foldTargets.map((b) => b.id), anyExpanded); setTimeout(() => fit(), 50); }}
+            aria-label={anyExpanded ? "Collapse all" : "Expand all"}
+            title={anyExpanded ? (scope ? t("この階層の中のボックスを全部畳む") : t("全部畳んで大項目だけにする (1 階層)")) : (scope ? t("この階層の中のボックスを全部展開する") : t("大項目を全部展開する"))}>
+            {anyExpanded ? "Collapse all" : "Expand all"}
+          </button>
+        )}
         <ViewSwitch />
         {selectedNodes.length > 0 && <button onClick={() => fit(selectedNodes)} title={t("選んだボックス (線を選んでいれば両端のボックス) へ移動")}>To selection</button>}
         <details ref={menu} className="canvas-tools__settings">
