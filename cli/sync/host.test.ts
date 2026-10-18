@@ -47,7 +47,13 @@ const make = (extra: Partial<ConstructorParameters<typeof SyncHost>[0]> = {}) =>
 };
 /** 時刻を進めて tick (常時の同期の 1 歩) */
 const advance = async (host: SyncHost, ms: number) => { clock += ms; await host.tick(); };
-const settle = () => new Promise((r) => setTimeout(r, 20));
+// 裏方と試験用サーバーの往復を待つ。CI の遅い機械では 20 ms で足りずに落ちることがあった (2026-10-17 の 2 回。Google のサインイン URL が出る前に判定) ので、CI では長めに待つ
+const settle = () => new Promise((r) => setTimeout(r, process.env.CI ? 100 : 20));
+/**
+ * 条件がそろうまで settle を繰り返す (最大 limit 回)。サーバーとの往復が何回か要る状態の変化を、固定の待ち時間に頼らずに待つ
+ * Input : pred = 条件, limit = 繰り返しの上限 / Output: なし (上限に達しても例外にしない。続く expect が理由を出す)
+ */
+const until = async (pred: () => boolean, limit = 100) => { for (let i = 0; i < limit && !pred(); i++) await settle(); };
 
 describe("状態の判定", () => {
   it("Windows で動く裏方は DPAPI が使えなければ unsupported。資格情報が無ければ signed-out。有効にしていなければ off。結び付いていなければ unbound", async () => {
@@ -168,14 +174,14 @@ describe("サインインとサインアウト", () => {
     const { host } = make();
     host.openFile(file);
     host.signIn("github");
-    await settle();
+    await until(() => !!host.status(file).signIn?.userCode);
     const during = host.status(file);
     expect(during.signIn).toMatchObject({ provider: "github", userCode: expect.stringMatching(/^TEST-/), verificationUrl: expect.stringContaining("/fake/github/login/device") });
     // サーバー側で許可する
     const code = [...server.deviceCodes.keys()].at(-1)!;
     server.deviceCodes.set(code, { account: "acc-alice", login: "alice" });
     await new Promise((r) => setTimeout(r, 50));
-    await host.tick(); await settle();
+    await host.tick(); await until(() => !!readCredentials(server.url));
     expect(readCredentials(server.url)).toMatchObject({ account: "acc-alice", login: "alice" });
     const after = host.status(file);
     expect(after.credentials.source).toBe("stored");
@@ -628,12 +634,12 @@ describe("Google でのサインイン (裏方)", () => {
     const { host } = make();
     host.openFile(file);
     host.signIn("google");
-    await settle();
+    await until(() => !!host.status(file).signIn?.url);
     const during = host.status(file);
     expect(during.signIn).toMatchObject({ provider: "google", url: expect.stringContaining("accounts.google.com") });
     const id = [...server.googleTx.keys()].at(-1)!;
     server.approveGoogle(id, { account: "acc-g", login: "g" });
-    await new Promise((r) => setTimeout(r, 50)); await host.tick(); await settle();
+    await new Promise((r) => setTimeout(r, 50)); await host.tick(); await until(() => !!readCredentials(server.url));
     expect(readCredentials(server.url)).toMatchObject({ account: "acc-g" });
     expect(host.status(file).signIn).toBeUndefined();
     expect(JSON.stringify(host.status(file))).not.toContain("tok-");
