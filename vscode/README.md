@@ -37,7 +37,7 @@ In View mode the boxes are laid out in dependency order as numbered stages, left
 
 ## How to use
 
-1. In your repository: `npx boxglow init --name "My project"` and `npx boxglow setup-agent` (adds the instructions for your agent and registers the MCP server).
+1. In your repository: `npx boxglow init --name "My project"` and `npx boxglow setup-agent` (installs everything the agent needs: the instructions, the skill, the hooks that inject the plan at session start and remind the agent to record before finishing, the MCP server, and a review subagent; for both Claude Code and Codex). `npx boxglow setup-agent --check` shows what is installed and the one-time steps left to you.
 2. Ask your agent to "read the README and create the major boxes in Boxglow".
 3. Right-click `boxglow.json` and choose **Boxglow: Open boxglow.json as a diagram** (also in the editor title bar and the command palette).
 
