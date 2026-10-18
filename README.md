@@ -11,6 +11,20 @@ Tasks are boxes with inputs and outputs; a box goes New (BlackBox: output decide
 - CLI for agents: `npx boxglow` (status / start / done / split / ask / answer ...)
 - License: MIT
 
+## What's new in 0.6.2
+
+- **`setup-agent` sets up everything for Claude Code and Codex**: hooks (the plan's resume summary is injected when a session starts, resumes or is compacted; an agent about to finish with an unrecorded box is told to record first; direct edits of `boxglow.json` are blocked), MCP registration, a review subagent, and the context guard. `setup-agent --check` shows what is installed, when each hook last fired, and the one-time steps left to you (Codex: trust the project and approve the hooks in the terminal CLI).
+- **Verification at done**: `boxglow done --checked "<checks run and results>" [--not-checked …] [--limits …]` stays on the box and shows in `show`, `context` and the Status tab.
+- **Sync you can stop**: "Stop syncing / Resume syncing" and "Disconnect this plan on this device"; a **Constraints** field under the outputs; a safer merge into `~/.codex/config.toml`; a usability pass (fewer steps on Home, clearer buttons and labels, a scrolling account menu).
+
+Details: [CHANGELOG.md](CHANGELOG.md). Update the CLI, `serve` and the VS Code extension (0.5.2) together.
+
+### 日本語: 0.6.2 の要点
+
+- **`setup-agent` だけで Claude Code と Codex の両方が整う**: hooks (セッションの開始・再開・圧縮の後に計画の再開の概要を文脈へ、記録の無い箱を残したまま終えようとすると記録を促す、boxglow.json の直接編集を止める)、MCP の登録、レビュー用のサブエージェント、確認トークン。`setup-agent --check` で、入っているもの・各 hook の最後の発火・利用者が一度だけ行うこと (Codex はプロジェクトの信頼とターミナルの CLI での hooks の承認) を表示。
+- **完了のときの検査結果**: `boxglow done --checked "<実行した検査と結果>" [--not-checked …] [--limits …]` が箱に残り、show・context・Status タブに出る。
+- **止められる同期** (「同期を止める / 再開する」「この端末の結び付けを解除する」)、出力の下の**制約**の欄、`~/.codex/config.toml` への安全な併合、使いやすさの見直し (Home の手数、ボタンの見た目、アカウントメニューのスクロール)。
+
 ## What's new in 0.6.1
 
 - **Sync in the browser alone** at [boxglow.app](https://boxglow.app): sign in with GitHub or Google, put a plan on the server or receive one, and it syncs while the tab is open. `serve` and the VS Code extension sync the same way with a local file.
@@ -187,7 +201,7 @@ Writes become new versions on the server and reach the synced devices on their n
 
 ## VS Code extension
 
-Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.1 goes with boxglow 0.6.1).
+Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.2 goes with boxglow 0.6.2).
 
 `vscode/` holds the extension's source. It opens `boxglow.json` as the same diagram inside the editor (custom editor "Boxglow"; right-click the file or use the editor title button / command *Boxglow: Open boxglow.json as a diagram*). The diagram follows the file when the CLI or an agent writes it, edits in the diagram are written back, and light / dark follow the VS Code theme. To build it yourself: `npm run build:vscode` (bundles the web app into `vscode/media/`), then `cd vscode && npm run package` (`.vsix`, install via *Extensions: Install from VSIX...*).
 

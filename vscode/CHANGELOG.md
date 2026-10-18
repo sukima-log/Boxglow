@@ -2,7 +2,13 @@
 
 ## Unreleased
 
-_Changes after 0.5.1 go here._
+_Changes after 0.5.2 go here._
+
+## 0.5.2
+
+- Follows boxglow 0.6.2. Update together with the CLI and `serve`.
+- Status tab shows the verification recorded at done (`boxglow done --checked / --not-checked / --limits`); after a box is reopened it is labelled as the previous done's verification.
+- Same app as 0.6.2: the constraints field, stop / resume / disconnect in the sync panel, the safer Codex config merge, and the usability fixes listed in the boxglow CHANGELOG.
 
 ## 0.5.1
 
