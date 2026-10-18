@@ -7,7 +7,7 @@ import { candidateGroups } from "../model/workflow";
 import { lint } from "../model/lint";
 import { resumeSummary } from "../model/resume";
 import { useMemo, useState } from "react";
-import { answerDecision, editDecisionAnswer, summarize, candidatesOf, reopenDecision, ancestorsOf, kindOf, portsOf, isAcked } from "../model/graph";
+import { answerDecision, editDecisionAnswer, summarize, candidatesOf, reopenDecision, ancestorsOf, kindOf, portsOf, isAcked, removeDecision } from "../model/graph";
 import { actorLabel, ACTIVITY_LABEL, agoText, shortTime } from "../model/report";
 import { ROOT_ID, type Project } from "../model/types";
 import { STATUS_LABEL } from "../model/status";
@@ -98,6 +98,12 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
               <button className="btn btn-primary btn-sm" disabled={!text.trim()} onClick={() => answer(text)}>{t("回答")}</button>
             </div>
           </div>
+          {/* 取り下げ: 間違えて出した問いは消せる (未回答のときだけ。分岐の問いは道と一体なので消せない。回答済みは履歴として残す) */}
+          {project.blocks[blockId]?.branch?.decisionId !== decisionId && (
+            <div className="flex justify-end">
+              <button className="btn btn-ghost btn-sm" onClick={() => { if (confirm(t("この問いを取り下げますか? (答えずに消します)"))) apply((p) => removeDecision(p, blockId, decisionId).project); }} title={t("問いを消す (答えずに取り下げる)")}>{t("取り下げる")}</button>
+            </div>
+          )}
         </>
       )}
     </div>

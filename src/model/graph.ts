@@ -580,8 +580,17 @@ export function moveTerminal(p: Project, which: "in" | "out", position: { x: num
 }
 
 /** ブロックを (子孫・ポート・線ごと) 削除する。最上位は消せない */
+/**
+ * 最後のプロジェクトのボックスか (計画にはプロジェクトのボックスが 1 つは要るので、これは消せない)
+ * Input : p, blockId
+ * Output: true = 消せない
+ */
+export function isLastProjectBox(p: Project, blockId: string): boolean {
+  return kindOf(p.blocks[blockId]) === "project" && projectBlocks(p).length <= 1;
+}
+
 export function removeBlock(p: Project, blockId: string): Project {
-  if (blockId === ROOT_ID) return p;
+  if (blockId === ROOT_ID || isLastProjectBox(p, blockId)) return p;
   const q = touch(p);
   const ids = new Set([blockId, ...descendantsOf(q, blockId).map((b) => b.id)]);
   const portIds = new Set(Object.values(q.ports).filter((x) => ids.has(x.blockId)).map((x) => x.id));
@@ -755,23 +764,58 @@ export function normalizePortNames(p: Project): { project: Project; renamed: num
   return { project: q ?? p, renamed };
 }
 
-/** ポートを (つながる線ごと) 削除する。自動で引き上げたポートは消せない (元の入力をつなぐと自然に消える) */
+/**
+ * 入力の内側から線で配られる先の入力 (子の入力、さらにその中の入力…) を全部集める (自動の線も含む)
+ * Input : p, portId = 入力ポート
+ * Output: 配られる先の入力ポートの配列 (自分は含まない。重複なし)
+ */
+export function inputsFedBy(p: Project, portId: string, seen: Set<string> = new Set()): Port[] {
+  const out: Port[] = [];
+  const port = p.ports[portId];
+  if (!port || port.direction !== "in" || seen.has(portId)) return out;
+  seen.add(portId);
+  for (const e of outgoingEdges(p, { portId, side: "inner" })) {
+    const to = p.ports[e.to.portId];
+    if (!to || to.direction !== "in" || seen.has(to.id)) continue;
+    out.push(to, ...inputsFedBy(p, to.id, seen));
+  }
+  return out;
+}
+
+/**
+ * ポートを消せるか (消せない理由つき)
+ *   - 出力: ボックスの最後の 1 本は消せない (ボックスは必ず出力を持つ。最上位の出力は除く)
+ * Input : p, portId
+ * Output: { ok, reason } (reason は画面に出せる文)
+ */
+export function canRemovePort(p: Project, portId: string): { ok: boolean; reason?: string } {
+  const x = p.ports[portId];
+  if (!x) return { ok: false, reason: t("ポートが見つかりません") };
+  if (x.direction === "out" && x.blockId !== ROOT_ID && portsOf(p, x.blockId, "out").length <= 1) return { ok: false, reason: t("最後の出力は消せません (ボックスは必ず出力を 1 本持ちます。名前を変えるか、ボックスごと消してください)") };
+  return { ok: true };
+}
+
+/**
+ * ポートを (つながる線ごと) 削除する
+ *   - 出力: 最後の 1 本は消せない (canRemovePort)。プロジェクトのボックスの出力なら最上位の写しも消す
+ *   - 入力: この入力から配られる先の入力 (子の入力、さらにその中…) も一緒に消す。消さないと、供給元を失った子の入力が自動で親へ引き上げられ、
+ *     同じ名前の入力がすぐ復活する (「一度足したら消せない」と見える。利用者の指摘 2026-10-18)。自動で引き上げた入力も同じ規則で消せる。
+ *     線だけ外したいときは disconnect
+ * Input : p, portId
+ * Output: 消した複製 (消せないときは p そのもの)
+ */
 export function removePort(p: Project, portId: string): Project {
   const x = p.ports[portId];
-  if (!x || x.promotedFrom) return p;
+  if (!x || !canRemovePort(p, portId).ok) return p;
   const q = touch(p);
-  // プロジェクトのボックスの出力を消したら、最上位の写しも (線ごと) 消す
+  const targets = new Set<string>([portId]);
+  if (x.direction === "in") for (const fed of inputsFedBy(q, portId)) targets.add(fed.id);
   if (x.direction === "out" && kindOf(q.blocks[x.blockId]) === "project") {
     const mirror = mirroredRootOutput(q, portId);
-    if (mirror) {
-      for (const e of Object.values(q.edges)) if (e.from.portId === mirror.id || e.to.portId === mirror.id) delete q.edges[e.id];
-      delete q.ports[mirror.id];
-    }
+    if (mirror) targets.add(mirror.id);
   }
-  for (const e of Object.values(q.edges)) {
-    if (e.from.portId === portId || e.to.portId === portId) delete q.edges[e.id];
-  }
-  delete q.ports[portId];
+  for (const e of Object.values(q.edges)) if (targets.has(e.from.portId) || targets.has(e.to.portId)) delete q.edges[e.id];
+  for (const id of targets) delete q.ports[id];
   return normalizePromotions(q);
 }
 
@@ -1335,6 +1379,22 @@ export function askDecision(p: Project, blockId: string, actor: string, question
  * Input : blockId, decisionId, patch
  * Output: 更新した Project (回答済み・見つからないときはそのまま)
  */
+/**
+ * 判断 (問い) を取り下げる: 未回答で、分岐の問いでないものだけ消せる (回答済みは履歴なので残す。分岐の問いは道と一体なので、分岐ごと扱う)
+ * Input : p, blockId, decisionId
+ * Output: { project, error } (消せないときは project = p と理由)
+ */
+export function removeDecision(p: Project, blockId: string, decisionId: string): { project: Project; error?: string } {
+  const b = p.blocks[blockId];
+  const d = b?.decisions.find((x) => x.id === decisionId);
+  if (!b || !d) return { project: p, error: t("判断が見つかりません") };
+  if (d.answer !== undefined) return { project: p, error: t("回答済みの判断は消せません (履歴として残します。やり直すなら reopen)") };
+  if (b.branch?.decisionId === decisionId) return { project: p, error: t("分岐の問いは消せません (道と一体です。分岐のボックスごと消すか、道を直してください)") };
+  const q = touch(p);
+  q.blocks[blockId] = { ...b, decisions: b.decisions.filter((x) => x.id !== decisionId) };
+  return { project: q };
+}
+
 export function updateDecision(p: Project, blockId: string, decisionId: string, patch: { question?: string; options?: string[]; context?: string }): Project {
   const b = p.blocks[blockId];
   const d = b?.decisions.find((x) => x.id === decisionId);

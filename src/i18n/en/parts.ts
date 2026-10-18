@@ -93,4 +93,6 @@ export const parts: Record<string, string> = {
 , "予定成果物": "Deliverable"
 , "パスの見当や題名 (例: src/auth/callback.ts)": "A path or title (e.g. src/auth/callback.ts)"
 , "使う箱:": "Used by:"
+, "消す (この入力を使う箱の入力も消えます: {list})": "Remove (the inputs of the boxes that use it are removed too: {list})"
+, "消す": "Remove"
 };

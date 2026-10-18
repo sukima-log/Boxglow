@@ -69,6 +69,11 @@ import {
 , updateDecision
 , normalizePortNames
 , portNet
+, addProjectBlock
+, inputsFedBy
+, canRemovePort
+, removeDecision
+, isLastProjectBox
 } from "./graph";
 import { ROOT_ID, type Project } from "./types";
 
@@ -1092,6 +1097,58 @@ describe("Top は全階層を見せる (大項目は畳んだまま始まり、�
     const r2 = splitBlock(r.project, b.id, { blocks: [{ title: "b1", outputs: ["成果"] }], connections: [{ from: "b1.成果", to: "parent.成果" }] }, "test");
     expect(r2.errors).toEqual([]);
     expect(r2.project.blocks[b.id].collapsed).toBe(false);
+  });
+});
+
+describe("消せるもの: 入力は使う箱の入力ごと、最後の出力と最後のプロジェクトのボックスは残す", () => {
+  it("最上位の入力 (自動で上がったものも) を消すと、使う箱の入力も消えて復活しない", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const a = addBlock(p, { parentId: pj, title: "A" }); p = a.project;
+    p = addPort(p, { blockId: a.blockId, direction: "in", name: "仕様書" }).project; // 最上位まで自動で上がる
+    const rootIn = portsOf(p, ROOT_ID, "in").find((x) => x.name === "仕様書")!;
+    expect(rootIn.promotedFrom).toBeTruthy();
+    expect(inputsFedBy(p, rootIn.id).map((x) => x.blockId)).toContain(a.blockId);
+    p = removePort(p, rootIn.id);
+    expect(portsOf(p, ROOT_ID, "in")).toHaveLength(0);
+    expect(portsOf(p, a.blockId, "in")).toHaveLength(0);
+    // 手で足した最上位の入力を子につないでから消しても同じ (線を消すだけだと子の入力が再び上がってしまう)
+    p = addPort(p, { blockId: a.blockId, direction: "in", name: "資料" }).project;
+    const manual = addPort(p, { blockId: ROOT_ID, direction: "in", name: "資料" }); p = manual.project;
+    const aIn = portsOf(p, a.blockId, "in")[0];
+    p = connect(p, { portId: manual.portId, side: "inner" }, { portId: portsOf(p, pj, "in")[0].id, side: "outer" }).project;
+    void aIn;
+    p = removePort(p, manual.portId);
+    expect(portsOf(p, ROOT_ID, "in")).toHaveLength(0);
+    expect(portsOf(p, a.blockId, "in")).toHaveLength(0);
+  });
+
+  it("最後の出力は消せない (最上位の出力は消せる)。判断は未回答だけ取り下げられ、分岐の問いは消せない", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const a = addBlock(p, { parentId: pj, title: "A", outputName: "成果" }); p = a.project;
+    const out = portsOf(p, a.blockId, "out")[0];
+    expect(canRemovePort(p, out.id).ok).toBe(false);
+    expect(removePort(p, out.id)).toBe(p);
+    const extra = addPort(p, { blockId: ROOT_ID, direction: "out", name: "おまけ" }); p = extra.project;
+    expect(canRemovePort(p, extra.portId).ok).toBe(true);
+    const asked = askDecision(p, a.blockId, "claude-code", "どれ?", ["x", "y"]); p = asked.project;
+    expect(removeDecision(p, a.blockId, asked.decisionId!).error).toBeUndefined();
+    expect(removeDecision(p, a.blockId, asked.decisionId!).project.blocks[a.blockId].decisions).toHaveLength(0);
+    const answered = answerDecision(p, a.blockId, asked.decisionId!, "x", "human");
+    expect(removeDecision(answered, a.blockId, asked.decisionId!).error).toBeTruthy();
+  });
+
+  it("最後のプロジェクトのボックスは消せない (2 つあれば消せる)", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    expect(isLastProjectBox(p, pj)).toBe(true);
+    expect(removeBlock(p, pj)).toBe(p);
+    const second = addProjectBlock(p, "別のプロジェクト"); p = second.project;
+    expect(isLastProjectBox(p, pj)).toBe(false);
+    p = removeBlock(p, pj);
+    expect(p.blocks[pj]).toBeUndefined();
+    expect(projectBlocks(p)).toHaveLength(1);
   });
 });
 

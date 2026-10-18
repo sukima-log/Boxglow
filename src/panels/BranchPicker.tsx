@@ -6,7 +6,7 @@
  * 答えた後は、選んだ道に印を付け、見送りの道を薄く出し、「選び直す」(reopenDecision) を置く。
  */
 import { answerDecision, portsOf, reopenDecision } from "../model/graph";
-import { branchDecision, chosenOption } from "../model/branch";
+import { branchDecision, chosenOption, addBranchOption, removeBranchOption } from "../model/branch";
 import type { Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
 import { t, useLang } from "../i18n";
@@ -40,6 +40,11 @@ export function BranchPicker({ project, blockId }: { project: Project; blockId: 
           <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => reopenDecision(p, blockId, d.id, "human", ""))}
             title={t("答えを履歴に残して未回答に戻す (見送りの道も元に戻る)")}>{t("Reopen")}</button>
         )}
+        {/* 答える前なら道を足せる (選択肢と出力が同時に増える) */}
+        {!readonly && d.answer === undefined && (
+          <button className="btn btn-ghost btn-sm" onClick={() => { const name = prompt(t("足す道 (選択肢) の名前")); if (name?.trim()) apply((p) => addBranchOption(p, blockId, name).project); }}
+            title={t("道 (選択肢) を足す")}>＋ {t("道を足す")}</button>
+        )}
       </div>
       {/* 問い: 何を決めるのか (題名と同じなら出さない) */}
       {d.question && d.question !== b.title && <p className="branch-picker__question">{d.question}</p>}
@@ -60,6 +65,11 @@ export function BranchPicker({ project, blockId }: { project: Project; blockId: 
               {state === "open" && !readonly && d.answer === undefined && (
                 <button className="btn btn-sm btn-primary" onClick={() => apply((p) => answerDecision(p, blockId, d.id, option, "human"))}
                   title={t("この道に進む (ほかの道は見送りになり、分岐のボックスは完了になる)")}>{t("選ぶ")}</button>
+              )}
+              {/* 道を消す: 答える前で、残りが 2 つ以上になるときだけ (線も外れる。先のボックスは残る) */}
+              {state === "open" && !readonly && d.answer === undefined && paths.length > 2 && (
+                <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => removeBranchOption(p, blockId, option).project)}
+                  title={t("この道を消す (線も外れる。先のボックスは残る)")}>×</button>
               )}
             </li>
           );

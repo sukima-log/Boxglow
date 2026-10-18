@@ -216,4 +216,12 @@ export const gui: Record<string, string> = {
   "成果物や参考資料のリンク (URL やファイルのパス)": "Links to deliverables and references (URLs or file paths)",
   "見た目": "Preview",
   "見た目 (打つと同時に反映)": "Preview (updates as you type)"
+, "最後のプロジェクトのボックスは消せません (中のボックスを消すか、ファイルごと作り直してください)": "The last project box cannot be deleted (delete the boxes inside it, or start a new file)"
+, "この問いを取り下げますか? (答えずに消します)": "Withdraw this question? (it is removed without an answer)"
+, "問いを消す (答えずに取り下げる)": "Remove the question (withdraw it unanswered)"
+, "取り下げる": "Withdraw"
+, "足す道 (選択肢) の名前": "Name of the path (option) to add"
+, "道 (選択肢) を足す": "Add a path (option)"
+, "道を足す": "Add path"
+, "この道を消す (線も外れる。先のボックスは残る)": "Remove this path (its wires too; the boxes after it stay)"
 };

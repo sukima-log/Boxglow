@@ -14,7 +14,7 @@ import { ReadinessFields } from "./ReadinessFields";
 import { CloseButton } from "./CloseButton";
 import { ConstraintsField, WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
-import { isAcked as decisionIsAcked } from "../model/graph";
+import { isAcked as decisionIsAcked, isLastProjectBox } from "../model/graph";
 import { useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
 import { LiveMarkdownEditor } from "./LiveMarkdownEditor";
@@ -120,7 +120,7 @@ function TerminalInspector({ project, which, groupId }: { project: Project; whic
           <input className="input" value={group.description} disabled={readonly} placeholder={t("説明 (任意。例: PCI-SIG の仕様書一式)")} onChange={(e) => apply((p) => updateInputGroup(p, group.id, { description: e.target.value }))} />
         </section>
       )}
-      <PortsEditor project={project} blockId={ROOT_ID} direction={which} readonly={readonly} title={which === "in" ? "Inputs" : "Outputs"} allowAdd={which === "out" || !!group} groupId={which === "in" ? (group ? group.id : null) : undefined} />
+      <PortsEditor project={project} blockId={ROOT_ID} direction={which} readonly={readonly} title={which === "in" ? "Inputs" : "Outputs"} groupId={which === "in" ? (group ? group.id : null) : undefined} />
       {which === "in" && !group && (
         <>
           <section className="sec">
@@ -211,6 +211,8 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       return updateBlock(p, blockId, { assigneeIds: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
     });
   const remove = () => {
+    // 計画にはプロジェクトのボックスが 1 つは要る (最後の 1 つは消せない。中のボックスを消すか、ファイルごと作り直す)
+    if (isLastProjectBox(project, blockId)) { setToast(t("最後のプロジェクトのボックスは消せません (中のボックスを消すか、ファイルごと作り直してください)")); return; }
     // 下の階層があるときだけ確認する (子のないボックスは Undo で戻せる。VS Code の webview では confirm が使えないので、確認を増やすと消せなくなる)
     if (kids.length > 0 && !confirm(t("「{title}」と下の階層のブロックを削除します。よろしいですか?", { title: b.title }))) return;
     select({});

@@ -30,6 +30,37 @@ function fixture(guard=false) {
   return {file,id:r.blockId,cli,token,read};
 }
 
+describe("消す操作 (port --remove / unask / branch の道 / remove のプロジェクト)",()=>{
+  it("port --remove は入力を使う箱の入力ごと消し、最後の出力は消せない。inputs で最上位の入力を足せる",()=>{
+    const {cli,read,id}=fixture();
+    expect(cli("port","inputs","--in","資料").status).toBe(0);
+    expect(Object.values(read().ports).some((q:any)=>q.blockId==="root"&&q.direction==="in"&&q.name==="資料"&&!q.promotedFrom)).toBe(true);
+    const r=cli("port","inputs","--remove","仕様書"); // 自動で上がった最上位の入力: 対象の入力ごと消える
+    expect(r.status,r.stderr).toBe(0);
+    expect(Object.values(read().ports).filter((q:any)=>q.name==="仕様書")).toHaveLength(0);
+    expect(Object.values(read().ports).filter((q:any)=>q.blockId===id&&q.direction==="in")).toHaveLength(0);
+    const last=cli("port","対象","--remove","コード");
+    expect(last.status).toBe(1);expect(last.stderr).toMatch(/最後の出力/);
+  });
+  it("unask は未回答の問いを消す。branch --box --add-option / --remove-option で道を足す / 消す。remove はプロジェクトのボックスを --force で消し、最後の 1 つは消せない",()=>{
+    const {cli,read,id}=fixture();
+    expect(cli("ask","対象","どれにする?","--options","a|b").status).toBe(0);
+    expect(read().blocks[id].decisions).toHaveLength(1);
+    expect(cli("unask","対象").status).toBe(0);
+    expect(read().blocks[id].decisions).toHaveLength(0);
+    expect(cli("unask","対象").status).toBe(1);
+    expect(cli("branch","方式","--options","A|B").status).toBe(0);
+    const br=()=>Object.values(read().blocks).find((b:any)=>b.title==="方式") as any;
+    expect(cli("branch","--box","方式","--add-option","C").status).toBe(0);
+    expect(Object.values(read().ports).filter((q:any)=>q.blockId===br().id&&q.direction==="out").map((q:any)=>q.branchOption)).toEqual(["A","B","C"]);
+    expect(cli("branch","--box","方式","--remove-option","C").status).toBe(0);
+    expect(Object.values(read().ports).filter((q:any)=>q.blockId===br().id&&q.direction==="out")).toHaveLength(2);
+    expect(cli("branch","--box","方式","--remove-option","B").status).toBe(1);
+    const pj=Object.values(read().blocks).find((b:any)=>b.kind==="project") as any;
+    expect(cli("remove",pj.id,"--force").status).toBe(1); // 最後のプロジェクトのボックス
+  });
+});
+
 describe("セッションの識別子と検査結果の日時 (Codex レビュー 30b)",()=>{
   it("start は環境のセッションの識別子を活動に残し、識別子の無い再着手では前の値を残さない (R30b-01)",()=>{
     const {file,id,read}=fixture();

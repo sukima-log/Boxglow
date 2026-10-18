@@ -3,7 +3,7 @@
  * ポートの行は「名前」と、その直下に「成果物 (リンク)」を主役として並べる。形式・制約は 1 行の補足。
  */
 import { useEffect, useRef, useState } from "react";
-import { addPort, consumersOf, createArtifact, inputGroupsOf, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort } from "../model/graph";
+import { addPort, consumersOf, createArtifact, inputGroupsOf, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort, inputsFedBy, canRemovePort } from "../model/graph";
 import type { Artifact, ExpectKind, Project } from "../model/types";
 import { setInputAnyOf } from "../model/branch";
 import { ROOT_ID } from "../model/types";
@@ -111,7 +111,8 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
     if (OPEN_PORTS.has(id)) OPEN_PORTS.delete(id); else OPEN_PORTS.add(id);
     setOpenState(new Set(OPEN_PORTS));
   };
-  const canRemove = (promoted: boolean) => !readonly && !promoted && (direction === "in" || ports.length > 1);
+  // 消せるか: 入力はいつでも (自動で上がった入力も。使う箱の入力ごと消える)。出力は最後の 1 本だけ消せない (ボックスは必ず出力を持つ)
+  const canRemove = (portId: string) => !readonly && canRemovePort(project, portId).ok;
 
   return (
     <section className="sec">
@@ -142,7 +143,11 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                 </select>
               )}
               <button className="btn btn-ghost btn-sm" onClick={() => toggleOpen(q.id)} aria-expanded={isOpen(q.id)} title={t("形式・制約などの設定")}>{isOpen(q.id) ? "▴" : "▾"}</button>
-              {canRemove(!!q.promotedFrom) && <button className="btn btn-ghost btn-sm" title="Remove" onClick={() => apply((p) => removePort(p, q.id))}>×</button>}
+              {canRemove(q.id) && (() => {
+                // 入力を消すと、この入力から配られる先の入力 (使う箱の入力) も一緒に消える。消さないと自動で復活するので、何が消えるかを先に示す
+                const fedBoxes = direction === "in" ? [...new Set(inputsFedBy(project, q.id).map((f) => project.blocks[f.blockId]?.title ?? "?"))] : [];
+                return <button className="btn btn-ghost btn-sm" title={fedBoxes.length ? t("消す (この入力を使う箱の入力も消えます: {list})", { list: fedBoxes.join(", ") }) : t("消す")} onClick={() => apply((p) => removePort(p, q.id))}>×</button>;
+              })()}
             </div>
             {/* 成果物 (主役): 名前の直下に並べる */}
             <div className="pl-1 pb-1">
@@ -158,8 +163,8 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                 </>
               )}
               {desc && !isOpen(q.id) && <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{desc}</div>}
-              {/* 下流: この出力を使う箱 (押すと移る)。変えるとどこを確かめ直すかの手がかり */}
-              {direction === "out" && (() => { const users = consumersOf(project, q.id); return users.length ? (
+              {/* 下流: この出力を使う箱 (押すと移る)。変えるとどこを確かめ直すかの手がかり。入力なら、この入力が配られる先の箱 (最上位の入力は、下の階層のどの箱が待っているか) */}
+              {(() => { const users = direction === "out" ? consumersOf(project, q.id) : [...new Map(inputsFedBy(project, q.id).map((f) => [f.blockId, project.blocks[f.blockId]])).values()].filter((b): b is NonNullable<typeof b> => !!b); return users.length ? (
                 <div className="text-[11px] mt-1 port-consumers" style={{ color: "var(--text-muted)" }}>
                   {t("使う箱:")} {users.map((b, i) => <span key={b.id}>{i > 0 && ", "}<button type="button" className="port-consumers__item" onClick={() => select({ blockId: b.id })}>{b.title}</button></span>)}
                 </div>) : null; })()}

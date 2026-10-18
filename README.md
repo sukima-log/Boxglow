@@ -131,8 +131,9 @@ MCP provides `boxglow_context`, `boxglow_checkpoint`, and `contextToken` on guar
 | `project <name>` | Add another project box to the same file (the top level holds only the input node, the output node and project boxes) |
 | `export-block <block>` / `import-block <file> --parent <block>` | Reuse a box (with its sub-boxes, ports and wiring) across projects as a `*.boxglow-block.json` template |
 | `reopen <block> --note "why"` | Reopen an answered decision: the old answer goes to its history, the candidates stay |
+| `unask <block>` | Withdraw an unanswered question |
 | `tidy` | Re-save the file by the rules: connected inputs and outputs share one name, overlaps resolved (fixes files written before these rules) |
-| `port <block|project> --in/--out/--rename` / `disconnect` / `move <block> --parent <block>` / `remove <block> [--force]` | Edit ports, remove a wire, move a box to another parent (wires are re-routed through the boxes in between), delete a box (and its children with `--force`) |
+| `port <block|project|inputs> --in/--out/--remove/--rename` / `disconnect` / `move <block> --parent <block>` / `remove <block> [--force]` | Edit ports (removing an input also removes the inputs it feeds), remove a wire, move a box to another parent (wires are re-routed through the boxes in between), delete a box (and its children with `--force`) |
 | `set <block> --status/--progress/--category/--due/--issue <url>/--repo` | Status, progress, category, schedule, JIRA / Redmine / GitHub issue link, repository |
 | `export --out docs/ROADMAP.md` / `export --format json` | Write the whole plan as Markdown (or JSON) |
 | `check` / `artifact` | Re-find deliverables after renames; attach a deliverable without finishing |

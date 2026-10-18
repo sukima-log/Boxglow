@@ -59,14 +59,14 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { addLogEntry, childrenOf, setNow, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor } from "../src/model/graph";
+import { addLogEntry, childrenOf, setNow, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor, canRemovePort, inputsFedBy, removePort, removeDecision, isLastProjectBox } from "../src/model/graph";
 import { checkStart, checkDone, descriptionReminder, scopeEntries } from "../src/model/workflow";
 import type { WorkScope, WorkflowPolicy } from "../src/model/types";
 import type { Artifact } from "../src/model/types";
 import { blockToPrompt } from "../src/model/export";
 import { blockReport, logReport, statusReport } from "../src/model/report";
 import { assignmentRows, type AssigneeTarget } from "../src/model/assignments";
-import { addBranch, addMerge, canConvertToBranch, convertToBranch, setInputAnyOf } from "../src/model/branch";
+import { addBranch, addMerge, canConvertToBranch, convertToBranch, setInputAnyOf, addBranchOption, removeBranchOption } from "../src/model/branch";
 import { STATUS_LABEL } from "../src/model/status";
 import { checkGitRef, findGitRef, gitRefFor } from "./git";
 import { layoutAll, layoutScope, nextFreePosition } from "../src/model/autolayout";
@@ -445,12 +445,13 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   claim <block> [--scope block|subtree] [--note]    受け持ちだけを取る (実行中にはしない)。分解・具体化の前に: context → claim → split / port / scope → context → start。受け持ち制御が無効な計画では「取得不要」
   branch <題名> --options "A|B" | --option <A> --option <B> [--question <問い>] [--context <判断材料>] [--in <入力名>]... [--parent <block>]   まだ決まっていない分かれ道 (分岐) を足す。選択肢ごとに道 (出力) ができ、answer で答えると選ばなかった道は見送り
   branch --box <block> --options "A|B" [--question <問い>] [--context <判断材料>]   今あるボックスを分岐に変える (今の出力は 1 つ目の選択肢の道になる。中にボックスを持つものは不可)
+  branch --box <block> --add-option <道> / --remove-option <道>   分岐の道 (選択肢) を足す / 消す (答える前だけ。道は 2 つ以上残す)
   join [--title <題名>] [--parent <block>]           合流の部品を足す (分かれた道を 1 つにまとめる。道の出力を connect でつなぐと、どれか 1 つが届けば先へ進む)
   move <block> --parent <block|project>            ボックスを別の親の中へ移す (線は間のボックスのポートを経由してつながったまま)
-  port <block|project> [--in <名前>]... [--out <名前>]... [--expect "<出力名>=<kind>:<hint>"]... [--self <出力名>]... [--no-self <出力名>]... [--rename <旧名>=<新名>] [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス)
+  port <block|project|inputs> [--in <名前>]... [--out <名前>]... [--remove <名前>]... [--expect "<出力名>=<kind>:<hint>"]... [--self <出力名>]... [--no-self <出力名>]... [--rename <旧名>=<新名>] [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、消す (入力を消すと使う箱の入力も消える。最後の出力は消せない)、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス、inputs = 最上位の入力)
   disconnect <題名.出力名> <題名.入力名>          線を外す
   tidy                                              ファイルを規則にそろえて保存し直す (線でつながる入出力の名前をそろえる、重なりを解く)
-  remove <block> [--force]                          ボックスを消す (中にボックスがあるときは --force。線も外れる。元に戻せないので Git で管理していること)
+  remove <block> [--force]                          ボックスを消す (中にボックスがあるとき・プロジェクトのボックスは --force。最後のプロジェクトのボックスは消せない。中にボックスがあるときは --force。線も外れる。元に戻せないので Git で管理していること)
   serve [--port 4174] [--open] [--sync|--no-sync]             ローカルサーバ: 同梱の Web アプリを http://localhost:4174/?serve=1 で配信し、boxglow.json を読み書き (Firefox / Safari でも使える)
                                                  通常は「同期を始める」から開始。--sync = 明示有効化、--no-sync = 無効。送り先は --server > BOXGLOW_SERVER > 既存の結び付け > 製品既定。空/off も無効
   mcp [--file <path>]                               MCP サーバ (標準入出力)。Claude Code などから status / start / done / ask ... をツールとして使う (.mcp.json は setup-agent が書く)
@@ -469,6 +470,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   answer <block> <回答> [--id <decision id>] [--by <名前>]   判断に答える (既定は最新の未回答)
   ack <block> [--id <decision id>]                人の回答を読んで引き取ったと記録する (status の「回答あり」から消える。start / done / blocked / review / set / split でも自動で引き取る)
   reopen <block> [--id <decision id>] [--note <理由>]   判断をやり直す (方針転換)。前の答えは履歴に、候補はそのまま残る
+  unask <block> [--id <decision id>]                 問いを取り下げる (未回答だけ。分岐の問いは消せない)
   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <題名>] [--note <説明>] [--category <カテゴリ>|none] [--repo <パス>|none] [--issue <URL>|none]
               [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <時間>|none] [--hours <実績時間>|none] [--split-by <一語>|none]  (--split-by = 直下の子の分け方: 工程 / 成果物 / 機能 など)
   find <文字>                                    ID や題名でボックスを探す
@@ -568,10 +570,10 @@ Usage (npx boxglow <command> ...):
   branch --box <block> --options "A|B" [--question <question>] [--context <background>]   Turn an existing box into a branch (its output becomes the first option's path; not for boxes with children)
   join [--title <title>] [--parent <block>]          Add a merge part (where paths come together; connect the paths' outputs to it, and any one of them arriving lets the work go on)
   move <block> --parent <block|project>            Move a box into another parent (wires stay connected through the ports of the boxes in between)
-  port <block|project> [--in <name>]... [--out <name>]... [--expect "<output>=<kind>:<hint>"]... [--self <output>]... [--no-self <output>]... [--rename <old>=<new>] [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, rename them, set an output's planned deliverable (expect: kind file / dir / url / doc / note / decision / result + a path or title) or mark it as made by this box itself (--self). --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
+  port <block|project|inputs> [--in <name>]... [--out <name>]... [--remove <name>]... [--expect "<output>=<kind>:<hint>"]... [--self <output>]... [--no-self <output>]... [--rename <old>=<new>] [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, remove them (removing an input also removes the inputs it feeds; the last output stays), rename them, set an output's planned deliverable (expect: kind file / dir / url / doc / note / decision / result + a path or title) or mark it as made by this box itself (--self). --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
   disconnect <title.output> <title.input>          Remove a wire
   tidy                                              Normalize the file and save it again (give connected inputs and outputs one name, resolve overlaps)
-  remove <block> [--force]                          Delete a box (--force if it contains boxes. Its wires are removed too. This cannot be undone, so keep the file in Git)
+  remove <block> [--force]                          Delete a box (--force if it contains boxes or is a project box; the last project box cannot be deleted. Its wires are removed too. This cannot be undone, so keep the file in Git)
   serve [--port 4174] [--open] [--sync|--no-sync]             Local server: serves the bundled web app at http://localhost:4174/?serve=1 and reads / writes boxglow.json (works in Firefox / Safari too)
                                                  Normally use Start syncing in the UI. --sync enables; --no-sync disables. Server: --server > BOXGLOW_SERVER > existing binding > product default. Empty/off also disables.
   mcp [--file <path>]                               MCP server (stdio). Lets Claude Code and others use status / start / done / ask ... as tools (setup-agent writes .mcp.json)
@@ -590,6 +592,7 @@ Usage (npx boxglow <command> ...):
   answer <block> <answer> [--id <decision id>] [--by <name>]   Answer a decision (default: the latest unanswered one)
   ack <block> [--id <decision id>]                Record that you have read a person's answer and taken it on (removes it from "Answered" in status. start / done / blocked / review / set / split also do this automatically)
   reopen <block> [--id <decision id>] [--note <reason>]   Reopen a decision (change of direction). The previous answer stays in the history and the options are kept
+  unask <block> [--id <decision id>]                 Withdraw a question (unanswered only; a branch's question cannot be removed)
   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <title>] [--note <description>] [--category <category>|none] [--repo <path>|none] [--issue <URL>|none]
               [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <hours>|none] [--hours <actual hours>|none] [--split-by <word>|none]  (--split-by = how the direct children are divided: stage / deliverable / feature ...)
   find <text>                                    Find boxes by ID or title
@@ -1193,6 +1196,16 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       // 分岐のボックスを足す: まだ決まっていない分かれ道。選択肢ごとに出力 (道) ができ、判断に答えると選ばなかった道の先は「見送り」になる
       // 例: branch "API の方式を決める" --question "API の方式はどれにしますか?" --options "REST|GraphQL" --in 設計書 --context "比較: ..."
       // 選択肢: --option を繰り返す (選択肢に「|」を含められる) か、--options "A|B" (「|」で区切る)
+      // 今ある分岐の道を足す / 消す: branch --box <block> --add-option "C" / --remove-option "B" (答える前だけ)
+      if (str(options.box) && (list(options["add-option"]).length || list(options["remove-option"]).length)) {
+        const target = mustFind(p, str(options.box));
+        const done: string[] = [];
+        for (const name of list(options["add-option"])) { const r = addBranchOption(p, target.id, name); if (r.error) throw new Error(r.error); p = r.project; done.push(t("足した {name}", { name })); }
+        for (const name of list(options["remove-option"])) { const r = removeBranchOption(p, target.id, name); if (r.error) throw new Error(r.error); p = r.project; done.push(t("消した {name}", { name })); }
+        save(path, p);
+        out(t("分岐の道: 「{title}」: {list}", { title: target.title, list: done.join(", ") }));
+        return;
+      }
       const choices = [...list(options.option), ...(str(options.options) ?? "").split("|")].map((x) => x.trim()).filter(Boolean);
       if (new Set(choices).size < 2) throw new Error(t("--options \"A|B\" (または --option を繰り返して) 選択肢を 2 つ以上指定してください"));
       // 今あるボックスを分岐に変える (--box <block>): 今の出力は 1 つ目の選択肢の道になる
@@ -1259,8 +1272,22 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     case "port": {
       // 例: port B5 --in "仕様書" --out "設計書"   /   port project --rename "最終成果物=公開された Boxglow 1.0"
       const target = rest[0] ?? "";
-      const blockId = target === "project" ? (projectBlocks(p)[0]?.id ?? ROOT_ID) : target === ROOT_ID ? ROOT_ID : mustFind(p, target).id;
+      // project = 最初のプロジェクトのボックス、inputs = 最上位の入力ノード (Inputs。--in で足す、--remove で消す)
+      const blockId = target === "project" ? (projectBlocks(p)[0]?.id ?? ROOT_ID) : target === "inputs" || target === ROOT_ID ? ROOT_ID : mustFind(p, target).id;
       const added: string[] = [];
+      // 消す: --remove "<名前>" (入力と出力に同じ名前があるときは in:<名前> / out:<名前>)。入力を消すと、配られる先 (使う箱) の入力も一緒に消える
+      for (const spec of list(options.remove)) {
+        const dir = spec.startsWith("in:") ? "in" : spec.startsWith("out:") ? "out" : undefined;
+        const name = dir ? spec.slice(dir.length + 1) : spec;
+        const hits = portsOf(p, blockId, dir).filter((x) => x.name === name);
+        if (hits.length === 0) throw new Error(t("ポート「{name}」が見つかりません", { name }));
+        if (hits.length > 1) throw new Error(t("「{name}」は入力と出力の両方にあります。in:{name} / out:{name} で指定してください", { name }));
+        const can = canRemovePort(p, hits[0].id);
+        if (!can.ok) throw new Error(can.reason ?? "");
+        const fed = hits[0].direction === "in" ? inputsFedBy(p, hits[0].id) : [];
+        p = removePort(p, hits[0].id);
+        added.push(fed.length ? t("消した {name} (使う箱の入力 {count} 件も)", { name, count: fed.length }) : t("消した {name}", { name }));
+      }
       for (const name of list(options.in)) { p = addPort(p, { blockId, direction: "in", name }).project; added.push(t("入力 {name}", { name })); }
       const newOuts = list(options.out);
       for (const name of newOuts) { p = addPort(p, { blockId, direction: "out", name }).project; added.push(t("出力 {name}", { name })); }
@@ -1301,7 +1328,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
         p = updatePort(p, port.id, { name: to });
         added.push(`${from} -> ${to}`);
       }
-      if (added.length === 0) throw new Error(t("--in <名前> / --out <名前> / --expect <出力名>=<kind>:<hint> / --self <出力名> / --rename <旧名>=<新名> / --any-of <入力名> / --all-of <入力名> のいずれかを指定してください"));
+      if (added.length === 0) throw new Error(t("--in <名前> / --out <名前> / --remove <名前> / --expect <出力名>=<kind>:<hint> / --self <出力名> / --rename <旧名>=<新名> / --any-of <入力名> / --all-of <入力名> のいずれかを指定してください"));
       save(path, p);
       out(t("ポート: {title}: {list}", { title: p.blocks[blockId]?.title ?? "project", list: added.join(", ") }));
       return;
@@ -1314,7 +1341,8 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     }
     case "remove": {
       const b = mustFind(p, rest[0]);
-      if (b.kind === "project") throw new Error(t("プロジェクトのボックスは消せません (中のボックスを全部消すか、ファイルごと作り直してください)"));
+      if (isLastProjectBox(p, b.id)) throw new Error(t("最後のプロジェクトのボックスは消せません (中のボックスを消すか、ファイルごと作り直してください)"));
+      if (b.kind === "project" && !options.force) throw new Error(t("「{title}」はプロジェクトのボックスです。中のボックスごと消すなら --force を付けてください", { title: b.title }));
       const kids = Object.values(p.blocks).filter((x) => x.parentId === b.id).length;
       if (kids > 0 && !options.force) throw new Error(t("「{title}」の中に {count} 個のボックスがあります。まとめて消すなら --force を付けてください", { title: b.title, count: kids }));
       const q = removeBlock(p, b.id);
@@ -1570,6 +1598,17 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       if (!id) throw new Error(t("未回答の判断がありません"));
       save(path, answerDecision(p, b.id, id, answer, str(options.by) ?? (actor === "agent" ? "human" : actor)));
       out(t("回答: 「{title}」 {answer}", { title: b.title, answer }));
+      return;
+    }
+    case "unask": {
+      // 問いを取り下げる (未回答だけ。分岐の問いは消せない。回答済みは reopen)
+      const b = mustFind(p, rest[0]);
+      const id = str(options.id) ?? [...b.decisions].reverse().find((d) => d.answer === undefined)?.id;
+      if (!id) throw new Error(t("取り下げられる判断 (未回答) がありません"));
+      const r = removeDecision(p, b.id, id);
+      if (r.error) throw new Error(r.error);
+      save(path, r.project);
+      out(t("取り下げ: 「{title}」の問いを消しました", { title: b.title }));
       return;
     }
     case "reopen": {
