@@ -18,7 +18,7 @@ import { isAcked as decisionIsAcked } from "../model/graph";
 import { useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
 import { LiveMarkdownEditor } from "./LiveMarkdownEditor";
-import { addLogEntry, removeLogEntry, isNow, setNow, addInputGroup, addMember, ancestorsOf, canAddOutput, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, removeBlock, setCategory, setProgress, setSchedule, updateBlock, waitingFor } from "../model/graph";
+import { addLogEntry, removeLogEntry, isNow, setNow, addInputGroup, addMember, ancestorsOf, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, removeBlock, setCategory, setProgress, setSchedule, updateBlock, waitingFor } from "../model/graph";
 import { saveTemplate } from "../lib/templates";
 import { actorLabel, ACTIVITY_LABEL, agoText } from "../model/report";
 import { DecisionCard, Timeline } from "./Timeline";
@@ -502,7 +502,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       {/* 3. 入力 / 4. 出力 */}
       {tab === "io" && (<>
       <PortsEditor project={project} blockId={blockId} direction="in" readonly={readonly} title="Inputs" />
-      <PortsEditor project={project} blockId={blockId} direction="out" readonly={readonly} title="Outputs" allowAdd={canAddOutput(project, blockId)} />
+      <PortsEditor project={project} blockId={blockId} direction="out" readonly={readonly} title="Outputs" />
       {/* 制約: 出力を作るうえで守る条件。出力のすぐ下に置く (利用者の要望 2026-10-18: More の中では見つからない)。作業範囲の編集と同じ値 */}
       <ConstraintsField project={project} blockId={blockId} />
       </>)}

@@ -67,8 +67,8 @@ import {
 , wireNet
 , removePort
 , updateDecision
-, isInputNameLocked
-, normalizeInputNames
+, normalizePortNames
+, portNet
 } from "./graph";
 import { ROOT_ID, type Project } from "./types";
 
@@ -644,11 +644,12 @@ describe("階層移動の線の付け替えと重なりの解消", () => {
     const rc = addBlock(q, { parentId: pj, title: "C" });
     q = rc.project;
     q = moveBlockToParent(q, b, rc.blockId, { x: 10, y: 10 });
-    // 入力名は供給元 (A の出力) の名前になっているので、その名前で探す
+    // 線でつながる入出力は同じ名前 (A の出力は既定の仮の名前「出力」だったので、つないだ時点で入力の名前 x になっている)。その名前で探す
     const xName = q.ports[inB.id].name;
-    expect(xName).toBe(outA.name);
+    expect(xName).toBe(q.ports[outA.id].name);
+    expect(xName).toBe("x");
     const cIn = portsOf(q, rc.blockId, "in").find((x) => x.name === xName && !x.promotedFrom);
-    const cOut = portsOf(q, rc.blockId, "out").find((x) => x.name === outB.name);
+    const cOut = portsOf(q, rc.blockId, "out").find((x) => x.name === q.ports[outB.id].name);
     expect(cIn).toBeDefined();
     expect(cOut).toBeDefined();
     const edges = Object.values(q.edges).filter((e) => !e.auto);
@@ -978,26 +979,91 @@ describe("入力名は供給元の出力名に追従する (二重管理をな�
   });
 });
 
-describe("つないだ入力の名前は供給元で決まる", () => {
-  it("connect すると入力の名前が供給元の出力名になり、以後は入力側で変えられない", () => {
+describe("線でつながる入出力は 1 つの名前 (どこで変えても全体がそろう)", () => {
+  it("connect すると入力の名前が供給元の出力名になり、入力側で変えると供給元の出力と兄弟の入力も変わる", () => {
     let p = createProject("t");
     const pj = projectBlocks(p)[0].id;
     const a = addBlock(p, { parentId: pj, title: "A", outputName: "設計書" }); p = a.project;
     const b = addBlock(p, { parentId: pj, title: "B", outputName: "成果" }); p = b.project;
+    const c = addBlock(p, { parentId: pj, title: "C", outputName: "別の成果" }); p = c.project;
     p = addPort(p, { blockId: b.blockId, direction: "in", name: "何か" }).project;
+    p = addPort(p, { blockId: c.blockId, direction: "in", name: "何か 2" }).project;
     const aOut = portsOf(p, a.blockId, "out")[0];
     const bIn = portsOf(p, b.blockId, "in")[0];
+    const cIn = portsOf(p, c.blockId, "in")[0];
     p = connect(p, { portId: aOut.id, side: "outer" }, { portId: bIn.id, side: "outer" }).project;
+    p = connect(p, { portId: aOut.id, side: "outer" }, { portId: cIn.id, side: "outer" }).project;
     expect(p.ports[bIn.id].name).toBe("設計書");
-    expect(isInputNameLocked(p, bIn.id)).toBe(true);
-    p = updatePort(p, bIn.id, { name: "勝手に変える" });
-    expect(p.ports[bIn.id].name).toBe("設計書");
-    p = updatePort(p, aOut.id, { name: "設計書 v2" });
-    expect(p.ports[bIn.id].name).toBe("設計書 v2");
+    expect(p.ports[cIn.id].name).toBe("設計書");
+    // 入力側で変えても全体がそろう (入力側のロックは廃止)
+    p = updatePort(p, bIn.id, { name: "設計書 v2" });
+    expect(p.ports[aOut.id].name).toBe("設計書 v2");
+    expect(p.ports[cIn.id].name).toBe("設計書 v2");
+    expect(portNet(p, aOut.id).size).toBe(3);
+  });
+
+  it("子の出力 → 親の出力をつなぐと親の出力も同じ名前になり、どちらで変えても子・最上位の写しまでそろう (一度ずれても追従する)", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    // 親はプロジェクトのボックス (その出力「最終成果物」は最上位の出力に写される)。子の出力 (仮の名前) を親の出力 (内側) へつなぐ
+    const kid = addBlock(p, { parentId: pj, title: "子", outputName: "新しい出力" }); p = kid.project;
+    const parentOut = portsOf(p, pj, "out")[0];
+    const kidOut = portsOf(p, kid.blockId, "out")[0];
+    p = connect(p, { portId: kidOut.id, side: "outer" }, { portId: parentOut.id, side: "inner" }).project;
+    expect(p.ports[kidOut.id].name).toBe("最終成果物"); // 仮の名前の側が相手に合わせる
+    // 同じ名前の子の出力 → 親の出力は 1 つの物。親側で変えると子と最上位の写しも変わり、子側で変えても同じ
+    p = updatePort(p, parentOut.id, { name: "設計書 v2" });
+    expect(p.ports[kidOut.id].name).toBe("設計書 v2");
+    expect(portsOf(p, ROOT_ID, "out").map((x) => x.name)).toContain("設計書 v2");
+    p = updatePort(p, kidOut.id, { name: "設計書 v3" });
+    expect(p.ports[parentOut.id].name).toBe("設計書 v3");
+    expect(portsOf(p, ROOT_ID, "out").map((x) => x.name)).toContain("設計書 v3");
+  });
+
+  it("子の出力 → 親の出力は、両方に本当の名前があればつないでも変えない (別名で束ねる・転記する使い方)", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const parent = addBlock(p, { parentId: pj, title: "親", outputName: "仕様 (転記)" }); p = parent.project;
+    const kid = addBlock(p, { parentId: parent.blockId, title: "子", outputName: "仕様" }); p = kid.project;
+    const parentOut = portsOf(p, parent.blockId, "out")[0];
+    const kidOut = portsOf(p, kid.blockId, "out")[0];
+    p = connect(p, { portId: kidOut.id, side: "outer" }, { portId: parentOut.id, side: "inner" }).project;
+    expect(p.ports[parentOut.id].name).toBe("仕様 (転記)");
+    expect(p.ports[kidOut.id].name).toBe("仕様");
+  });
+
+  it("上流が仮の名前 (新しい出力) のままなら、つないだときに受ける側の名前を採る", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const parent = addBlock(p, { parentId: pj, title: "親", outputName: "キャラ A" }); p = parent.project;
+    const kid = addBlock(p, { parentId: parent.blockId, title: "子", outputName: "新しい出力" }); p = kid.project;
+    const parentOut = portsOf(p, parent.blockId, "out")[0];
+    const kidOut = portsOf(p, kid.blockId, "out")[0];
+    p = connect(p, { portId: kidOut.id, side: "outer" }, { portId: parentOut.id, side: "inner" }).project;
+    expect(p.ports[kidOut.id].name).toBe("キャラ A");
+    expect(p.ports[parentOut.id].name).toBe("キャラ A");
   });
 });
 
-describe("normalizeInputNames: 古い食い違いをそろえる", () => {
+describe("出力は作る物ごとに何本でも持てる (下の階層が無くても)", () => {
+  it("addPort で 2 本目の出力を足せる。split の outputs も複数書ける", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const a = addBlock(p, { parentId: pj, title: "キャラクター設定", outputName: "キャラ A" }); p = a.project;
+    const r2 = addPort(p, { blockId: a.blockId, direction: "out", name: "キャラ B" }); p = r2.project;
+    expect(portsOf(p, a.blockId, "out").map((x) => x.name)).toEqual(["キャラ A", "キャラ B"]);
+    expect(r2.portId).not.toBe(portsOf(p, a.blockId, "out")[0].id);
+    const big = addBlock(p, { parentId: pj, title: "大きいボックス", outputName: "成果物" }); p = big.project;
+    const r = splitBlock(p, big.blockId, { blocks: [{ title: "設定", outputs: ["キャラ C", "キャラ D"] }, { title: "まとめ", outputs: ["成果物"] }], connections: [{ from: "設定.キャラ C", to: "まとめ" }, { from: "設定.キャラ D", to: "まとめ" }, { from: "まとめ.成果物", to: "parent.成果物" }] }, "test");
+    expect(r.errors).toEqual([]);
+    const made = findBlock(r.project, "設定").block!;
+    expect(portsOf(r.project, made.id, "out").map((x) => x.name)).toEqual(["キャラ C", "キャラ D"]);
+    const sum = findBlock(r.project, "まとめ").block!;
+    expect(portsOf(r.project, sum.id, "in").map((x) => x.name)).toEqual(["キャラ C", "キャラ D"]);
+  });
+});
+
+describe("normalizePortNames: 古い食い違いをそろえる", () => {
   it("供給元と違う名前の入力を、供給元の名前 (さらに上流があればその名前) にそろえる", () => {
     let p = createProject("t");
     const pj = projectBlocks(p)[0].id;
@@ -1010,10 +1076,25 @@ describe("normalizeInputNames: 古い食い違いをそろえる", () => {
     // 規則が入る前のファイルを模して、入力の名前だけ食い違わせる
     const broken = structuredClone(p);
     broken.ports[bIn.id].name = "CLI と連携の仕組み";
-    const r = normalizeInputNames(broken);
+    const r = normalizePortNames(broken);
     expect(r.renamed).toBe(1);
     expect(r.project.ports[bIn.id].name).toBe("CLI と手順");
-    expect(normalizeInputNames(r.project).renamed).toBe(0);
+    expect(normalizePortNames(r.project).renamed).toBe(0);
+  });
+
+  it("子の出力 → 親の出力 (上向きの線) の食い違いは直さない (親の出力は別名で束ねてよい)", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const parent = addBlock(p, { parentId: pj, title: "親", outputName: "設計書" }); p = parent.project;
+    const kid = addBlock(p, { parentId: parent.blockId, title: "子", outputName: "設計書" }); p = kid.project;
+    const parentOut = portsOf(p, parent.blockId, "out")[0];
+    const kidOut = portsOf(p, kid.blockId, "out")[0];
+    p = connect(p, { portId: kidOut.id, side: "outer" }, { portId: parentOut.id, side: "inner" }).project;
+    const broken = structuredClone(p);
+    broken.ports[parentOut.id].name = "古い名前";
+    const r = normalizePortNames(broken);
+    expect(r.project.ports[parentOut.id].name).toBe("古い名前");
+    expect(r.renamed).toBe(0);
   });
 });
 

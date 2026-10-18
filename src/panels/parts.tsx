@@ -3,7 +3,7 @@
  * ポートの行は「名前」と、その直下に「成果物 (リンク)」を主役として並べる。形式・制約は 1 行の補足。
  */
 import { useEffect, useRef, useState } from "react";
-import { addPort, consumersOf, createArtifact, inputGroupsOf, isInputNameLocked, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort } from "../model/graph";
+import { addPort, consumersOf, createArtifact, inputGroupsOf, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort } from "../model/graph";
 import type { Artifact, ExpectKind, Project } from "../model/types";
 import { setInputAnyOf } from "../model/branch";
 import { ROOT_ID } from "../model/types";
@@ -130,14 +130,10 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
         return (
           <div key={q.id} className="port-card">
             <div className="flex items-center gap-1">
-              {direction === "in" && isInputNameLocked(project, q.id) ? (
-                // 供給元のある入力: 名前は供給元の出力名で決まる (ここでは変えられない。変えるなら供給元の出力で)
-                <span className="input input-plain font-bold truncate" style={{ cursor: "default" }} title={t("入力の名前は供給元 ({owner}) の出力名です。変えるなら供給元の出力で", { owner: srcOwner ?? "?" })}>{q.name}</span>
-              ) : (
-                <DebouncedText className="input input-plain font-bold" value={q.name} disabled={readonly} title={q.promotedFrom ? t("下の階層の未接続の入力 (自動)。元の入力をつなぐと消えます") : direction === "in" ? t("まだ供給元の無い入力。つなぐと供給元の出力名になります") : undefined}
-                  style={q.promotedFrom ? { fontStyle: "italic", opacity: 0.75 } : undefined}
-                  onCommit={(v) => apply((p) => updatePort(p, q.id, { name: v }))} />
-              )}
+              {/* 名前: 線でつながる入出力は 1 つの名前 (ここで変えると、つながる先 (供給元の出力・使う箱の入力・親の出力) も同じ名前になる) */}
+              <DebouncedText className="input input-plain font-bold" value={q.name} disabled={readonly} title={q.promotedFrom ? t("下の階層の未接続の入力 (自動)。元の入力をつなぐと消えます") : t("線でつながる入出力は同じ名前になります (ここで変えると、つながる先も変わります)")}
+                style={q.promotedFrom ? { fontStyle: "italic", opacity: 0.75 } : undefined}
+                onCommit={(v) => apply((p) => updatePort(p, q.id, { name: v }))} />
               {direction === "in" && !q.promotedFrom && !q.required && <span className="meta-chip muted" title={t("任意: 無くても着手できます")}>{t("任意")}</span>}
               {groups.length > 0 && !readonly && (
                 <select className="input input-plain" style={{ width: 110, fontSize: 11 }} value={q.groupId ?? ""} title={t("入力グループ")} onChange={(e) => apply((p) => setInputGroup(p, q.id, e.target.value || null))}>

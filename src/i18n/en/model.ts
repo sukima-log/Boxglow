@@ -32,7 +32,6 @@ export const model: Record<string, string> = {
 , "親ブロックが見つかりません": "Parent box not found"
 , "出力「{name}」がありません ({list})": "No output \"{name}\" ({list})"
   // --- 分解 (split) の指摘 ---
-, "「{title}」の出力は 1 本にしました (下の階層を持たないボックスの出力は 1 本。{omitted} は省略)": "\"{title}\" was given a single output (a box with no children has one output; {omitted} omitted)"
 , "ボックスが見つかりません": "Box not found"
 , "「{title}」に入力「{port}」がありません": "\"{title}\" has no input \"{port}\""
 , "「{title}」に出力「{port}」がありません": "\"{title}\" has no output \"{port}\""

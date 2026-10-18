@@ -53,7 +53,7 @@ export function buildSampleProject(): Project {
   p = updateBlock(p, req.blockId, { status: "white", assigneeIds: [m1.memberId], description: "企画メモを読み、機能を箇条書きにする。優先度を付ける。" });
   p = connect(p, { portId: rin.portId, side: "inner" }, { portId: reqIn.portId, side: "outer" }).project;
 
-  // 設計する: 要件一覧 -> 設計書 (画面設計と API 仕様をまとめたもの。下の階層を持たないボックスの出力は 1 本) (完了)
+  // 設計する: 要件一覧 -> 設計書 (画面設計と API 仕様をまとめたもの) (完了)
   const desIn = addPort(p, { blockId: design.blockId, direction: "in", name: "要件一覧" });
   p = desIn.project;
   const desOut1 = portsOf(p, design.blockId, "out")[0];

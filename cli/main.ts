@@ -59,7 +59,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { addLogEntry, childrenOf, setNow, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, isInputNameLocked, normalizeInputNames, ackDecisions, isHumanActor } from "../src/model/graph";
+import { addLogEntry, childrenOf, setNow, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor } from "../src/model/graph";
 import { checkStart, checkDone, descriptionReminder, scopeEntries } from "../src/model/workflow";
 import type { WorkScope, WorkflowPolicy } from "../src/model/types";
 import type { Artifact } from "../src/model/types";
@@ -171,7 +171,7 @@ function save(path: string, p: Project): void {
   // つないだ入力の名前は供給元にそろえる (古いファイルの食い違いもここで直る)
   // 読んでいないパス (新規作成) は「ファイルが無い」ことを前提にする
   const expected = readRevisions.has(resolve(path)) ? readRevisions.get(resolve(path))! : null;
-  const normalized = normalizeCollapsed(normalizeInputNames(p).project);
+  const normalized = normalizeCollapsed(normalizePortNames(p).project);
   let text = toJSON(normalized) + "\n";
   const warnings:string[]=[];
   const revision = planIO().commit(path, text, expected, { prepare: (current) => {
@@ -450,7 +450,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   move <block> --parent <block|project>            ボックスを別の親の中へ移す (線は間のボックスのポートを経由してつながったまま)
   port <block|project> [--in <名前>]... [--out <名前>]... [--expect "<出力名>=<kind>:<hint>"]... [--self <出力名>]... [--no-self <出力名>]... [--rename <旧名>=<新名>] [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス)
   disconnect <題名.出力名> <題名.入力名>          線を外す
-  tidy                                              ファイルを規則にそろえて保存し直す (つないだ入力の名前を供給元に合わせる、大項目を畳む、重なりを解く)
+  tidy                                              ファイルを規則にそろえて保存し直す (線でつながる入出力の名前をそろえる、大項目を畳む、重なりを解く)
   remove <block> [--force]                          ボックスを消す (中にボックスがあるときは --force。線も外れる。元に戻せないので Git で管理していること)
   serve [--port 4174] [--open] [--sync|--no-sync]             ローカルサーバ: 同梱の Web アプリを http://localhost:4174/?serve=1 で配信し、boxglow.json を読み書き (Firefox / Safari でも使える)
                                                  通常は「同期を始める」から開始。--sync = 明示有効化、--no-sync = 無効。送り先は --server > BOXGLOW_SERVER > 既存の結び付け > 製品既定。空/off も無効
@@ -571,7 +571,7 @@ Usage (npx boxglow <command> ...):
   move <block> --parent <block|project>            Move a box into another parent (wires stay connected through the ports of the boxes in between)
   port <block|project> [--in <name>]... [--out <name>]... [--expect "<output>=<kind>:<hint>"]... [--self <output>]... [--no-self <output>]... [--rename <old>=<new>] [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, rename them, set an output's planned deliverable (expect: kind file / dir / url / doc / note / decision / result + a path or title) or mark it as made by this box itself (--self). --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
   disconnect <title.output> <title.input>          Remove a wire
-  tidy                                              Normalize the file and save it again (match connected input names to their source, collapse top-level items, resolve overlaps)
+  tidy                                              Normalize the file and save it again (give connected inputs and outputs one name, collapse top-level items, resolve overlaps)
   remove <block> [--force]                          Delete a box (--force if it contains boxes. Its wires are removed too. This cannot be undone, so keep the file in Git)
   serve [--port 4174] [--open] [--sync|--no-sync]             Local server: serves the bundled web app at http://localhost:4174/?serve=1 and reads / writes boxglow.json (works in Firefox / Safari too)
                                                  Normally use Start syncing in the UI. --sync enables; --no-sync disables. Server: --server > BOXGLOW_SERVER > existing binding > product default. Empty/off also disables.
@@ -1299,7 +1299,6 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
         const to = spec.slice(eq + 1);
         const port = portsOf(p, blockId).find((x) => x.name === from);
         if (!port) throw new Error(t("ポート「{name}」が見つかりません", { name: from }));
-        if (isInputNameLocked(p, port.id)) throw new Error(t("入力「{name}」の名前は供給元の出力名で決まります。供給元の出力の名前を変えてください (port <供給元> --rename)", { name: from }));
         p = updatePort(p, port.id, { name: to });
         added.push(`${from} -> ${to}`);
       }
@@ -1309,9 +1308,9 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       return;
     }
     case "tidy": {
-      const r = normalizeInputNames(p);
+      const r = normalizePortNames(p);
       save(path, r.project);
-      out(t("そろえました: 入力の名前 {count} 件を供給元に合わせました", { count: r.renamed }));
+      out(t("そろえました: 線でつながる入出力の名前 {count} 件を上流に合わせました", { count: r.renamed }));
       return;
     }
     case "remove": {

@@ -14,7 +14,7 @@ import { useMemo } from "react";
 import { readingLayout } from "../model/readingLayout";
 import { create } from "zustand";
 import { BrowserSyncHost } from "../sync/browser-host";
-import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeCollapsed, normalizeInputNames, resolveChangedOverlaps, resolveAllOverlaps, scopeFor, toJSON, wireNetTabs, withIndex } from "../model/graph";
+import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeCollapsed, normalizePortNames, resolveChangedOverlaps, resolveAllOverlaps, scopeFor, toJSON, wireNetTabs, withIndex } from "../model/graph";
 export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile, writeLocalFile } from "../lib/localfile";
@@ -1037,7 +1037,7 @@ export const useProjectStore = create<State>((set, get) => {
       let next = fn(project);
       if (next === project) return;
       // 大項目は畳んだ状態でそろえる。保存時は追加・移動・拡大した箱だけ補正し、既存の兄弟を動かさない (ドラッグ中は除く)
-      next = normalizeCollapsed(normalizeInputNames(next).project);
+      next = normalizeCollapsed(normalizePortNames(next).project);
       if (opts?.history !== false) next = resolveChangedOverlaps(normalizeCollapsed(project), next, blockSize);
       const history = opts?.history ?? true;
       set({

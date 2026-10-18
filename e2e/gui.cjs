@@ -126,6 +126,25 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     check('入出力: 出力の詳細に「使う箱」が並ぶ (設計書 → 一覧画面・編集画面・ノートの API・認証方式を決める)',consumers.includes('一覧画面') && consumers.includes('認証方式を決める'),consumers);
     await page.locator('.port-consumers__item',{hasText:'一覧画面'}).click();await page.waitForTimeout(300);
     check('入出力: 「使う箱」を押すとその箱が選ばれる',await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.project.blocks[s.selection.blockId]?.title==='一覧画面';}));
+    // 下の階層を持たないボックスでも出力を何本でも足せる (1 つの作業で複数の物ができるとき)。足した出力は後で消して元に戻す
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.select({blockId:s.selection.blockId,panelTab:'io'});});await page.waitForTimeout(300);
+    const outSec=page.locator('.sec',{has:page.locator('.label',{hasText:'Outputs'})}).first();
+    const addOut=outSec.locator('button',{hasText:'出力を追加'});
+    check('入出力: 末端のボックスにも「出力を追加」が出る',await addOut.count()===1);
+    const outsBefore=await page.evaluate(()=>{const s=window.boxglow.store.getState();return Object.values(s.project.ports).filter(q=>q.blockId===s.selection.blockId&&q.direction==='out').length;});
+    await addOut.click();await page.waitForTimeout(300);
+    const outsAfter=await page.evaluate(()=>{const s=window.boxglow.store.getState();return Object.values(s.project.ports).filter(q=>q.blockId===s.selection.blockId&&q.direction==='out').map(q=>q.name);});
+    check('入出力: 「出力を追加」で 2 本目の出力ができる',outsAfter.length===outsBefore+1 && outsAfter.includes('新しい出力'),JSON.stringify(outsAfter));
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();const extra=Object.values(s.project.ports).find(q=>q.blockId===s.selection.blockId&&q.direction==='out'&&q.name==='新しい出力');s.apply(p=>{const q=structuredClone(p);for(const e of Object.values(q.edges))if(e.from.portId===extra.id||e.to.portId===extra.id)delete q.edges[e.id];delete q.ports[extra.id];return q;});});await page.waitForTimeout(200);
+    // 線でつながる入出力は 1 つの名前: 入力「設計書」の名前を変えると、供給元 (設計する) の出力と、同じ出力を使う他の箱の入力も変わる。確かめたら元に戻す
+    const inSec=page.locator('.sec',{has:page.locator('.label',{hasText:'Inputs'})}).first();
+    const inName=inSec.locator('.port-card .input-plain.font-bold').first();
+    check('入出力: つないだ入力の名前欄が編集できる (ロックしない)',await inName.evaluate(el=>el.tagName==='INPUT'&&!el.disabled));
+    await inName.fill('設計書 v2');await inName.press('Enter');await page.waitForTimeout(700);
+    const renamed=await page.evaluate(()=>{const s=window.boxglow.store.getState();const names=Object.values(s.project.ports).filter(q=>q.name==='設計書 v2').map(q=>s.project.blocks[q.blockId]?.title+':'+q.direction);return names.sort();});
+    check('入出力: 入力側で名前を変えると供給元の出力と兄弟の入力も同じ名前になる',renamed.includes('設計する:out') && renamed.includes('一覧画面:in') && renamed.includes('編集画面:in'),JSON.stringify(renamed));
+    await inName.fill('設計書');await inName.press('Enter');await page.waitForTimeout(700);
+    check('入出力: 名前を戻すと全部戻る',await page.evaluate(()=>Object.values(window.boxglow.store.getState().project.ports).every(q=>q.name!=='設計書 v2')));
     await page.evaluate(()=>window.boxglow.store.getState().select({}));await page.waitForTimeout(200);
 
     // 今どこを作業しているか: Top では作業中を含む大項目に太い枠と「作業中: 題名」の札、タブの中では作業中のボックス自身に枠

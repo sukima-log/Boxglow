@@ -619,10 +619,8 @@ export function removeBlock(p: Project, blockId: string): Project {
  * Output: { project, portId }
  */
 export function addPort(p: Project, args: { blockId: string; direction: "in" | "out"; name: string }): { project: Project; portId: string } {
-  // 下の階層を持たないボックス (最上位以外) の出力は 1 本だけ。2 本目は足さない (下の階層ができれば足せる)
-  if (args.direction === "out" && args.blockId !== ROOT_ID && !canAddOutput(p, args.blockId)) {
-    return { project: p, portId: portsOf(p, args.blockId, "out")[0]?.id ?? "" };
-  }
+  // 出力は作る物ごとに 1 本で、本数の上限は無い (1 つの作業で複数の物ができるときは出力を分ける。利用者の要望 2026-10-18。
+  // それまでは下の階層を持たないボックスの出力を 1 本に制限していた)
   const q = touch(p);
   const id = newId();
   q.ports[id] = {
@@ -661,49 +659,88 @@ function mirroredRootOutput(p: Project, portId: string): Port | null {
   return e ? p.ports[e.to.portId] ?? null : null;
 }
 
-/** 出力を増やせるか: 最上位、下の階層を持つボックス、または出力がまだ無いボックス */
-export function canAddOutput(p: Project, blockId: string): boolean {
-  if (kindOf(p.blocks[blockId]) === "project") return true; // プロジェクトのボックスは包みなので出力をいくつでも持てる
-  if (p.blocks[blockId]?.branch) return true; // 分岐のボックスは、選択肢ごとに 1 本ずつ出力を持つ
-  if (blockId === ROOT_ID) return true;
-  if (portsOf(p, blockId, "out").length === 0) return true;
-  return childrenOf(p, blockId).length > 0;
-}
-
-/** ポートの属性を更新する (name / description / required / artifacts) */
+/**
+ * ポートの属性を更新する (name / description / required / artifacts)
+ * 名前を変えたら、線でつながる入出力 (上流・下流とも、最上位の写しも含む) を全部同じ名前にする
+ * (規則: 線でつながっている入出力は 1 つの名前。入力側・親の出力側のどこで変えても全体がそろう。利用者の要望 2026-10-18)
+ * Input : portId, patch
+ * Output: 更新した複製 (ポートが無ければ p そのもの)
+ */
 export function updatePort(p: Project, portId: string, patch: Partial<Omit<Port, "id" | "blockId" | "direction">>): Project {
   const q = touch(p);
   const x = q.ports[portId];
   if (!x) return p;
   const oldName = x.name;
-  // 供給元のある入力の名前は入力側では変えられない (供給元の出力の名前が入力名。変えるなら供給元で)
-  if (patch.name !== undefined && isInputNameLocked(q, portId)) patch = { ...patch, name: undefined } as typeof patch;
+  // 網は名前を変える前に求める (上向きの線は両端の名前が同じときだけ越えるので、先に変えると写しなどが外れる)
+  const net = patch.name !== undefined && patch.name !== oldName ? portNet(q, portId) : null;
   Object.assign(x, Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)));
-  // プロジェクトのボックスの出力の名前を変えたら、最上位の写しも同じ名前にする
-  if (patch.name !== undefined && x.direction === "out" && kindOf(q.blocks[x.blockId]) === "project") {
-    const mirror = mirroredRootOutput(q, portId);
-    if (mirror) mirror.name = patch.name;
-  }
-  // 名前を変えたら、線でつながる先のポートで同じ名前だったものも一緒に変える (入力名は供給元の出力名と同じにしておくのが基本。
-  // 二重に管理しなくて済むように、下流 (出力 → 入力、親の入力 → 子の入力、子の出力 → 親の出力) へ伝える)
-  if (patch.name !== undefined && patch.name !== oldName) renameDownstream(q, portId, oldName, patch.name);
+  if (net) for (const id of net) q.ports[id].name = x.name;
   return q;
 }
 
 /**
- * 供給元のある入力の名前を、供給元の名前にそろえる (規則が入る前に作った線や、手で直したファイルの食い違いを直す)。
- * 上流から順に (親の入力 → 子の入力、出力 → 入力) たどって決める
+ * 線でつながる入出力の集まり (信号の網): ポートから、線を向きに関係なくたどって届く全部のポート (自分を含む)。
+ * 自動の線 (引き上げ・最上位の写し) も含める (同じ物を指すので名前は同じにする)。
+ * ただし「子の出力 → 親の出力」の上向きの線は、両端の名前が同じときだけ越える: 親の出力は子の出力をそのまま外へ出すこともあれば、
+ * 別の名前で束ねる・転記する (例: 子「孫の出力」→ 親「束ねた出力」) こともあり、名前が違うなら別の物として扱う
+ * Input : p, portId
+ * Output: ポート id の集合
+ */
+export function portNet(p: Project, portId: string): Set<string> {
+  const out = new Set<string>();
+  const stack = [portId];
+  const edges = Object.values(p.edges);
+  const crosses = (e: Edge): boolean => !isUpEdge(p, e) || p.ports[e.from.portId]?.name === p.ports[e.to.portId]?.name;
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    if (out.has(id) || !p.ports[id]) continue;
+    out.add(id);
+    for (const e of edges) {
+      if (e.from.portId === id && !out.has(e.to.portId) && crosses(e)) stack.push(e.to.portId);
+      if (e.to.portId === id && !out.has(e.from.portId) && crosses(e)) stack.push(e.from.portId);
+    }
+  }
+  return out;
+}
+
+/** 子の出力 → 親の出力 (内側) の上向きの線か (最上位の写しも含む) */
+function isUpEdge(p: Project, e: Edge): boolean {
+  return e.to.side === "inner" && p.ports[e.to.portId]?.direction === "out";
+}
+
+/**
+ * 線でつながる入出力を全部同じ名前にする
+ * Input : q = 変更中のプロジェクト (直接書き換える), portId = 基準のポート, name = 新しい名前
+ * Output: 無し (q を書き換える)
+ */
+function renameNet(q: Project, portId: string, name: string): void {
+  for (const id of portNet(q, portId)) q.ports[id].name = name;
+}
+
+/**
+ * まだ名前を付けていない仮の名前か (画面の「出力を追加」「入力を追加」や addBlock の既定の名前。両方の言語の文言を見る)
+ * Input : name
+ * Output: true = 仮の名前
+ */
+export function isPlaceholderName(name: string): boolean {
+  return PLACEHOLDER_NAMES.has(name.trim());
+}
+const PLACEHOLDER_NAMES = new Set(["出力", "入力", "新しい出力", "新しい入力", "Output", "Input", "New output", "New input", ""]);
+
+/**
+ * 線でつながる入出力の名前を 1 つにそろえる (規則が入る前に作った線や、手で直したファイルの食い違いを直す)。
+ * 名前は一番上流 (供給元をたどって行き着く、線を受けていないポート) のものにする。
+ * 子の出力 → 親の出力の上向きの線は見ない (親の出力は別の名前で束ねてよい)。最上位の写し (自動の上向きの線) だけはそろえる
  * Input : p
  * Output: そろえた複製 (変える物が無ければ p そのもの)。変えたポートの数も返す
  */
-export function normalizeInputNames(p: Project): { project: Project; renamed: number } {
-  // 供給元を持つ入力ごとに「供給元の名前」を求める。供給元が入力 (親の入力の内側) なら、さらにその供給元をたどる
-  const feeder = new Map<string, string>(); // 入力ポート id -> 供給元ポート id
+export function normalizePortNames(p: Project): { project: Project; renamed: number } {
+  // ポートごとに「線を受けている側の供給元」を求める (入力の外側に来る線、最上位の写し。1 ポートに 1 本まで)
+  const feeder = new Map<string, string>(); // ポート id -> 供給元ポート id
   for (const e of Object.values(p.edges)) {
-    if (e.auto) continue;
-    const t = p.ports[e.to.portId];
-    if (!t || t.direction !== "in" || e.to.side !== "outer") continue;
-    feeder.set(t.id, e.from.portId);
+    if (!p.ports[e.to.portId] || !p.ports[e.from.portId]) continue;
+    if (isUpEdge(p, e) && !e.auto) continue;
+    feeder.set(e.to.portId, e.from.portId);
   }
   const resolved = new Map<string, string>();
   const nameOf = (portId: string, seen: Set<string> = new Set()): string => {
@@ -727,38 +764,6 @@ export function normalizeInputNames(p: Project): { project: Project; renamed: nu
     }
   }
   return { project: q ?? p, renamed };
-}
-
-/**
- * 入力の名前が供給元に固定されているか (外から本物の線 (自動でない) がつながっている入力。名前は供給元の出力名で決まる)
- * Input : p, portId
- * Output: true = 入力側では名前を変えられない
- */
-export function isInputNameLocked(p: Project, portId: string): boolean {
-  const port = p.ports[portId];
-  if (!port || port.direction !== "in") return false;
-  return incomingEdges(p, { portId, side: "outer" }).some((e) => !e.auto);
-}
-
-/**
- * 線でつながる先のポートの名前を、元と同じ名前だったものだけ、再帰的に変える
- * Input : q = 変更中のプロジェクト (直接書き換える), portId = 変えたポート, oldName, newName
- * Output: 無し (q を書き換える)
- */
-function renameDownstream(q: Project, portId: string, oldName: string, newName: string, seen: Set<string> = new Set()): void {
-  if (seen.has(portId)) return;
-  seen.add(portId);
-  for (const e of Object.values(q.edges)) {
-    if (e.from.portId !== portId) continue;
-    const t = q.ports[e.to.portId];
-    if (!t || t.name !== oldName) continue;
-    t.name = newName;
-    if (t.direction === "out" && kindOf(q.blocks[t.blockId]) === "project") {
-      const mirror = mirroredRootOutput(q, t.id);
-      if (mirror) mirror.name = newName;
-    }
-    renameDownstream(q, t.id, oldName, newName, seen);
-  }
 }
 
 /** ポートを (つながる線ごと) 削除する。自動で引き上げたポートは消せない (元の入力をつなぐと自然に消える) */
@@ -793,13 +798,19 @@ export function connect(p: Project, from: Endpoint, to: Endpoint): { project: Pr
   for (const e of incomingEdges(q, to)) delete q.edges[e.id];
   const id = newId();
   q.edges[id] = { id, from, to, kind: check.kind!, auto: false };
-  // つないだ入力の名前は供給元の名前にそろえる (入力名は入力側で決めない。親の入力 → 子の入力も同じ)
+  // つないだら、線でつながる入出力を全部同じ名前にする。名前は作る側 (上流 = 出す側) が勝つ。
+  // ただし上流がまだ仮の名前 (「新しい出力」など) で、受ける側に本当の名前が付いていれば、その名前を採る
   const fromPort = q.ports[from.portId];
   const toPort = q.ports[to.portId];
-  if (fromPort && toPort && toPort.direction === "in" && to.side === "outer" && toPort.name !== fromPort.name) {
-    const old = toPort.name;
-    toPort.name = fromPort.name;
-    renameDownstream(q, toPort.id, old, fromPort.name);
+  if (fromPort && toPort && toPort.name !== fromPort.name) {
+    const takeTo = isPlaceholderName(fromPort.name) && !isPlaceholderName(toPort.name);
+    if (isUpEdge(q, q.edges[id])) {
+      // 子の出力 → 親の出力: 親の出力は別の名前で束ねる・転記することがあるので、仮の名前の側だけを相手に合わせる (両方に本当の名前があれば触らない)
+      if (isPlaceholderName(toPort.name)) renameNet(q, toPort.id, fromPort.name);
+      else if (takeTo) renameNet(q, fromPort.id, toPort.name);
+    } else {
+      renameNet(q, toPort.id, takeTo ? toPort.name : fromPort.name);
+    }
   }
   return { project: normalizePromotions(q), edgeId: id };
 }
@@ -1581,7 +1592,7 @@ function parseExpectSpec(v: Expect | string | undefined): Expect | null | undefi
  *         join = true なら合流の部品 (makers.join で作る。入力は connections で道の出力をつなぐと作られる)
  *         makers = 分岐・合流を作る関数 (branch.ts の addBranch / addMerge。graph.ts から直接は参照できないので呼び出し側が渡す)
  * Output: { project, errors, fatal }。fatal = true は壊れた構造 (結線先が無い、循環、形の違う expect など) で、呼び出し側は保存しない。
- *         fatal でない errors は注意 (出力を 1 本にした、など) で、保存してよい
+ *         fatal でない errors は注意 (結線できなかった、など) で、保存してよい
  */
 export function splitBlock(
   p: Project
@@ -1620,6 +1631,8 @@ export function splitBlock(
     const r = addBlock(q, { parentId, title: b.title, outputName: b.outputs?.[0] });
     q = r.project;
     made[b.title] = r.blockId;
+    // 2 本目以降の出力 (1 つの作業で複数の物ができるとき)
+    for (const name of (b.outputs ?? []).slice(1)) q = addPort(q, { blockId: r.blockId, direction: "out", name }).project;
     if (b.description) { q.blocks[r.blockId].description = b.description; q.blocks[r.blockId].descriptionUpdatedAt = now(); }
     // 具体化の情報 (任意): 予定成果物は出力に、完了条件と処理は scope に入れる
     const expect = parseExpectSpec(b.expect);
@@ -1630,7 +1643,6 @@ export function splitBlock(
     if (b.constraints?.trim()) scope.constraints = b.constraints.trim();
     if (b.goal?.trim()) scope.goal = b.goal.trim();
     if (Object.keys(scope).length) q.blocks[r.blockId].scope = scope;
-    if ((b.outputs ?? []).length > 1) errors.push(t("「{title}」の出力は 1 本にしました (下の階層を持たないボックスの出力は 1 本。{omitted} は省略)", { title: b.title, omitted: b.outputs!.slice(1).join(", ") }));
     for (const name of b.inputs ?? []) q = addPort(q, { blockId: r.blockId, direction: "in", name }).project;
   }
   // 参照の解決: 題名にドットがあってもよいので、区切り方を左から順に試す。失敗の理由 (ボックスが無い / ポートが無い) も返す

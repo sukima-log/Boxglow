@@ -46,8 +46,8 @@ Do not edit it directly; update it with `npx boxglow`.
 
 - Keep at most 1-2 boxes in progress at a time
 - Make deliverables (artifacts) something a human can open later (a commit, a PR, a file path)
-- Name outputs after concrete deliverables (file, PR, URL, test results). Avoid abstract names (feature set, findings)
-- The receiving side of a connection can be just a title (`connect "A.Design doc" "B"` creates an input "Design doc" on B). An input's name is determined by the source output's name and is not changed on the input side
+- Name outputs after concrete deliverables (file, PR, URL, test results). Avoid abstract names (feature set, findings). When one piece of work produces several things, give it one output per thing (`port <block> --out "<name>"` adds one)
+- The receiving side of a connection can be just a title (`connect "A.Design doc" "B"` creates an input "Design doc" on B). Connected inputs and outputs share one name (renaming either end renames the other)
 - Always connect boxes as "input → output". Add missing inputs / outputs with `port`, remove a wire with `disconnect`, and remove a box itself with `remove`. Export a document with `export --out docs/ROADMAP.md`
 - When you add a box, give it a kind of work with `--category` (design / build / verify / evaluate / study / research / ui / improve / fix / docs / ops / other). On the screen it becomes a colored band and a tag
 - If boxglow.json does not exist yet, create it with `npx boxglow init --name "<project name>"` and place the final deliverable and the top-level boxes with `add`
