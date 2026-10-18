@@ -1063,6 +1063,38 @@ describe("出力は作る物ごとに何本でも持てる (下の階層が無�
   });
 });
 
+describe("Top は全階層を見せる (大項目は畳んだまま始まり、人が開く)", () => {
+  it("大項目に最初の子ができたら畳んで始まる (CLI の add / split で Top の配置が動かない)。2 つ目以降は今の状態を保つ", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const major = addBlock(p, { parentId: pj, title: "大項目" }); p = major.project;
+    expect(p.blocks[major.blockId].collapsed).toBe(false); // 子が無いうちは畳む意味が無い
+    p = addBlock(p, { parentId: major.blockId, title: "子 1" }).project;
+    expect(p.blocks[major.blockId].collapsed).toBe(true);
+    // 人が開いた後に子を足しても、開いたまま
+    p = { ...p, blocks: { ...p.blocks, [major.blockId]: { ...p.blocks[major.blockId], collapsed: false } } };
+    p = addBlock(p, { parentId: major.blockId, title: "子 2" }).project;
+    expect(p.blocks[major.blockId].collapsed).toBe(false);
+    // 大項目でない箱 (子の中) は、最初の子ができても畳まない
+    const kid = findBlock(p, "子 2").block!;
+    p = addBlock(p, { parentId: kid.id, title: "孫" }).project;
+    expect(p.blocks[kid.id].collapsed).toBe(false);
+  });
+
+  it("split は大項目を畳んだままにし、大項目でない箱は展開する", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const major = addBlock(p, { parentId: pj, title: "大項目", outputName: "成果" }); p = major.project;
+    const r = splitBlock(p, major.blockId, { blocks: [{ title: "a", outputs: ["x"] }, { title: "b", outputs: ["成果"] }], connections: [{ from: "a.x", to: "b" }, { from: "b.成果", to: "parent.成果" }] }, "test");
+    expect(r.errors).toEqual([]);
+    expect(r.project.blocks[major.blockId].collapsed).toBe(true);
+    const b = findBlock(r.project, "b").block!;
+    const r2 = splitBlock(r.project, b.id, { blocks: [{ title: "b1", outputs: ["成果"] }], connections: [{ from: "b1.成果", to: "parent.成果" }] }, "test");
+    expect(r2.errors).toEqual([]);
+    expect(r2.project.blocks[b.id].collapsed).toBe(false);
+  });
+});
+
 describe("normalizePortNames: 古い食い違いをそろえる", () => {
   it("供給元と違う名前の入力を、供給元の名前 (さらに上流があればその名前) にそろえる", () => {
     let p = createProject("t");

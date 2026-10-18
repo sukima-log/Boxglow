@@ -252,6 +252,13 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.getByRole('button',{name:'Fit',exact:true}).click();await page.waitForTimeout(800);
     await page.locator('.react-flow__node-terminal').first().dblclick();await page.waitForTimeout(500);
     check('タブの入出力ノード: ダブルクリックで Top に戻る',await page.evaluate(()=>window.boxglow.store.getState().viewScope)===null);
+
+    // Top で大項目を選んで + Block を押しても、タブへ飛ばずに Top のまま (親が展開して、新しいボックスが中に見える)。Edit に入って足し、終わったら消して戻す
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.setViewScope(null);s.setEditMode(true);const b=Object.values(s.project.blocks).find(x=>x.title==='設計する');s.select({blockId:b.id});});await page.waitForTimeout(400);
+    await page.locator('.add-menu > button.btn-primary').click();await page.waitForTimeout(300);await page.locator('.add-menu__item',{hasText:'Block'}).first().click();await page.waitForTimeout(700); // + Block はメニューを開くので、その中の Block を押す
+    const added=await page.evaluate(()=>{const s=window.boxglow.store.getState();const rf=window.boxglow.rf;const parent=Object.values(s.project.blocks).find(x=>x.title==='設計する');const b=s.project.blocks[s.selection.blockId];const node=rf.getNodes().find(n=>n.id===b?.id);return {scope:s.viewScope,parentOk:b?.parentId===parent.id,visible:!!node&&!node.hidden,expanded:!parent.collapsed};});
+    check('Top で大項目の中にボックスを足してもタブへ飛ばない (親が展開して中に見える)',added.scope===null&&added.parentOk&&added.visible&&added.expanded,JSON.stringify(added));
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();const id=s.selection.blockId;s.select({});s.apply(p=>{const q=structuredClone(p);for(const e of Object.values(q.edges)){const a=q.ports[e.from.portId],b=q.ports[e.to.portId];if(a?.blockId===id||b?.blockId===id)delete q.edges[e.id];}for(const k of Object.keys(q.ports))if(q.ports[k].blockId===id)delete q.ports[k];delete q.blocks[id];const parent=Object.values(q.blocks).find(x=>x.title==='設計する');parent.collapsed=true;return q;});s.setEditMode(false);});await page.waitForTimeout(400);
     await page.setViewportSize({width:390,height:844});await page.waitForTimeout(300);
     await page.locator('.topbar button[aria-label="Menu"]').click();
     check('狭い幅 (390px): 追加・Auto Layout・Undo / Redo は ⋯ メニューの中にある',await page.locator('.menu-actions').getByRole('button',{name:'+ Block',exact:true}).isVisible() && await page.getByRole('button',{name:'Auto Layout',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Undo',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Redo',exact:true}).isVisible());

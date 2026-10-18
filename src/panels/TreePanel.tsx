@@ -175,7 +175,10 @@ export function TreePanel({ project, filter, onClose }: { project: Project; filt
     apply((p) => {
       const result = addBlock(p, { parentId, title: t("新しいボックス"), actor: "human" });
       id = result.blockId;
-      return result.project;
+      // 親を展開して、足したボックスがその場で見えるようにする (畳んだままだと、見える画面 (タブ) へ飛んでしまう)
+      const q = structuredClone(result.project);
+      if (q.blocks[parentId]) q.blocks[parentId].collapsed = false;
+      return q;
     });
     if (id) {
       jump(id);

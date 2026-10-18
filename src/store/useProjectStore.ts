@@ -14,7 +14,7 @@ import { useMemo } from "react";
 import { readingLayout } from "../model/readingLayout";
 import { create } from "zustand";
 import { BrowserSyncHost } from "../sync/browser-host";
-import { createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizeCollapsed, normalizePortNames, resolveChangedOverlaps, resolveAllOverlaps, scopeFor, toJSON, wireNetTabs, withIndex } from "../model/graph";
+import { ancestorsOf, createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizePortNames, resolveChangedOverlaps, resolveAllOverlaps, scopeFor, toJSON, wireNetTabs, withIndex } from "../model/graph";
 export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
 import { ensurePermission, readLocalFile, writeLocalFile } from "../lib/localfile";
@@ -77,6 +77,8 @@ interface State {
   setReadingView: (enabled: boolean) => void;
   /** ボックスを畳む / 展開する。Top で大項目なら、そのタブを開く。Edit なら共有の配置として保存、View なら画面だけ */
   toggleCollapsed: (blockId: string) => void;
+  /** 大項目のタブを開く (Top でダブルクリック)。線を選んだまま接続先の大項目を開く流れも受ける */
+  openTab: (blockId: string) => void;
   /** 開いているタブ (大項目のボックスの id)。null なら Top (大項目の一覧)。画面だけの状態で、プロジェクトごとにブラウザに記憶 */
   viewScope: string | null;
   /** 表示範囲を切り替える (null = Top)。範囲の外にあるボックスの選択は解除する */
@@ -963,20 +965,21 @@ export const useProjectStore = create<State>((set, get) => {
       if (choice === "merge") scheduleSave();
       return true;
     }
-  , toggleCollapsed: (blockId) => {
-      const { project, editMode, readonly, viewCollapsed, viewScope } = get();
+  , openTab: (blockId) => {
+      const { project } = get();
       if (!project || !project.blocks[blockId]) return;
-      // Top の図では大項目は展開しない (中はタブで見る)。畳む / 展開の操作はその大項目のタブを開く操作にする
-      if (viewScope === null && majorOf(project, blockId) === blockId) {
-        // ダブルクリックの 1 回目でボックスが選ばれ、直前まで選んでいた線の選択が外れている。
-        // その線がこのタブへ続いているなら、線を選んだままタブを開く (線を選んで接続先のボックスをダブルクリックする流れ)
-        const { lastEdgeId, selection } = get();
-        if (lastEdgeId && selection.blockId === blockId && project.edges[lastEdgeId] && wireNetTabs(project, lastEdgeId).includes(blockId)) {
-          set({ selection: { ...NO_SELECTION, edgeId: lastEdgeId } });
-        }
-        get().setViewScope(blockId);
-        return;
+      // ダブルクリックの 1 回目でボックスが選ばれ、直前まで選んでいた線の選択が外れている。
+      // その線がこのタブへ続いているなら、線を選んだままタブを開く (線を選んで接続先のボックスをダブルクリックする流れ)
+      const { lastEdgeId, selection } = get();
+      if (lastEdgeId && selection.blockId === blockId && project.edges[lastEdgeId] && wireNetTabs(project, lastEdgeId).includes(blockId)) {
+        set({ selection: { ...NO_SELECTION, edgeId: lastEdgeId } });
       }
+      get().setViewScope(blockId);
+    }
+    // 畳む / 展開 (Top の大項目も同じ。Top は全階層を見せる: 利用者の要望 2026-10-18。B93 で「Top は大項目だけ」にしていたのを戻した)
+  , toggleCollapsed: (blockId) => {
+      const { project, editMode, readonly, viewCollapsed } = get();
+      if (!project || !project.blocks[blockId]) return;
       if (!Object.values(project.blocks).some((b) => b.parentId === blockId)) return; // 子が無ければ畳めない
       if (editMode && !readonly) {
         // 共有の配置として保存する (他の人・AI にも同じ見え方になる)。画面だけの記録は消して、保存した値を見せる
@@ -1020,12 +1023,18 @@ export const useProjectStore = create<State>((set, get) => {
     }
   , focus: null
   , focusBlock: (blockId, opts) => {
-      // ボックスが見える画面に切り替えてから寄せる: 親のボックスを開く (親がプロジェクトのボックスや最上位なら Top)。
+      // ボックスが今の画面に見えていればそのまま寄せる (Top は全階層を見せるので、大項目の中に足したボックスもタブへ飛ばずに見える)。
+      // 見えていない (別のタブの中、または畳んだ中) ときだけ、そのボックスが見える画面 (属する大項目のタブ。大項目より上なら Top) に切り替える。
       // scope: false なら画面は変えない (キャンバスでクリックして選んだときは、クリック側がボックスを開くのでここでは切り替えない)
-      const { project, viewScope } = get();
+      const { project, viewScope, viewCollapsed } = get();
       if (opts?.scope !== false && project && project.blocks[blockId]) {
-        const want = scopeFor(project, blockId);
-        if (want !== viewScope) get().setViewScope(want);
+        const shown = withViewCollapsed(project, viewCollapsed);
+        const inView = viewScope === null || isInScope(project, viewScope, blockId);
+        const hidden = ancestorsOf(shown, blockId).some((a) => a.collapsed && a.id !== viewScope); // 開いているタブの大項目は畳んでいても展開して描く
+        if (!inView || hidden) {
+          const want = scopeFor(project, blockId);
+          if (want !== viewScope) get().setViewScope(want);
+        }
       }
       set({ focus: { blockId, nonce: Date.now() } });
     }
@@ -1036,9 +1045,9 @@ export const useProjectStore = create<State>((set, get) => {
       if (!project || readonly) return;
       let next = fn(project);
       if (next === project) return;
-      // 大項目は畳んだ状態でそろえる。保存時は追加・移動・拡大した箱だけ補正し、既存の兄弟を動かさない (ドラッグ中は除く)
-      next = normalizeCollapsed(normalizePortNames(next).project);
-      if (opts?.history !== false) next = resolveChangedOverlaps(normalizeCollapsed(project), next, blockSize);
+      // 線でつながる入出力の名前をそろえる。保存時は追加・移動・拡大した箱だけ補正し、既存の兄弟を動かさない (ドラッグ中は除く)
+      next = normalizePortNames(next).project;
+      if (opts?.history !== false) next = resolveChangedOverlaps(project, next, blockSize);
       const history = opts?.history ?? true;
       set({
         project: next
@@ -1492,7 +1501,7 @@ export function withViewCollapsed(project: Project, viewCollapsed: Record<string
   return { ...project, blocks };
 }
 
-/** 描画用のプロジェクト (Top では大項目を畳み、開いているタブの大項目だけ展開。View の畳みも重ねる。画面だけで、ファイルは変えない) を返すフック */
+/** 描画用のプロジェクト (開いているタブの大項目は展開。View の畳みも重ねる。画面だけで、ファイルは変えない) を返すフック */
 const shownCache = new WeakMap<Project, { collapsed: Record<string, boolean>; scope: string | null; reading: boolean; lang: string; shown: Project }>();
 export function useShownProject(): Project | null {
   const lang = useLang();
@@ -1504,7 +1513,7 @@ export function useShownProject(): Project | null {
     if (!project) return null;
     const cached = shownCache.get(project);
     if (cached && cached.collapsed === viewCollapsed && cached.scope === viewScope && cached.reading === reading && cached.lang === lang) return cached.shown;
-    let shown = normalizeCollapsed(withViewCollapsed(project, viewCollapsed));
+    let shown = withViewCollapsed(project, viewCollapsed);
     if (viewScope && shown.blocks[viewScope]?.collapsed) {
       shown = { ...shown, blocks: { ...shown.blocks, [viewScope]: { ...shown.blocks[viewScope], collapsed: false } } };
     }

@@ -59,7 +59,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { addLogEntry, childrenOf, setNow, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, normalizeCollapsed, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor } from "../src/model/graph";
+import { addLogEntry, childrenOf, setNow, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor } from "../src/model/graph";
 import { checkStart, checkDone, descriptionReminder, scopeEntries } from "../src/model/workflow";
 import type { WorkScope, WorkflowPolicy } from "../src/model/types";
 import type { Artifact } from "../src/model/types";
@@ -166,18 +166,17 @@ function load(path: string): Project {
  * Output: なし。読んだ後に他が書き換えていたら FileConflict、他が書き込み中なら FileBusy の例外 (どちらも書き込まない)
  */
 function save(path: string, p: Project): void {
-  // 画面と同じく、今回寸法や位置を変えたボックスだけ重なりを解く。
-  // 大項目は常に畳んだ状態 (All の図は大項目までしか出さず、中はタブで見る。大きさもこの前提で計算する)
-  // つないだ入力の名前は供給元にそろえる (古いファイルの食い違いもここで直る)
+  // 画面と同じく、今回寸法や位置を変えたボックスだけ重なりを解く (畳んだ箱は畳んだ大きさで計算する)。
+  // 線でつながる入出力の名前はそろえる (古いファイルの食い違いもここで直る)
   // 読んでいないパス (新規作成) は「ファイルが無い」ことを前提にする
   const expected = readRevisions.has(resolve(path)) ? readRevisions.get(resolve(path))! : null;
-  const normalized = normalizeCollapsed(normalizePortNames(p).project);
+  const normalized = normalizePortNames(p).project;
   let text = toJSON(normalized) + "\n";
   const warnings:string[]=[];
   const revision = planIO().commit(path, text, expected, { prepare: (current) => {
     // ロック取得・リビジョン照合後の原本と比較する。受け持ち検証には補正後の差分を渡す。
     const next = current
-      ? resolveChangedOverlaps(normalizeCollapsed(fromJSON(current)), normalized, blockSize)
+      ? resolveChangedOverlaps(fromJSON(current), normalized, blockSize)
       : resolveAllOverlaps(normalized, blockSize);
     text = prepareClaimSave(current, toJSON(next) + "\n", claimRequest, warning => warnings.push(warning));
     return text;
@@ -450,7 +449,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   move <block> --parent <block|project>            ボックスを別の親の中へ移す (線は間のボックスのポートを経由してつながったまま)
   port <block|project> [--in <名前>]... [--out <名前>]... [--expect "<出力名>=<kind>:<hint>"]... [--self <出力名>]... [--no-self <出力名>]... [--rename <旧名>=<新名>] [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス)
   disconnect <題名.出力名> <題名.入力名>          線を外す
-  tidy                                              ファイルを規則にそろえて保存し直す (線でつながる入出力の名前をそろえる、大項目を畳む、重なりを解く)
+  tidy                                              ファイルを規則にそろえて保存し直す (線でつながる入出力の名前をそろえる、重なりを解く)
   remove <block> [--force]                          ボックスを消す (中にボックスがあるときは --force。線も外れる。元に戻せないので Git で管理していること)
   serve [--port 4174] [--open] [--sync|--no-sync]             ローカルサーバ: 同梱の Web アプリを http://localhost:4174/?serve=1 で配信し、boxglow.json を読み書き (Firefox / Safari でも使える)
                                                  通常は「同期を始める」から開始。--sync = 明示有効化、--no-sync = 無効。送り先は --server > BOXGLOW_SERVER > 既存の結び付け > 製品既定。空/off も無効
@@ -571,7 +570,7 @@ Usage (npx boxglow <command> ...):
   move <block> --parent <block|project>            Move a box into another parent (wires stay connected through the ports of the boxes in between)
   port <block|project> [--in <name>]... [--out <name>]... [--expect "<output>=<kind>:<hint>"]... [--self <output>]... [--no-self <output>]... [--rename <old>=<new>] [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, rename them, set an output's planned deliverable (expect: kind file / dir / url / doc / note / decision / result + a path or title) or mark it as made by this box itself (--self). --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
   disconnect <title.output> <title.input>          Remove a wire
-  tidy                                              Normalize the file and save it again (give connected inputs and outputs one name, collapse top-level items, resolve overlaps)
+  tidy                                              Normalize the file and save it again (give connected inputs and outputs one name, resolve overlaps)
   remove <block> [--force]                          Delete a box (--force if it contains boxes. Its wires are removed too. This cannot be undone, so keep the file in Git)
   serve [--port 4174] [--open] [--sync|--no-sync]             Local server: serves the bundled web app at http://localhost:4174/?serve=1 and reads / writes boxglow.json (works in Firefox / Safari too)
                                                  Normally use Start syncing in the UI. --sync enables; --no-sync disables. Server: --server > BOXGLOW_SERVER > existing binding > product default. Empty/off also disables.
@@ -1125,8 +1124,8 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       return;
     }
     case "layout": {
-      // 大項目は畳んだ前提で並べる (All は大項目までしか出さない)
-      const q = rest[0] ? layoutScope(normalizeCollapsed(p), mustFind(p, rest[0]).id) : layoutAll(normalizeCollapsed(p));
+      // 畳んだ箱は畳んだ大きさで並べる (Top も全階層を見せるので、展開している大項目は中まで含めた大きさ)
+      const q = rest[0] ? layoutScope(p, mustFind(p, rest[0]).id) : layoutAll(p);
       save(path, q);
       out(rest[0] ? t("整列: 「{title}」の中", { title: mustFind(p, rest[0]).title }) : t("整列: 全体"));
       return;

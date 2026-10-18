@@ -258,7 +258,7 @@ export function buildNodes(
   });
   const blocks = Object.values(p.blocks).filter((b) => b.id !== ROOT_ID);
   blocks.sort((a, b) => depthOf(p, a.id) - depthOf(p, b.id));
-  const majors = new Set(majorBlocks(p).map((b) => b.id)); // Top では大項目は畳んだまま (▸ はタブを開く)
+  const majors = new Set(majorBlocks(p).map((b) => b.id)); // 大項目 (Top でダブルクリックするとタブを開く。▸ / ▾ はその場で畳む / 展開)
   for (const b of blocks) {
     const size = blockSize(p, b.id);
     const nested = b.parentId !== null && b.parentId !== ROOT_ID;

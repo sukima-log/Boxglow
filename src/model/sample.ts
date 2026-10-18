@@ -6,7 +6,7 @@ import { ackDecisions, addBlock, addInputGroup, addMember, addPort, answerDecisi
 import { acquireClaim } from "./claims";
 import { addBranch, addMerge } from "./branch";
 import { ROOT_ID, type Expect, type Project } from "./types";
-import { normalizeCollapsed, projectBlocks } from "./graph";
+import { majorBlocks, projectBlocks } from "./graph";
 import { layoutAll } from "./autolayout";
 
 /** サンプルを組み立てて返す */
@@ -253,5 +253,7 @@ export function buildSampleProject(): Project {
   // 完了済みのフロントエンドの中 (一覧画面・編集画面) は、最初は畳んでおく (実装するのタブを読める大きさに保つ。▸ で開ける)
   p.blocks[fe.blockId].collapsed = true;
   // 依存関係で並べ直す (線が読みやすい配置にする)
-  return layoutAll(normalizeCollapsed(p)); // 大項目は畳んだ前提で並べる (Top は大項目までしか出さない)
+  // サンプルは大項目を畳んだ概観から始める (Top は全階層を見せられるが、最初は大項目だけが見える方が読みやすい)。配置もその状態で並べる
+  for (const b of majorBlocks(p)) p.blocks[b.id].collapsed = true;
+  return layoutAll(p);
 }

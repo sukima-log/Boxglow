@@ -8,7 +8,7 @@ Boxglow keeps a project plan in one file, `boxglow.json`: tasks are boxes with i
 
 ## How a plan is laid out
 
-The **Top** view shows only the major boxes. Each major box opens as a tab with everything inside it, nested. Wires show which output feeds which input, so you can see what is blocked by what.
+The **Top** view shows the whole plan, nested: expand or collapse any box in place with its arrow. Double-click a major box to open it as its own tab. Wires show which output feeds which input, so you can see what is blocked by what.
 
 In View mode the boxes are laid out in dependency order as numbered stages, left to right: each card shows its category, title and state, with its inputs on the left and outputs on the right. Your own layout in the file is untouched and is used in Edit mode.
 

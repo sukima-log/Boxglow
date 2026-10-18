@@ -237,20 +237,6 @@ export function isInScope(p: Project, scope: string, blockId: string | null): bo
 }
 
 /**
- * 大項目のボックスは常に畳んだ状態にそろえる (Top の図は大項目までしか出さず、中はタブで見る。大項目の中のボックスは入れ子のまま見せる)。
- * 並べるときの大きさの計算もこの状態で行う
- * Input : p
- * Output: 大項目の collapsed を true にした複製 (変える物が無ければ p そのもの)
- */
-export function normalizeCollapsed(p: Project): Project {
-  const ids = majorBlocks(p).filter((b) => !b.collapsed).map((b) => b.id);
-  if (ids.length === 0) return p;
-  const blocks = { ...p.blocks };
-  for (const id of ids) blocks[id] = { ...blocks[id], collapsed: true };
-  return { ...p, blocks };
-}
-
-/**
  * ボックスが見える画面 (開いておくべきタブ)。大項目の中のボックスならその大項目のタブ、大項目そのものや上の階層なら Top (null)
  * Input : p, blockId
  * Output: 大項目の id または null (= Top)
@@ -536,6 +522,9 @@ export function addBlock(
   // 子を持ったら親は「分解中」。black のままの親だけ gray に上げる (white は人が決めたので触らない)
   const parent = q.blocks[args.parentId];
   if (parent && parent.id !== ROOT_ID && parent.status === "black") { parent.status = "gray"; parent.statusChangedAt = now(); }
+  // 大項目に最初の子ができたときは畳んで始める: Top は全階層を見せるので、CLI / MCP の add・split で大項目が勝手に広がると隣の箱を押してしまう。
+  // 人が ▸ で開く。画面からの追加 (+ Block など) は呼び出し側が親を展開して、足したボックスがその場で見えるようにしている
+  if (parent && siblings.length === 0 && majorOf(q, args.parentId) === args.parentId) parent.collapsed = true;
   return { project: normalizePromotions(q), blockId: id };
 }
 
@@ -1697,7 +1686,8 @@ export function splitBlock(
   // 分解の方針 (一語)
   if (spec.splitBy?.trim()) q.blocks[parentId].splitBy = spec.splitBy.trim();
   if (q.blocks[parentId].status === "black") { q.blocks[parentId].status = "gray"; q.blocks[parentId].statusChangedAt = now(); }
-  q.blocks[parentId].collapsed = false;
+  // 分解した親は展開して中を見せる。ただし大項目は畳んだまま (CLI / MCP からの分解で Top の配置を動かさない: 展開すると隣の箱を押す。人が ▸ で開く)
+  if (majorOf(q, parentId) !== parentId) q.blocks[parentId].collapsed = false;
   appendLog(q, { actor, kind: "split", blockId: parentId, message: t("「{title}」を {count} 個に分解: {list}", { title: parent.title, count: spec.blocks.length, list: spec.blocks.map((b) => b.title).join(", ") }) });
   return { project: q, errors, fatal };
 }

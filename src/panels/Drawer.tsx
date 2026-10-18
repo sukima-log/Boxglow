@@ -71,8 +71,11 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
     const parentId = parentForNewBlock(project, selection, useProjectStore.getState().viewScope);
     apply((p) => {
       const r = instantiateTemplate(p, parentId, tpl, "human");
+      // 親を展開して、挿入したボックスがその場で見えるようにする (畳んだままだと、見える画面 (タブ) へ飛んでしまう)
+      const q = structuredClone(r.project);
+      if (q.blocks[parentId]) q.blocks[parentId].collapsed = false;
       setTimeout(() => { select({ blockId: r.blockId }); focusBlock(r.blockId); }, 0);
-      return r.project;
+      return q;
     });
   };
   const importTemplateFile = async () => {

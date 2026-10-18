@@ -9,7 +9,6 @@ export const canvas: Record<string, string> = {
   // ボックス (BlockNode): 題名の行
   "カテゴリ: {label}": "Category: {label}"
 , "{title} (部品: {name})": "{title} (part: {name})"
-, "この大項目のタブを開く (中のボックス {n} 個)": "Open this item's tab ({n} boxes inside)"
 , "下の階層を展開する": "Expand children"
 , "下の階層を畳む": "Collapse children"
   // ボックス (BlockNode): 情報の行

@@ -102,7 +102,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     , unpreparedBelow: unpreparedState(p).below.get(blockId) ?? 0
       // 今どこを作業しているか: 自分が作業中か、畳んだ中 (大項目を含む) に作業中のボックスがあるか (展開して見えているときは、そのボックス自身が目立つ)
     , workingNow: workingNow(p).working.has(blockId)
-    , workingBelow: (b?.collapsed || data.major) && !workingNow(p).working.has(blockId) ? (workingNow(p).below.get(blockId) ?? []) : []
+    , workingBelow: b?.collapsed && !workingNow(p).working.has(blockId) ? (workingNow(p).below.get(blockId) ?? []) : []
     , pending: b?.decisions.filter((d) => d.answer === undefined).length ?? 0
     , activity: b?.activity ?? null
     , percent: effectiveProgress(p, blockId)
@@ -146,16 +146,19 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   }, [view.status]);
 
   const toggleCollapsed = useProjectStore((s) => s.toggleCollapsed);
+  const openTab = useProjectStore((s) => s.openTab);
   // ▸ で中を見る (そのボックスを開く) (ファイルに差分を出さない)
   const toggle = (ev: React.MouseEvent) => {
     ev.stopPropagation();
     toggleCollapsed(blockId);
   };
-  // ダブルクリック: 大項目なら Top からそのタブを開く、中のボックスなら畳む / 展開。1 回のクリックは選ぶだけ。
+  // ダブルクリック: Top の大項目ならそのタブを開く (中が空でも開ける)、それ以外は畳む / 展開。1 回のクリックは選ぶだけ。
+  // ▸ / ▾ はどの階層でもその場で畳む / 展開する (Top も全階層を見せる)
   // ボックスの側で受ける (React Flow のノードのダブルクリックは View のとき届かない)
   const onDoubleClick = (ev: React.MouseEvent) => {
     ev.stopPropagation();
-    if (view.kids > 0 || data.major) toggleCollapsed(blockId); // 大項目はタブがあるので、中が空でも開ける
+    if (data.major && viewScope === null) openTab(blockId);
+    else if (view.kids > 0) toggleCollapsed(blockId);
   };
 
   const cls = [
@@ -233,9 +236,9 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         {/* 分岐のボックス: 「分岐」の札 (判断の答えで、どの出力の道へ進むかが決まる) */}
         {view.branch && <span className="bg-block__tag branch" title={t("分岐: 判断の答えで、進む道 (出力) が決まります")}>{t("分岐")}</span>}
         <span className="bg-block__title" title={view.fromTemplate ? t("{title} (部品: {name})", { title: view.title, name: view.fromTemplate }) : view.title}>{view.title}</span>
-        {(view.kids > 0 || data.major) && viewScope !== blockId && (
-          <button className="bg-block__toggle nodrag" onClick={toggle} onDoubleClick={ev => ev.stopPropagation()} title={data.major ? t("この大項目のタブを開く (中のボックス {n} 個)", { n: view.kids }) : view.collapsed ? t("下の階層を展開する") : t("下の階層を畳む")}>
-            {data.major || view.collapsed ? "▸" : "▾"}
+        {view.kids > 0 && viewScope !== blockId && (
+          <button className="bg-block__toggle nodrag" onClick={toggle} onDoubleClick={ev => ev.stopPropagation()} title={view.collapsed ? t("下の階層を展開する") : t("下の階層を畳む")}>
+            {view.collapsed ? "▸" : "▾"}
           </button>
         )}
       </div>

@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { TreeIcon } from "./TreeIcon";
 import { RestoreDialog, SaveHeldChip, SyncChip } from "./SyncPanel";
 import { AccountButton } from "./AccountMenu";
-import { addBlock, addProjectBlock, normalizeCollapsed, searchBlocks, summarize, toJSON, projectBlocks } from "../model/graph";
+import { addBlock, addProjectBlock, searchBlocks, summarize, toJSON, projectBlocks } from "../model/graph";
 import { layoutAll } from "../model/autolayout";
 import { projectToMarkdown, scopeToMermaid } from "../model/export";
 import { ROOT_ID, type Project } from "../model/types";
@@ -137,10 +137,10 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
     if (name?.trim()) apply((p) => { const r = addProjectBlock(p, name.trim()); setTimeout(() => { select({ blockId: r.blockId }); focusBlock(r.blockId); }, 0); return r.project; });
   };
   /**
-   * Auto Layout: 依存関係の順に全体を並べ直す (大項目は畳んだ前提。Ctrl+Z で戻せる)
+   * Auto Layout: 依存関係の順に全体を並べ直す (畳んだ箱は畳んだ大きさで。Ctrl+Z で戻せる)
    * Input / Output: なし (project を更新する)
    */
-  const autoLayout = () => { apply((p) => layoutAll(normalizeCollapsed(p))); setToast(t("全体を並べ直しました。元に戻す操作で戻せます")); };
+  const autoLayout = () => { apply((p) => layoutAll(p)); setToast(t("全体を並べ直しました。元に戻す操作で戻せます")); };
   // 合流の部品を足す: 今見ている階層 (選んでいる箱があればその中) に置き、選ぶ
   const addJoin = () => {
     const parentId = parentForNewBlock(project, selection, useProjectStore.getState().viewScope);

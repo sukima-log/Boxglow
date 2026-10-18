@@ -22,10 +22,13 @@ const fs = require('fs'), path = require('path');
       });
       check(`${theme}: TopのInputは左・Outputは右`, await terminalsAtSides());
       const initial = await p.evaluate(() => JSON.stringify(window.boxglow.store.getState().project));
-      const major = await p.locator('.bg-block__toggle[title*="タブ"]').first();
-      await major.click();
+      // Top の大項目の ▸ はその場で展開する (タブへは飛ばない。View なので画面だけの展開で、保存データは変えない)
+      const majorId = await p.evaluate(() => { const rf = window.boxglow.rf; return rf.getNodes().find(n => n.type === 'block' && n.data.major)?.id; });
+      await p.locator(`[data-id="${majorId}"] .bg-block__toggle`).first().click();
       await p.waitForTimeout(500);
-      check(`${theme}: Topの矢印はその場で展開せずタブを開く`, await p.evaluate(() => !!window.boxglow.store.getState().viewScope));
+      check(`${theme}: Topの矢印はその場で展開する (タブへ飛ばない)`, await p.evaluate((id) => { const s = window.boxglow.store.getState(); const rf = window.boxglow.rf; return s.viewScope === null && rf.getNodes().some(n => n.parentId === id && !n.hidden); }, majorId));
+      await p.evaluate((id) => window.boxglow.store.getState().setViewScope(id), majorId);
+      await p.waitForTimeout(500);
       check(`${theme}: 階層タブでもInputは左・Outputは右`, await terminalsAtSides());
       check(`${theme}: タブ移動で保存データを変更しない`, initial === await p.evaluate(() => JSON.stringify(window.boxglow.store.getState().project)));
       await p.evaluate(q => window.boxglow.store.getState().openProjectObject(q, true), fixture());
