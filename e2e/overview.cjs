@@ -23,7 +23,7 @@ const fs = require('fs'), path = require('path');
       check(`${theme}: TopのInputは左・Outputは右`, await terminalsAtSides());
       const initial = await p.evaluate(() => JSON.stringify(window.boxglow.store.getState().project));
       // Top の大項目の ▸ はその場で展開する (タブへは飛ばない。View なので画面だけの展開で、保存データは変えない)
-      const majorId = await p.evaluate(() => { const rf = window.boxglow.rf; return rf.getNodes().find(n => n.type === 'block' && n.data.major)?.id; });
+      const majorId = await p.evaluate(() => { const rf = window.boxglow.rf; const all = rf.getNodes(); return all.find(n => n.type === 'block' && n.data.major && all.some(c => c.parentId === n.id))?.id; }); // 子を持つ大項目 (▸ は子がある箱にだけ出る)
       await p.locator(`[data-id="${majorId}"] .bg-block__toggle`).first().click();
       await p.waitForTimeout(500);
       check(`${theme}: Topの矢印はその場で展開する (タブへ飛ばない)`, await p.evaluate((id) => { const s = window.boxglow.store.getState(); const rf = window.boxglow.rf; return s.viewScope === null && rf.getNodes().some(n => n.parentId === id && !n.hidden); }, majorId));

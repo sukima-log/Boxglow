@@ -285,6 +285,15 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     const folded=await page.evaluate(()=>{const rf=window.boxglow.rf;const majors=new Set(rf.getNodes().filter(n=>n.type==='block'&&n.data.major).map(n=>n.id));return rf.getNodes().filter(n=>n.type==='block'&&majors.has(n.parentId)).every(n=>n.hidden);});
     check('Top: Collapse all で 1 階層 (大項目だけ) に戻る',folded&&(await page.getByRole('button',{name:'Expand all',exact:true}).count())===1);
     check('Top: View での Expand / Collapse all は保存データを変えない',beforeFold===await page.evaluate(()=>JSON.stringify(window.boxglow.store.getState().project)));
+    // ▸ で大項目を 1 つ展開した直後でも、ホイールだけで全体 (Fit と同じ倍率) まで縮小できる (下限が古いまま残らない)
+    const majorId=await page.evaluate(()=>{const rf=window.boxglow.rf;return rf.getNodes().find(n=>n.type==='block'&&n.data.major&&rf.getNodes().some(c=>c.parentId===n.id))?.id;});
+    await page.locator(`[data-id="${majorId}"] .bg-block__toggle`).first().click();await page.waitForTimeout(900);
+    await page.mouse.move(700,500);for(let i=0;i<40;i++){await page.mouse.wheel(0,300);await page.waitForTimeout(25);}await page.waitForTimeout(500);
+    const wheelMin=await page.evaluate(()=>window.boxglow.rf.getViewport().zoom);
+    await page.getByRole('button',{name:'Fit',exact:true}).click();await page.waitForTimeout(600);
+    const fitZoom=await page.evaluate(()=>window.boxglow.rf.getViewport().zoom);
+    check('ズーム: ▸ で展開した直後でも、ホイールだけで Fit と同じ倍率まで縮小できる',Math.abs(wheelMin-fitZoom)<0.001,`wheel ${wheelMin} fit ${fitZoom}`);
+    await page.locator(`[data-id="${majorId}"] .bg-block__toggle`).first().click();await page.waitForTimeout(400);
     await page.setViewportSize({width:390,height:844});await page.waitForTimeout(300);
     await page.locator('.topbar button[aria-label="Menu"]').click();
     check('狭い幅 (390px): 追加・Auto Layout・Undo / Redo は ⋯ メニューの中にある',await page.locator('.menu-actions').getByRole('button',{name:'+ Block',exact:true}).isVisible() && await page.getByRole('button',{name:'Auto Layout',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Undo',exact:true}).isVisible() && await page.locator('.menu-actions').getByRole('button',{name:'Redo',exact:true}).isVisible());

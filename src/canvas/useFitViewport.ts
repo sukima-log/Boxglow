@@ -72,11 +72,17 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
     height: number;
   } | null>(null);
   const moveStartZoom = useRef<number | null>(null);
-  /** Input: 測定済みノード。Output: 表示対象全体の矩形 (未測定なら null) */
+  /**
+   * 測定済みのノード (配置で決めた width / height だけのノードは含めない: 初回の表示は実寸がそろってから決める)。
+   * ▸ で展開した直後は、まだ測っていないノードがここから外れて縮小の下限が高く決まり、測定が終わっても配置の印が変わらないので取り直されない。
+   * そのため、ホイールで縮小するたびに下限を取り直す (下の wheel 処理)。利用者の指摘 2026-10-18: Fit を押さないとホイールでは全体が見えなかった
+   */
+  const sizedNodes = useCallback((ids?: string[]) => rf.getNodes().filter(n => !n.hidden && (n.measured?.width ?? 0) > 0 && (!ids || ids.includes(n.id))), [rf]);
+  /** Input: なし。Output: 表示対象全体の矩形 (大きさの分かるノードが無ければ null) */
   const boundsNow = useCallback(() => {
-    const nodes = rf.getNodes().filter(n => !n.hidden && (n.measured?.width ?? 0) > 0);
+    const nodes = sizedNodes();
     return nodes.length ? rf.getNodesBounds(nodes) : null;
-  }, [rf]);
+  }, [rf, sizedNodes]);
 
   /** Input: 現在の図と使用可能領域。Output: 幅に合わせて先頭を読む位置 */
   const readingTarget = useCallback(() => {
@@ -94,12 +100,12 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
   /** Input: 対象 ID (省略時は全体)。Output: 使用可能領域へ収まる位置・倍率 */
   const target = useCallback((ids?: string[]) => {
     const region = area.current;
-    const nodes = rf.getNodes().filter(n => !n.hidden && (n.measured?.width ?? 0) > 0 && (!ids || ids.includes(n.id)));
+    const nodes = sizedNodes(ids);
     if (!region || !nodes.length) return null;
     const bounds = rf.getNodesBounds(nodes);
     const v = getViewportForBounds(bounds, region.width, region.height, MIN_ZOOM, 1, ids ? .3 : .12);
     return { x: v.x + region.x, y: v.y + region.y, zoom: v.zoom };
-  }, [rf]);
+  }, [rf, sizedNodes]);
 
   /**
    * Input: 対象 ID。Output: 明示的な全体表示を実行
@@ -197,6 +203,11 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
     const wheel = (event: WheelEvent) => {
       const element = event.target instanceof Element ? event.target : null;
       if (event.defaultPrevented || element?.closest(".nowheel, .react-flow__panel, .react-flow__minimap, input, textarea, select, [contenteditable=true]")) return;
+      // 縮小しようとしたら、全体表示の倍率 (= 縮小の下限) を取り直す。古い下限が残っていても、ホイールで全体まで引けるようにする
+      if (!event.shiftKey && event.deltaY > 0 && (!vertical || event.ctrlKey || event.metaKey)) {
+        const v = target();
+        if (v) { fitted.current = v; if (v.zoom < minZoomNow.current - .00001) setMinZoom(v.zoom); }
+      }
       const current = rf.getViewport(), fit = fitted.current;
       const zoomKey = event.ctrlKey || event.metaKey;
       if (event.shiftKey) {
@@ -245,7 +256,7 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
     };
     canvas.addEventListener("wheel", wheel, { capture: true, passive: false });
     return () => canvas.removeEventListener("wheel", wheel, true);
-  }, [vertical, rf, boundsNow]);
+  }, [vertical, rf, boundsNow, target]);
   /** 操作前の倍率を記憶し、パンと縮小を区別する。Input/Output: なし */
   const onMoveStart = useCallback(() => { moveStartZoom.current = rf.getViewport().zoom; }, [rf]);
   /**
