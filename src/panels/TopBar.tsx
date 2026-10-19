@@ -220,7 +220,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   const saveIcon = readonly ? "◈" : ephemeral ? "○" : saveError ? "!" : saveState === "saving" ? "↻" : saveState === "unsaved" ? "○" : "✓";
   /** Input: なし。Output: 配置の編集モードと短い結果通知。ノートなどの編集可否とは区別する。 */
   const toggleMode = () => setEditMode(!editMode);
-  const saveTitle = readonly ? t("閲覧専用") : ephemeral ? t("サンプルは保存されません。Save で自分の計画のコピーを残せます") : source === "file" ? t("このファイルに直接保存します。別の画面・CLI・AI も同じファイルを編集するなら、serve か VS Code 拡張で開いてください") : fileName ? t("{file} に自動で保存します", { file: fileName }) : t("このブラウザに自動で保存します (ファイルにするなら Save to file)");
+  const saveTitle = readonly ? t("閲覧専用") : ephemeral ? t("サンプルは保存されません。Save で自分の計画のコピーを残せます") : source === "file" ? t("このファイルに直接保存します。別の画面・CLI・AI も同じファイルを編集するなら、serve か VS Code 拡張で開いてください") : fileName ? t("{file} に自動で保存します (Save で今すぐ書きます)", { file: fileName }) : t("このブラウザに自動で保存します (ファイルにするなら Save to file)");
   const sum = summarize(project);
   const busy = sum.working.length; // 作業中の件数 (詰まり・確認待ちは別の札で数える)
 
@@ -259,9 +259,10 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
         </button>
       )}
       {ephemeral && !readonly && <button className="btn btn-sm" onClick={copyToMine} title={t("自分のプロジェクトとして保存")}>Save</button>}
-      {/* 保存は自動 (ブラウザ内 / ファイル / serve / VS Code のどれでも)。手動の Save は失敗したときの再試行だけ。
+      {/* 保存は自動 (ブラウザ内 / ファイル / serve / VS Code のどれでも)。
+          ファイルにつながる計画 (開いたファイル / serve / VS Code) では、手で Save も押せる (今すぐ書く。利用者の要望 2026-10-19: 自動だけでは心もとない)。失敗したときは Retry。
           ブラウザ内の計画は「Save to file」でファイルにできる (Chrome / Edge は保存先を選んで以後そこに保存、ほかはダウンロード) */}
-      {!ephemeral && !readonly && saveError && <button className="btn btn-sm" onClick={saveNow} title={saveError}>Retry</button>}
+      {!ephemeral && !readonly && (source !== "idb" || saveError) && <button className="btn btn-sm" onClick={saveNow} disabled={saveState === "saving"} title={saveError ?? saveTitle}>{saveError ? "Retry" : "Save"}</button>}
       {!ephemeral && !readonly && source === "idb" && <button className="btn btn-sm" onClick={() => void saveAsFile()} title={t("ファイルとして保存する (Chrome / Edge では保存先を選ぶと、以後そのファイルに保存します。ほかのブラウザではダウンロード)")}>Save to file</button>}
       {/* 画面からの同期の印 (裏方が状態を流しているときだけ出る) */}
       <SaveHeldChip />

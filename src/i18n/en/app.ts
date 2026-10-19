@@ -449,7 +449,7 @@ export const app: Record<string, string> = {
 , "出力を作るうえで守る条件 (性能・再現の品質・ファイルサイズ・寸法・消費電力など)。完了条件 (何を確かめれば完了か) とは分けて書く": "What the output must respect (performance, quality of reproduction, file size, dimensions, power consumption, ...). Keep it apart from the acceptance criteria (how to check it is done)"
 , "例: 初回表示 1 秒以内、ビルド成果物 2 MB 以下": "e.g. first paint within 1 s, build output under 2 MB"
 , "このブラウザに自動で保存します (ファイルにするなら Save to file)": "Saved automatically in this browser (use Save to file to turn it into a file)"
-, "{file} に自動で保存します": "Saved automatically to {file}"
+, "{file} に自動で保存します (Save で今すぐ書きます)": "Saved automatically to {file} (Save writes it now)"
 , "ファイルとして保存する (Chrome / Edge では保存先を選ぶと、以後そのファイルに保存します。ほかのブラウザではダウンロード)": "Save as a file (Chrome / Edge: pick a location and the plan is saved there from now on; other browsers download it)"
 , "コピーを別のファイルに保存する (今の保存先は変わりません)": "Save a copy to another file (the current save location stays)"
 , "この場所には保存できませんでした ({error})": "Could not save there ({error})"
