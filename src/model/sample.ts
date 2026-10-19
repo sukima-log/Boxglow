@@ -110,7 +110,8 @@ export function buildSampleProject(): Project {
   p = relIn.project;
   const relOut = portsOf(p, release.blockId, "out")[0];
   p = updatePort(p, relOut.id, { name: "公開 URL" });
-  p = updateBlock(p, release.blockId, { description: "どこに置くかは未定。候補: 静的ホスティング。" });
+  // 公開する: 判断待ちと中の箱があり、作業中 (子を足しても自動では In Progress にならないので明示する)
+  p = updateBlock(p, release.blockId, { status: "gray", description: "どこに置くかは未定。候補: 静的ホスティング。" });
   p = connect(p, { portId: implOut.id, side: "outer" }, { portId: relIn.portId, side: "outer" }).project;
   p = connect(p, { portId: relOut.id, side: "outer" }, { portId: rootOut.id, side: "inner" }).project;
 
