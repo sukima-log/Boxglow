@@ -167,6 +167,8 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
               ) : (
                 <>
                   <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{direction === "in" ? t("入力物") : t("成果物")}</div>
+                  {/* 差し戻された成果物: 届いた扱いにはしないが、履歴として見える */}
+                  {(q.rejectedArtifacts?.length ?? 0) > 0 && <div className="text-[11px]" style={{ color: "var(--text-muted)", textDecoration: "line-through" }} title={q.rejectedArtifacts!.map((a) => `${a.title}: ${a.rejectedNote ?? ""} (${a.rejectedBy})`).join("\n")}>{t("差し戻し済み: {list}", { list: q.rejectedArtifacts!.map((a) => a.title).join(", ") })}</div>}
                   <ArtifactsEditor artifacts={q.artifacts} readonly={readonly} addLabel={direction === "in" ? t("入力物を追加") : t("成果物を追加")}
                     onChange={(next) => apply((p) => updatePort(p, q.id, { artifacts: next }))} />
                 </>

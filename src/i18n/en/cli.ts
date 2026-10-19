@@ -349,4 +349,10 @@ export const cli: Record<string, string> = {
 , "消すポートの名前 (入力を消すと、使う箱の入力も消える。最後の出力は消せない。同名が両方にあれば in:<名前> / out:<名前>)": "Names of ports to remove (removing an input also removes the inputs of the boxes that use it; the last output stays; if an input and an output share the name, use in:<name> / out:<name>)"
 , "問いを取り下げる (未回答だけ。分岐の問いは消せない。回答済みは reopen)": "Withdraw a question (unanswered only; a branch's question cannot be removed; answered ones use reopen)"
 , "判断の id (省略すると最新の未回答)": "Decision id (default: the latest unanswered one)"
+, "--to <作り直す箱> を指定してください (候補: {list})": "Give --to <box to redo> (candidates: {list})"
+, "--note <理由> を指定してください (作り直す人が読みます)": "Give --note <reason> (the person redoing the work reads it)"
+, "差し戻し: 「{from}」→「{to}」(In Progress に戻しました。成果物は差し戻し済みとして残ります)": "Sent back: \"{from}\" → \"{to}\" (back to In Progress; its artifacts are kept as rejected)"
+, "差し戻す: 評価・検査が通らなかった成果物を作った箱へ戻す (その箱は In Progress に戻り、成果物は差し戻し済みとして残る。線で戻さない)": "Send back: return a rejected deliverable to the box that made it (that box goes back to In Progress and its artifacts are kept as rejected; no wire goes backwards)"
+, "作り直す箱 (この箱の入力の供給元)": "The box to redo (a source of this box's inputs)"
+, "理由 (作り直す人が読む)": "Reason (read by whoever redoes the work)"
 };

@@ -69,6 +69,9 @@ import {
 , updateDecision
 , normalizePortNames
 , portNet
+, sentBackTo
+, sendBackTargets
+, sendBack
 , targetCandidates
 , sourceCandidates
 , canConnectAcross
@@ -1234,6 +1237,31 @@ describe("階層をまたぐ結線 (connectAcross / connectToBlock) と、名前
     expect(targets.some((x) => x.blockId === other.blockId)).toBe(true);
     expect(targets.some((x) => x.blockId === chara)).toBe(true); // 先祖 (親の出力へ)
     expect(targets.some((x) => x.blockId === leaf)).toBe(false);
+  });
+});
+
+describe("差し戻し (sendBack): 線で戻さず、作った箱を In Progress に戻す", () => {
+  it("評価の箱から供給元へ差し戻すと、供給元は gray に戻り成果物は差し戻し済みへ、評価の入力は待ちに戻る", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const make = addBlock(p, { parentId: pj, title: "作成", outputName: "キャラ" }); p = make.project;
+    const evalB = addBlock(p, { parentId: pj, title: "評価", outputName: "評価結果" }); p = evalB.project;
+    const r = connectToBlock(p, { portId: portsOf(p, make.blockId, "out")[0].id, side: "outer" }, evalB.blockId); p = r.project;
+    p = finishBlock(p, make.blockId, "claude-code", { artifacts: [{ title: "chara.glb", url: "assets/chara.glb" }] }).project;
+    const evalIn = portsOf(p, evalB.blockId, "in")[0];
+    expect(isInputReady(p, evalIn.id)).toBe(true);
+    expect(sendBackTargets(p, evalB.blockId).map((b) => b.title)).toEqual(["作成"]);
+    const sb = sendBack(p, evalB.blockId, make.blockId, "human", "顔が崩れている");
+    expect(sb.error).toBeUndefined(); p = sb.project;
+    expect(p.blocks[make.blockId].status).toBe("gray");
+    const out = portsOf(p, make.blockId, "out")[0];
+    expect(out.artifacts).toHaveLength(0);
+    expect(out.rejectedArtifacts?.map((a) => [a.title, a.rejectedNote])).toEqual([["chara.glb", "顔が崩れている"]]);
+    expect(isInputReady(p, evalIn.id)).toBe(false);
+    expect(sentBackTo(p, make.blockId).map((x) => [x.from.title, x.record.note])).toEqual([["評価", "顔が崩れている"]]);
+    expect(p.log.at(-1)?.message).toContain("差し戻し");
+    // 供給元でない箱へは戻せない
+    expect(sendBack(p, evalB.blockId, evalB.blockId, "human", "x").error).toBeTruthy();
   });
 });
 

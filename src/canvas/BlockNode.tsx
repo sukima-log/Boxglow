@@ -1,7 +1,7 @@
 import { ClaimMark, useClaimClock, visibleClaim } from "../panels/Claims";
 import { chosenOption, isSkipped, waitingBranches } from "../model/branch";
 import { unpreparedState } from "../model/readiness";
-import { workingNow } from "../model/graph";
+import { workingNow, sentBackTo } from "../model/graph";
 /**
  * ブロック (ボックス) のノード
  * 分類・題名・状態・入力・出力を縦に読むカード。親は子を包む領域として描く。
@@ -99,6 +99,8 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     , waitingBranch: waitingBranches(p, blockId).length > 0
       // 要具体化: 自身が作る出力が無い、予定成果物・完了条件が未定 (着手の前に決める)。親には配下の件数
     , unprepared: unpreparedState(p).self.has(blockId)
+      // 差し戻された回数と最新の理由 (作り直し中であることが図で分かる)
+    , sentBack: b?.status !== "white" ? sentBackTo(p, blockId) : []
     , unpreparedBelow: unpreparedState(p).below.get(blockId) ?? 0
       // 今どこを作業しているか: 自分が作業中か、畳んだ中 (大項目を含む) に作業中のボックスがあるか (展開して見えているときは、そのボックス自身が目立つ)
     , workingNow: workingNow(p).working.has(blockId)
@@ -268,6 +270,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         {view.waitingBranch && !view.skipped && <span className="meta-chip branch-waiting" title={t("まだ答えていない分岐の先です。答えると、この道へ進むかが決まります")}>{t("分岐待ち")}</span>}
         {/* 要具体化: 着手の前に、出力の予定成果物と完了条件を決める。親には配下の件数 */}
         {/* 押すと右パネルの状態タブ (着手の前に決めること) を開く */}
+        {view.sentBack.length > 0 && <button type="button" className="meta-chip sentback nodrag" title={t("差し戻し: {note} ({from})", { note: view.sentBack[0].record.note, from: view.sentBack[0].from.title })} onClick={(e) => { e.stopPropagation(); select({ blockId, panelTab: "status" }); }}>{t("差し戻し {n}", { n: view.sentBack.length })}</button>}
         {view.unprepared && !view.skipped && <button type="button" className="meta-chip unprepared nodrag" title={t("着手の前に、出力の予定成果物 (expect) と完了条件を決めます (押すと状態タブ)")} onClick={(e) => { e.stopPropagation(); select({ blockId, panelTab: "status" }); }}>{t("要具体化")}</button>}
         {!view.unprepared && view.unpreparedBelow > 0 && !view.skipped && <span className="meta-chip unprepared below" title={t("中に、要具体化のボックスが {n} 個あります", { n: view.unpreparedBelow })}>{t("要具体化 {n}", { n: view.unpreparedBelow })}</span>}
         {view.dueDate && view.status !== "white" && (

@@ -48,4 +48,6 @@ export const canvas: Record<string, string> = {
 , "ホイールで上下へ · Ctrl＋ホイールで拡大縮小": "Scroll to read · Ctrl + scroll to zoom"
 , "「{name}」から接続中 — 接続先の箱か丸をクリック": "Connecting from \"{name}\" — click the target box or port"
 , "中止 (Esc)": "Cancel (Esc)"
+, "差し戻し: {note} ({from})": "Sent back: {note} ({from})"
+, "差し戻し {n}": "Sent back {n}"
 };

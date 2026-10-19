@@ -12,8 +12,7 @@ import { branchState, chosenOption, isSkipped, waitingBranches } from "./branch"
 // 文言の言語切り替え (React に依存しない core を使う。CLI の束に React を入れないため)
 import { t } from "../i18n/core";
 import { nanoid } from "nanoid";
-import {
-  ROOT_ID
+import { ROOT_ID
 , SCHEMA_VERSION
 , type ActivityState
 , type Artifact
@@ -33,7 +32,7 @@ import {
 , type Project
 , type TemplateNode
 , type TemplateOrigin
-, type WorkScope, type BlockVerification } from "./types";
+, type WorkScope, type BlockVerification, type SendBack } from "./types";
 
 /** ログに残す上限 (古いものから落とす) */
 export const LOG_LIMIT = 500;
@@ -1380,6 +1379,60 @@ export function askDecision(p: Project, blockId: string, actor: string, question
  * Input : blockId, decisionId, patch
  * Output: 更新した Project (回答済み・見つからないときはそのまま)
  */
+/**
+ * 差し戻せる先: このボックスの入力の供給元の箱 (上流をたどって、出力を作っている箱)。評価・検査の箱から「作り直す箱」を選ぶ候補
+ * Input : p, blockId = 評価の箱
+ * Output: 箱の配列 (重複なし。自分は含まない)
+ */
+export function sendBackTargets(p: Project, blockId: string): Block[] {
+  const out: Block[] = [];
+  for (const q of portsOf(p, blockId, "in")) {
+    const src = sourceOfInput(p, q.id);
+    const b = src ? p.blocks[src.blockId] : undefined;
+    if (b && b.id !== blockId && b.id !== ROOT_ID && !out.some((x) => x.id === b.id)) out.push(b);
+  }
+  return out;
+}
+
+/**
+ * 差し戻す: 評価・検査の箱 (blockId) が、通らなかった成果物を作った箱 (toBlockId) へ戻す。線では戻さない (循環になるため、状態の変化で表す)。
+ *   - 戻す先の箱: In Progress (gray) に戻す。この箱へ届いていた出力の成果物は rejectedArtifacts へ移す (届いた扱いにしない。履歴として残る)
+ *   - 評価の箱: sendbacks に記録。両方の箱の作業記録に理由を残す
+ * Input : p, blockId = 評価の箱, toBlockId = 作り直す箱 (sendBackTargets のどれか), by = 誰が, note = 理由
+ * Output: { project, error }
+ */
+export function sendBack(p: Project, blockId: string, toBlockId: string, by: string, note: string): { project: Project; error?: string } {
+  const from = p.blocks[blockId];
+  const to = p.blocks[toBlockId];
+  if (!from || !to) return { project: p, error: t("ボックスが見つかりません") };
+  if (!sendBackTargets(p, blockId).some((b) => b.id === toBlockId)) return { project: p, error: t("「{title}」はこの箱の入力の供給元ではありません (差し戻せるのは、入力を作っている箱だけです)", { title: to.title }) };
+  const q = touch(p);
+  const at = now();
+  // この箱に届いていた、戻す先の箱の出力: 成果物を差し戻し済みへ移す
+  for (const i of portsOf(q, blockId, "in")) {
+    const src = sourceOfInput(q, i.id);
+    if (!src || src.blockId !== toBlockId) continue;
+    const port = q.ports[src.id];
+    if (port.artifacts.length === 0) continue;
+    port.rejectedArtifacts = [...(port.rejectedArtifacts ?? []), ...port.artifacts.map((a) => ({ ...a, rejectedAt: at, rejectedBy: by, rejectedNote: note }))];
+    port.artifacts = [];
+  }
+  q.blocks[toBlockId] = { ...q.blocks[toBlockId], status: "gray", statusChangedAt: at };
+  q.blocks[blockId] = { ...q.blocks[blockId], sendbacks: [...(from.sendbacks ?? []), { id: newId(), to: toBlockId, by, at, note }] };
+  appendLog(q, { actor: by, kind: "status", blockId: toBlockId, message: t("差し戻し: 「{from}」から「{to}」へ: {note}", { from: from.title, to: to.title, note }) });
+  return { project: q };
+}
+
+/**
+ * この箱が差し戻された記録 (評価の箱の sendbacks のうち、この箱へのもの)
+ * Input : p, blockId / Output: [{ from: 評価の箱, record }] (新しい順)
+ */
+export function sentBackTo(p: Project, blockId: string): { from: Block; record: SendBack }[] {
+  const out: { from: Block; record: SendBack }[] = [];
+  for (const b of Object.values(p.blocks)) for (const r of b.sendbacks ?? []) if (r.to === blockId) out.push({ from: b, record: r });
+  return out.sort((a, c) => c.record.at.localeCompare(a.record.at));
+}
+
 /**
  * 判断 (問い) を取り下げる: 未回答で、分岐の問いでないものだけ消せる (回答済みは履歴なので残す。分岐の問いは道と一体なので、分岐ごと扱う)
  * Input : p, blockId, decisionId

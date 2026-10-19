@@ -59,7 +59,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { addLogEntry, childrenOf, setNow, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor, canRemovePort, inputsFedBy, removePort, removeDecision, isLastProjectBox } from "../src/model/graph";
+import { addLogEntry, childrenOf, setNow, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor, canRemovePort, inputsFedBy, removePort, removeDecision, isLastProjectBox, sendBack, sendBackTargets } from "../src/model/graph";
 import { checkStart, checkDone, descriptionReminder, scopeEntries } from "../src/model/workflow";
 import type { WorkScope, WorkflowPolicy } from "../src/model/types";
 import type { Artifact } from "../src/model/types";
@@ -464,6 +464,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   artifact <block> <URL またはパス> [--title <題名>] [--output <出力名>]   成果物だけ付ける (完了にはしない)
   check                                          Git の成果物が今も見つかるか確認し、移動していればパスを付け替える。未コミットのときに記録した成果物は、コミット済みになっていれば Git の参照に補完する
   blocked <block> --note <困っていること>          詰まり
+  sendback <block> --to <block> --note <理由>     差し戻し (評価・検査が通らなかった成果物を作った箱へ戻す。その箱は In Progress に戻り、成果物は差し戻し済みに。線では戻さない)
   review <block> [--note]                        確認待ち
   ask <block> <質問> [--options "A|B"] [--context <判断材料>] [--branch]   人間に判断を求める (判断待ちになる)。--branch = 答えで後の作業が分かれる問い: そのボックスを分岐にする (選択肢ごとに道)。質問だけで判断できるよう、前提・比較・影響を --context に書く
   decision <block> --id <decision id> [--question] [--options "A|B"] [--context]   未回答の判断を書き直す
@@ -586,6 +587,7 @@ Usage (npx boxglow <command> ...):
   artifact <block> <URL or path> [--title <title>] [--output <output name>]   Attach an artifact only (does not finish the box)
   check                                          Check that Git artifacts can still be found, and update the path if they moved. Artifacts recorded while uncommitted become Git references once they are committed
   blocked <block> --note <what is blocking you>    Blocked
+  sendback <block> --to <block> --note <reason>   Send back (the box that made the rejected deliverable goes back to In Progress; its artifacts are kept as rejected; no wire goes backwards)
   review <block> [--note]                        Waiting for review
   ask <block> <question> [--options "A|B"] [--context <background>] [--branch]   Ask a person to decide (becomes Needs decision). --branch = the answer changes the work that follows: turn the box into a branch (one path per option). Put the assumptions, comparison and impact in --context so the question can be decided on its own
   decision <block> --id <decision id> [--question] [--options "A|B"] [--context]   Rewrite an unanswered decision
@@ -1426,6 +1428,20 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
       save(path, setActivity(p, b.id, actor, "blocked", str(options.note) ?? ""));
       out(t("詰まり: 「{title}」", { title: b.title }));
+      return;
+    }
+    case "sendback": {
+      // 差し戻し: 評価・検査が通らなかった成果物を作った箱へ戻す (線で戻さない)。例: sendback 評価 --to 作成 --note "テストが 2 件落ちる"
+      const b = mustFind(p, rest[0]);
+      if (!str(options.to)) throw new Error(t("--to <作り直す箱> を指定してください (候補: {list})", { list: sendBackTargets(p, b.id).map((x) => x.title).join(", ") || t("(なし)") }));
+      const target = mustFind(p, str(options.to));
+      const note = str(options.note) ?? "";
+      if (!note.trim()) throw new Error(t("--note <理由> を指定してください (作り直す人が読みます)"));
+      p = ackDecisions(p, b.id, actor);
+      const r = sendBack(p, b.id, target.id, actor, note.trim());
+      if (r.error) throw new Error(r.error);
+      save(path, r.project);
+      out(t("差し戻し: 「{from}」→「{to}」(In Progress に戻しました。成果物は差し戻し済みとして残ります)", { from: b.title, to: target.title }));
       return;
     }
     case "review": {

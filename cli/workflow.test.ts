@@ -30,6 +30,23 @@ function fixture(guard=false) {
   return {file,id:r.blockId,cli,token,read};
 }
 
+describe("差し戻し (sendback)",()=>{
+  it("評価の箱から作った箱へ差し戻すと In Progress に戻り、--to と --note が無ければ案内する",()=>{
+    const {cli,read,id}=fixture();
+    expect(cli("add","評価","--in","コード").status).toBe(0);
+    expect(cli("connect","対象.コード","評価").status).toBe(0);
+    expect(cli("done","対象","--artifact","コード=src/a.ts").status).toBe(0);
+    expect(read().blocks[id].status).toBe("white");
+    const noTo=cli("sendback","評価");expect(noTo.status).toBe(1);expect(noTo.stderr).toMatch(/--to/);
+    const r=cli("sendback","評価","--to","対象","--note","テストが落ちる");expect(r.status,r.stderr).toBe(0);
+    expect(read().blocks[id].status).toBe("gray");
+    const out=Object.values(read().ports).find((q:any)=>q.blockId===id&&q.direction==="out") as any;
+    expect(out.artifacts).toHaveLength(0);expect(out.rejectedArtifacts).toHaveLength(1);
+    const ctx=JSON.parse(cli("context","対象").stdout);
+    expect(JSON.stringify(ctx)).toContain("テストが落ちる");
+  });
+});
+
 describe("消す操作 (port --remove / unask / branch の道 / remove のプロジェクト)",()=>{
   it("port --remove は入力を使う箱の入力ごと消し、最後の出力は消せない。inputs で最上位の入力を足せる",()=>{
     const {cli,read,id}=fixture();

@@ -82,6 +82,8 @@ export interface Port {
   /** 入力の必須フラグ (出力は常に必須) */
   required: boolean;
   artifacts: Artifact[];
+  /** 差し戻された成果物 (履歴として残す。届いた扱いにしない) */
+  rejectedArtifacts?: (Artifact & { rejectedAt: string; rejectedBy: string; rejectedNote?: string })[];
   /** 下の階層の未接続の入力を自動で引き上げて作ったポートなら、元のポートの id */
   promotedFrom?: string;
   /** 最上位の入力を分けるグループ (Project.inputGroups の id)。無ければ既定の入力ノード */
@@ -208,10 +210,25 @@ export interface BlockVerification {
   by: string;
 }
 
+/**
+ * 差し戻し: 評価・検査の箱が、通らなかった成果物を作った箱へ戻した記録 (評価の箱に残す)。
+ * 戻された箱は In Progress に戻り、その出力の成果物は rejectedArtifacts に移る (届いた扱いにしない)
+ */
+export interface SendBack {
+  id: string;
+  /** 戻した先 (作り直す箱) の id */
+  to: string;
+  by: string;
+  at: string;
+  note: string;
+}
+
 export interface Block {
   scope?: WorkScope;
   /** 完了のときの検査結果 (done --checked ...)。未完了に戻しても残す (次の完了で上書き) */
   verification?: BlockVerification;
+  /** 差し戻し (このボックスが評価して通らなかったとき、作り直す箱へ戻した記録。線では戻さない) */
+  sendbacks?: SendBack[];
   /** 説明を実際に変えた日時。古い記録には推測で補わない。 */
   descriptionUpdatedAt?: string;
   /** New / In Progress / Done を最後に変えた日時。 */

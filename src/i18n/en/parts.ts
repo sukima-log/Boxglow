@@ -103,4 +103,5 @@ export const parts: Record<string, string> = {
 , "使う箱を足す…": "Connect to…"
 , "つなげる箱がありません": "No box to connect"
 , "検索": "Search"
+, "差し戻し済み: {list}": "Rejected: {list}"
 };

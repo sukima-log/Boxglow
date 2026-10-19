@@ -3,7 +3,7 @@
  * 対象のボックス・その親 (上の階層すべて)・入力の供給元 (上流) のボックスについて、説明・判断 (確認済みの回答も含む)・
  * 入出力の条件・成果物・引き継ぎメモを集める。CLI の context と、確認トークン (cli/context.ts) の元になる
  */
-import { ancestorsOf, incomingEdges, isInputReady, isSourceReady, portsOf } from "./graph";
+import { ancestorsOf, incomingEdges, isInputReady, isSourceReady, portsOf, sentBackTo } from "./graph";
 import { branchState } from "./branch";
 import { freshnessText, descriptionReminder } from "./workflow";
 
@@ -86,6 +86,9 @@ export function agentContext(p: Project, blockId: string) {
       , artifacts: b.artifacts
       // 完了のときの検査結果 (実行した検査・未実施・制限)。次の作業が「何を確かめ済みか」を読める
       , verification: b.verification
+      // 差し戻し: この箱が戻した記録と、この箱が戻された記録 (理由を読んで作り直す)
+      , sendbacks: b.sendbacks
+      , sentBack: sentBackTo(p, id).map((x) => ({ from: x.from.title, by: x.record.by, at: x.record.at, note: x.record.note }))
         // 判断は確認済み (ack 済み) のものも含める。確認の印 (ackedBy / ackedAt) は入れない (ack してもトークンは変わらない)
       , decisions: b.decisions.map((d) => ({ id: d.id, question: d.question, context: d.context, options: d.options, answer: d.answer, history: d.history }))
       , handoff: p.handoffs?.[id]

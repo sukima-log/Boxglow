@@ -126,6 +126,7 @@ MCP provides `boxglow_context`, `boxglow_checkpoint`, and `contextToken` on guar
 | `review-box <block>` / `box-ok <block> --note` | The same for a box's readiness (target, deliverable, checks, inputs, upstream branch answers) |
 | `lint [block] [--strict]` | Must-fix gaps (missing expect / acceptance, parent outputs nobody makes, exclusive branch paths both required) and review candidates (single child, unconnected outputs, token entries) |
 | `start <block> --note` / `done <block> --artifact name=url` | Record work in progress / completion with deliverables |
+| `sendback <block> --to <block> --note "why"` | A check or evaluation failed: send the work back to the box that made it (it returns to In Progress, its artifacts are kept as rejected). Wires never go backwards |
 | `split <block> --spec '<json>'` | Decompose a box into child boxes with named inputs / outputs and connections |
 | `ask <block> "question" --options "A\|B"` / `answer <block> "A"` | Ask a human for a decision / answer it |
 | `project <name>` | Add another project box to the same file (the top level holds only the input node, the output node and project boxes) |

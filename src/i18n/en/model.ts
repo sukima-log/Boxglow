@@ -89,4 +89,6 @@ export const model: Record<string, string> = {
 , "この 2 つはつなげません (途中の階層で循環するか、向きが合いません)": "These two cannot be connected (a cycle in between, or the direction does not fit)"
 , "自分の中の箱には、自分の出力をつなげません": "A box's output cannot feed a box inside it"
 , "{title} (親の出力へ)": "{title} (into its output)"
+, "「{title}」はこの箱の入力の供給元ではありません (差し戻せるのは、入力を作っている箱だけです)": "\"{title}\" does not feed this box's inputs (you can only send back to a box that makes one of the inputs)"
+, "差し戻し: 「{from}」から「{to}」へ: {note}": "Sent back from \"{from}\" to \"{to}\": {note}"
 };

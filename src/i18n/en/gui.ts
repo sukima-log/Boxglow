@@ -226,4 +226,12 @@ export const gui: Record<string, string> = {
 , "I/O タブ ▾": "I/O tab ▾"
 , "I/O タブの出力の下にある完了条件の欄と同じ値です (More の作業範囲でも編集できます)": "Same value as the acceptance criteria field below the outputs on the I/O tab (also editable in the work scope on More)"
 , "I/O タブ (出力の下)": "I/O tab (below the outputs)"
+, "「{title}」に差し戻しました (In Progress に戻りました)": "Sent back to \"{title}\" (it is In Progress again)"
+, "差し戻し": "Send back"
+, "評価・検査が通らなかったとき、成果物を作った箱へ戻す (その箱は In Progress に戻り、成果物は差し戻し済みになる。線では戻さない)": "When a check or evaluation fails, return the work to the box that made it (it goes back to In Progress and its artifacts become rejected; no wire goes backwards)"
+, "差し戻す": "Send back"
+, "戻す先": "Send back to"
+, "理由 (作り直す人が読む。例: テストが 2 件落ちる)": "Reason (read by whoever redoes it, e.g. 2 tests fail)"
+, "評価した箱へ": "Go to the box that sent it back"
+, "戻した箱へ": "Go to the box it was sent to"
 };
