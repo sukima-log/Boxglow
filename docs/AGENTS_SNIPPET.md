@@ -11,7 +11,7 @@ boxglow.json はリポジトリ直下に置く (`npx boxglow init --name "<プ�
 ファイルを直接編集せず、必ず `npx boxglow` コマンドで更新すること (結線ルールと履歴が保たれる)。
 
 ブロック = 「入力から出力 (成果物) を作るタスク」。出力の成果物が確定したら完了 (WhiteBox)。
-状態: BlackBox (出力だけ決めた) → GrayBox (分解中・着手中) → WhiteBox (完了)。
+状態: BlackBox (出力だけ決めた) → GrayBox (着手中) → WhiteBox (完了)。
 
 ### 作業のたびに守ること
 

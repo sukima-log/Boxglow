@@ -519,9 +519,9 @@ export function addBlock(
   const out: Port = { id: newId(), blockId: id, direction: "out", name: args.outputName ?? t("出力"), description: "", required: true, artifacts: [] };
   q.ports[out.id] = out;
   if (args.actor) appendLog(q, { actor: args.actor, kind: "added", blockId: id, message: t("「{title}」を追加", { title: args.title }) });
-  // 子を持ったら親は「分解中」。black のままの親だけ gray に上げる (white は人が決めたので触らない)
+  // 子を足しても親の状態は変えない (以前は black の親を「分解中」として gray に上げていたが、計画を組み立てているだけで
+  // In Progress になるのは意図と違う: 利用者の指摘 2026-10-19。In Progress になるのは start か、人が状態を変えたとき)
   const parent = q.blocks[args.parentId];
-  if (parent && parent.id !== ROOT_ID && parent.status === "black") { parent.status = "gray"; parent.statusChangedAt = now(); }
   // 大項目に最初の子ができたときは畳んで始める: Top は全階層を見せるので、CLI / MCP の add・split で大項目が勝手に広がると隣の箱を押してしまう。
   // 人が ▸ で開く。画面からの追加 (+ Block など) は呼び出し側が親を展開して、足したボックスがその場で見えるようにしている
   if (parent && siblings.length === 0 && majorOf(q, args.parentId) === args.parentId) parent.collapsed = true;
@@ -1745,7 +1745,7 @@ export function splitBlock(
   }
   // 分解の方針 (一語)
   if (spec.splitBy?.trim()) q.blocks[parentId].splitBy = spec.splitBy.trim();
-  if (q.blocks[parentId].status === "black") { q.blocks[parentId].status = "gray"; q.blocks[parentId].statusChangedAt = now(); }
+  // 分解しても親の状態は変えない (計画の組み立てで In Progress にしない。利用者の指摘 2026-10-19)
   // 分解した親は展開して中を見せる。ただし大項目は畳んだまま (CLI / MCP からの分解で Top の配置を動かさない: 展開すると隣の箱を押す。人が ▸ で開く)
   if (majorOf(q, parentId) !== parentId) q.blocks[parentId].collapsed = false;
   appendLog(q, { actor, kind: "split", blockId: parentId, message: t("「{title}」を {count} 個に分解: {list}", { title: parent.title, count: spec.blocks.length, list: spec.blocks.map((b) => b.title).join(", ") }) });
@@ -1850,8 +1850,7 @@ function instantiateNode(p: Project, parentId: string, node: TemplateNode, origi
       const to = resolve(c.to, "in");
       if (from && to) q = connect(q, from, to).project;
     }
-    if (q.blocks[id].status !== "gray") q.blocks[id].statusChangedAt = now();
-    q.blocks[id].status = "gray";
+    // 挿入した部品の状態は New のまま (中に箱があっても、着手するまで In Progress にしない)
   }
   return { project: q, blockId: id };
 }
@@ -2143,7 +2142,7 @@ export function moveBlockToParent(p: Project, blockId: string, newParentId: stri
   q.blocks[blockId].position = { ...q.blocks[blockId].position, x: Math.max(CHILD_PADDING.left, position.x), y: Math.max(childTop(q, newParentId), position.y) };
   // 新しい階層で、間のボックスを経由してつなぎ直す
   for (const pr of pending) routeConnect(q, pr.from, pr.to);
-  if (q.blocks[newParentId].status === "black") { q.blocks[newParentId].status = "gray"; q.blocks[newParentId].statusChangedAt = now(); }
+  // 移した先の親の状態は変えない (計画の組み立てで In Progress にしない。利用者の指摘 2026-10-19)
   q.blocks[newParentId].collapsed = false;
   appendLog(q, { actor: "human", kind: "note", blockId, message: t("「{title}」を「{parent}」の中へ移動", { title: b.title, parent: np.title }) });
   return normalizePromotions(q);

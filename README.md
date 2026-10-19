@@ -240,7 +240,7 @@ Boxglow never uploads your files. A deliverable is a **reference**: a URL, or fo
 | State | Meaning | Look |
 |---|---|---|
 | New (BlackBox) | Output decided, nothing inside yet | Slate header, ○ icon |
-| In Progress (GrayBox) | Being decomposed or worked on | Teal header, ◐ icon, progress bar |
+| In Progress (GrayBox) | Being worked on | Teal header, ◐ icon, progress bar |
 | Done (WhiteBox) | Output confirmed with a deliverable | Light header, ● with a check |
 
 Expanded boxes (containers) are drawn as frames: the shallower the level, the thicker the border, and the fill alternates per level so nesting is visible. Wires are thin and use colors never used for borders (thick green = the source already has a deliverable, thin amber = not yet). Selecting a wire highlights the whole signal in orange, through parent ports, from the original output to the final input.

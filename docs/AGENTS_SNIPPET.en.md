@@ -11,7 +11,7 @@ Put boxglow.json at the repository root (`npx boxglow init --name "<project name
 Do not edit the file directly; always update it with `npx boxglow` commands (this keeps the wiring rules and the history intact).
 
 A block = "a task that turns inputs into an output (deliverable)". It is done (WhiteBox) once the output's deliverable is settled.
-Status: BlackBox (only the output is decided) → GrayBox (being broken down or worked on) → WhiteBox (done).
+Status: BlackBox (only the output is decided) → GrayBox (in progress) → WhiteBox (done).
 
 ### What to do every time you work
 

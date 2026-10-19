@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Adding boxes inside a box no longer turns it In Progress.** Building the plan (adding a child, `split`, moving a box into another, inserting a template) leaves the parent's status as it is; a box becomes In Progress when work starts (`start`, a progress value) or when a person changes it.
 - **Dropping a wire on a box uses the input that was promoted automatically.** Before, dropping a parent's input onto a box that already had an auto-promoted input of the same name added a second input with that name, and the new one fed nothing inside. Now the wire attaches to the existing input of the same name (the one the inner boxes are waiting for). `lint` flags an input of a box with children that feeds nothing inside ("unused-input", review).
 - **Mouse-wheel zoom-out now reaches the whole plan.** Right after a box was expanded with its arrow, the zoom-out limit was computed before the newly shown boxes were measured and stayed too high, so only Fit could show everything. The limit now counts boxes by their laid-out size and is refreshed on every zoom-out.
 - **Collapse all / Expand all** in the canvas tool strip: on Top it folds everything back to the major boxes (one level) or opens them all; inside a tab it folds or opens every box in that level. Like the arrow on a box, it is saved in Edit mode and screen-only in View mode.

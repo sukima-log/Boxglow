@@ -96,10 +96,10 @@ describe("ブロックとポートの生成", () => {
     expect(portsOf(p, a, "in")).toHaveLength(0);
   });
 
-  it("子を追加すると black の親は gray になる", () => {
+  it("子を追加しても親の状態は New のまま (計画の組み立てで In Progress にしない)", () => {
     const { p, a } = twoBlocks();
     const r = addBlock(p, { parentId: a, title: "A-1" });
-    expect(r.project.blocks[a].status).toBe("gray");
+    expect(r.project.blocks[a].status).toBe("black");
   });
 });
 
@@ -348,7 +348,7 @@ describe("AI の活動・判断・分解 (schemaVersion 2)", () => {
     expect(childrenOf(r.project, a)).toHaveLength(2);
     // 分解でできた 3 本 + プロジェクトのボックスから最終成果物への 1 本
     expect(Object.values(r.project.edges).filter((e) => !e.auto)).toHaveLength(4);
-    expect(r.project.blocks[a].status).toBe("gray");
+    expect(r.project.blocks[a].status).toBe("black"); // 分解しても New のまま
   });
 
   it("findBlock は id・完全一致・一意な部分一致で探す", () => {
@@ -476,7 +476,7 @@ describe("プロジェクトのボックス・深い階層・テンプレート 
     expect(childrenOf(q, ins.blockId)).toHaveLength(2);
     expect(portsOf(q, ins.blockId, "out")[0].description).toBe("8bit グレースケール");
     expect(Object.values(q.edges).filter((e) => !e.auto).length).toBeGreaterThanOrEqual(3 + 1);
-    expect(nb.status).toBe("gray");
+    expect(nb.status).toBe("black"); // 挿入した部品は New のまま
     expect(nb.id).not.toBe(r.blockId);
   });
 });
@@ -611,7 +611,7 @@ describe("ドラッグ操作の補助", () => {
     expect(q.blocks[b].position.y).toBeGreaterThanOrEqual(76);
     // A -> B の線は C の入力を経由して残る
     expect(Object.values(q.edges).some((e) => !e.auto && e.from.portId === outA.id)).toBe(true);
-    expect(q.blocks[rc.blockId].status).toBe("gray");
+    expect(q.blocks[rc.blockId].status).toBe("black"); // 移し先の親も New のまま
   });
 
   it("出力をボックスに落とすと、空いている入力か新しい入力につながる。親に落とすと親の出力につながる", () => {
