@@ -86,4 +86,7 @@ export const model: Record<string, string> = {
 , "答えた後は道を削除できません (Reopen してから)": "Paths cannot be deleted after the answer (Reopen first)"
 , "道「{name}」がありません": "There is no path \"{name}\""
 , "道は 2 つ以上要ります (1 つにするなら、分岐ではなくふつうのボックスにしてください)": "A branch needs at least two paths (with one path, use an ordinary box instead)"
+, "この 2 つはつなげません (途中の階層で循環するか、向きが合いません)": "These two cannot be connected (a cycle in between, or the direction does not fit)"
+, "自分の中の箱には、自分の出力をつなげません": "A box's output cannot feed a box inside it"
+, "{title} (親の出力へ)": "{title} (into its output)"
 };

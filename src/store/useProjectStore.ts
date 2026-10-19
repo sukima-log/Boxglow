@@ -26,7 +26,7 @@ import { mergeProjects } from "../model/merge";
 import { applyRestore, editorCaughtUp, prepareRestore, readRecovery, type Recovery, type RestoreConflict, type RestorePicks, type RestoreStep } from "../sync/recovery";
 import { buildSampleProject } from "../model/sample";
 import exampleText from "../../examples/logic-daw/boxglow.json?raw";
-import type { Project } from "../model/types";
+import type { Endpoint, Project } from "../model/types";
 import type { AssigneeTarget } from "../model/assignments";
 import type { HostAction, SyncStatus } from "../sync/status";
 import { deleteProject, listProjects, loadProject, saveProject, type ProjectMeta } from "../lib/storage";
@@ -209,6 +209,9 @@ interface State {
   selection: Selection;
   /** 直前まで選んでいた線の id (ボックスをダブルクリックしてタブを開くとき、最初のクリックで外れた線の選択を戻すため) */
   lastEdgeId: string | null;
+  /** 2 クリック結線の出す側 (丸をクリックしたとき)。接続先の箱か丸をクリックするまで保つ */
+  pendingConnect: Endpoint | null;
+  setPendingConnect: (ep: Endpoint | null) => void;
   past: Project[];
   future: Project[];
   /** 画面の下に短く出す通知 */
@@ -1028,6 +1031,8 @@ export const useProjectStore = create<State>((set, get) => {
   , projects: []
   , selection: NO_SELECTION
   , lastEdgeId: null
+  , pendingConnect: null
+  , setPendingConnect: (pendingConnect) => set({ pendingConnect })
   , past: []
   , future: []
   , toast: null

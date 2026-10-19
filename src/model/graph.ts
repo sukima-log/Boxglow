@@ -932,8 +932,9 @@ export function normalizePromotions(p: Project): Project {
       const block = q.blocks[port.blockId];
       if (!block || block.parentId === null) continue; // 最上位の入力はこれ以上伸ばさない
       if (incomingEdges(q, { portId: port.id, side: "outer" }).length > 0) continue;
-      // 同じ名前の自動ポートが親に既にあれば、それを共用する (同じ材料を複数の子が待っているとき、入力ノードに同名が並ばないように)
-      let promoted = Object.values(q.ports).find((x) => x.blockId === block.parentId && x.direction === "in" && x.promotedFrom && x.name === port.name);
+      // 同じ名前の入力が親に既にあれば (自動で上がったものでも、人が足したものでも) それを共用する = 名前でつなぐ。
+      // 同じ材料を複数の子が待っているとき入力ノードに同名が並ばず、最上位に同名の入力があれば子の入力は自動でそこにつながる (利用者の要望 2026-10-19)
+      let promoted = Object.values(q.ports).find((x) => x.blockId === block.parentId && x.direction === "in" && x.name === port.name);
       if (!promoted) {
         promoted = {
           id: newId()
@@ -2030,9 +2031,9 @@ function scopeChain(p: Project, scope: string): string[] {
   return out;
 }
 
-/** ボックスに同名のポートがあればそれを、無ければ作って返す (手で作ったものだけ。自動のものは別) */
+/** ボックスに同名のポートがあればそれを、無ければ作って返す (自動で上がった入力も使う: 本物の線が来れば自動の線は置き換わる) */
 function findOrAddPort(q: Project, blockId: string, direction: "in" | "out", name: string): Port | null {
-  const existing = portsOf(q, blockId, direction).find((x) => x.name === name && !x.promotedFrom);
+  const existing = portsOf(q, blockId, direction).find((x) => x.name === name);
   if (existing) return existing;
   const r = addPort(q, { blockId, direction, name });
   Object.assign(q, r.project);
@@ -2078,6 +2079,42 @@ export function routeConnect(q: Project, from: Endpoint, to: Endpoint): void {
   }
   const last = connect(q, f, to);
   if (!last.error) Object.assign(q, last.project);
+}
+
+/**
+ * 2 つの端点をつなぐ。同じ階層ならそのまま、階層が違えば途中の箱に入出力を作って通す (routeConnect)。
+ * 画面で遠い箱へ線を落としたとき・2 クリック結線・供給元の一覧から選んだときの共通の入口 (利用者の指摘 2026-10-19: 階層が違うとつながらなかった)
+ * Input : from = 出す側の端点 (出力の外側、または親の入力の内側), to = 受ける側の端点 (入力の外側、または親の出力の内側)
+ * Output: { project, edgeId, error }。失敗したら project は元のまま
+ */
+export function connectAcross(p: Project, from: Endpoint, to: Endpoint): { project: Project; edgeId?: string; error?: string } {
+  const direct = validateConnection(p, from, to);
+  if (direct.ok) return connect(p, from, to);
+  if (!canConnectAcross(p, from, to)) return { project: p, error: direct.reason };
+  const before = new Set(Object.keys(p.edges));
+  const q = clone(p);
+  routeConnect(q, from, to);
+  // 受ける側に新しい本物の線が届いていれば成功 (途中で循環などで止まれば届かない)
+  const arrived = incomingEdges(q, to).find((e) => !e.auto && !before.has(e.id));
+  if (!arrived) return { project: p, error: t("この 2 つはつなげません (途中の階層で循環するか、向きが合いません)") };
+  return { project: normalizePromotions(q), edgeId: arrived.id };
+}
+
+/**
+ * 階層をまたいでつなげる見込みがあるか (向きが合い、両方の階層が分かる)。画面でドラッグ中の受け付け判定に使う (軽い判定。最終的な可否は connectAcross)
+ * Input : from, to / Output: true = つなげる見込み
+ */
+export function canConnectAcross(p: Project, from: Endpoint, to: Endpoint): boolean {
+  if (validateConnection(p, from, to).ok) return true;
+  const fp = p.ports[from.portId];
+  const tp = p.ports[to.portId];
+  if (!fp || !tp || from.portId === to.portId) return false;
+  const fromIsSource = (fp.direction === "out" && from.side === "outer") || (fp.direction === "in" && from.side === "inner");
+  const toIsTarget = (tp.direction === "in" && to.side === "outer") || (tp.direction === "out" && to.side === "inner");
+  if (!fromIsSource || !toIsTarget) return false;
+  const fs = scopeOf(p, from);
+  const ts = scopeOf(p, to);
+  return fs !== null && ts !== null && fs !== ts;
 }
 
 /**
@@ -2149,36 +2186,31 @@ export function moveBlockToParent(p: Project, blockId: string, newParentId: stri
 }
 
 /**
- * 出力 (または親の入力) を、ボックスそのものにドロップしたときの結線
- * 空いている入力 (線が来ていない、自動の線だけの入力) があればそこへ、無ければ出力と同じ名前の入力を作ってつなぐ
- * Input : from = 出す側の端点, targetBlockId = 落としたボックス
+ * ボックスの上に線を落としたときの結線 (丸ではなく箱で受ける)。階層が違っても途中の箱に入出力を作って通す
+ *   - 落とした箱が出す側の先祖 (親、さらに上) なら、その箱の出力 (内側) へ束ねる
+ *   - それ以外は、落とした箱の入力へ: 同じ名前で本物の線がまだ来ていない入力 (自動で上がったものを含む) → 本物の線が来ていない手動の入力 → 無ければ新しく足す
+ *     (自動で上がった入力を除くと同名の入力が 2 本になり、新しい方は中の誰にもつながらなかった: 利用者の指摘 2026-10-18)
+ * Input : from = 出す側の端点, targetBlockId = 落とした箱
  * Output: { project, error }
  */
 export function connectToBlock(p: Project, from: Endpoint, targetBlockId: string): { project: Project; error?: string } {
   const fp = p.ports[from.portId];
   const tb = p.blocks[targetBlockId];
   if (!fp || !tb || targetBlockId === ROOT_ID) return { project: p, error: t("つなぐ先が見つかりません") };
-  // 出す側の階層と、落としたボックスの階層が合うか (同じ階層のボックス、または出す側が親の入力ならその子)
-  const fromScope = scopeOf(p, from);
-  const targetIsChildOfSource = fp.direction === "in" && from.side === "inner" && tb.parentId === fp.blockId;
-  const sameScope = fromScope !== null && tb.parentId === fromScope;
-  // 落としたボックスが出す側の親なら、親の出力 (内側) につなぐ
-  const targetIsParent = fp.direction === "out" && from.side === "outer" && p.blocks[fp.blockId]?.parentId === targetBlockId;
-  if (targetIsParent) {
+  const fromIsOutput = fp.direction === "out" && from.side === "outer";
+  // 先祖へ: その箱の出力 (内側) に束ねる (空いている出力、無ければ最初の出力)
+  if (fromIsOutput && ancestorsOf(p, fp.blockId).some((a) => a.id === targetBlockId)) {
     const outs = portsOf(p, targetBlockId, "out");
     const free = outs.find((o) => incomingEdges(p, { portId: o.id, side: "inner" }).length === 0) ?? outs[0];
     if (!free) return { project: p, error: t("親に出力がありません") };
-    return connect(p, from, { portId: free.id, side: "inner" });
+    return connectAcross(p, from, { portId: free.id, side: "inner" });
   }
-  if (!sameScope && !targetIsChildOfSource) return { project: p, error: t("同じ階層のボックス (または親子) にだけつなげます") };
+  // 自分自身や自分の中の箱には、自分の出力をつなげない
+  if (fromIsOutput && (targetBlockId === fp.blockId || ancestorsOf(p, targetBlockId).some((a) => a.id === fp.blockId))) return { project: p, error: t("自分の中の箱には、自分の出力をつなげません") };
+  // 親の入力 (内側) を、その親の外の箱へ: 親の出力を通して出すことになる (through)。親自身へは意味が無い
+  if (!fromIsOutput && targetBlockId === fp.blockId) return { project: p, error: t("つなぐ先が見つかりません") };
   const ins = portsOf(p, targetBlockId, "in");
   const free = (i: Port) => incomingEdges(p, { portId: i.id, side: "outer" }).every((e) => e.auto);
-  // つなぐ先の入力の選び方:
-  //   1. 同じ名前で、本物の線がまだ来ていない入力 (自動で上がった入力も含む。中の箱が待っている入力に、そのまま供給元を与える)
-  //   2. それ以外の、本物の線が来ていない手動の入力
-  //   3. 無ければ新しく足す
-  // 以前は自動で上がった入力を除いていたため、子持ちの箱へ親の入力を落とすと同名の入力が 2 本になり、新しい方は中の誰にもつながらなかった
-  // (利用者の指摘 2026-10-18: 中の箱に何もつながっていない配線ができる)
   let target = ins.find((i) => i.name === fp.name && free(i)) ?? ins.find((i) => free(i) && !i.promotedFrom);
   let q = p;
   if (!target) {
@@ -2186,7 +2218,49 @@ export function connectToBlock(p: Project, from: Endpoint, targetBlockId: string
     q = r.project;
     target = q.ports[r.portId];
   }
-  return connect(q, from, { portId: target.id, side: "outer" });
+  return connectAcross(q, from, { portId: target.id, side: "outer" });
+}
+
+/**
+ * 供給元の候補 (線を引かずに一覧から選ぶ): 計画の入力、上の階層の入力、ほかの箱の出力。すでにこの箱に来ているものは除く
+ * Input : p, blockId = 入力を足したい箱
+ * Output: [{ label (表示), from (端点) }] (計画の入力 → 上の階層の入力 → ほかの箱の出力 の順)
+ */
+export function sourceCandidates(p: Project, blockId: string): { label: string; from: Endpoint }[] {
+  const b = p.blocks[blockId];
+  if (!b) return [];
+  const ancestors = ancestorsOf(p, blockId).map((a) => a.id);
+  const descendants = new Set(descendantsOf(p, blockId).map((d) => d.id));
+  // すでに来ている供給元 (入力の外側に来る線の出す側)
+  const already = new Set<string>();
+  for (const i of portsOf(p, blockId, "in")) for (const e of incomingEdges(p, { portId: i.id, side: "outer" })) if (!e.auto) already.add(e.from.portId);
+  const out: { label: string; from: Endpoint }[] = [];
+  const crumb = (id: string) => { const x = p.blocks[id]; const parent = x?.parentId && x.parentId !== ROOT_ID ? p.blocks[x.parentId] : null; return parent && kindOf(parent) !== "project" ? `${parent.title} › ${x!.title}` : x?.title ?? "?"; };
+  for (const q of portsOf(p, ROOT_ID, "in")) if (!already.has(q.id)) out.push({ label: `Inputs › ${q.name}`, from: { portId: q.id, side: "inner" } });
+  for (const aid of ancestors) if (aid !== ROOT_ID) for (const q of portsOf(p, aid, "in")) if (!already.has(q.id)) out.push({ label: `${crumb(aid)} › ${q.name}`, from: { portId: q.id, side: "inner" } });
+  const others = Object.values(p.blocks).filter((x) => x.id !== blockId && x.id !== ROOT_ID && !ancestors.includes(x.id) && !descendants.has(x.id) && kindOf(x) !== "project")
+    .sort((x, y) => x.title.localeCompare(y.title));
+  for (const x of others) for (const q of portsOf(p, x.id, "out")) if (!already.has(q.id)) out.push({ label: `${crumb(x.id)} › ${q.name}`, from: { portId: q.id, side: "outer" } });
+  return out;
+}
+
+/**
+ * 出力の使い先の候補 (一覧から選ぶ): 自分と自分の中の箱を除く箱。先祖は「親の出力へ束ねる」として含める。すでに使っている箱は除く
+ * Input : p, portId = 出力ポート
+ * Output: [{ label, blockId }]
+ */
+export function targetCandidates(p: Project, portId: string): { label: string; blockId: string }[] {
+  const port = p.ports[portId];
+  if (!port || port.direction !== "out") return [];
+  const self = port.blockId;
+  const descendants = new Set(descendantsOf(p, self).map((d) => d.id));
+  const ancestors = new Set(ancestorsOf(p, self).map((a) => a.id));
+  const using = new Set(consumersOf(p, portId).map((b) => b.id));
+  const crumb = (id: string) => { const x = p.blocks[id]; const parent = x?.parentId && x.parentId !== ROOT_ID ? p.blocks[x.parentId] : null; return parent && kindOf(parent) !== "project" ? `${parent.title} › ${x!.title}` : x?.title ?? "?"; };
+  return Object.values(p.blocks)
+    .filter((x) => x.id !== self && x.id !== ROOT_ID && !descendants.has(x.id) && !using.has(x.id) && (kindOf(x) !== "project" || ancestors.has(x.id)))
+    .sort((x, y) => (ancestors.has(x.id) ? -1 : 0) - (ancestors.has(y.id) ? -1 : 0) || x.title.localeCompare(y.title))
+    .map((x) => ({ label: ancestors.has(x.id) ? t("{title} (親の出力へ)", { title: crumb(x.id) }) : crumb(x.id), blockId: x.id }));
 }
 
 /** ボックスとボックスの間に要る間隔: 線はボックスの縁から 36px 離れるので、両側で 72px + 線 1 本分。8px 単位で 96px */

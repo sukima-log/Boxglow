@@ -3,7 +3,7 @@
  * ポートの行は「名前」と、その直下に「成果物 (リンク)」を主役として並べる。形式・制約は 1 行の補足。
  */
 import { useEffect, useRef, useState } from "react";
-import { addPort, consumersOf, createArtifact, inputGroupsOf, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort, inputsFedBy, canRemovePort } from "../model/graph";
+import { addPort, consumersOf, createArtifact, inputGroupsOf, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort, inputsFedBy, canRemovePort, connectToBlock, sourceCandidates, targetCandidates } from "../model/graph";
 import type { Artifact, ExpectKind, Project } from "../model/types";
 import { setInputAnyOf } from "../model/branch";
 import { ROOT_ID } from "../model/types";
@@ -113,16 +113,25 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
   };
   // 消せるか: 入力はいつでも (自動で上がった入力も。使う箱の入力ごと消える)。出力は最後の 1 本だけ消せない (ボックスは必ず出力を持つ)
   const canRemove = (portId: string) => !readonly && canRemovePort(project, portId).ok;
+  const setToast = useProjectStore((s) => s.setToast);
+  // 線を引かずに一覧から選ぶ: 入力なら供給元 (計画の入力・上の階層の入力・ほかの箱の出力)、出力なら使う箱。遠い箱や別の階層でも、ズームせずにつなげる (利用者の指摘 2026-10-19)
+  const [picking, setPicking] = useState<null | { kind: "source" } | { kind: "target"; portId: string }>(null);
+  const pickSource = (from: { portId: string; side: "outer" | "inner" }) => { setPicking(null); apply((p) => { const r = connectToBlock(p, from, blockId); if (r.error) setToast(r.error); return r.project; }); };
+  const pickTarget = (portId: string, targetBlockId: string) => { setPicking(null); apply((p) => { const r = connectToBlock(p, { portId, side: "outer" }, targetBlockId); if (r.error) setToast(r.error); return r.project; }); };
 
   return (
     <section className="sec">
       <div className="sec__head">
         <span className="label"><span className={`io-mark ${direction}`} aria-hidden="true">{direction === "in" ? "→" : "→"}</span>{title}</span>
+        {!readonly && direction === "in" && blockId !== ROOT_ID && (
+          <button className="btn btn-sm" title={t("供給元の一覧 (計画の入力・上の階層の入力・ほかの箱の出力) から選んでつなぐ")} aria-expanded={picking?.kind === "source"} onClick={() => setPicking(picking?.kind === "source" ? null : { kind: "source" })}>{t("供給元から選ぶ…")}</button>
+        )}
         {!readonly && allowAdd && (
           <button className="btn btn-sm" title={direction === "in" ? t("入力を追加") : t("出力を追加")}
             onClick={() => apply((p) => { const r = addPort(p, { blockId, direction, name: direction === "in" ? t("新しい入力") : t("新しい出力") }); return groupId ? setInputGroup(r.project, r.portId, groupId) : r.project; })}>＋ {direction === "in" ? t("入力を追加") : t("出力を追加")}</button>
         )}
       </div>
+      {picking?.kind === "source" && <Picker items={sourceCandidates(project, blockId).map((c) => ({ label: c.label, key: `${c.from.portId}:${c.from.side}`, pick: () => pickSource(c.from) }))} onClose={() => setPicking(null)} empty={t("つなげる供給元がありません")} />}
       {ports.length === 0 && <div className="text-[12px] px-1" style={{ color: "var(--text-muted)" }}>None</div>}
       {ports.map((q) => {
         const src = direction === "in" ? sourceOfInput(project, q.id) : null;
@@ -164,6 +173,12 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
               )}
               {desc && !isOpen(q.id) && <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{desc}</div>}
               {/* 下流: この出力を使う箱 (押すと移る)。変えるとどこを確かめ直すかの手がかり。入力なら、この入力が配られる先の箱 (最上位の入力は、下の階層のどの箱が待っているか) */}
+              {direction === "out" && !readonly && blockId !== ROOT_ID && (
+                <div className="text-[11px] mt-1">
+                  <button type="button" className="port-consumers__item" aria-expanded={picking?.kind === "target" && picking.portId === q.id} onClick={() => setPicking(picking?.kind === "target" && picking.portId === q.id ? null : { kind: "target", portId: q.id })} title={t("この出力を使う箱を一覧から選んでつなぐ (階層が違ってもよい)")}>{t("使う箱を足す…")}</button>
+                  {picking?.kind === "target" && picking.portId === q.id && <Picker items={targetCandidates(project, q.id).map((c) => ({ label: c.label, key: c.blockId, pick: () => pickTarget(q.id, c.blockId) }))} onClose={() => setPicking(null)} empty={t("つなげる箱がありません")} />}
+                </div>
+              )}
               {(() => { const users = direction === "out" ? consumersOf(project, q.id) : [...new Map(inputsFedBy(project, q.id).map((f) => [f.blockId, project.blocks[f.blockId]])).values()].filter((b): b is NonNullable<typeof b> => !!b); return users.length ? (
                 <div className="text-[11px] mt-1 port-consumers" style={{ color: "var(--text-muted)" }}>
                   {t("使う箱:")} {users.map((b, i) => <span key={b.id}>{i > 0 && ", "}<button type="button" className="port-consumers__item" onClick={() => select({ blockId: b.id })}>{b.title}</button></span>)}
@@ -253,6 +268,28 @@ export function ResizeHandle({ side, width, min, max, onWidth, style }: { side: 
     el.addEventListener("pointercancel", up);
   };
   return <div className={`resize-handle ${side}`} data-active={active} style={style} onPointerDown={onPointerDown} title={t("ドラッグで幅を変える")} />;
+}
+
+/**
+ * 一覧から 1 つ選ぶ小さな部品 (検索つき)。供給元・使う箱の選択に使う。Esc か Cancel で閉じる
+ * Input : items = [{ key, label, pick }], onClose, empty = 候補が無いときの文
+ * Output: 検索欄と候補のボタンの並び
+ */
+export function Picker({ items, onClose, empty }: { items: { key: string; label: string; pick: () => void }[]; onClose: () => void; empty: string }) {
+  const [q, setQ] = useState("");
+  const shown = items.filter((i) => !q.trim() || i.label.toLowerCase().includes(q.trim().toLowerCase()));
+  return (
+    <div className="picker" onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }}>
+      <div className="flex gap-1 items-center">
+        <input className="input flex-1" autoFocus placeholder={t("検索")} value={q} onChange={(e) => setQ(e.target.value)} aria-label={t("検索")} />
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
+      </div>
+      {shown.length === 0 && <div className="text-[12px] px-1" style={{ color: "var(--text-muted)" }}>{empty}</div>}
+      <ul className="picker__list">
+        {shown.map((i) => <li key={i.key}><button type="button" className="picker__item" onClick={i.pick}>{i.label}</button></li>)}
+      </ul>
+    </div>
+  );
 }
 
 /**

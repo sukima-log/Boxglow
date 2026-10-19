@@ -96,4 +96,11 @@ export const parts: Record<string, string> = {
 , "もう一度押すと完全に削除します (元に戻せません)": "Press again to delete permanently (cannot be undone)"
 , "ライブラリから削除 (元に戻せません)": "Delete from the library (cannot be undone)"
 , "問いを取り下げる (Undo で戻せます)": "Withdraw the question (Undo brings it back)"
+, "供給元の一覧 (計画の入力・上の階層の入力・ほかの箱の出力) から選んでつなぐ": "Pick a source from a list (plan inputs, inputs of the levels above, outputs of other boxes) and connect it"
+, "供給元から選ぶ…": "Connect from…"
+, "つなげる供給元がありません": "No source to connect"
+, "この出力を使う箱を一覧から選んでつなぐ (階層が違ってもよい)": "Pick a box from a list that will use this output (any level)"
+, "使う箱を足す…": "Connect to…"
+, "つなげる箱がありません": "No box to connect"
+, "検索": "Search"
 };

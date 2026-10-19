@@ -69,6 +69,10 @@ import {
 , updateDecision
 , normalizePortNames
 , portNet
+, targetCandidates
+, sourceCandidates
+, canConnectAcross
+, connectAcross
 , addProjectBlock
 , inputsFedBy
 , canRemovePort
@@ -1167,6 +1171,69 @@ describe("箱へ線を落とすと、自動で上がった同名の入力につ�
     expect(incomingEdges(p, { portId: ins[0].id, side: "outer" }).some((e) => !e.auto)).toBe(true); // 本物の線が来た
     expect(outgoingEdges(p, { portId: ins[0].id, side: "inner" })).toHaveLength(1); // 中の箱へ配られたまま
     expect(portsOf(p, ROOT_ID, "in").map((x) => x.name)).toEqual(["シナリオ"]); // 最上位の入力は 1 本のまま
+  });
+});
+
+describe("階層をまたぐ結線 (connectAcross / connectToBlock) と、名前でつなぐ", () => {
+  /** 最上位の入力「シナリオ」と、3 階層下の箱 (Interval › 3Dモデリング › キャラクターモデリング › 登場人物情報抽出) */
+  const deep = () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    p = addPort(p, { blockId: ROOT_ID, direction: "in", name: "シナリオ" }).project;
+    const m3d = addBlock(p, { parentId: pj, title: "3Dモデリング" }); p = m3d.project;
+    const chara = addBlock(p, { parentId: m3d.blockId, title: "キャラクターモデリング" }); p = chara.project;
+    const leaf = addBlock(p, { parentId: chara.blockId, title: "登場人物情報抽出", outputName: "Human Woman" }); p = leaf.project;
+    return { p, pj, m3d: m3d.blockId, chara: chara.blockId, leaf: leaf.blockId };
+  };
+  it("最上位の入力を 3 階層下の箱に落とすと、途中の箱に入力を作って通る", () => {
+    const { p, pj, m3d, chara, leaf } = deep();
+    const root = portsOf(p, ROOT_ID, "in")[0];
+    const r = connectToBlock(p, { portId: root.id, side: "inner" }, leaf);
+    expect(r.error).toBeUndefined();
+    const q = r.project;
+    for (const id of [pj, m3d, chara, leaf]) {
+      const ins = portsOf(q, id, "in");
+      expect(ins.map((x) => x.name)).toEqual(["シナリオ"]);
+      expect(incomingEdges(q, { portId: ins[0].id, side: "outer" }).some((e) => !e.auto)).toBe(true);
+    }
+    expect(portsOf(q, ROOT_ID, "in")).toHaveLength(1); // 最上位に同名が増えない
+  });
+  it("深い箱に同名の入力を足すだけで、最上位の同名の入力まで自動でつながる (名前でつなぐ)", () => {
+    const { p, pj, leaf } = deep();
+    const q = addPort(p, { blockId: leaf, direction: "in", name: "シナリオ" }).project;
+    expect(portsOf(q, ROOT_ID, "in")).toHaveLength(1);
+    const pjIn = portsOf(q, pj, "in");
+    expect(pjIn).toHaveLength(1);
+    expect(incomingEdges(q, { portId: pjIn[0].id, side: "outer" })[0]?.from.portId).toBe(portsOf(q, ROOT_ID, "in")[0].id);
+    expect(isInputReady(q, portsOf(q, leaf, "in")[0].id)).toBe(false); // 供給元 (最上位の入力) に入力物が無いのでまだ待ち
+  });
+  it("丸どうしでも階層が違えば通す。自分の中の箱へ自分の出力は落とせない。先祖に落とすと親の出力へ束ねる", () => {
+    const { p, m3d, chara, leaf } = deep();
+    const root = portsOf(p, ROOT_ID, "in")[0];
+    let q = addPort(p, { blockId: leaf, direction: "in", name: "資料" }).project;
+    const leafIn = portsOf(q, leaf, "in")[0];
+    expect(canConnectAcross(q, { portId: root.id, side: "inner" }, { portId: leafIn.id, side: "outer" })).toBe(true);
+    const r = connectAcross(q, { portId: root.id, side: "inner" }, { portId: leafIn.id, side: "outer" });
+    expect(r.error).toBeUndefined(); q = r.project;
+    expect(portsOf(q, leaf, "in").map((x) => x.name)).toEqual(["シナリオ"]); // 線でつながる入出力は 1 つの名前 (上流の名前)
+    const charaOut = portsOf(q, chara, "out")[0];
+    expect(connectToBlock(q, { portId: charaOut.id, side: "outer" }, leaf).error).toBeTruthy();
+    const leafOut = portsOf(q, leaf, "out")[0];
+    const up = connectToBlock(q, { portId: leafOut.id, side: "outer" }, m3d); // 2 つ上の先祖へ束ねる
+    expect(up.error).toBeUndefined();
+    expect(incomingEdges(up.project, { portId: portsOf(up.project, m3d, "out")[0].id, side: "inner" }).some((e) => !e.auto)).toBe(true);
+  });
+  it("供給元の候補は 計画の入力 → 上の階層の入力 → ほかの箱の出力 の順で、自分・先祖・子孫の出力は含まない", () => {
+    const { p, pj, chara, leaf } = deep();
+    const other = addBlock(p, { parentId: pj, title: "音響", outputName: "BGM" }); const q = other.project;
+    const cands = sourceCandidates(q, leaf);
+    expect(cands[0].label).toBe("Inputs › シナリオ");
+    expect(cands.some((c) => c.label.endsWith("› BGM"))).toBe(true);
+    expect(cands.some((c) => c.label.includes("Human Woman"))).toBe(false);
+    const targets = targetCandidates(q, portsOf(q, leaf, "out")[0].id);
+    expect(targets.some((x) => x.blockId === other.blockId)).toBe(true);
+    expect(targets.some((x) => x.blockId === chara)).toBe(true); // 先祖 (親の出力へ)
+    expect(targets.some((x) => x.blockId === leaf)).toBe(false);
   });
 });
 

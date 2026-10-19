@@ -243,6 +243,7 @@ export function App() {
       } else if (ev.key === "Escape") {
         select({});
         setHelpOpen(false);
+        useProjectStore.getState().setPendingConnect(null); // 2 クリック結線の中止
       }
     };
     window.addEventListener("keydown", onKey);

@@ -7,7 +7,7 @@ import { readingColumns } from "../model/readingLayout";
 import { sharedWires } from "./sharedWires";
 import { Background, BackgroundVariant, PanOnScrollMode, MiniMap, ReactFlow, useNodesState, useReactFlow, useStore, type ReactFlowState, type Connection, type Edge as RFEdge, type NodeChange, type OnConnectEnd, type OnNodeDrag } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { connect, connectToBlock, isHiddenByCollapse, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, validateConnection, withIndex } from "../model/graph";
+import { canConnectAcross, connectAcross, connectToBlock, isHiddenByCollapse, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, withIndex } from "../model/graph";
 import { blockSize, isExpanded } from "../model/size";
 import { ROOT_ID } from "../model/types";
 import { nextFreePosition } from "../model/autolayout";
@@ -20,7 +20,7 @@ import { TerminalNode } from "./TerminalNode";
 import { RoutedEdge } from "./RoutedEdge";
 import { buildEdges, buildNodes, parseHandle, SCOPE_IN, SCOPE_OUT, type AnyRFNode } from "./layout";
 import { routeAll, type EdgeSpec, type NodeRect } from "./routeAll";
-import { useLang } from "../i18n";
+import { useLang, t } from "../i18n";
 
 
 const nodeTypes = { block: BlockNode, terminal: TerminalNode };
@@ -227,7 +227,18 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
           else if (ch.id === "root-out") select({ terminal: "out" });
           // 大項目の入力/出力ノードを選んだら、その大項目のボックスを選ぶ (右のパネルで入出力を直せる)
           else if (ch.id === SCOPE_IN || ch.id === SCOPE_OUT) { const sc = useProjectStore.getState().viewScope; if (sc) select({ blockId: sc }); }
-          else select({ blockId: ch.id });
+          else {
+            // 2 クリック結線の途中なら、クリックした箱を接続先にする (階層が違っても途中の箱を通す)
+            const st = useProjectStore.getState();
+            if (st.pendingConnect && !st.readonly) {
+              const pending = st.pendingConnect;
+              st.setPendingConnect(null);
+              let error: string | undefined;
+              st.apply((p) => { const r = connectToBlock(p, pending, ch.id); error = r.error; return r.project; });
+              if (error) st.setToast(error);
+            }
+            select({ blockId: ch.id });
+          }
           // キャンバスでの選択は表示位置を動かさない。
           // Tree や検索から「移動する」操作は、それぞれの focusBlock に任せる。
         }
@@ -331,7 +342,32 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
       if (!from) return;
       const pt = "changedTouches" in event ? event.changedTouches[0] : (event as MouseEvent);
       const el = document.elementFromPoint(pt.clientX, pt.clientY);
-      if (el?.closest(".react-flow__handle")) return; // つなげない丸の上で離したときは何もしない (黙って別の入力が作られると、意図しない結線になる)
+      const store = useProjectStore.getState();
+      const handleEl = el?.closest(".react-flow__handle") as HTMLElement | null;
+      if (handleEl) {
+        const at = parseHandle(handleEl.getAttribute("data-handleid"));
+        if (at && at.portId === from.portId && at.side === from.side) {
+          // 同じ丸の上で離した = クリック。2 クリック結線: 1 回目は出す側として覚え、2 回目 (別の丸) はつなぐ
+          // (丸の種類はどちらでもよい: 出す側・受ける側の向きは両方の順で試す)
+          const pending = store.pendingConnect;
+          if (pending && !(pending.portId === from.portId && pending.side === from.side)) {
+            store.setPendingConnect(null);
+            let error: string | undefined;
+            apply((p) => { let r = connectAcross(p, pending, from); if (r.error) { const r2 = connectAcross(p, from, pending); if (!r2.error) r = r2; } error = r.error; return r.project; });
+            if (error) setToast(error);
+          } else {
+            store.setPendingConnect(from);
+          }
+          return;
+        }
+        if (at) {
+          // 別の丸の上で離したが React Flow では無効 (階層が違う): 途中の箱を通してつなぐ
+          let error: string | undefined;
+          apply((p) => { const r = connectAcross(p, from, at); error = r.error; return r.project; });
+          if (error) setToast(error);
+        }
+        return;
+      }
       const nodeEl = el?.closest(".react-flow__node-block") as HTMLElement | null;
       const targetId = nodeEl?.getAttribute("data-id");
       if (!targetId) return;
@@ -354,7 +390,7 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
       if (!from || !to) return;
       let error: string | undefined;
       apply((p) => {
-        const r = connect(p, from, to);
+        const r = connectAcross(p, from, to); // 階層が違えば途中の箱を通す
         error = r.error;
         return r.project;
       });
@@ -368,7 +404,7 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
       const from = parseHandle(c.sourceHandle);
       const to = parseHandle(c.targetHandle);
       if (!canEdit || !from || !to) return false;
-      return validateConnection(project, from, to).ok;
+      return canConnectAcross(project, from, to); // 階層が違ってもつなげる見込みがあれば受け付ける
     }
   , [project, canEdit]
   );
@@ -384,7 +420,10 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
     }
     select({ edgeId: e.id });
   }, [select, project]);
-  const onPaneClick = useCallback(() => select({}), [select]);
+  const onPaneClick = useCallback(() => { select({}); useProjectStore.getState().setPendingConnect(null); }, [select]);
+  const pendingConnect = useProjectStore((s) => s.pendingConnect);
+  const setPendingConnect = useProjectStore((s) => s.setPendingConnect);
+  const pendingName = pendingConnect ? project.ports[pendingConnect.portId]?.name ?? "" : "";
 
 
   return (
@@ -405,6 +444,8 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
       snapToGrid={snap}
       snapGrid={[8, 8]}
       connectionRadius={28}
+      autoPanOnConnect
+      autoPanSpeed={20}
       isValidConnection={isValidConnection}
       onEdgeClick={onEdgeClick}
       onPaneClick={onPaneClick}
@@ -428,6 +469,13 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
       <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--bg-grid)" />
       {/* 線を選んだときは、右の詳細パネルではなく図の上部の帯で、線の向きと状態を出す */}
       <EdgeBar />
+      {/* 2 クリック結線の途中: 何から接続中かと、次の操作を示す (Esc か × で中止) */}
+      {pendingConnect && (
+        <div className="connect-pending" role="status">
+          {t("「{name}」から接続中 — 接続先の箱か丸をクリック", { name: pendingName })}
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPendingConnect(null)} title={t("中止 (Esc)")}>×</button>
+        </div>
+      )}
       <CanvasTools readFromTop={readFromTop} fit={fit} snap={snap} onSnap={() => setSnap((v) => !v)} showMap={showMap} onMap={() => setShowMap((v) => !v)} />
       {showMap && <MiniMap
         position="bottom-right"

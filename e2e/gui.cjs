@@ -285,6 +285,27 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     const folded=await page.evaluate(()=>{const rf=window.boxglow.rf;const majors=new Set(rf.getNodes().filter(n=>n.type==='block'&&n.data.major).map(n=>n.id));return rf.getNodes().filter(n=>n.type==='block'&&majors.has(n.parentId)).every(n=>n.hidden);});
     check('Top: Collapse all で 1 階層 (大項目だけ) に戻る',folded&&(await page.getByRole('button',{name:'Expand all',exact:true}).count())===1);
     check('Top: View での Expand / Collapse all は保存データを変えない',beforeFold===await page.evaluate(()=>JSON.stringify(window.boxglow.store.getState().project)));
+    // 一覧から選んで結線 (供給元から選ぶ…): 3 階層下の箱に最上位の入力をつなぐと、途中の箱にも入力が通る。終わったら Undo で戻す
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.setEditMode(true);const b=Object.values(s.project.blocks).find(x=>x.title==='トークンを保存する');s.select({blockId:b.id,panelTab:'io'});});await page.waitForTimeout(500);
+    await page.getByRole('button',{name:'供給元から選ぶ…',exact:true}).click();await page.waitForTimeout(300);
+    const firstItem=page.locator('.picker__item').first();const firstLabel=await firstItem.innerText();
+    check('一覧から選ぶ: 供給元の候補の先頭は計画の入力 (Inputs › …)',firstLabel.startsWith('Inputs ›'),firstLabel);
+    await firstItem.click();await page.waitForTimeout(600);
+    const wired=await page.evaluate((label)=>{const s=window.boxglow.store.getState();const p=s.project;const name=label.replace('Inputs › ','');const leaf=Object.values(p.blocks).find(x=>x.title==='トークンを保存する');const chain=[];let cur=leaf;while(cur&&cur.parentId&&cur.parentId!=='root'){chain.push(cur.id);cur=p.blocks[cur.parentId];}return chain.map(id=>{const ins=Object.values(p.ports).filter(q=>q.blockId===id&&q.direction==='in'&&q.name===name);return ins.length===1&&Object.values(p.edges).some(e=>e.to.portId===ins[0].id&&e.to.side==='outer'&&!e.auto);});},firstLabel);
+    check('一覧から選ぶ: 3 階層下の箱まで途中の箱に入力を作って通る',wired.length>=3&&wired.every(Boolean),JSON.stringify(wired));
+    await page.evaluate(()=>window.boxglow.store.getState().undo());await page.waitForTimeout(300);
+    // 2 クリック結線: 出す側を覚えた状態 (チップが出る) で箱をクリックするとつながる
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.select({});const root=Object.values(s.project.ports).find(q=>q.blockId==='root'&&q.direction==='in');s.setPendingConnect({portId:root.id,side:'inner'});});await page.waitForTimeout(300);
+    check('2 クリック結線: 接続中のチップが出る',(await page.locator('.connect-pending').count())===1);
+    await page.getByRole('button',{name:'Fit',exact:true}).click();await page.waitForTimeout(500); // 前の検査で表示位置が動いているので、全体を収めてからクリックする
+    const designId=await page.evaluate(()=>Object.values(window.boxglow.store.getState().project.blocks).find(x=>x.title==='設計する').id);
+    const dpt=await page.evaluate((id)=>{const rf=window.boxglow.rf;const n=rf.getInternalNode(id);return rf.flowToScreenPosition({x:n.internals.positionAbsolute.x+60,y:n.internals.positionAbsolute.y+14});},designId);
+    const underEl=await page.evaluate((pt)=>{const el=document.elementFromPoint(pt.x,pt.y);return el?el.className+' / '+(el.closest('.react-flow__node')?el.closest('.react-flow__node').getAttribute('data-id'):'no-node'):'none';},dpt);
+    await page.mouse.click(dpt.x,dpt.y);await page.waitForTimeout(600);
+    const twoClick=await page.evaluate((id)=>{const s=window.boxglow.store.getState();const p=s.project;const root=Object.values(p.ports).find(q=>q.blockId==='root'&&q.direction==='in');const ins=Object.values(p.ports).filter(q=>q.blockId===id&&q.direction==='in'&&q.name===root.name);return {pending:s.pendingConnect,sel:s.selection.blockId,toast:s.toast,ok:ins.length===1&&Object.values(p.edges).some(e=>e.to.portId===ins[0].id&&!e.auto)};},designId);
+    twoClick.under=underEl;twoClick.designId=designId;
+    check('2 クリック結線: 箱をクリックするとつながり、チップが消える',twoClick.pending===null&&twoClick.ok,JSON.stringify(twoClick));
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.undo();s.select({});s.setEditMode(false);});await page.waitForTimeout(300);
     // ▸ で大項目を 1 つ展開した直後でも、ホイールだけで全体 (Fit と同じ倍率) まで縮小できる (下限が古いまま残らない)
     const majorId=await page.evaluate(()=>{const rf=window.boxglow.rf;return rf.getNodes().find(n=>n.type==='block'&&n.data.major&&rf.getNodes().some(c=>c.parentId===n.id))?.id;});
     await page.locator(`[data-id="${majorId}"] .bg-block__toggle`).first().click();await page.waitForTimeout(900);
