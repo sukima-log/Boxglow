@@ -140,7 +140,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
    * Auto Layout: 依存関係の順に全体を並べ直す (畳んだ箱は畳んだ大きさで。Ctrl+Z で戻せる)
    * Input / Output: なし (project を更新する)
    */
-  const autoLayout = () => { apply((p) => layoutAll(p)); setToast(t("全体を並べ直しました。元に戻す操作で戻せます")); };
+  const autoLayout = () => { apply((p) => layoutAll(p)); setToast(t("全体を並べ直しました (Undo で戻せます)")); };
   // 合流の部品を足す: 今見ている階層 (選んでいる箱があればその中) に置き、選ぶ
   const addJoin = () => {
     const parentId = parentForNewBlock(project, selection, useProjectStore.getState().viewScope);
@@ -171,7 +171,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   const combineFromFile = async () => {
     const text = await pickTextFile(".json,application/json");
     if (!text) return;
-    try { const n = combineInto(text, t("取り込んだ計画")); setToast(t("取り込みました (箱 {n} 個)。元に戻す操作で戻せます", { n: String(n) })); }
+    try { const n = combineInto(text, t("取り込んだ計画")); setToast(t("取り込みました (箱 {n} 個。Undo で戻せます)", { n: String(n) })); }
     catch (e) { setToast(e instanceof Error ? e.message : String(e)); }
   };
   /** 今見ているプロジェクトの箱 (Top なら最初の箱) を別の計画に切り出してダウンロードする */
@@ -184,7 +184,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
       const text = splitOut(target.id);
       if (!text) return;
       downloadText(safeFilename(target.title) + ".boxglow.json", text, "application/json");
-      setToast(t("「{title}」を切り出してダウンロードしました。この計画からは外しました (元に戻す操作で戻せます)", { title: target.title }));
+      setToast(t("「{title}」を切り出してダウンロードしました。この計画からは外しました (Undo で戻せます)", { title: target.title }));
     } catch (e) { setToast(e instanceof Error ? e.message : String(e)); }
   };
   const doImport = async () => {

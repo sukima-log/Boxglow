@@ -114,7 +114,7 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
           {/* 取り下げ: 間違えて出した問いは消せる (未回答のときだけ。分岐の問いは道と一体なので消せない。回答済みは履歴として残す) */}
           {project.blocks[blockId]?.branch?.decisionId !== decisionId && (
             <div className="flex justify-end">
-              <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => { const r = removeDecision(p, blockId, decisionId); if (r.error) setToast(r.error); return r.project; })} title={t("問いを消す (答えずに取り下げる。元に戻す操作で戻せる)")}>{t("取り下げる")}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => { const r = removeDecision(p, blockId, decisionId); if (r.error) setToast(r.error); return r.project; })} title={t("問いを取り下げる (Undo で戻せます)")}>{"Withdraw"}</button>
             </div>
           )}
         </>

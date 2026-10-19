@@ -1,8 +1,8 @@
 /** 状態・操作結果の補助説明。既存の英語UIラベルは変更しない。 */
 export const uiFeedback: Record<string, string> = {
   "同期を要求しました。結果は同期の状態で確認できます": "Sync requested. Check the sync status for the result."
-, "全体を並べ直しました。元に戻す操作で戻せます": "Layout updated. Use Undo to restore it."
-, "「{title}」を削除しました。元に戻す操作で戻せます": "Deleted “{title}”. Use Undo to restore it."
+, "全体を並べ直しました (Undo で戻せます)": "Laid out the whole plan (Undo brings it back)"
+, "「{title}」を削除しました (Undo で戻せます)": "\"{title}\" deleted (Undo brings it back)"
 , "送信待ち": "Waiting to send"
 , "送受信中…": "Syncing…"
 , "サーバーと最新の内容を確認しました": "Checked the latest content with the server."

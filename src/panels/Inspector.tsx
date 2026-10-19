@@ -113,7 +113,7 @@ function TerminalInspector({ project, which, groupId }: { project: Project; whic
           <div className="sec__head"><span className="label">Group</span>
             <span className="flex gap-1">
               <button className="btn btn-ghost btn-sm" title={t("このグループを JSON に書き出す (他のプロジェクトで読み込める)")} onClick={() => downloadText(`${safeFilename(group.name)}.boxglow-inputs.json`, exportInputGroup(project, group.id), "application/json")}>Export</button>
-              {!readonly && <button className="btn btn-ghost btn-sm btn-danger" title={t("グループを消す (入力は Inputs に戻る)")} onClick={() => { select({ terminal: "in" }); apply((p) => removeInputGroup(p, group.id)); setToast(t("グループ「{name}」を消しました (入力は Inputs に戻りました)。元に戻す操作で戻せます", { name: group.name })); }}>Delete</button>}
+              {!readonly && <button className="btn btn-ghost btn-sm btn-danger" title={t("グループを削除 (入力は Inputs に戻ります)")} onClick={() => { select({ terminal: "in" }); apply((p) => removeInputGroup(p, group.id)); setToast(t("グループ「{name}」を削除しました (入力は Inputs に戻りました。Undo で戻せます)", { name: group.name })); }}>Delete</button>}
             </span>
           </div>
           <DebouncedText className="input font-head text-[15px]" value={group.name} disabled={readonly} placeholder="Group name" onCommit={(v) => apply((p) => updateInputGroup(p, group.id, { name: v }))} />
@@ -212,11 +212,11 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
     });
   const remove = () => {
     // 計画にはプロジェクトのボックスが 1 つは要る (最後の 1 つは消せない。中のボックスを消すか、ファイルごと作り直す)
-    if (isLastProjectBox(project, blockId)) { setToast(t("最後のプロジェクトのボックスは消せません (中のボックスを消すか、ファイルごと作り直してください)")); return; }
+    if (isLastProjectBox(project, blockId)) { setToast(t("最後のプロジェクトのボックスは削除できません")); return; }
     // 確認しない: 計画の中の削除は元に戻す操作で戻せる (VS Code の webview では confirm が出ないので、確認があると消せなくなる)
     select({});
     apply((p) => removeBlock(p, blockId));
-    setToast(t("「{title}」を削除しました。元に戻す操作で戻せます", { title: b.title }));
+    setToast(t("「{title}」を削除しました (Undo で戻せます)", { title: b.title }));
   };
   const copyPrompt = async (ask: "plan" | "decompose" | "review") => {
     setAiOpen(false);
@@ -401,7 +401,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
               <span className="tl-actor">{actorLabel(b.activity.actor)}</span>
               <b>{t(ACTIVITY_LABEL[b.activity.state])}</b>
               <span style={{ color: "var(--text-muted)" }}>{agoText(b.activity.since)}</span>
-              {!readonly && <button className="btn btn-ghost btn-sm ml-auto" title={t("活動の印を消す")} onClick={() => apply((p) => clearActivity(p, blockId))}>×</button>}
+              {!readonly && <button className="btn btn-ghost btn-sm ml-auto" title={t("活動の印を外す")} onClick={() => apply((p) => clearActivity(p, blockId))}>×</button>}
             </div>
             {b.activity.note && b.activity.state !== "needs_decision" && <div className="text-[13px]">{b.activity.note}</div>}
           </div>
@@ -621,7 +621,7 @@ function WorkLog({ project, blockId, readonly, apply }: { project: Project; bloc
             <span className="worklog__by">{e.by}</span><span className="worklog__at">{when(e.at)}</span>
             {!readonly && <span className="worklog__tools">
               <button className="btn btn-ghost btn-sm" onClick={() => setEditing(editing === e.id ? null : e.id)} title={t("編集")}>✎</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => removeLogEntry(p, blockId, e.id))} title={t("削除 (元に戻す操作で戻せます)")}>×</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => removeLogEntry(p, blockId, e.id))} title={t("削除 (Undo で戻せます)")}>×</button>
             </span>}
           </header>
           {editing === e.id ? (

@@ -227,7 +227,7 @@ export function App() {
           if (b) {
             select({});
             apply((q) => removeBlock(q, sel.blockId!));
-            if (kids > 0) useProjectStore.getState().setToast(t("「{title}」と下の階層のブロックを削除しました。元に戻す操作で戻せます", { title: b.title }));
+            if (kids > 0) useProjectStore.getState().setToast(t("「{title}」と下の階層のブロックを削除しました (Undo で戻せます)", { title: b.title }));
           }
         }
       } else if (ev.key.toLowerCase() === "n" && !ev.ctrlKey && !ev.metaKey) {

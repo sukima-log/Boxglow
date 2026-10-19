@@ -80,7 +80,7 @@ const { chromium, BASE, check, result } = require('./lib.cjs');
       await page.evaluate(() => window.boxglow.store.getState().closeProject());
       await page.evaluate(() => { const d = document.querySelector('.home-disclosure'); if (d && !d.open) d.open = true; });
       await page.locator('.home-templates select').selectOption('元の計画');
-      await page.getByRole('button', { name: 'テンプレート「元の計画」を消す', exact: true }).click();
+      await page.getByRole('button', { name: 'テンプレート「元の計画」を削除', exact: true }).click();
       await page.waitForFunction(() => window.boxglow.store.getState().planTemplates.length === 0);
       check('テンプレート: Home から消せる (消すと選択肢が出ない)', (await page.locator('.home-templates').count()) === 0);
       await context.close();

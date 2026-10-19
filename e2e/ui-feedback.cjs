@@ -24,7 +24,7 @@ const { chromium, open, check, result } = require('./lib.cjs');
       await page.locator('.inspector-body > div:first-child > .relative > button').click();
       let dialogs=0; page.on('dialog',async d=>{dialogs++;await d.accept();});
       await page.locator('.inspector-body').getByRole('button',{name:'Delete',exact:true}).click();
-      check(`${prefix}: 単独ボックスは確認なしで削除され、復元の案内が出る`,dialogs===0 && !await page.evaluate(id=>!!window.boxglow.store.getState().project.blocks[id],addedId) && (await page.locator('.toast').innerText()).includes(ja?'元に戻す':'Undo'));
+      check(`${prefix}: 単独ボックスは確認なしで削除され、復元の案内が出る`,dialogs===0 && !await page.evaluate(id=>!!window.boxglow.store.getState().project.blocks[id],addedId) && (await page.locator('.toast').innerText()).includes('Undo'));
       await page.getByRole('button',{name:'Menu',exact:true}).click();
       await page.locator('.menu-actions').getByRole('button',{name:'Undo',exact:true}).click();
       check(`${prefix}: 案内した元に戻す操作で削除を復元できる`,await page.evaluate(id=>!!window.boxglow.store.getState().project.blocks[id],addedId));

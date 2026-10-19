@@ -215,18 +215,15 @@ export const gui: Record<string, string> = {
   "成果物や参考資料のリンク (URL やファイルのパス)": "Links to deliverables and references (URLs or file paths)",
   "見た目": "Preview",
   "見た目 (打つと同時に反映)": "Preview (updates as you type)"
-, "最後のプロジェクトのボックスは消せません (中のボックスを消すか、ファイルごと作り直してください)": "The last project box cannot be deleted (delete the boxes inside it, or start a new file)"
-, "取り下げる": "Withdraw"
+, "最後のプロジェクトのボックスは削除できません": "The last project box cannot be deleted"
 , "足す道 (選択肢) の名前": "Name of the path (option) to add"
 , "道 (選択肢) を足す": "Add a path (option)"
-, "道を足す": "Add path"
-, "この道を消す (線も外れる。先のボックスは残る)": "Remove this path (its wires too; the boxes after it stay)"
+, "この道を削除 (線も外れます)": "Delete this path (its wires too)"
 , "着手の準備ができています (押すと欄を開閉します)": "Ready to start (click to open or close the fields)"
 , "着手の準備 ✓ Ready": "Ready to start ✓"
 , "記入済み": "filled in"
 , "入出力タブのこの出力の欄と同じ値です": "Same value as this output's field on the I/O tab"
-, "追加": "Add"
-, "保存先: I/O タブの出力「{name}」の ▾": "stored on: I/O tab, output \"{name}\" ▾"
+, "I/O タブ ▾": "I/O tab ▾"
 , "I/O タブの出力の下にある完了条件の欄と同じ値です (More の作業範囲でも編集できます)": "Same value as the acceptance criteria field below the outputs on the I/O tab (also editable in the work scope on More)"
-, "保存先: I/O タブの出力の下": "stored on: I/O tab, below the outputs"
+, "I/O タブ (出力の下)": "I/O tab (below the outputs)"
 };

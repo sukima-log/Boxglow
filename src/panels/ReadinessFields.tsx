@@ -52,7 +52,7 @@ export function ReadinessFields({ project, blockId, onOpenIo }: { project: Proje
             <span className="readiness-fields__label">
               {filled && <Done />}{t("出力「{name}」の予定成果物", { name: q.name })}
               {/* 保存先: 入出力タブの、この出力の ▾ の中 (同じ値) */}
-              <button type="button" className="readiness-fields__where" onClick={onOpenIo} title={t("入出力タブのこの出力の欄と同じ値です")}>{t("保存先: I/O タブの出力「{name}」の ▾", { name: q.name })}</button>
+              <button type="button" className="readiness-fields__where" onClick={onOpenIo} title={t("入出力タブのこの出力の欄と同じ値です")}>{t("I/O タブ ▾", { name: q.name })}</button>
             </span>
             <span className="readiness-fields__inputs">
               <select className="input input-plain" style={{ width: 96, fontSize: 11 }} aria-label={t("予定成果物の種類")} value={q.expect?.kind ?? ""} disabled={readonly}
@@ -73,7 +73,7 @@ export function ReadinessFields({ project, blockId, onOpenIo }: { project: Proje
           <span className="readiness-fields__label">
             {!!acceptance.trim() && <Done />}{t("完了条件")}
             {/* 保存先: I/O タブの出力の下の「完了条件」(作業範囲の編集とも同じ値) */}
-            <button type="button" className="readiness-fields__where" onClick={onOpenIo} title={t("I/O タブの出力の下にある完了条件の欄と同じ値です (More の作業範囲でも編集できます)")}>{t("保存先: I/O タブの出力の下")}</button>
+            <button type="button" className="readiness-fields__where" onClick={onOpenIo} title={t("I/O タブの出力の下にある完了条件の欄と同じ値です (More の作業範囲でも編集できます)")}>{t("I/O タブ (出力の下)")}</button>
           </span>
           <DebouncedText multiline className="input" rows={2} placeholder={t("何をどう確かめれば完了か (例: 配信先の URL でアプリが開く)")} value={acceptance} disabled={readonly}
             onCommit={(v) => apply((p) => { const scope = { ...p.blocks[blockId].scope }; if (v.trim()) scope.acceptance = v.trim(); else delete scope.acceptance; return updateBlock(p, blockId, { scope: Object.keys(scope).length ? scope : undefined }); })} />

@@ -14,7 +14,7 @@ export const inspector: Record<string, string> = {
 , "完了 {white} / {total}": "Done {white} / {total}"
   // 入力ノード / グループ
 , "このグループを JSON に書き出す (他のプロジェクトで読み込める)": "Export this group as JSON (can be imported into another project)"
-, "グループを消す (入力は Inputs に戻る)": "Delete this group (its inputs go back to Inputs)"
+, "グループを削除 (入力は Inputs に戻ります)": "Delete the group (its inputs go back to Inputs)"
 , "説明 (任意。例: PCI-SIG の仕様書一式)": "Description (optional, e.g. PCI-SIG spec set)"
 , "ここには、下の階層で供給元が決まっていない入力が自動で上がります。各入力はグループに移せます。": "Inputs with no source in the levels below are raised here automatically. Each input can be moved into a group."
 , "他のプロジェクトで書き出したグループを読み込む": "Import a group exported from another project"
@@ -41,7 +41,7 @@ export const inspector: Record<string, string> = {
 , "進捗 (ドラッグで入力)": "Progress (drag to set)"
 , "手入力をやめて、下の階層から自動で計算する": "Stop manual entry and compute from the levels below"
 , "下の階層の完了数": "Done count in the levels below"
-, "活動の印を消す": "Clear the activity mark"
+, "活動の印を外す": "Clear the activity mark"
 , "判断 ({n})": "Decisions ({n})"
   // ブロック: 担当
 , "{name} (自分)": "{name} (me)"
@@ -71,6 +71,6 @@ export const inspector: Record<string, string> = {
 , "「{name}」": " \"{name}\""
 , "自動の線。手動でつなぐと置き換わります。": "Automatic wire. Connecting manually replaces it."
 , "新しいグループ": "New group"
-, "グループ「{name}」を消しました (入力は Inputs に戻りました)。元に戻す操作で戻せます": "Group \"{name}\" removed (its inputs went back to Inputs). Undo brings it back"
-, "削除 (元に戻す操作で戻せます)": "Delete (Undo brings it back)"
+, "グループ「{name}」を削除しました (入力は Inputs に戻りました。Undo で戻せます)": "Group \"{name}\" deleted (its inputs went back to Inputs. Undo brings it back)"
+, "削除 (Undo で戻せます)": "Delete (Undo brings it back)"
 };

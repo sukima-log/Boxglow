@@ -255,7 +255,7 @@ export function addBranchOption(p: Project, blockId: string, option: string): { 
   const d = b ? branchDecision(b) : undefined;
   const name = option.trim();
   if (!b?.branch || !d) return { project: p, error: t("分岐のボックスではありません") };
-  if (d.answer !== undefined) return { project: p, error: t("答えた後は道を足せません (選び直してから足してください)") };
+  if (d.answer !== undefined) return { project: p, error: t("答えた後は道を追加できません (Reopen してから)") };
   if (!name) return { project: p, error: t("道の名前を指定してください") };
   if (d.options.includes(name)) return { project: p, error: t("道「{name}」はすでにあります", { name }) };
   const added = addPort(p, { blockId, direction: "out", name });
@@ -273,7 +273,7 @@ export function removeBranchOption(p: Project, blockId: string, option: string):
   const b = p.blocks[blockId];
   const d = b ? branchDecision(b) : undefined;
   if (!b?.branch || !d) return { project: p, error: t("分岐のボックスではありません") };
-  if (d.answer !== undefined) return { project: p, error: t("答えた後は道を消せません (選び直してから消してください)") };
+  if (d.answer !== undefined) return { project: p, error: t("答えた後は道を削除できません (Reopen してから)") };
   if (!d.options.includes(option)) return { project: p, error: t("道「{name}」がありません", { name: option }) };
   if (d.options.length <= 2) return { project: p, error: t("道は 2 つ以上要ります (1 つにするなら、分岐ではなくふつうのボックスにしてください)") };
   const port = portsOf(p, blockId, "out").find((q) => q.branchOption === option);

@@ -46,7 +46,7 @@ export function BranchPicker({ project, blockId }: { project: Project; blockId: 
         )}
         {/* 答える前なら道を足せる (選択肢と出力が同時に増える) */}
         {!readonly && d.answer === undefined && (
-          <button className="btn btn-ghost btn-sm" onClick={() => setAdding(adding === null ? "" : null)} title={t("道 (選択肢) を足す")}>＋ {t("道を足す")}</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setAdding(adding === null ? "" : null)} title={t("道 (選択肢) を足す")}>＋ {"Add path"}</button>
         )}
       </div>
       {/* 問い: 何を決めるのか (題名と同じなら出さない) */}
@@ -58,7 +58,7 @@ export function BranchPicker({ project, blockId }: { project: Project; blockId: 
           <div className="flex gap-1 items-center">
             <input className="input flex-1" autoFocus placeholder={t("足す道 (選択肢) の名前")} value={adding} onChange={(e) => setAdding(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) submit(); if (e.key === "Escape") setAdding(null); }} />
-            <button className="btn btn-primary btn-sm" onClick={submit} disabled={!adding.trim()}>{t("追加")}</button>
+            <button className="btn btn-primary btn-sm" onClick={submit} disabled={!adding.trim()}>{"Add"}</button>
             <button className="btn btn-ghost btn-sm" onClick={() => setAdding(null)}>Cancel</button>
           </div>
         );
@@ -83,7 +83,7 @@ export function BranchPicker({ project, blockId }: { project: Project; blockId: 
               {/* 道を消す: 答える前で、残りが 2 つ以上になるときだけ (線も外れる。先のボックスは残る) */}
               {state === "open" && !readonly && d.answer === undefined && paths.length > 2 && (
                 <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => { const r = removeBranchOption(p, blockId, option); if (r.error) setToast(r.error); return r.project; })}
-                  title={t("この道を消す (線も外れる。先のボックスは残る)")}>×</button>
+                  title={t("この道を削除 (線も外れます)")}>×</button>
               )}
             </li>
           );

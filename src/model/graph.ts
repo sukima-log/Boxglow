@@ -791,7 +791,7 @@ export function inputsFedBy(p: Project, portId: string, seen: Set<string> = new 
 export function canRemovePort(p: Project, portId: string): { ok: boolean; reason?: string } {
   const x = p.ports[portId];
   if (!x) return { ok: false, reason: t("ポートが見つかりません") };
-  if (x.direction === "out" && x.blockId !== ROOT_ID && portsOf(p, x.blockId, "out").length <= 1) return { ok: false, reason: t("最後の出力は消せません (ボックスは必ず出力を 1 本持ちます。名前を変えるか、ボックスごと消してください)") };
+  if (x.direction === "out" && x.blockId !== ROOT_ID && portsOf(p, x.blockId, "out").length <= 1) return { ok: false, reason: t("最後の出力は削除できません (ボックスには出力が 1 本必要です)") };
   return { ok: true };
 }
 
@@ -1388,8 +1388,8 @@ export function removeDecision(p: Project, blockId: string, decisionId: string):
   const b = p.blocks[blockId];
   const d = b?.decisions.find((x) => x.id === decisionId);
   if (!b || !d) return { project: p, error: t("判断が見つかりません") };
-  if (d.answer !== undefined) return { project: p, error: t("回答済みの判断は消せません (履歴として残します。やり直すなら reopen)") };
-  if (b.branch?.decisionId === decisionId) return { project: p, error: t("分岐の問いは消せません (道と一体です。分岐のボックスごと消すか、道を直してください)") };
+  if (d.answer !== undefined) return { project: p, error: t("回答済みの判断は削除できません (履歴として残ります。やり直すには Reopen)") };
+  if (b.branch?.decisionId === decisionId) return { project: p, error: t("分岐の問いは削除できません (分岐のボックスごと削除するか、道を変更してください)") };
   const q = touch(p);
   q.blocks[blockId] = { ...b, decisions: b.decisions.filter((x) => x.id !== decisionId) };
   return { project: q };

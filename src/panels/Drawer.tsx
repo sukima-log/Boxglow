@@ -171,7 +171,7 @@ export function Drawer({ project, filter, onFilter, onClose, width }: { project:
             <span className="ml-auto flex gap-0.5">
               {!readonly && <button className="btn btn-ghost btn-sm" title={t("挿入")} onClick={() => insertTemplate(tpl)}>Insert</button>}
               <button className="btn btn-ghost btn-sm" title={t("JSON で保存 (他のリポジトリや人と共有)")} onClick={() => downloadText(`${safeFilename(tpl.name)}.boxglow-block.json`, JSON.stringify(tpl, null, 2), "application/json")}>↓</button>
-              <ConfirmButton label="×" confirmLabel={t("本当に消す")} title={t("ライブラリから消す (元に戻せません)")} onConfirm={() => void deleteTemplate(tpl.id).then(refreshTemplates)} />
+              <ConfirmButton label="×" confirmLabel={"Delete permanently"} title={t("ライブラリから削除 (元に戻せません)")} onConfirm={() => void deleteTemplate(tpl.id).then(refreshTemplates)} />
             </span>
           </div>
         ))}

@@ -83,7 +83,7 @@ export function lint(p: Project, rootId?: string): LintIssue[] {
     if (!isProject && kids.length === 1) push("review", "single-child", b, t("子が 1 個だけです (分解の途中なら、残りの子を足すか、親と 1 つにまとめます)"));
     // 子を持つ箱の入力なのに、中の誰にも配られていない (線を落としたときに同名の入力が 2 本できた名残など。中で使う箱につなぐか、消す)
     if (kids.length > 0) for (const q of portsOf(p, b.id, "in")) {
-      if (outgoingEdges(p, { portId: q.id, side: "inner" }).length === 0) push("review", "unused-input", b, t("入力「{name}」は中のどの箱にもつながっていません (中の箱の入力につなぐか、消します)", { name: q.name }), q.id);
+      if (outgoingEdges(p, { portId: q.id, side: "inner" }).length === 0) push("review", "unused-input", b, t("入力「{name}」は中のどの箱にもつながっていません (中の箱の入力につなぐか、削除します)", { name: q.name }), q.id);
     }
     for (const q of portsOf(p, b.id, "out")) {
       // どこにもつながらない出力 (プロジェクトのボックスの出力は最上位の出力につながる前提。合流・分岐の出力も同じ)

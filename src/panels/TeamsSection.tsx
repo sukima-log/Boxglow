@@ -108,13 +108,13 @@ export function TeamsSection({ status, act }: { status: SyncStatus; act: (a: Hos
               {/* 離脱 / 削除 */}
               <div className="sync-panel__row">
                 {confirm === null && <button className="btn btn-sm" disabled={teams?.busy} onClick={() => setConfirm("leave")}>{t("このワークスペースから抜ける…")}</button>}
-                {confirm === null && admin && <button className="btn btn-sm danger" disabled={teams?.busy} onClick={() => setConfirm("delete")}>{t("ワークスペースを消す…")}</button>}
+                {confirm === null && admin && <button className="btn btn-sm danger" disabled={teams?.busy} onClick={() => setConfirm("delete")}>{t("ワークスペースを削除…")}</button>}
               </div>
               {confirm && (
                 <div className="sync-lifecycle__confirm">
-                  <p>{confirm === "delete" ? t("「{name}」を消します。中の計画はサーバーから 30 日後に消えます (手元のファイルは残ります)。", { name: detail.name }) : t("「{name}」から抜けます。このワークスペースの計画は同期できなくなります。", { name: detail.name })}</p>
+                  <p>{confirm === "delete" ? t("「{name}」を削除します。中の計画はサーバーから 30 日後に消えます (手元のファイルは残ります)。", { name: detail.name }) : t("「{name}」から抜けます。このワークスペースの計画は同期できなくなります。", { name: detail.name })}</p>
                   <div className="sync-panel__row">
-                    <button className="btn btn-primary btn-sm danger" disabled={teams?.busy} onClick={() => { setConfirm(null); void act(confirm === "delete" ? { kind: "deleteTeam", id: detail.teamId } : { kind: "leaveTeam", id: detail.teamId }); }}>{confirm === "delete" ? t("消す") : t("抜ける")}</button>
+                    <button className="btn btn-primary btn-sm danger" disabled={teams?.busy} onClick={() => { setConfirm(null); void act(confirm === "delete" ? { kind: "deleteTeam", id: detail.teamId } : { kind: "leaveTeam", id: detail.teamId }); }}>{confirm === "delete" ? t("削除") : t("抜ける")}</button>
                     <button className="btn btn-ghost btn-sm" onClick={() => setConfirm(null)}>{t("やめる")}</button>
                   </div>
                 </div>

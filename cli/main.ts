@@ -1201,7 +1201,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
         const target = mustFind(p, str(options.box));
         const done: string[] = [];
         for (const name of list(options["add-option"])) { const r = addBranchOption(p, target.id, name); if (r.error) throw new Error(r.error); p = r.project; done.push(t("足した {name}", { name })); }
-        for (const name of list(options["remove-option"])) { const r = removeBranchOption(p, target.id, name); if (r.error) throw new Error(r.error); p = r.project; done.push(t("消した {name}", { name })); }
+        for (const name of list(options["remove-option"])) { const r = removeBranchOption(p, target.id, name); if (r.error) throw new Error(r.error); p = r.project; done.push(t("削除: {name}", { name })); }
         save(path, p);
         out(t("分岐の道: 「{title}」: {list}", { title: target.title, list: done.join(", ") }));
         return;
@@ -1286,7 +1286,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
         if (!can.ok) throw new Error(can.reason ?? "");
         const fed = hits[0].direction === "in" ? inputsFedBy(p, hits[0].id) : [];
         p = removePort(p, hits[0].id);
-        added.push(fed.length ? t("消した {name} (使う箱の入力 {count} 件も)", { name, count: fed.length }) : t("消した {name}", { name }));
+        added.push(fed.length ? t("削除: {name} (使う箱の入力 {count} 件も)", { name, count: fed.length }) : t("削除: {name}", { name }));
       }
       for (const name of list(options.in)) { p = addPort(p, { blockId, direction: "in", name }).project; added.push(t("入力 {name}", { name })); }
       const newOuts = list(options.out);
@@ -1341,7 +1341,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     }
     case "remove": {
       const b = mustFind(p, rest[0]);
-      if (isLastProjectBox(p, b.id)) throw new Error(t("最後のプロジェクトのボックスは消せません (中のボックスを消すか、ファイルごと作り直してください)"));
+      if (isLastProjectBox(p, b.id)) throw new Error(t("最後のプロジェクトのボックスは削除できません"));
       if (b.kind === "project" && !options.force) throw new Error(t("「{title}」はプロジェクトのボックスです。中のボックスごと消すなら --force を付けてください", { title: b.title }));
       const kids = Object.values(p.blocks).filter((x) => x.parentId === b.id).length;
       if (kids > 0 && !options.force) throw new Error(t("「{title}」の中に {count} 個のボックスがあります。まとめて消すなら --force を付けてください", { title: b.title, count: kids }));
@@ -1608,7 +1608,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const r = removeDecision(p, b.id, id);
       if (r.error) throw new Error(r.error);
       save(path, r.project);
-      out(t("取り下げ: 「{title}」の問いを消しました", { title: b.title }));
+      out(t("取り下げ: 「{title}」の問いを削除しました", { title: b.title }));
       return;
     }
     case "reopen": {

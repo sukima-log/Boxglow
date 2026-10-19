@@ -209,7 +209,7 @@ export function HomeDialog() {
                 <option value="">{t("白紙から")}</option>
                 {planTemplates.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
               </select></label>
-              {template && <button className="btn btn-ghost btn-sm btn-danger" aria-label={t("テンプレート「{name}」を消す", { name: template })} title={t("このテンプレートを消す")} onClick={() => { void deletePlanTemplate(template); setTemplate(""); }}>×</button>}
+              {template && <button className="btn btn-ghost btn-sm btn-danger" aria-label={t("テンプレート「{name}」を削除", { name: template })} title={t("このテンプレートを削除")} onClick={() => { void deletePlanTemplate(template); setTemplate(""); }}>×</button>}
             </div>
           )}
         </section>
@@ -227,7 +227,7 @@ export function HomeDialog() {
                   <span className="truncate font-head text-[15px]">{m.name}</span>
                   <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{new Date(m.updatedAt).toLocaleString(getLang() === "en" ? "en-US" : "ja-JP")}</span>
                 </button>
-                <ConfirmButton className="btn btn-ghost btn-sm btn-danger flex-none" label="×" confirmLabel={t("本当に消す")} ariaLabel={t("「{name}」を削除", { name: m.name })} title={t("ブラウザから消す (元に戻せません)")} onConfirm={() => void deleteProject(m.id)} />
+                <ConfirmButton className="btn btn-ghost btn-sm btn-danger flex-none" label="×" confirmLabel={"Delete permanently"} ariaLabel={t("「{name}」を削除", { name: m.name })} title={t("このブラウザから削除 (元に戻せません)")} onConfirm={() => void deleteProject(m.id)} />
               </div>)}
             </div>
           )}

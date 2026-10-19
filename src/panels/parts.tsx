@@ -146,7 +146,7 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
               {canRemove(q.id) && (() => {
                 // 入力を消すと、この入力から配られる先の入力 (使う箱の入力) も一緒に消える。消さないと自動で復活するので、何が消えるかを先に示す
                 const fedBoxes = direction === "in" ? [...new Set(inputsFedBy(project, q.id).map((f) => project.blocks[f.blockId]?.title ?? "?"))] : [];
-                return <button className="btn btn-ghost btn-sm" title={fedBoxes.length ? t("消す (この入力を使う箱の入力も消えます: {list})", { list: fedBoxes.join(", ") }) : t("消す")} onClick={() => apply((p) => removePort(p, q.id))}>×</button>;
+                return <button className="btn btn-ghost btn-sm" title={fedBoxes.length ? t("削除 (使う箱の入力も消えます: {list})", { list: fedBoxes.join(", ") }) : t("削除")} onClick={() => apply((p) => removePort(p, q.id))}>×</button>;
               })()}
             </div>
             {/* 成果物 (主役): 名前の直下に並べる */}
@@ -268,7 +268,7 @@ export function ConfirmButton({ label, confirmLabel, onConfirm, className = "btn
   const [armed, setArmed] = useState(false);
   useEffect(() => { if (!armed) return; const id = setTimeout(() => setArmed(false), 3000); return () => clearTimeout(id); }, [armed]);
   return (
-    <button type="button" className={`${className}${armed ? " btn-danger" : ""}`} title={armed ? t("もう一度押すと消します") : title} aria-label={ariaLabel}
+    <button type="button" className={`${className}${armed ? " btn-danger" : ""}`} title={armed ? t("もう一度押すと完全に削除します (元に戻せません)") : title} aria-label={ariaLabel}
       onClick={(e) => { e.stopPropagation(); if (armed) { setArmed(false); onConfirm(); } else setArmed(true); }}>{armed ? confirmLabel : label}</button>
   );
 }

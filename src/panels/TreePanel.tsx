@@ -549,7 +549,7 @@ export function TreePanel({ project, filter, onClose }: { project: Project; filt
           <button
             className="btn btn-ghost btn-sm"
             disabled={isLastProjectBox(project, current.id)}
-            title={isLastProjectBox(project, current.id) ? t("最後のプロジェクトのボックスは消せません (中のボックスを消すか、ファイルごと作り直してください)") : undefined}
+            title={isLastProjectBox(project, current.id) ? t("最後のプロジェクトのボックスは削除できません") : undefined}
             onClick={() => {
               // 確認しない: 元に戻す操作で戻せる (VS Code の webview では confirm が出ない)
               apply((p) => removeBlock(p, current.id));
