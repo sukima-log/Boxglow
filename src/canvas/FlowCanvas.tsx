@@ -88,24 +88,6 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
   useEffect(() => { (window as unknown as { boxglow?: { rf?: unknown } }).boxglow = { ...((window as unknown as { boxglow?: object }).boxglow ?? {}), rf }; }, [rf]);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
-  // 追加したブロックが画面の外にあるときは、そこへ寄せる (拡大率は変えない)
-  useEffect(() => {
-    if (!focus) return;
-    const t = setTimeout(() => {
-      const node = rf.getInternalNode(focus.blockId);
-      if (!node) return;
-      const w = node.measured.width ?? 240;
-      const h = node.measured.height ?? 80;
-      const abs = node.internals.positionAbsolute;
-      const { zoom } = rf.getViewport();
-      const { x, y } = rf.flowToScreenPosition({ x: abs.x, y: abs.y });
-      const el = document.querySelector(".react-flow") as HTMLElement | null;
-      const bounds = el?.getBoundingClientRect() ?? { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
-      const visible = x >= bounds.left && y >= bounds.top && x + w * zoom <= bounds.right && y + h * zoom <= bounds.bottom;
-      if (!visible) void rf.setCenter(abs.x + w / 2, abs.y + h / 2, { zoom, duration: 300 });
-    }, 120);
-    return () => clearTimeout(t);
-  }, [focus, rf]);
 
   // ノードはドラッグ中の見た目のために React Flow 側の状態を持ち、project (と言語) が変わるたびに作り直す
   const [nodes, setNodes, onNodesChangeRaw] = useNodesState<AnyRFNode>([]);
@@ -119,7 +101,13 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
 
   const geometrySig = useStore(selectGeometry);
   const dragging = useStore((s) => s.nodes.some(n => n.dragging));
-  const { minZoom, fit, readFromTop, onMoveStart, onMoveEnd } = useFitViewport(geometrySig, panelLayoutKey, dragging, vertical);
+  const { minZoom, fit, readFromTop, onMoveStart, onMoveEnd, centerOn } = useFitViewport(geometrySig, panelLayoutKey, dragging, vertical, selection.blockId);
+  // 一覧などから移ったブロックが見える領域 (パネルを除く) の外にあるときは、その中央へ寄せる (倍率は保つ)
+  useEffect(() => {
+    if (!focus) return;
+    const t = setTimeout(() => { centerOn(focus.blockId); }, 120);
+    return () => clearTimeout(t);
+  }, [focus, centerOn]);
 
   // タブ (表示範囲) を切り替えたら、その範囲が収まるように全体表示する。
   // ノードが作り直されて大きさが測られる (nodesInitialized) のを待ってから fitView する (早すぎると古い大きさで計算して外れる)

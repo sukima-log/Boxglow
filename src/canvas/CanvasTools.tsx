@@ -6,7 +6,7 @@
 import { Panel, useReactFlow, useStore, useStoreApi } from "@xyflow/react";
 import { useEffect, useRef } from "react";
 import { t, useLang } from "../i18n";
-import { layoutScope } from "../model/autolayout";
+import { layoutAll, layoutScope } from "../model/autolayout";
 import { useProjectStore } from "../store/useProjectStore";
 import { childrenOf, descendantsOf, majorBlocks } from "../model/graph";
 
@@ -73,6 +73,13 @@ export function CanvasTools({ snap, onSnap, showMap, onMap, fit, readFromTop }: 
   }, [flow]);
   /** 全体表示: 今の階層のボックスがすべて収まる倍率にする (拡大は 100% まで)。Input / Output: なし */
   /** 今開いているタブ (階層) の直下のボックスだけを整列する。子の中の配置は変えない。Ctrl+Z で戻せる。Input / Output: なし */
+  /** 全体を依存関係の順に並べ直す (⋯ メニューと同じ。よく使うので道具帯にも置く: 利用者の要望 2026-10-19)。Input / Output: なし */
+  const autoLayout = () => {
+    if (!canEdit) return;
+    apply((p) => layoutAll(p));
+    toast(t("全体を並べ直しました (Undo で戻せます)"));
+    requestAnimationFrame(() => requestAnimationFrame(() => fit()));
+  };
   const align = () => {
     if (!scope || !canEdit) return;
     apply((p) => layoutScope(p, scope, { recursive: false }));
@@ -113,6 +120,7 @@ export function CanvasTools({ snap, onSnap, showMap, onMap, fit, readFromTop }: 
             {anyExpanded ? "Collapse all" : "Expand all"}
           </button>
         )}
+        {canEdit && <button className="canvas-tools__layout" onClick={autoLayout} title={t("Auto Layout: 依存関係の順に全体を並べ直す (Undo で戻せます)")}>Auto Layout</button>}
         <ViewSwitch />
         {selectedNodes.length > 0 && <button onClick={() => fit(selectedNodes)} title={t("選んだボックス (線を選んでいれば両端のボックス) へ移動")}>To selection</button>}
         <details ref={menu} className="canvas-tools__settings">

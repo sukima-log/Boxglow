@@ -35,4 +35,5 @@ export const canvasReview: Record<string, string> = {
   "全部畳んで大項目だけにする (1 階層)": "Collapse everything down to the major boxes (one level)",
   "この階層の中のボックスを全部展開する": "Expand every box inside this level",
   "大項目を全部展開する": "Expand all major boxes",
+  "Auto Layout: 依存関係の順に全体を並べ直す (Undo で戻せます)": "Auto Layout: lay out the whole plan in dependency order (Undo brings it back)",
 };

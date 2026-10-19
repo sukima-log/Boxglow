@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Clicking a box no longer jumps the view.** When the side panel opens and would cover the box you clicked, the canvas now glides so that box sits in the middle of the visible area (not behind the panel); if the box stays visible, nothing moves. Jumping to a box from a list uses the same rule.
+- **Auto Layout button** in the canvas tool strip (Edit mode), next to Collapse all; the ⋯ menu entry stays.
 - **Wires can cross levels.** Dropping a wire on a box (or a port) in another level now works: the inputs and outputs needed on the boxes in between are created and wired automatically, and an auto-promoted input of the same name is reused instead of duplicated. Dropping an output on one of its ancestors bundles it into that box's output. The CLI `connect` and MCP `boxglow_connect` do the same.
 - **Connect without drawing a wire.** On the I/O tab, **Connect from…** lists sources (plan inputs, inputs of the levels above, outputs of other boxes, with search) and **Connect to…** under an output lists the boxes that can use it; picking one connects them, however far apart or deep they are.
 - **Same name, same wire.** Adding an input to a deep box with the same name as a plan input (or any input of a level above) connects it automatically through the levels in between; the top-level Inputs node no longer shows the name twice.

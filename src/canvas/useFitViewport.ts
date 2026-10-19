@@ -57,8 +57,10 @@ export function constrainVertical(view: Viewport, bounds: Area, region: Area, fi
  * Input: 図形の変更印、パネルの変更印、ドラッグ中か、縦表示か
  * Output: 下限倍率、全体表示・幅合わせ・移動イベントのハンドラー
  */
-export function useFitViewport(geometry: string, panelLayoutKey: string, dragging: boolean, vertical = false) {
+export function useFitViewport(geometry: string, panelLayoutKey: string, dragging: boolean, vertical = false, selectedId: string | null = null) {
   const rf = useReactFlow();
+  const selectedNow = useRef(selectedId);
+  selectedNow.current = selectedId;
   const [minZoom, setMinZoom] = useState(MIN_ZOOM);
   // 今の縮小の下限 (fit の中から最新の値を読むため。state は描画まで古い値のまま)
   const minZoomNow = useRef(MIN_ZOOM);
@@ -106,6 +108,40 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
     const v = getViewportForBounds(bounds, region.width, region.height, MIN_ZOOM, 1, ids ? .3 : .12);
     return { x: v.x + region.x, y: v.y + region.y, zoom: v.zoom };
   }, [rf, sizedNodes]);
+
+  /**
+   * 箱が見える領域 (左右のパネルを除いた部分) に全部入っているか
+   * Input: ノード id / Output: true = 入っている (ノードが無い・領域が無ければ true 扱い = 動かさない)
+   */
+  const insideRegion = useCallback((id: string) => {
+    const region = area.current;
+    const node = rf.getInternalNode(id);
+    if (!region || !node) return true;
+    const { zoom, x: vx, y: vy } = rf.getViewport();
+    const abs = node.internals.positionAbsolute;
+    const w = (node.measured.width ?? node.width ?? 0) * zoom, h = (node.measured.height ?? node.height ?? 0) * zoom;
+    const left = abs.x * zoom + vx, top = abs.y * zoom + vy;
+    const margin = 16;
+    return left >= region.x + margin && top >= region.y + margin && left + w <= region.x + region.width - margin && top + h <= region.y + region.height - margin;
+  }, [rf]);
+  /**
+   * 箱を見える領域の中央へ寄せる (倍率は保つ。箱が領域より大きければ領域に収まる倍率まで下げる)。動きをつけて移動する
+   * Input: ノード id, opts.force = 見えていても寄せる (既定は、領域からはみ出しているときだけ)
+   * Output: 寄せたら true
+   */
+  const centerOn = useCallback((id: string, opts: { force?: boolean; duration?: number } = {}) => {
+    const region = area.current;
+    const node = rf.getInternalNode(id);
+    if (!region || !node) return false;
+    if (!opts.force && insideRegion(id)) return false;
+    const abs = node.internals.positionAbsolute;
+    const w = node.measured.width ?? node.width ?? 0, h = node.measured.height ?? node.height ?? 0;
+    const current = rf.getViewport().zoom;
+    const zoom = Math.max(minZoomNow.current, Math.min(current, (region.width - 48) / Math.max(w, 1), (region.height - 48) / Math.max(h, 1)));
+    const cx = abs.x + w / 2, cy = abs.y + h / 2;
+    void rf.setViewport({ x: region.x + region.width / 2 - cx * zoom, y: region.y + region.height / 2 - cy * zoom, zoom }, { duration: opts.duration ?? 240 });
+    return true;
+  }, [rf, insideRegion]);
 
   /**
    * Input: 対象 ID。Output: 明示的な全体表示を実行
@@ -159,6 +195,14 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
       if (different(current, next))
         void rf.setViewport(next);
     }
+    else if (selectedNow.current && prevArea && (prevArea.x !== nextArea.x || prevArea.width !== nextArea.width || prevArea.height !== nextArea.height) && rf.getInternalNode(selectedNow.current)) {
+      // 箱を選んでパネルが開き、見える領域が変わった: 選んだ箱が隠れたりはみ出したりしていれば、見える領域の中央へ動きをつけて寄せる
+      // (以前は全体表示へ瞬間移動していて、押した箱がどこへ行ったか分からなかった: 利用者の指摘 2026-10-19)。
+      // 箱が見えたままなら動かさない (クリックのたびに揺れない)。縮小の下限より小さい倍率になっていれば下限まで上げる
+      const z = Math.max(current.zoom, nextFit.zoom);
+      if (!insideRegion(selectedNow.current)) centerOn(selectedNow.current, { force: true });
+      else if (z !== current.zoom) void rf.setViewport({ ...current, zoom: z }, { duration: 160 });
+    }
     else if (current.zoom < nextFit.zoom - .00001) {
       // 領域が広がって下限が上がる場合: 縮小しきっていた (全体表示だった) なら新しい全体表示へ、そうでなければ倍率だけ引き上げる
       if (wasFitted) { void rf.setViewport(nextFit); return; }
@@ -171,7 +215,7 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
       // 領域の広さが変わった (サイドバーや引き出しの開閉) 場合: 全体表示のままなら、新しい領域の中央に合わせ直す (片側に寄ったまま残さない)
       void rf.setViewport(nextFit);
     }
-  }, [rf, target, vertical, readingTarget]);
+  }, [rf, target, vertical, readingTarget, insideRegion, centerOn]);
   // 監視の寿命をノード位置の変化から切り離す。ドラッグの各フレームで作り直さない。
   useLayoutEffect(() => {
     const canvas = document.querySelector<HTMLElement>(".react-flow");
@@ -274,5 +318,5 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
         void rf.setViewport(fit);
     }
   }, [rf]);
-  return { minZoom, fit, readFromTop, onMoveStart, onMoveEnd };
+  return { minZoom, fit, readFromTop, onMoveStart, onMoveEnd, centerOn };
 }

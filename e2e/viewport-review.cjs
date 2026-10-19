@@ -16,8 +16,10 @@ const { chromium, open, check, result } = require('./lib.cjs');
       await p.waitForTimeout(400);
       const before = await viewport();
       await p.getByTestId('rf__node-' + id).locator('.bg-block__title').click();
-      await p.waitForTimeout(500);
-      check('Topの各ボックスをクリックしても位置と倍率を維持: ' + id, same(before, await viewport()));
+      await p.waitForTimeout(700);
+      // 押しても表示は動かない。パネルが開いて箱が隠れるときだけ、押した箱が見える領域 (パネルを除く) に収まる位置へ動く
+      const inRegion = await p.evaluate((id) => { const c = document.querySelector('.react-flow').getBoundingClientRect(); const panel = document.querySelector('.panel.right:not(.hidden-panel)')?.getBoundingClientRect(); const right = panel && panel.left < c.right ? panel.left : c.right; const n = document.querySelector('[data-id="' + id + '"]').getBoundingClientRect(); return n.left >= c.left && n.right <= right && n.top >= c.top && n.bottom <= c.bottom; }, id);
+      check('Topの各ボックスをクリックしても位置と倍率を維持 (隠れるときは見える領域へ): ' + id, same(before, await viewport()) || inRegion);
     }
     await p.evaluate(() => window.boxglow.store.getState().select({}));
     for (const mode of ['View', 'Edit']) {
