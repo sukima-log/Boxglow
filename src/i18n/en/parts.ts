@@ -104,4 +104,5 @@ export const parts: Record<string, string> = {
 , "つなげる箱がありません": "No box to connect"
 , "検索": "Search"
 , "差し戻し済み: {list}": "Rejected: {list}"
+, "未接続の入力 (自動では上の階層へ引き上げません。線をつなぐと元に戻ります)": "Unconnected input (not promoted to the levels above; connecting a wire restores that)"
 };

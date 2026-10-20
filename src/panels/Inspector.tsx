@@ -15,7 +15,7 @@ import { SendBackPanel } from "./SendBack";
 import { CloseButton } from "./CloseButton";
 import { AcceptanceField, ConstraintsField, WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
-import { isAcked as decisionIsAcked, isLastProjectBox } from "../model/graph";
+import { isAcked as decisionIsAcked } from "../model/graph";
 import { useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
 import { LiveMarkdownEditor } from "./LiveMarkdownEditor";
@@ -212,8 +212,6 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       return updateBlock(p, blockId, { assigneeIds: cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id] });
     });
   const remove = () => {
-    // 計画にはプロジェクトのボックスが 1 つは要る (最後の 1 つは消せない。中のボックスを消すか、ファイルごと作り直す)
-    if (isLastProjectBox(project, blockId)) { setToast(t("最後のプロジェクトのボックスは削除できません")); return; }
     // 確認しない: 計画の中の削除は元に戻す操作で戻せる (VS Code の webview では confirm が出ないので、確認があると消せなくなる)
     select({});
     apply((p) => removeBlock(p, blockId));

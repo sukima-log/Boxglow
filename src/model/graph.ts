@@ -579,17 +579,8 @@ export function moveTerminal(p: Project, which: "in" | "out", position: { x: num
 }
 
 /** ブロックを (子孫・ポート・線ごと) 削除する。最上位は消せない */
-/**
- * 最後のプロジェクトのボックスか (計画にはプロジェクトのボックスが 1 つは要るので、これは消せない)
- * Input : p, blockId
- * Output: true = 消せない
- */
-export function isLastProjectBox(p: Project, blockId: string): boolean {
-  return kindOf(p.blocks[blockId]) === "project" && projectBlocks(p).length <= 1;
-}
-
 export function removeBlock(p: Project, blockId: string): Project {
-  if (blockId === ROOT_ID || isLastProjectBox(p, blockId)) return p;
+  if (blockId === ROOT_ID) return p; // どのボックスでも消せる (最後のプロジェクトのボックスも。次に足した箱は最上位に置かれ、読み込み時に包み直される)
   const q = touch(p);
   const ids = new Set([blockId, ...descendantsOf(q, blockId).map((b) => b.id)]);
   const portIds = new Set(Object.values(q.ports).filter((x) => ids.has(x.blockId)).map((x) => x.id));
@@ -830,6 +821,7 @@ export function connect(p: Project, from: Endpoint, to: Endpoint): { project: Pr
   for (const e of incomingEdges(q, to)) delete q.edges[e.id];
   const id = newId();
   q.edges[id] = { id, from, to, kind: check.kind!, auto: false };
+  if (q.ports[to.portId]?.noPromote) delete q.ports[to.portId].noPromote; // 本物の線が来たので、自動の引き上げを止めていた印は外す
   // つないだら、線でつながる入出力を全部同じ名前にする。名前は作る側 (上流 = 出す側) が勝つ。
   // ただし上流がまだ仮の名前 (「新しい出力」など) で、受ける側に本当の名前が付いていれば、その名前を採る
   const fromPort = q.ports[from.portId];
@@ -856,31 +848,19 @@ export function disconnect(p: Project, edgeId: string): Project {
 }
 
 /**
- * 選んだ線の「外す対象」: 本物の線ならそれ自身。自動の線 (下の階層の入力を自動で上へ引き上げた区間) なら、その経路を上流へたどって最初に出てくる本物の線
- * (自動の線は消してもすぐ再生されるので、外す意味があるのは供給元とつないだ本物の線。利用者の指摘 2026-10-20: 自動の区間を選ぶと Delete が効かなかった)
- * Input : p, edgeId / Output: 外す線の id (経路に本物の線が無ければ null = まだ供給元が無い)
- */
-export function removableEdgeOf(p: Project, edgeId: string): string | null {
-  const seen = new Set<string>();
-  let cur = p.edges[edgeId];
-  while (cur && !seen.has(cur.id)) {
-    if (!cur.auto) return cur.id;
-    seen.add(cur.id);
-    // 出す側のポートの反対の面に入ってくる線 (上流)
-    const backSide: "inner" | "outer" = cur.from.side === "outer" ? "inner" : "outer";
-    cur = incomingEdges(p, { portId: cur.from.portId, side: backSide })[0];
-  }
-  return null;
-}
-
-/**
- * 選んだ線の接続を外す (自動の線なら、その経路の本物の線を外す)
- * Input : p, edgeId / Output: { project, error } (外す線が無ければ error)
+ * 選んだ線を外す (どんな線でも消せる。利用者の要望 2026-10-20)
+ *   - 本物の線: そのまま外す
+ *   - 自動の線 (下の階層の入力を自動で上へ引き上げた区間): 受ける側の入力に「上へ引き上げない」印を付けて外す。その入力は箱に未接続のまま残り、
+ *     使われなくなった引き上げのポートは消える。本物の線をつなぐと印は外れる
+ * Input : p, edgeId / Output: { project } (線が無ければそのまま)
  */
 export function disconnectWire(p: Project, edgeId: string): { project: Project; error?: string } {
-  const target = removableEdgeOf(p, edgeId);
-  if (!target) return { project: p, error: t("この線は自動の線で、まだ供給元とつながっていません (外す接続がありません。入力そのものを消すなら、箱の I/O タブで ×)") };
-  return { project: disconnect(p, target) };
+  const e = p.edges[edgeId];
+  if (!e) return { project: p };
+  const q = touch(p);
+  if (e.auto && q.ports[e.to.portId]?.direction === "in") q.ports[e.to.portId].noPromote = true;
+  delete q.edges[edgeId];
+  return { project: normalizePromotions(q) };
 }
 
 /** メンバーを追加する */
@@ -959,6 +939,7 @@ export function normalizePromotions(p: Project): Project {
       const block = q.blocks[port.blockId];
       if (!block || block.parentId === null) continue; // 最上位の入力はこれ以上伸ばさない
       if (incomingEdges(q, { portId: port.id, side: "outer" }).length > 0) continue;
+      if (port.noPromote) continue; // 自動の線を消した入力は、上へ引き上げずにその箱に未接続のまま残す
       // 同じ名前の入力が親に既にあれば (自動で上がったものでも、人が足したものでも) それを共用する = 名前でつなぐ。
       // 同じ材料を複数の子が待っているとき入力ノードに同名が並ばず、最上位に同名の入力があれば子の入力は自動でそこにつながる (利用者の要望 2026-10-19)
       let promoted = Object.values(q.ports).find((x) => x.blockId === block.parentId && x.direction === "in" && x.name === port.name);

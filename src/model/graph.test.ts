@@ -70,7 +70,7 @@ import {
 , normalizePortNames
 , portNet
 , disconnectWire
-, removableEdgeOf
+
 , sentBackTo
 , sendBackTargets
 , sendBack
@@ -78,11 +78,10 @@ import {
 , sourceCandidates
 , canConnectAcross
 , connectAcross
-, addProjectBlock
 , inputsFedBy
 , canRemovePort
 , removeDecision
-, isLastProjectBox
+
 } from "./graph";
 import { ROOT_ID, type Project } from "./types";
 
@@ -1148,16 +1147,12 @@ describe("消せるもの: 入力は使う箱の入力ごと、最後の出力�
     expect(removeDecision(answered, a.blockId, asked.decisionId!).error).toBeTruthy();
   });
 
-  it("最後のプロジェクトのボックスは消せない (2 つあれば消せる)", () => {
+  it("プロジェクトのボックスも消せる (最後の 1 つでも)", () => {
     let p = createProject("t");
     const pj = projectBlocks(p)[0].id;
-    expect(isLastProjectBox(p, pj)).toBe(true);
-    expect(removeBlock(p, pj)).toBe(p);
-    const second = addProjectBlock(p, "別のプロジェクト"); p = second.project;
-    expect(isLastProjectBox(p, pj)).toBe(false);
     p = removeBlock(p, pj);
     expect(p.blocks[pj]).toBeUndefined();
-    expect(projectBlocks(p)).toHaveLength(1);
+    expect(projectBlocks(p)).toHaveLength(0);
   });
 });
 
@@ -1267,30 +1262,31 @@ describe("差し戻し (sendBack): 線で戻さず、作った箱を In Progress
   });
 });
 
-describe("自動の線を選んで外すと、経路の本物の線が外れる (disconnectWire)", () => {
-  it("引き上げた区間を選んでも、供給元とつないだ本物の線を外す。本物の線が無ければ外せない", () => {
+describe("どんな線でも Delete で外せる (disconnectWire)", () => {
+  it("自動の線を外すと、その入力は箱に未接続のまま残り、上へは引き上げられない。線をつなぐと元に戻る", () => {
     let p = createProject("t");
     const pj = projectBlocks(p)[0].id;
     const m = addBlock(p, { parentId: pj, title: "大項目" }); p = m.project;
     const leafB = addBlock(p, { parentId: m.blockId, title: "葉" }); p = leafB.project;
     const leaf = leafB.blockId;
     p = addPort(p, { blockId: leaf, direction: "in", name: "資料" }).project; // 大項目 → プロジェクト → 最上位まで自動で上がる
+    expect(portsOf(p, ROOT_ID, "in").map((x) => x.name)).toEqual(["資料"]);
     const autoEdge = Object.values(p.edges).find((e) => e.auto && p.ports[e.to.portId].blockId === leaf)!;
-    expect(removableEdgeOf(p, autoEdge.id)).toBeNull(); // まだ供給元が無い
-    expect(disconnectWire(p, autoEdge.id).error).toBeTruthy();
-    // 供給元 (別の箱の出力) を最上位の入力の代わりにつなぐ: 兄弟 A の出力 → 大項目 (階層をまたぐ)
+    const d = disconnectWire(p, autoEdge.id); p = d.project;
+    expect(d.error).toBeUndefined();
+    const leafIn = portsOf(p, leaf, "in")[0];
+    expect(leafIn.noPromote).toBe(true);
+    expect(incomingEdges(p, { portId: leafIn.id, side: "outer" })).toHaveLength(0);
+    expect(portsOf(p, ROOT_ID, "in")).toHaveLength(0); // 使われなくなった引き上げのポートは消える
+    expect(portsOf(p, m.blockId, "in")).toHaveLength(0);
+    // 本物の線をつなぐと印が外れる
     const a = addBlock(p, { parentId: pj, title: "A", outputName: "資料" }); p = a.project;
     const r = connectToBlock(p, { portId: portsOf(p, a.blockId, "out")[0].id, side: "outer" }, leaf); p = r.project;
     expect(r.error).toBeUndefined();
+    expect(portsOf(p, leaf, "in")[0].noPromote).toBeUndefined();
+    // 本物の線もそのまま外せる
     const real = Object.values(p.edges).find((e) => !e.auto && e.from.portId === portsOf(p, a.blockId, "out")[0].id)!;
-    // 葉の入力に来る区間 (大項目の入力 → 葉) を選んで外す: 本物の線 (A → 大項目) が外れる
-    const inner = Object.values(p.edges).find((e) => p.ports[e.to.portId].blockId === leaf)!;
-    expect(removableEdgeOf(p, inner.id)).toBe(inner.auto ? real.id : inner.id);
-    const d = disconnectWire(p, inner.id);
-    expect(d.error).toBeUndefined();
-    // どちらの場合も、A とつないだ本物の線は無くなり、葉の入力は再び自動で引き上げられる (供給元の無い状態に戻る)
-    expect(Object.values(d.project.edges).some((e) => !e.auto && e.from.portId === real.from.portId)).toBe(false);
-    expect(portsOf(d.project, ROOT_ID, "in").some((x) => x.name === "資料" && x.promotedFrom)).toBe(true);
+    expect(disconnectWire(p, real.id).project.edges[real.id]).toBeUndefined();
   });
 });
 

@@ -3,7 +3,7 @@
  * どこからどこへの線か、確定済みか入力待ちかを 1 行で出す。閲覧専用でなければ「接続を外す」を出す (Delete キーでも外せる)
  */
 import { Panel } from "@xyflow/react";
-import { isEdgeReady, removableEdgeOf, disconnectWire } from "../model/graph";
+import { isEdgeReady, disconnectWire } from "../model/graph";
 import { ROOT_ID } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
 import { t, useLang } from "../i18n";
@@ -32,10 +32,8 @@ export function EdgeBar() {
       {/* どこから → どこへ (入出力の名前を添える) */}
       <span className="edge-bar__path"><b>{name(fp.blockId)}</b>{t("「{name}」", { name: fp.name })} → <b>{name(tp.blockId)}</b>{t("「{name}」", { name: tp.name })}</span>
       <span className="wire-state" data-ready={ready} title={ready ? t("供給元の完了・成果物、または上流の入力を確認できています。") : t("供給元が未完了で成果物がない、または上流の入力がまだ確定していません。")}>{ready ? t("確定済み") : t("入力待ち")}</span>
-      {/* 接続を外す (Delete キーと同じ)。自動の区間を選んでいても、その経路の本物の線を外す。本物の線が無い (まだ供給元が無い) ときは押せない */}
-      {canEdit && (() => { const target = removableEdgeOf(project, e.id); return (
-        <button className="btn btn-sm" disabled={!target} title={target ? (target === e.id ? undefined : t("この区間は自動の線なので、経路の本物の線 (供給元とつないだ線) を外します")) : t("まだ供給元とつながっていない自動の線です (外す接続がありません)")}
-          onClick={() => { select({}); apply((p) => disconnectWire(p, e.id).project); }}>{t("接続を外す")}</button>); })()}
+      {/* 接続を外す (Delete キーと同じ)。自動の線も外せる (その入力は箱に未接続のまま残る) */}
+      {canEdit && <button className="btn btn-sm" onClick={() => { select({}); apply((p) => disconnectWire(p, e.id).project); }}>{t("接続を外す")}</button>}
       <button className="btn btn-ghost btn-sm" onClick={() => select({})} title={t("選択を外す (Esc)")} aria-label={t("選択を外す (Esc)")}>×</button>
     </Panel>
   );

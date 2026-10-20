@@ -91,5 +91,4 @@ export const model: Record<string, string> = {
 , "{title} (親の出力へ)": "{title} (into its output)"
 , "「{title}」はこの箱の入力の供給元ではありません (差し戻せるのは、入力を作っている箱だけです)": "\"{title}\" does not feed this box's inputs (you can only send back to a box that makes one of the inputs)"
 , "差し戻し: 「{from}」から「{to}」へ: {note}": "Sent back from \"{from}\" to \"{to}\": {note}"
-, "この線は自動の線で、まだ供給元とつながっていません (外す接続がありません。入力そのものを消すなら、箱の I/O タブで ×)": "This is an automatic wire with no source yet (nothing to disconnect; to remove the input itself, use × on the box's I/O tab)"
 };

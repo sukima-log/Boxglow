@@ -84,6 +84,8 @@ export interface Port {
   artifacts: Artifact[];
   /** 差し戻された成果物 (履歴として残す。届いた扱いにしない) */
   rejectedArtifacts?: (Artifact & { rejectedAt: string; rejectedBy: string; rejectedNote?: string })[];
+  /** 自動で上の階層へ引き上げない (自動の線を Delete で消したとき。本物の線をつなぐと外れる) */
+  noPromote?: boolean;
   /** 下の階層の未接続の入力を自動で引き上げて作ったポートなら、元のポートの id */
   promotedFrom?: string;
   /** 最上位の入力を分けるグループ (Project.inputGroups の id)。無ければ既定の入力ノード */

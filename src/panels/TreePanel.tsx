@@ -5,7 +5,7 @@ import { ClaimMark } from "./Claims";
  * 編集は既存モデル API をストアの apply に渡す。検証・履歴・Undo を図の編集と共有する。
  */
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { addBlock, kindOf, moveBlockToParent, removeBlock, setStatus, updateBlock, workingNow, isLastProjectBox } from "../model/graph";
+import { addBlock, kindOf, moveBlockToParent, removeBlock, setStatus, updateBlock, workingNow } from "../model/graph";
 import { ROOT_ID, type Block, type BlockStatus, type Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
 import { t, useLang } from "../i18n";
@@ -548,8 +548,6 @@ export function TreePanel({ project, filter, onClose }: { project: Project; filt
           </div>
           <button
             className="btn btn-ghost btn-sm"
-            disabled={isLastProjectBox(project, current.id)}
-            title={isLastProjectBox(project, current.id) ? t("最後のプロジェクトのボックスは削除できません") : undefined}
             onClick={() => {
               // 確認しない: 元に戻す操作で戻せる (VS Code の webview では confirm が出ない)
               apply((p) => removeBlock(p, current.id));

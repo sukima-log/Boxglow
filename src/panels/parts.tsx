@@ -141,7 +141,7 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
           <div key={q.id} className="port-card">
             <div className="flex items-center gap-1">
               {/* 名前: 線でつながる入出力は 1 つの名前 (ここで変えると、つながる先 (供給元の出力・使う箱の入力・親の出力) も同じ名前になる) */}
-              <DebouncedText className="input input-plain font-bold" value={q.name} disabled={readonly} title={q.promotedFrom ? t("下の階層の未接続の入力 (自動)。元の入力をつなぐと消えます") : t("線でつながる入出力は同じ名前になります (ここで変えると、つながる先も変わります)")}
+              <DebouncedText className="input input-plain font-bold" value={q.name} disabled={readonly} title={q.promotedFrom ? t("下の階層の未接続の入力 (自動)。元の入力をつなぐと消えます") : q.noPromote ? t("未接続の入力 (自動では上の階層へ引き上げません。線をつなぐと元に戻ります)") : t("線でつながる入出力は同じ名前になります (ここで変えると、つながる先も変わります)")}
                 style={q.promotedFrom ? { fontStyle: "italic", opacity: 0.75 } : undefined}
                 onCommit={(v) => apply((p) => updatePort(p, q.id, { name: v }))} />
               {direction === "in" && !q.promotedFrom && !q.required && <span className="meta-chip muted" title={t("任意: 無くても着手できます")}>{t("任意")}</span>}

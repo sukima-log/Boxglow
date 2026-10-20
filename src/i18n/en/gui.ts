@@ -215,7 +215,6 @@ export const gui: Record<string, string> = {
   "成果物や参考資料のリンク (URL やファイルのパス)": "Links to deliverables and references (URLs or file paths)",
   "見た目": "Preview",
   "見た目 (打つと同時に反映)": "Preview (updates as you type)"
-, "最後のプロジェクトのボックスは削除できません": "The last project box cannot be deleted"
 , "足す道 (選択肢) の名前": "Name of the path (option) to add"
 , "道 (選択肢) を足す": "Add a path (option)"
 , "この道を削除 (線も外れます)": "Delete this path (its wires too)"

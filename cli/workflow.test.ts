@@ -74,7 +74,7 @@ describe("消す操作 (port --remove / unask / branch の道 / remove のプロ
     expect(Object.values(read().ports).filter((q:any)=>q.blockId===br().id&&q.direction==="out")).toHaveLength(2);
     expect(cli("branch","--box","方式","--remove-option","B").status).toBe(1);
     const pj=Object.values(read().blocks).find((b:any)=>b.kind==="project") as any;
-    expect(cli("remove",pj.id,"--force").status).toBe(1); // 最後のプロジェクトのボックス
+    expect(cli("remove",pj.id,"--force").status).toBe(0); // 最後のプロジェクトのボックスも消せる
   });
 });
 

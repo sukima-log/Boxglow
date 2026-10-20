@@ -223,12 +223,9 @@ export function App() {
         if (sel.edgeId) {
           // 自動の線 (引き上げた区間) を選んでいても、その経路の本物の線を外す
           const r = disconnectWire(p, sel.edgeId);
-          if (r.error) useProjectStore.getState().setToast(r.error);
-          else {
-            select({});
-            apply(() => r.project);
-            useProjectStore.getState().setToast(t("接続を外しました (Undo で戻せます)"));
-          }
+          select({});
+          apply(() => r.project);
+          useProjectStore.getState().setToast(t("接続を外しました (Undo で戻せます)"));
         } else if (sel.blockId) {
           const b = p.blocks[sel.blockId];
           const kids = Object.values(p.blocks).filter((x) => x.parentId === sel.blockId).length;
