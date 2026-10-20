@@ -211,6 +211,10 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   const setEditMode = useProjectStore((s) => s.setEditMode);
   const saveNow = useProjectStore((s) => s.saveNow);
   const saveAsFile = useProjectStore((s) => s.saveAsFile);
+  const autoSaveRev = useProjectStore((s) => s.autoSaveRev);
+  const isAutoSave = useProjectStore((s) => s.isAutoSave);
+  const setAutoSave = useProjectStore((s) => s.setAutoSave);
+  const autoSave = isAutoSave(); void autoSaveRev; // 設定が変わったら描き直す
   const source = useProjectStore((s) => s.source);
   const reload = useProjectStore((s) => s.reload);
   const reloading = useProjectStore((s) => s.reloading);
@@ -220,7 +224,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   const saveIcon = readonly ? "◈" : ephemeral ? "○" : saveError ? "!" : saveState === "saving" ? "↻" : saveState === "unsaved" ? "○" : "✓";
   /** Input: なし。Output: 配置の編集モードと短い結果通知。ノートなどの編集可否とは区別する。 */
   const toggleMode = () => setEditMode(!editMode);
-  const saveTitle = readonly ? t("閲覧専用") : ephemeral ? t("サンプルは保存されません。Save で自分の計画のコピーを残せます") : source === "file" ? t("このファイルに直接保存します。別の画面・CLI・AI も同じファイルを編集するなら、serve か VS Code 拡張で開いてください") : fileName ? t("{file} に自動で保存します (Save で今すぐ書きます)", { file: fileName }) : t("このブラウザに自動で保存します (ファイルにするなら Save to file)");
+  const saveTitle = readonly ? t("閲覧専用") : ephemeral ? t("サンプルは保存されません。Save で自分の計画のコピーを残せます") : source === "file" ? t("このファイルに直接保存します。別の画面・CLI・AI も同じファイルを編集するなら、serve か VS Code 拡張で開いてください") : fileName ? (autoSave ? t("{file} に自動で保存します (Save で今すぐ書きます)", { file: fileName }) : t("{file} に保存します (自動保存はオフ: Save か Ctrl+S で書きます)", { file: fileName })) : t("このブラウザに自動で保存します (ファイルにするなら Save to file)");
   const sum = summarize(project);
   const busy = sum.working.length; // 作業中の件数 (詰まり・確認待ちは別の札で数える)
 
@@ -262,7 +266,9 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
       {/* 保存は自動 (ブラウザ内 / ファイル / serve / VS Code のどれでも)。
           ファイルにつながる計画 (開いたファイル / serve / VS Code) では、手で Save も押せる (今すぐ書く。利用者の要望 2026-10-19: 自動だけでは心もとない)。失敗したときは Retry。
           ブラウザ内の計画は「Save to file」でファイルにできる (Chrome / Edge は保存先を選んで以後そこに保存、ほかはダウンロード) */}
-      {!ephemeral && !readonly && (source !== "idb" || saveError) && <button className="btn btn-sm" onClick={saveNow} disabled={saveState === "saving"} title={saveError ?? saveTitle}>{saveError ? "Retry" : "Save"}</button>}
+      {!ephemeral && !readonly && (source !== "idb" || saveError) && <button className={`btn btn-sm${saveState === "unsaved" ? " btn-primary" : ""}`} onClick={saveNow} disabled={saveState === "saving"} title={saveError ?? saveTitle}>{saveError ? "Retry" : "Save"}</button>}
+      {/* 自動保存の切り替え (ファイル / serve / VS Code)。オフなら変更は Unsaved のまま残り、Save か Ctrl+S で書く */}
+      {!ephemeral && !readonly && source !== "idb" && <button className="btn btn-ghost btn-sm" aria-pressed={autoSave} onClick={() => setAutoSave(!autoSave)} title={autoSave ? t("自動保存: オン (変更のたびに書き込みます。押すとオフ)") : t("自動保存: オフ (Save か Ctrl+S で書き込みます。押すとオン)")}>{autoSave ? "Auto save: on" : "Auto save: off"}</button>}
       {!ephemeral && !readonly && source === "idb" && <button className="btn btn-sm" onClick={() => void saveAsFile()} title={t("ファイルとして保存する (Chrome / Edge では保存先を選ぶと、以後そのファイルに保存します。ほかのブラウザではダウンロード)")}>Save to file</button>}
       {/* 画面からの同期の印 (裏方が状態を流しているときだけ出る) */}
       <SaveHeldChip />

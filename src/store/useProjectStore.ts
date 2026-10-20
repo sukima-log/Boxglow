@@ -88,6 +88,11 @@ interface State {
   setViewScope: (blockId: string | null) => void;
   /** 今すぐ保存する (Save ボタン。自動保存を待たずに書く) */
   saveNow: () => void;
+  /** 自動保存の設定が変わった回数 (画面の描き直し用)。設定そのものは isAutoSave で読む */
+  autoSaveRev: number;
+  /** 今の保存先で自動保存が有効か (ブラウザ内は常に有効。直接開いたファイルは既定でオフ、serve / VS Code は既定でオン。保存先の種類ごとに覚える) */
+  isAutoSave: () => boolean;
+  setAutoSave: (on: boolean) => void;
   /**
    * 手動の更新: つながっているファイルを、今すぐ読み直して画面に反映する (自動の更新を待たずに取り直す)。
    * ブラウザ内の計画は、このブラウザの保存先から読み直す (サンプルは、読み直す先が無いので変わらない)。
@@ -296,6 +301,23 @@ function loadMe(p: Project): string | null {
  * Input : p = 開いたプロジェクト
  * Output: 大項目のボックスの id (無い・消えていれば null = Top)
  */
+/** 自動保存の設定の保存先 (保存先の種類ごと) */
+const autoSaveKey = (source: string) => `boxglow:autoSave:${source}`;
+/**
+ * 自動保存が有効か。ブラウザ内の計画は常に有効 (ほかに保存先が無い)。直接開いたファイルは既定でオフ (意図したときに Save)、serve / VS Code は既定でオン (AI が同じファイルを読むため)
+ * Input : source = 保存先の種類 / Output: true = 変更のたびに書く
+ */
+function loadAutoSave(source: string): boolean {
+  if (source === "idb") return true;
+  const fallback = source !== "file";
+  try {
+    const v = localStorage.getItem(autoSaveKey(source));
+    return v === null ? fallback : v === "1";
+  } catch {
+    return fallback;
+  }
+}
+
 function loadScope(p: Project): string | null {
   try {
     const id = localStorage.getItem(`boxglow:scope:${p.id}`);
@@ -674,9 +696,11 @@ export const useProjectStore = create<State>((set, get) => {
     return null;
   };
   const scheduleSave = () => {
-    const { project, ephemeral, readonly } = get();
+    const { project, ephemeral, readonly, source } = get();
     if (!project || ephemeral || readonly) return;
     set({ saveState: "unsaved" });
+    // 自動保存がオフなら Unsaved のまま待つ (Save か Ctrl+S で書く。利用者の要望 2026-10-20: 意図したときだけ保存したい)
+    if (!loadAutoSave(source)) return;
     if (holdSave) return;
     if (saveTimer) clearTimeout(saveTimer);
     saveTimer = setTimeout(() => { saveTimer = null; void persist(); }, SAVE_DELAY);
@@ -731,6 +755,13 @@ export const useProjectStore = create<State>((set, get) => {
       set({ viewScope: scope, selection: keepSel });
     }
   , saveNow: () => { if (saveTimer) clearTimeout(saveTimer); saveTimer = null; holdSave = false; set({ saveHeld: false, restoreNotice: null }); void persist(true); }
+  , autoSaveRev: 0
+  , isAutoSave: () => loadAutoSave(get().source)
+  , setAutoSave: (on) => {
+      try { localStorage.setItem(autoSaveKey(get().source), on ? "1" : "0"); } catch { /* 覚えられなくても動く */ }
+      set({ autoSaveRev: get().autoSaveRev + 1 });
+      if (on && get().saveState === "unsaved") get().saveNow(); // オンにした時点でたまっていた変更を書く
+    }
   , reloading: false
   , syncStatus: null
   , syncLost: false

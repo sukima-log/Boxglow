@@ -212,6 +212,11 @@ export function App() {
       } else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "y") {
         ev.preventDefault();
         redo();
+      } else if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "s") {
+        // Ctrl+S = 今すぐ保存 (自動保存がオフのときの基本の操作)。ブラウザの「ページを保存」を出さない
+        ev.preventDefault();
+        const st = useProjectStore.getState();
+        if (!readonly && !st.ephemeral && st.project) st.saveNow();
       } else if (ev.key === "Delete" || ev.key === "Backspace") {
         // View でも効く (配置を固定しているだけで、線や箱の削除は Undo で戻せる。利用者の要望 2026-10-20: 線を選んで Delete ですぐ外したい)
         if (readonly) return;

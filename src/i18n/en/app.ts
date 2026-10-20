@@ -460,4 +460,7 @@ export const app: Record<string, string> = {
 , "「{title}」と下の階層のブロックを削除しました (Undo で戻せます)": "\"{title}\" and the blocks inside were deleted (Undo brings them back)"
 , "このブラウザから削除 (元に戻せません)": "Delete from this browser (cannot be undone)"
 , "接続を外しました (Undo で戻せます)": "Wire removed (Undo brings it back)"
+, "自動保存: オン (変更のたびに書き込みます。押すとオフ)": "Auto save: on (every change is written; click to turn off)"
+, "自動保存: オフ (Save か Ctrl+S で書き込みます。押すとオン)": "Auto save: off (Save or Ctrl+S writes; click to turn on)"
+, "{file} に保存します (自動保存はオフ: Save か Ctrl+S で書きます)": "Saves to {file} (auto save is off: Save or Ctrl+S writes)"
 };
