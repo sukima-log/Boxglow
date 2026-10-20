@@ -185,13 +185,13 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
       await fp.evaluate(() => window.boxglow.store.getState().apply((p) => ({ ...p, description: 'ブラウザで編集' })));
       await fp.waitForTimeout(900);
       // 直接開いたファイルは自動保存が既定でオフ: 編集は Unsaved のまま残り、Save (Ctrl+S) で書く
-      check('直接開いたファイル: 自動保存は既定でオフ (編集は Unsaved のまま)', (await fstate()).save === 'unsaved' && (await fp.evaluate(() => JSON.parse(window.__files['boxglow.json']).description)) !== 'ブラウザで編集' && (await fp.getByRole('button', { name: 'Auto save: off', exact: true }).count()) === 1);
+      check('直接開いたファイル: 自動保存は既定でオフ (編集は Unsaved のまま)', (await fstate()).save === 'unsaved' && (await fp.evaluate(() => JSON.parse(window.__files['boxglow.json']).description)) !== 'ブラウザで編集' && (await fp.getByRole('switch', { name: 'Auto save', exact: true }).getAttribute('aria-checked')) === 'false');
       await fp.getByRole('button', { name: 'Save', exact: true }).click();
       await fp.waitForFunction(() => window.boxglow.store.getState().saveState === 'saved', null, { timeout: 10000 });
       check('直接開いたファイル: Save でそのファイルに書く', (await fp.evaluate(() => JSON.parse(window.__files['boxglow.json']).description)) === 'ブラウザで編集');
       // 以降の検査は自動保存をオンにして行う (オンにした時点でたまっている変更は無い)
-      await fp.getByRole('button', { name: 'Auto save: off', exact: true }).click();
-      check('直接開いたファイル: 自動保存をオンにできる', (await fp.getByRole('button', { name: 'Auto save: on', exact: true }).count()) === 1);
+      await fp.getByRole('switch', { name: 'Auto save', exact: true }).click();
+      check('直接開いたファイル: 自動保存をオンにできる', (await fp.getByRole('switch', { name: 'Auto save', exact: true }).getAttribute('aria-checked')) === 'true');
       // 外 (CLI) が別の項目を変える → 保存済みなら監視が取り込む
       await fp.evaluate(() => { const j = JSON.parse(window.__files['boxglow.json']); j.name = 'CLI が改名'; window.__touch(JSON.stringify(j)); });
       await fp.waitForFunction(() => window.boxglow.store.getState().project?.name === 'CLI が改名', null, { timeout: 10000 });

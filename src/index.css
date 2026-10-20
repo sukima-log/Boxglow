@@ -1998,6 +1998,13 @@ button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent)
 .readiness-fields__label { font-size: 12px; color: var(--text); }
 .readiness-fields__inputs { display: flex; gap: 4px; align-items: center; }
 .readiness-fields__note { font-size: 11px; color: var(--accent); }
+/* 左右に動くスイッチ (Auto save など)。左 = オフ、右 = オン */
+.switch { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); cursor: pointer; white-space: nowrap; }
+.switch__track { position: relative; width: 34px; height: 18px; padding: 0; border: 1px solid var(--line); border-radius: 999px; background: var(--bg-soft, rgba(127,127,127,.2)); cursor: pointer; transition: background .15s, border-color .15s; }
+.switch__track[aria-checked="true"] { background: var(--primary); border-color: var(--primary); }
+.switch__knob { position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--bg-paper, #fff); box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: left .15s; }
+.switch__track[aria-checked="true"] .switch__knob { left: 18px; }
+.switch__track:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 /* 差し戻し (状態タブ) */
 .sendback { display: flex; flex-direction: column; gap: 6px; font-size: 12px; }
 .sendback__form { display: flex; flex-direction: column; gap: 4px; padding: 8px; border: 1px dashed var(--accent); border-radius: 8px; }

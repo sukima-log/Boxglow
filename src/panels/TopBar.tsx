@@ -268,7 +268,12 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
           ブラウザ内の計画は「Save to file」でファイルにできる (Chrome / Edge は保存先を選んで以後そこに保存、ほかはダウンロード) */}
       {!ephemeral && !readonly && (source !== "idb" || saveError) && <button className={`btn btn-sm${saveState === "unsaved" ? " btn-primary" : ""}`} onClick={saveNow} disabled={saveState === "saving"} title={saveError ?? saveTitle}>{saveError ? "Retry" : "Save"}</button>}
       {/* 自動保存の切り替え (ファイル / serve / VS Code)。オフなら変更は Unsaved のまま残り、Save か Ctrl+S で書く */}
-      {!ephemeral && !readonly && source !== "idb" && <button className="btn btn-ghost btn-sm" aria-pressed={autoSave} onClick={() => setAutoSave(!autoSave)} title={autoSave ? t("自動保存: オン (変更のたびに書き込みます。押すとオフ)") : t("自動保存: オフ (Save か Ctrl+S で書き込みます。押すとオン)")}>{autoSave ? "Auto save: on" : "Auto save: off"}</button>}
+      {!ephemeral && !readonly && source !== "idb" && (
+        <label className="switch" title={autoSave ? t("自動保存: オン (変更のたびに書き込みます。押すとオフ)") : t("自動保存: オフ (Save か Ctrl+S で書き込みます。押すとオン)")}>
+          <span className="switch__label">Auto save</span>
+          <button type="button" role="switch" aria-checked={autoSave} aria-label="Auto save" className="switch__track" onClick={() => setAutoSave(!autoSave)}><span className="switch__knob" /></button>
+        </label>
+      )}
       {!ephemeral && !readonly && source === "idb" && <button className="btn btn-sm" onClick={() => void saveAsFile()} title={t("ファイルとして保存する (Chrome / Edge では保存先を選ぶと、以後そのファイルに保存します。ほかのブラウザではダウンロード)")}>Save to file</button>}
       {/* 画面からの同期の印 (裏方が状態を流しているときだけ出る) */}
       <SaveHeldChip />
