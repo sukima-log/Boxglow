@@ -246,7 +246,7 @@ export function addBranch(p: Project, args: { parentId: string; title: string; q
 }
 
 /**
- * 分岐に道 (選択肢) を足す: 未回答のときだけ。出力 (道) と判断の選択肢を同時に足す
+ * 分岐に道 (選択肢) を足す (いつでも)。出力 (道) と判断の選択肢を同時に足す
  * Input : p, blockId = 分岐のボックス, option = 選択肢の文字 (道の名前にもなる)
  * Output: { project, portId, error } (足せないときは project = p と理由)
  */
@@ -255,7 +255,6 @@ export function addBranchOption(p: Project, blockId: string, option: string): { 
   const d = b ? branchDecision(b) : undefined;
   const name = option.trim();
   if (!b?.branch || !d) return { project: p, error: t("分岐のボックスではありません") };
-  if (d.answer !== undefined) return { project: p, error: t("答えた後は道を追加できません (Reopen してから)") };
   if (!name) return { project: p, error: t("道の名前を指定してください") };
   if (d.options.includes(name)) return { project: p, error: t("道「{name}」はすでにあります", { name }) };
   const added = addPort(p, { blockId, direction: "out", name });
@@ -265,7 +264,7 @@ export function addBranchOption(p: Project, blockId: string, option: string): { 
 }
 
 /**
- * 分岐の道 (選択肢) を消す: 未回答で、残りが 2 つ以上になるときだけ。出力 (線ごと) と選択肢を消す (道の先のボックスは残り、入力は自動で上がる)
+ * 分岐の道 (選択肢) を消す (いつでも)。出力 (線ごと) と選択肢を消す (道の先のボックスは残り、入力は自動で上がる)
  * Input : p, blockId = 分岐のボックス, option = 選択肢の文字
  * Output: { project, error } (消せないときは project = p と理由)
  */
@@ -273,9 +272,8 @@ export function removeBranchOption(p: Project, blockId: string, option: string):
   const b = p.blocks[blockId];
   const d = b ? branchDecision(b) : undefined;
   if (!b?.branch || !d) return { project: p, error: t("分岐のボックスではありません") };
-  if (d.answer !== undefined) return { project: p, error: t("答えた後は道を削除できません (Reopen してから)") };
   if (!d.options.includes(option)) return { project: p, error: t("道「{name}」がありません", { name: option }) };
-  if (d.options.length <= 2) return { project: p, error: t("道は 2 つ以上要ります (1 つにするなら、分岐ではなくふつうのボックスにしてください)") };
+  // 道はいつでも足せる・消せる (答えた後も、1 つになっても。lint が見直し候補として出すだけで禁止はしない)
   const port = portsOf(p, blockId, "out").find((q) => q.branchOption === option);
   let q = port ? removePort(p, port.id) : p;
   q = updateDecision(q, blockId, d.id, { options: d.options.filter((o) => o !== option) });

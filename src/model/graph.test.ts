@@ -1131,20 +1131,18 @@ describe("消せるもの: 入力は使う箱の入力ごと、最後の出力�
     expect(portsOf(p, a.blockId, "in")).toHaveLength(0);
   });
 
-  it("最後の出力は消せない (最上位の出力は消せる)。判断は未回答だけ取り下げられ、分岐の問いは消せない", () => {
+  it("最後の出力も消せる (出力の無い箱は要具体化として案内されるだけ)。判断は回答済みでも消せる", () => {
     let p = createProject("t");
     const pj = projectBlocks(p)[0].id;
     const a = addBlock(p, { parentId: pj, title: "A", outputName: "成果" }); p = a.project;
     const out = portsOf(p, a.blockId, "out")[0];
-    expect(canRemovePort(p, out.id).ok).toBe(false);
-    expect(removePort(p, out.id)).toBe(p);
-    const extra = addPort(p, { blockId: ROOT_ID, direction: "out", name: "おまけ" }); p = extra.project;
-    expect(canRemovePort(p, extra.portId).ok).toBe(true);
+    expect(canRemovePort(p, out.id).ok).toBe(true);
+    p = removePort(p, out.id);
+    expect(portsOf(p, a.blockId, "out")).toHaveLength(0);
     const asked = askDecision(p, a.blockId, "claude-code", "どれ?", ["x", "y"]); p = asked.project;
-    expect(removeDecision(p, a.blockId, asked.decisionId!).error).toBeUndefined();
     expect(removeDecision(p, a.blockId, asked.decisionId!).project.blocks[a.blockId].decisions).toHaveLength(0);
     const answered = answerDecision(p, a.blockId, asked.decisionId!, "x", "human");
-    expect(removeDecision(answered, a.blockId, asked.decisionId!).error).toBeTruthy();
+    expect(removeDecision(answered, a.blockId, asked.decisionId!).project.blocks[a.blockId].decisions).toHaveLength(0);
   });
 
   it("プロジェクトのボックスも消せる (最後の 1 つでも)", () => {

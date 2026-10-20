@@ -44,8 +44,8 @@ export function BranchPicker({ project, blockId }: { project: Project; blockId: 
           <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => reopenDecision(p, blockId, d.id, "human", ""))}
             title={t("答えを履歴に残して未回答に戻す (見送りの道も元に戻る)")}>{t("Reopen")}</button>
         )}
-        {/* 答える前なら道を足せる (選択肢と出力が同時に増える) */}
-        {!readonly && d.answer === undefined && (
+        {/* 道を足す (いつでも。選択肢と出力が同時に増える) */}
+        {!readonly && (
           <button className="btn btn-ghost btn-sm" onClick={() => setAdding(adding === null ? "" : null)} title={t("道 (選択肢) を足す")}>＋ {"Add path"}</button>
         )}
       </div>
@@ -80,8 +80,8 @@ export function BranchPicker({ project, blockId }: { project: Project; blockId: 
                 <button className="btn btn-sm btn-primary" onClick={() => apply((p) => answerDecision(p, blockId, d.id, option, "human"))}
                   title={t("この道に進む (ほかの道は見送りになり、分岐のボックスは完了になる)")}>{t("選ぶ")}</button>
               )}
-              {/* 道を消す: 答える前で、残りが 2 つ以上になるときだけ (線も外れる。先のボックスは残る) */}
-              {state === "open" && !readonly && d.answer === undefined && paths.length > 2 && (
+              {/* 道を消す (いつでも。線も外れる。先のボックスは残る) */}
+              {!readonly && (
                 <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => { const r = removeBranchOption(p, blockId, option); if (r.error) setToast(r.error); return r.project; })}
                   title={t("この道を削除 (線も外れます)")}>×</button>
               )}

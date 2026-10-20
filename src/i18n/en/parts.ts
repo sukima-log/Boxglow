@@ -95,7 +95,6 @@ export const parts: Record<string, string> = {
 , "削除": "Delete"
 , "もう一度押すと完全に削除します (元に戻せません)": "Press again to delete permanently (cannot be undone)"
 , "ライブラリから削除 (元に戻せません)": "Delete from the library (cannot be undone)"
-, "問いを取り下げる (Undo で戻せます)": "Withdraw the question (Undo brings it back)"
 , "供給元の一覧 (計画の入力・上の階層の入力・ほかの箱の出力) から選んでつなぐ": "Pick a source from a list (plan inputs, inputs of the levels above, outputs of other boxes) and connect it"
 , "供給元から選ぶ…": "Connect from…"
 , "つなげる供給元がありません": "No source to connect"
@@ -105,4 +104,6 @@ export const parts: Record<string, string> = {
 , "検索": "Search"
 , "差し戻し済み: {list}": "Rejected: {list}"
 , "未接続の入力 (自動では上の階層へ引き上げません。線をつなぐと元に戻ります)": "Unconnected input (not promoted to the levels above; connecting a wire restores that)"
+, "この判断を消す (Undo で戻せます。分岐の問いなら、ふつうの箱に戻ります)": "Delete this decision (Undo brings it back; for a branch's question the box becomes an ordinary box)"
+, "問いを取り下げる (Undo で戻せます。分岐の問いなら、ふつうの箱に戻ります)": "Withdraw the question (Undo brings it back; for a branch's question the box becomes an ordinary box)"
 };

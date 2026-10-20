@@ -773,15 +773,13 @@ export function inputsFedBy(p: Project, portId: string, seen: Set<string> = new 
 }
 
 /**
- * ポートを消せるか (消せない理由つき)
- *   - 出力: ボックスの最後の 1 本は消せない (ボックスは必ず出力を持つ。最上位の出力は除く)
+ * ポートを消せるか。どのポートも消せる (出力が無くなった箱は「要具体化」として案内されるだけで、禁止はしない。利用者の要望 2026-10-20)
  * Input : p, portId
- * Output: { ok, reason } (reason は画面に出せる文)
+ * Output: { ok, reason } (無いポートだけ false)
  */
 export function canRemovePort(p: Project, portId: string): { ok: boolean; reason?: string } {
   const x = p.ports[portId];
   if (!x) return { ok: false, reason: t("ポートが見つかりません") };
-  if (x.direction === "out" && x.blockId !== ROOT_ID && portsOf(p, x.blockId, "out").length <= 1) return { ok: false, reason: t("最後の出力は削除できません (ボックスには出力が 1 本必要です)") };
   return { ok: true };
 }
 
@@ -1443,18 +1441,20 @@ export function sentBackTo(p: Project, blockId: string): { from: Block; record: 
 }
 
 /**
- * 判断 (問い) を取り下げる: 未回答で、分岐の問いでないものだけ消せる (回答済みは履歴なので残す。分岐の問いは道と一体なので、分岐ごと扱う)
+ * 判断 (問い) を消す: 回答済みでも消せる (Undo で戻せる)。分岐の問いを消すと、その箱はふつうの箱に戻る (道の印が外れ、線はそのまま)
  * Input : p, blockId, decisionId
- * Output: { project, error } (消せないときは project = p と理由)
+ * Output: { project, error } (無いときだけ error)
  */
 export function removeDecision(p: Project, blockId: string, decisionId: string): { project: Project; error?: string } {
   const b = p.blocks[blockId];
   const d = b?.decisions.find((x) => x.id === decisionId);
   if (!b || !d) return { project: p, error: t("判断が見つかりません") };
-  if (d.answer !== undefined) return { project: p, error: t("回答済みの判断は削除できません (履歴として残ります。やり直すには Reopen)") };
-  if (b.branch?.decisionId === decisionId) return { project: p, error: t("分岐の問いは削除できません (分岐のボックスごと削除するか、道を変更してください)") };
   const q = touch(p);
-  q.blocks[blockId] = { ...b, decisions: b.decisions.filter((x) => x.id !== decisionId) };
+  const { branch, ...rest } = b;
+  const next: Block = { ...rest, decisions: b.decisions.filter((x) => x.id !== decisionId) };
+  if (branch?.decisionId !== decisionId && branch) next.branch = branch;
+  else if (branch) for (const o of portsOf(q, blockId, "out")) if (o.branchOption !== undefined) { const { branchOption: _bo, ...po } = q.ports[o.id]; void _bo; q.ports[o.id] = po; }
+  q.blocks[blockId] = next;
   return { project: q };
 }
 
@@ -2152,6 +2152,8 @@ export function routeConnect(q: Project, from: Endpoint, to: Endpoint): void {
 export function connectAcross(p: Project, from: Endpoint, to: Endpoint): { project: Project; edgeId?: string; error?: string } {
   const direct = validateConnection(p, from, to);
   if (direct.ok) return connect(p, from, to);
+  // 逆向きに引いた (入力から出力へ) ときは、向きを入れ替えてつなぐ (どちらから引いても同じ線)
+  if (!canConnectAcross(p, from, to) && canConnectAcross(p, to, from)) return connectAcross(p, to, from);
   if (!canConnectAcross(p, from, to)) return { project: p, error: direct.reason };
   const before = new Set(Object.keys(p.edges));
   const q = clone(p);
@@ -2258,14 +2260,21 @@ export function moveBlockToParent(p: Project, blockId: string, newParentId: stri
 export function connectToBlock(p: Project, from: Endpoint, targetBlockId: string): { project: Project; error?: string } {
   const fp = p.ports[from.portId];
   const tb = p.blocks[targetBlockId];
-  if (!fp || !tb || targetBlockId === ROOT_ID) return { project: p, error: t("つなぐ先が見つかりません") };
+  if (!fp || !tb) return { project: p, error: t("つなぐ先が見つかりません") };
   const fromIsOutput = fp.direction === "out" && from.side === "outer";
-  // 先祖へ: その箱の出力 (内側) に束ねる (空いている出力、無ければ最初の出力)
+  // 最上位の Outputs ノードへ落とした: 計画の最終成果物にする (同名の最上位の出力を作ってつなぐ。途中の箱の出力も作られる)
+  if (targetBlockId === ROOT_ID) {
+    if (!fromIsOutput) return { project: p, error: t("つなぐ先が見つかりません") };
+    const r = addPort(p, { blockId: ROOT_ID, direction: "out", name: fp.name });
+    return connectAcross(r.project, from, { portId: r.portId, side: "inner" });
+  }
+  // 先祖へ: その箱の出力 (内側) に束ねる (空いている出力、無ければ新しく足す)
   if (fromIsOutput && ancestorsOf(p, fp.blockId).some((a) => a.id === targetBlockId)) {
     const outs = portsOf(p, targetBlockId, "out");
-    const free = outs.find((o) => incomingEdges(p, { portId: o.id, side: "inner" }).length === 0) ?? outs[0];
-    if (!free) return { project: p, error: t("親に出力がありません") };
-    return connectAcross(p, from, { portId: free.id, side: "inner" });
+    const free = outs.find((o) => incomingEdges(p, { portId: o.id, side: "inner" }).length === 0);
+    if (free) return connectAcross(p, from, { portId: free.id, side: "inner" });
+    const r = addPort(p, { blockId: targetBlockId, direction: "out", name: fp.name });
+    return connectAcross(r.project, from, { portId: r.portId, side: "inner" });
   }
   // 自分自身や自分の中の箱には、自分の出力をつなげない
   if (fromIsOutput && (targetBlockId === fp.blockId || ancestorsOf(p, targetBlockId).some((a) => a.id === fp.blockId))) return { project: p, error: t("自分の中の箱には、自分の出力をつなげません") };

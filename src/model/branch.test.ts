@@ -32,7 +32,7 @@ function fixture(anyOf = true) {
 }
 
 describe("分岐の道の追加 / 削除 (答える前だけ、2 つ以上残す)", () => {
-  it("道を足すと出力と選択肢が増え、消すと減る。2 つのときは消せず、答えた後は変えられない", () => {
+  it("道を足すと出力と選択肢が増え、消すと減る。答えた後でも足せる・消せる。分岐の問いを消すとふつうの箱に戻る", async () => {
     let { p, br } = fixture();
     const added = addBranchOption(p, br.blockId, "gRPC"); p = added.project;
     expect(added.error).toBeUndefined();
@@ -42,9 +42,13 @@ describe("分岐の道の追加 / 削除 (答える前だけ、2 つ以上残す
     const removed = removeBranchOption(p, br.blockId, "gRPC"); p = removed.project;
     expect(removed.error).toBeUndefined();
     expect(portsOf(p, br.blockId, "out").map((o) => o.branchOption)).toEqual(["REST", "GraphQL"]);
-    expect(removeBranchOption(p, br.blockId, "REST").error).toBeTruthy(); // 2 つは残す
     p = answerDecision(p, br.blockId, p.blocks[br.blockId].decisions[0].id, "REST", "human");
-    expect(addBranchOption(p, br.blockId, "SOAP").error).toBeTruthy();
+    expect(addBranchOption(p, br.blockId, "SOAP").error).toBeUndefined();
+    expect(removeBranchOption(p, br.blockId, "GraphQL").error).toBeUndefined();
+    const { removeDecision } = await import("./graph");
+    const plain = removeDecision(p, br.blockId, p.blocks[br.blockId].decisions[0].id).project;
+    expect(plain.blocks[br.blockId].branch).toBeUndefined();
+    expect(portsOf(plain, br.blockId, "out").every((o) => o.branchOption === undefined)).toBe(true);
   });
 });
 

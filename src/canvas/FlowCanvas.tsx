@@ -357,7 +357,9 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
         return;
       }
       const nodeEl = el?.closest(".react-flow__node-block") as HTMLElement | null;
-      const targetId = nodeEl?.getAttribute("data-id");
+      // 最上位の Outputs ノードに落としたら、計画の最終成果物にする (ROOT_ID を渡す)
+      const terminalEl = el?.closest(".react-flow__node-terminal") as HTMLElement | null;
+      const targetId = nodeEl?.getAttribute("data-id") ?? (terminalEl?.getAttribute("data-id") === "root-out" ? ROOT_ID : null);
       if (!targetId) return;
       let error: string | undefined;
       apply((p) => {

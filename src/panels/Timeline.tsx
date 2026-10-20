@@ -94,6 +94,7 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
             <div className="flex gap-1">
               <button className="btn btn-ghost btn-sm" onClick={() => setEditing(d.answer ?? "")} title={t("答えの文面を直す (書き間違いや補足。選び直しではない)")}>Edit</button>
               <button className="btn btn-ghost btn-sm" onClick={() => setReopenNote("")} title={t("方針転換: 答えを履歴に残して、候補から選び直す")}>{t("Reopen")}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => { const r = removeDecision(p, blockId, decisionId); if (r.error) setToast(r.error); return r.project; })} title={t("この判断を消す (Undo で戻せます。分岐の問いなら、ふつうの箱に戻ります)")}>Delete</button>
             </div>
           )}
         </div>
@@ -112,9 +113,9 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
             </div>
           </div>
           {/* 取り下げ: 間違えて出した問いは消せる (未回答のときだけ。分岐の問いは道と一体なので消せない。回答済みは履歴として残す) */}
-          {project.blocks[blockId]?.branch?.decisionId !== decisionId && (
+          {(
             <div className="flex justify-end">
-              <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => { const r = removeDecision(p, blockId, decisionId); if (r.error) setToast(r.error); return r.project; })} title={t("問いを取り下げる (Undo で戻せます)")}>{"Withdraw"}</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => apply((p) => { const r = removeDecision(p, blockId, decisionId); if (r.error) setToast(r.error); return r.project; })} title={t("問いを取り下げる (Undo で戻せます。分岐の問いなら、ふつうの箱に戻ります)")}>{"Withdraw"}</button>
             </div>
           )}
         </>

@@ -48,7 +48,7 @@ describe("差し戻し (sendback)",()=>{
 });
 
 describe("消す操作 (port --remove / unask / branch の道 / remove のプロジェクト)",()=>{
-  it("port --remove は入力を使う箱の入力ごと消し、最後の出力は消せない。inputs で最上位の入力を足せる",()=>{
+  it("port --remove は入力を使う箱の入力ごと消す。最後の出力も消せる。inputs で最上位の入力を足せる",()=>{
     const {cli,read,id}=fixture();
     expect(cli("port","inputs","--in","資料").status).toBe(0);
     expect(Object.values(read().ports).some((q:any)=>q.blockId==="root"&&q.direction==="in"&&q.name==="資料"&&!q.promotedFrom)).toBe(true);
@@ -57,7 +57,8 @@ describe("消す操作 (port --remove / unask / branch の道 / remove のプロ
     expect(Object.values(read().ports).filter((q:any)=>q.name==="仕様書")).toHaveLength(0);
     expect(Object.values(read().ports).filter((q:any)=>q.blockId===id&&q.direction==="in")).toHaveLength(0);
     const last=cli("port","対象","--remove","コード");
-    expect(last.status).toBe(1);expect(last.stderr).toMatch(/最後の出力/);
+    expect(last.status,last.stderr).toBe(0);
+    expect(Object.values(read().ports).filter((q:any)=>q.blockId===id&&q.direction==="out")).toHaveLength(0);
   });
   it("unask は未回答の問いを消す。branch --box --add-option / --remove-option で道を足す / 消す。remove はプロジェクトのボックスを --force で消し、最後の 1 つは消せない",()=>{
     const {cli,read,id}=fixture();
@@ -72,7 +73,8 @@ describe("消す操作 (port --remove / unask / branch の道 / remove のプロ
     expect(Object.values(read().ports).filter((q:any)=>q.blockId===br().id&&q.direction==="out").map((q:any)=>q.branchOption)).toEqual(["A","B","C"]);
     expect(cli("branch","--box","方式","--remove-option","C").status).toBe(0);
     expect(Object.values(read().ports).filter((q:any)=>q.blockId===br().id&&q.direction==="out")).toHaveLength(2);
-    expect(cli("branch","--box","方式","--remove-option","B").status).toBe(1);
+    expect(cli("branch","--box","方式","--remove-option","B").status).toBe(0); // 道は 1 つになっても消せる
+    expect(Object.values(read().ports).filter((q:any)=>q.blockId===br().id&&q.direction==="out")).toHaveLength(1);
     const pj=Object.values(read().blocks).find((b:any)=>b.kind==="project") as any;
     expect(cli("remove",pj.id,"--force").status).toBe(0); // 最後のプロジェクトのボックスも消せる
   });
