@@ -459,4 +459,5 @@ export const app: Record<string, string> = {
 , "新しいプロジェクト": "New project"
 , "「{title}」と下の階層のブロックを削除しました (Undo で戻せます)": "\"{title}\" and the blocks inside were deleted (Undo brings them back)"
 , "このブラウザから削除 (元に戻せません)": "Delete from this browser (cannot be undone)"
+, "接続を外しました (Undo で戻せます)": "Wire removed (Undo brings it back)"
 };

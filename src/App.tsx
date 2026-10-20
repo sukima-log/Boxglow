@@ -213,12 +213,14 @@ export function App() {
         ev.preventDefault();
         redo();
       } else if (ev.key === "Delete" || ev.key === "Backspace") {
-        if (readonly || !useProjectStore.getState().editMode) return;
+        // View でも効く (配置を固定しているだけで、線や箱の削除は Undo で戻せる。利用者の要望 2026-10-20: 線を選んで Delete ですぐ外したい)
+        if (readonly) return;
         if (sel.edgeId) {
           const e = p.edges[sel.edgeId];
           if (e && !e.auto) {
             select({});
             apply((q) => disconnect(q, sel.edgeId!));
+            useProjectStore.getState().setToast(t("接続を外しました (Undo で戻せます)"));
           }
         } else if (sel.blockId) {
           const b = p.blocks[sel.blockId];

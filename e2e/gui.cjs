@@ -285,6 +285,12 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     const folded=await page.evaluate(()=>{const rf=window.boxglow.rf;const majors=new Set(rf.getNodes().filter(n=>n.type==='block'&&n.data.major).map(n=>n.id));return rf.getNodes().filter(n=>n.type==='block'&&majors.has(n.parentId)).every(n=>n.hidden);});
     check('Top: Collapse all で 1 階層 (大項目だけ) に戻る',folded&&(await page.getByRole('button',{name:'Expand all',exact:true}).count())===1);
     check('Top: View での Expand / Collapse all は保存データを変えない',beforeFold===await page.evaluate(()=>JSON.stringify(window.boxglow.store.getState().project)));
+    // View でも、線を選んで Delete で外せる (Undo で戻す)
+    const edgeId=await page.evaluate(()=>{const s=window.boxglow.store.getState();s.setEditMode(false);const e=Object.values(s.project.edges).find(x=>!x.auto);s.select({edgeId:e.id});return e.id;});await page.waitForTimeout(300);
+    await page.keyboard.press('Delete');await page.waitForTimeout(400);
+    check('View: 線を選んで Delete で外せる',await page.evaluate((id)=>!window.boxglow.store.getState().project.edges[id],edgeId));
+    await page.evaluate(()=>window.boxglow.store.getState().undo());await page.waitForTimeout(300);
+    check('View: Undo で線が戻る',await page.evaluate((id)=>!!window.boxglow.store.getState().project.edges[id],edgeId));
     // 一覧から選んで結線 (供給元から選ぶ…): 3 階層下の箱に最上位の入力をつなぐと、途中の箱にも入力が通る。終わったら Undo で戻す
     await page.evaluate(()=>{const s=window.boxglow.store.getState();s.setEditMode(true);const b=Object.values(s.project.blocks).find(x=>x.title==='トークンを保存する');s.select({blockId:b.id,panelTab:'io'});});await page.waitForTimeout(500);
     await page.getByRole('button',{name:'供給元から選ぶ…',exact:true}).click();await page.waitForTimeout(300);
