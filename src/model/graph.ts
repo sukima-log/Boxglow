@@ -855,6 +855,34 @@ export function disconnect(p: Project, edgeId: string): Project {
   return normalizePromotions(q);
 }
 
+/**
+ * 選んだ線の「外す対象」: 本物の線ならそれ自身。自動の線 (下の階層の入力を自動で上へ引き上げた区間) なら、その経路を上流へたどって最初に出てくる本物の線
+ * (自動の線は消してもすぐ再生されるので、外す意味があるのは供給元とつないだ本物の線。利用者の指摘 2026-10-20: 自動の区間を選ぶと Delete が効かなかった)
+ * Input : p, edgeId / Output: 外す線の id (経路に本物の線が無ければ null = まだ供給元が無い)
+ */
+export function removableEdgeOf(p: Project, edgeId: string): string | null {
+  const seen = new Set<string>();
+  let cur = p.edges[edgeId];
+  while (cur && !seen.has(cur.id)) {
+    if (!cur.auto) return cur.id;
+    seen.add(cur.id);
+    // 出す側のポートの反対の面に入ってくる線 (上流)
+    const backSide: "inner" | "outer" = cur.from.side === "outer" ? "inner" : "outer";
+    cur = incomingEdges(p, { portId: cur.from.portId, side: backSide })[0];
+  }
+  return null;
+}
+
+/**
+ * 選んだ線の接続を外す (自動の線なら、その経路の本物の線を外す)
+ * Input : p, edgeId / Output: { project, error } (外す線が無ければ error)
+ */
+export function disconnectWire(p: Project, edgeId: string): { project: Project; error?: string } {
+  const target = removableEdgeOf(p, edgeId);
+  if (!target) return { project: p, error: t("この線は自動の線で、まだ供給元とつながっていません (外す接続がありません。入力そのものを消すなら、箱の I/O タブで ×)") };
+  return { project: disconnect(p, target) };
+}
+
 /** メンバーを追加する */
 export function addMember(p: Project, name: string, color: string): { project: Project; memberId: string } {
   const q = touch(p);

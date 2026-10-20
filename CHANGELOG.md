@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **Delete removes the selected wire or box in View mode too** (Undo brings it back); the wire bar's "Remove wire" button is also available in View.
+- **Delete removes the selected wire or box in View mode too** (Undo brings it back); the wire bar's "Remove wire" button is also available in View. Selecting an automatic segment (an input promoted through the levels) and pressing Delete removes the real wire of that path, instead of doing nothing.
 - **Send back.** When an evaluation or check does not pass, the work is sent back instead of wiring a loop (wires are dependencies and never go backwards): **Send back** on the Status tab (choose the box that made the input and write why), `boxglow sendback <box> --to <box> --note "why"`, MCP `boxglow_sendback`. The box that made it returns to In Progress, its artifacts are kept as "rejected" (so the evaluating box waits again), the reason is logged on both boxes and shown in `context`, and the canvas marks the box with a "Sent back n" chip. The agent instructions explain this instead of looping.
 - **Clicking a box no longer jumps the view.** When the side panel opens and would cover the box you clicked, the canvas now glides so that box sits in the middle of the visible area (not behind the panel); if the box stays visible, nothing moves. Jumping to a box from a list uses the same rule.
 - **Auto Layout button** in the canvas tool strip (Edit mode), next to Collapse all; the ⋯ menu entry stays.

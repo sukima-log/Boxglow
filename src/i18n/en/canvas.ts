@@ -50,4 +50,6 @@ export const canvas: Record<string, string> = {
 , "中止 (Esc)": "Cancel (Esc)"
 , "差し戻し: {note} ({from})": "Sent back: {note} ({from})"
 , "差し戻し {n}": "Sent back {n}"
+, "この区間は自動の線なので、経路の本物の線 (供給元とつないだ線) を外します": "This segment is automatic; the real wire of this path (the one connected to the source) is removed"
+, "まだ供給元とつながっていない自動の線です (外す接続がありません)": "An automatic wire with no source yet (nothing to disconnect)"
 };

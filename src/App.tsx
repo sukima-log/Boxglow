@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { FlowCanvas } from "./canvas/FlowCanvas";
-import { addBlock, computeProgress, disconnect, pendingDecisions, portsOf, removeBlock } from "./model/graph";
+import { addBlock, computeProgress, pendingDecisions, portsOf, removeBlock, disconnectWire } from "./model/graph";
 import { ROOT_ID } from "./model/types";
 import { majorBlocks, parentForNewBlock, useProjectStore, useShownProject } from "./store/useProjectStore";
 import { DEFAULT_SYNC_SERVER } from "../cli/sync/server-policy";
@@ -216,10 +216,12 @@ export function App() {
         // View でも効く (配置を固定しているだけで、線や箱の削除は Undo で戻せる。利用者の要望 2026-10-20: 線を選んで Delete ですぐ外したい)
         if (readonly) return;
         if (sel.edgeId) {
-          const e = p.edges[sel.edgeId];
-          if (e && !e.auto) {
+          // 自動の線 (引き上げた区間) を選んでいても、その経路の本物の線を外す
+          const r = disconnectWire(p, sel.edgeId);
+          if (r.error) useProjectStore.getState().setToast(r.error);
+          else {
             select({});
-            apply((q) => disconnect(q, sel.edgeId!));
+            apply(() => r.project);
             useProjectStore.getState().setToast(t("接続を外しました (Undo で戻せます)"));
           }
         } else if (sel.blockId) {
