@@ -26,7 +26,7 @@ export const EXPANDED_MIN_W = 320;
 /** 展開中: 子の右端からボックスの縁までの余白 (子の出力から親の出力へ上がる線の通路) */
 export const EXPANDED_PAD = 96;
 /** 展開中: 子の下端からボックスの縁までの余白 */
-export const EXPANDED_PAD_Y = 104; // 子の下を通る線 (縁から 36px + 2 本分)。空きが足りないときは線の間隔を詰める
+export const EXPANDED_PAD_Y = 52; // 子の下の空き (+12 で 64。見出しの下の空き graph.ts の CHILD_GAP_Y と同じ)。子の下を通る線の通り道。空きが足りないときは線の間隔を詰める
 /** 入力/出力ノードの幅 */
 export const TERMINAL_W = 200;
 

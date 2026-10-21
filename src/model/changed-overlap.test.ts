@@ -62,17 +62,19 @@ it("EditでB6を展開しても上下を入れ替えず、B7を下へ押す", ()
   const next = updateBlock(p, id("B6"), { collapsed: false });
   const fixed = resolveChangedOverlaps(p, next, blockSize);
   expect(fixed.blocks[id("B6")].position).toEqual(p.blocks[id("B6")].position);
-  expect(fixed.blocks[id("B7")].position).toEqual({ x: 120, y: 668 });
+  expect(fixed.blocks[id("B7")].position).toEqual({ x: 120, y: 616 }); // 子の下の空きを 116 → 64 にした分だけ B6 が低い
 });
 
 /** 等間隔の箱。独立した形状で押し出しの連鎖と、64個を超える走査を検査する。 */
+/** 子を置ける一番上 (見出しの下の空き 64 を含む。graph.ts の childTop と同じ) */
+const TOP = 124;
 function column(count: number) {
   const p = createProject("column");
   const parentId = defaultTaskParent(p);
   const template = p.blocks[parentId];
   for (let i = 0; i < count; i++) {
     const id = `box-${i}`;
-    p.blocks[id] = { ...template, id, parentId, kind: "task", title: id, position: { x: 120, y: 96 + i * 196 }, collapsed: true };
+    p.blocks[id] = { ...template, id, parentId, kind: "task", title: id, position: { x: 120, y: TOP + i * 196 }, collapsed: true };
   }
   return p;
 }
@@ -93,21 +95,21 @@ it("拡大による押し出しが80個へ連鎖しても、順序と間隔を�
 it("移動した箱が64個を超える兄弟を避けても、最後に重なりを残さない", () => {
   const p = column(80);
   const next = structuredClone(p);
-  next.blocks["box-79"].position = { x: 120, y: 96 };
+  next.blocks["box-79"].position = { x: 120, y: TOP };
   const fixed = resolveChangedOverlaps(p, next, fixedSize);
-  expect(fixed.blocks["box-79"].position.y).toBe(96 + 79 * 196);
+  expect(fixed.blocks["box-79"].position.y).toBe(TOP + 79 * 196);
   for (let i = 0; i < 79; i++) expect(fixed.blocks[`box-${i}`].position).toEqual(p.blocks[`box-${i}`].position);
 });
 
 it("幅が増えた箱の右だけを押し、遠い旧重なりはそのまま残す", () => {
   const p = column(4);
-  p.blocks["box-1"].position = { x: 316, y: 96 };
+  p.blocks["box-1"].position = { x: 316, y: TOP };
   p.blocks["box-2"].position = { x: 2000, y: 2000 };
   p.blocks["box-3"].position = { x: 2000, y: 2000 };
   const size = (q: Project, id: string) => ({ width: q.blocks[id].title === "grown" ? 200 : 100, height: 1000 });
   const fixed = resolveChangedOverlaps(p, updateBlock(p, "box-0", { title: "grown" }), size);
   expect(fixed.blocks["box-0"].position).toEqual(p.blocks["box-0"].position);
-  expect(fixed.blocks["box-1"].position).toEqual({ x: 416, y: 96 });
+  expect(fixed.blocks["box-1"].position).toEqual({ x: 416, y: TOP });
   expect(fixed.blocks["box-2"].position).toEqual(p.blocks["box-2"].position);
   expect(fixed.blocks["box-3"].position).toEqual(p.blocks["box-3"].position);
 });

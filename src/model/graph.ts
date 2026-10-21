@@ -78,7 +78,9 @@ function ensureKeys(q: Project): void {
 }
 
 /** 子ブロックを置くときの親の内側の余白 (px)。top は見出し (題名 + 情報の行) の下にさらに空ける分 */
-export const CHILD_PADDING = { left: 120, top: 76 }; // 左: 親の入力から子へ下りる線の通路 (縁から 36px + 線 3 本分)
+/** 子の上下の空き (見出しの下と、子の下。線の通り道) */
+export const CHILD_GAP_Y = 64;
+export const CHILD_PADDING = { left: 120, top: 60 + CHILD_GAP_Y }; // 左: 親の入力から子へ下りる線の通路 (縁から 36px + 線 3 本分)
 /** 親の見出しの高さの既定 (size.ts と同じ 36 + 24)。題名が折り返すと size.ts 側で増える */
 const DEFAULT_HEADER_H = 60;
 
@@ -88,7 +90,9 @@ export function childTop(p: Project, parentId: string): number {
   if (!b) return CHILD_PADDING.top;
   // 題名が長いと見出しが伸びるので、その分を足す (size.ts の見積もりと同じ式)
   const lines = Math.min(3, Math.max(1, Math.ceil((b.title.length * 14) / 400)));
-  return DEFAULT_HEADER_H + (lines - 1) * 18 + 16;
+  // 見出しの下の空きは、子の下の空き (size.ts の EXPANDED_PAD_Y + 12 = 64) と同じにする。
+  // 以前は上 16px・下 116px で、子が上に寄って見えた (利用者の指摘 2026-10-21)。上の空きは親の入力から子へ横に渡る線の通り道にもなる
+  return DEFAULT_HEADER_H + (lines - 1) * 18 + CHILD_GAP_Y;
 }
 
 /* ------------------------------------------------------------------ */

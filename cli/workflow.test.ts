@@ -227,15 +227,15 @@ describe("担当の一覧 (list)",()=>{
     // メンバーを足して、対象のボックスの担当にする (CLI にメンバーの命令は無いので、ファイルを直接整える)
     const p=read();p.members=[{id:"m1",name:"さとう",color:"#0d8080"}];
     const target=Object.values(p.blocks as Record<string,{title:string;assigneeIds:string[];dueDate?:string}>).find(b=>b.title==="対象")!;
-    target.assigneeIds=["m1"];target.dueDate="2026-10-20";
+    target.assigneeIds=["m1"];target.dueDate="2099-10-20"; // 未来の日付 (今日を過ぎると「期日切れ」が付いて照合が変わるため)
     writeFileSync(file,JSON.stringify(p,null,2));
     const table=cli("list","--assignee","さとう");
     expect(table.status,table.stderr).toBe(0);
     expect(table.stdout).toContain("| ID | 題名 | 場所 | 状態 |");
-    expect(table.stdout).toMatch(/\| 対象 \|.*\| New \| 0% \| 2026-10-20 \|.*要具体化: /);
+    expect(table.stdout).toMatch(/\| 対象 \|.*\| New \| 0% \| 2099-10-20 \|.*要具体化: /);
     const json=JSON.parse(cli("list","--assignee","さとう","--json").stdout);
     expect(json).toHaveLength(1);
-    expect(json[0]).toMatchObject({title:"対象",dueDate:"2026-10-20",missingInputs:["仕様書"]});
+    expect(json[0]).toMatchObject({title:"対象",dueDate:"2099-10-20",missingInputs:["仕様書"]});
     // 全員: 担当の列が足され、担当のいないボックスは「未担当」と出る
     const all=cli("list","--everyone");
     expect(all.status,all.stderr).toBe(0);
