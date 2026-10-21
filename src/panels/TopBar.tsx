@@ -248,9 +248,10 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
       <button className="project-name" onClick={() => select({ project: true })} title={project.name}>{project.name}</button>
       <span className={`save-chip ${saveError ? "save-error" : saveState === "unsaved" ? "unsaved" : ""}`} title={saveError || saveTitle} role="status" aria-live="polite">
         <span aria-hidden="true">{saveIcon}</span>
-        {!ephemeral && <span className="save-chip__file">{fileName ?? ""}</span>}
+        {!ephemeral && fileName && <span className="save-chip__file">{fileName}:</span>}
         {/* 保存先のファイルと同期先のサーバーを区別する。ローカル保存済みでも送信前のことがある。 */}
-        <span>{!ephemeral && !readonly && <span>{source === "idb" ? t("ブラウザ内") : t("ファイル")}: </span>}{saveLabel}</span>
+        {/* 保存先の種類: ファイル名が出ているときは出さない (「Interval.boxglow.json: Saved」)。狭い幅でファイル名を隠すときだけ「ファイル:」を出す (index.css)。ブラウザ内の計画は常に「ブラウザ内:」 */}
+        <span>{!ephemeral && !readonly && <span className={source !== "idb" && fileName ? "save-chip__kind" : undefined}>{source === "idb" ? t("ブラウザ内") : t("ファイル")}: </span>}{saveLabel}</span>
       </span>
       {/* 手動の更新: 今すぐ読み直す (自動の更新を待たない)。どの計画でも、いつも同じ場所に出す (変更があるかどうかに関係なく)。
           ファイルにつながっている計画はファイルを、ブラウザ内の計画はこのブラウザの保存先を読み直す */}
