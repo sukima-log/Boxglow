@@ -1291,6 +1291,16 @@ describe("どんな線でも Delete で外せる (disconnectWire)", () => {
 });
 
 describe("normalizePortNames: 古い食い違いをそろえる", () => {
+  it("食い違ったファイルを読み込んだ時点で、親の出力の名前にそろう (開いただけで見た目がそろう)", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const parent = addBlock(p, { parentId: pj, title: "髪の毛・髪型", outputName: "髪の毛Model" }); p = parent.project;
+    const kid = addBlock(p, { parentId: parent.blockId, title: "テクスチャ", outputName: "髪の毛Model" }); p = kid.project;
+    p = connect(p, { portId: portsOf(p, kid.blockId, "out")[0].id, side: "outer" }, { portId: portsOf(p, parent.blockId, "out")[0].id, side: "inner" }).project;
+    const broken = JSON.parse(toJSON(p)); broken.ports[portsOf(p, kid.blockId, "out")[0].id].name = "3Dオブジェクト(テクスチャ付き)";
+    expect(portsOf(fromJSON(JSON.stringify(broken)), kid.blockId, "out")[0].name).toBe("髪の毛Model");
+  });
+
   it("供給元と違う名前の入力を、供給元の名前 (さらに上流があればその名前) にそろえる", () => {
     let p = createProject("t");
     const pj = projectBlocks(p)[0].id;

@@ -1211,7 +1211,8 @@ export function fromJSON(text: string): Project {
   // 壊れた参照 (存在しないブロックのポート、存在しないポートの線) を落とす
   for (const x of Object.values(q.ports)) if (!q.blocks[x.blockId]) delete q.ports[x.id];
   for (const e of Object.values(q.edges)) if (!q.ports[e.from.portId] || !q.ports[e.to.portId]) delete q.edges[e.id];
-  return normalizePromotions(wrapIntoProject(q));
+  // 読み込んだ時点で、線でつながる入出力の名前をそろえる (以前は編集・保存のときだけで、開いただけでは古い食い違いが見えたまま: 利用者の指摘 2026-10-21)
+  return normalizePortNames(normalizePromotions(wrapIntoProject(q))).project;
 }
 
 /**

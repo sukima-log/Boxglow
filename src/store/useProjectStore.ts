@@ -1201,8 +1201,9 @@ export const useProjectStore = create<State>((set, get) => {
     }
 
   , openProject: async (id) => {
-      const p = await loadProject(id);
-      if (!p) return false;
+      const loaded = await loadProject(id);
+      if (!loaded) return false;
+      const p = normalizePortNames(loaded).project; // 古い食い違いをそろえる (fromJSON を通らない経路)
       get().openProjectObject(p, false);
       return true;
     }
@@ -1296,7 +1297,9 @@ export const useProjectStore = create<State>((set, get) => {
       stopWatching();
       fileHandle = handle;
       baseText = text;
-      set({ project: p, ephemeral: false, source: "file", readonly: true, fileName: handle.name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: "saved", meId: loadMe(p), editMode: loadEditMode(p) });
+      // 読み込みで名前をそろえた (ファイルと中身が違う) ときは、未保存として示す
+      const aligned = (() => { try { const raw = JSON.parse(text) as { ports?: Record<string, { name?: string }> }; return Object.values(p.ports).some((q) => raw.ports?.[q.id] && raw.ports[q.id].name !== q.name); } catch { return false; } })();
+      set({ project: p, ephemeral: false, source: "file", readonly: true, fileName: handle.name, past: [], future: [], selection: NO_SELECTION, viewCollapsed: {}, viewScope: loadScope(p), saveState: aligned ? "unsaved" : "saved", meId: loadMe(p), editMode: loadEditMode(p) });
       rememberInUrl(null);
       const generation = epoch;
       /**
