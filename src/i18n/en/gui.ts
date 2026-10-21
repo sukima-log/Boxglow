@@ -233,4 +233,5 @@ export const gui: Record<string, string> = {
 , "理由 (作り直す人が読む。例: テストが 2 件落ちる)": "Reason (read by whoever redoes it, e.g. 2 tests fail)"
 , "評価した箱へ": "Go to the box that sent it back"
 , "戻した箱へ": "Go to the box it was sent to"
+, "差し戻されています": "Sent back"
 };

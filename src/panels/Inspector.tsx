@@ -407,8 +407,6 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
         )}
         {/* レビューの記録の状態: 分解 (子があるとき) と着手準備。なし / 済 / 古い (何が変わったか)。人も「確認」で記録できる */}
         {b.status !== "white" && <ReviewState project={project} blockId={blockId} />}
-        {/* 差し戻し: 評価・検査が通らなかったとき、成果物を作った箱へ戻す (線では戻さない) */}
-        <SendBackPanel project={project} blockId={blockId} />
         {/* AI への引き継ぎ: セッションをまたいで残すメモ (project.handoffs にボックスごとに 1 つ)。メモがあるときは開いた状態で出す。
             下のボタンは、判断・入出力も含めた引き継ぎ情報 (agentContext) を JSON でコピーする */}
         <details className="text-[12px]" open={!!project.handoffs?.[blockId] && b.status !== "white"}>
@@ -506,10 +504,14 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       {/* 3. 入力 / 4. 出力 */}
       {tab === "io" && (<>
       <PortsEditor project={project} blockId={blockId} direction="in" readonly={readonly} title="Inputs" />
+      {/* 差し戻された理由は、作り直す出力のすぐ上に出す (下にあると見落とす) */}
+      <SendBackPanel project={project} blockId={blockId} show="received" />
       <PortsEditor project={project} blockId={blockId} direction="out" readonly={readonly} title="Outputs" />
       {/* 完了条件と制約: 出力のすぐ下に置く (利用者の要望 2026-10-18: More の作業範囲の中では見つからない)。作業範囲の編集・着手の準備の欄と同じ値 */}
       <AcceptanceField project={project} blockId={blockId} />
       <ConstraintsField project={project} blockId={blockId} />
+      {/* 差し戻しの記録 (戻した / 戻された)。操作は各入力の「↩ 差し戻す」から (I/O タブにまとめる: 利用者の要望 2026-10-21) */}
+      <SendBackPanel project={project} blockId={blockId} show="sent" />
       </>)}
 
       {/* AI */}

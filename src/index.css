@@ -2014,6 +2014,11 @@ button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent)
 .sendback__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .sendback__item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
 .sendback__note { white-space: pre-wrap; }
+/* 差し戻されている箱: 作り直しの理由を囲んで目立たせる */
+.sendback--received { padding: 8px; border: 1px solid var(--accent); border-radius: 8px; }
+.sendback--received .label { color: var(--accent); }
+/* 入力カードの「↩ 差し戻す」: 小さく、でも見つけられる強さ (橙の枠) */
+.sendback-btn { padding: 0 8px; font-size: 11px; color: var(--accent); border-color: var(--accent); }
 .sendback__meta { font-size: 11px; color: var(--text-muted); }
 .meta-chip.sentback { color: var(--accent); border-color: var(--accent); background: none; cursor: pointer; }
 /* 2 クリック結線の途中の表示 (図の上部中央) */

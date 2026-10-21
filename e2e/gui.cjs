@@ -285,6 +285,19 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     const folded=await page.evaluate(()=>{const rf=window.boxglow.rf;const majors=new Set(rf.getNodes().filter(n=>n.type==='block'&&n.data.major).map(n=>n.id));return rf.getNodes().filter(n=>n.type==='block'&&majors.has(n.parentId)).every(n=>n.hidden);});
     check('Top: Collapse all で 1 階層 (大項目だけ) に戻る',folded&&(await page.getByRole('button',{name:'Expand all',exact:true}).count())===1);
     check('Top: View での Expand / Collapse all は保存データを変えない',beforeFold===await page.evaluate(()=>JSON.stringify(window.boxglow.store.getState().project)));
+    // 差し戻し: I/O タブの入力カードの「↩ 差し戻す」から、理由を書いて戻す。戻された箱は In Progress に戻り、I/O タブに「差し戻されています」と理由が出る。Undo で戻す
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.setViewScope(null);const b=Object.values(s.project.blocks).find(x=>x.title==='実装する');s.select({blockId:b.id,panelTab:'io'});});await page.waitForTimeout(500);
+    const sbBtn=page.locator('.panel.right .sendback-btn').first();
+    check('差し戻し: 供給元のある入力カードに「↩ 差し戻す」が出る',await sbBtn.count()===1);
+    await sbBtn.click();await page.waitForTimeout(200);
+    await page.locator('.panel.right .sendback__form textarea').fill('画面設計に一覧画面が無い');
+    await page.locator('.panel.right .sendback__form .btn-primary').click();await page.waitForTimeout(600);
+    const sb=await page.evaluate(()=>{const s=window.boxglow.store.getState();const d=Object.values(s.project.blocks).find(x=>x.title==='設計する');return d.status;});
+    check('差し戻し: 供給元 (設計する) が In Progress に戻る',sb==='gray',sb);
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();const d=Object.values(s.project.blocks).find(x=>x.title==='設計する');s.select({blockId:d.id,panelTab:'io'});});await page.waitForTimeout(400);
+    const recv=await page.locator('.panel.right .sendback').innerText().catch(()=> '');
+    check('差し戻し: 戻された箱の I/O タブに「差し戻されています」と理由が出る',recv.includes('差し戻されています')&&recv.includes('画面設計に一覧画面が無い'),recv);
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.undo();s.select({});});await page.waitForTimeout(300);
     // View でも、線を選んで Delete で外せる (Undo で戻す)
     const edgeId=await page.evaluate(()=>{const s=window.boxglow.store.getState();s.setEditMode(false);const e=Object.values(s.project.edges).find(x=>!x.auto);s.select({edgeId:e.id});return e.id;});await page.waitForTimeout(300);
     await page.keyboard.press('Delete');await page.waitForTimeout(400);

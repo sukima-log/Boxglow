@@ -3,7 +3,7 @@
  * ポートの行は「名前」と、その直下に「成果物 (リンク)」を主役として並べる。形式・制約は 1 行の補足。
  */
 import { useEffect, useRef, useState } from "react";
-import { addPort, consumersOf, createArtifact, inputGroupsOf, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort, inputsFedBy, canRemovePort, connectToBlock, sourceCandidates, targetCandidates } from "../model/graph";
+import { addPort, consumersOf, createArtifact, inputGroupsOf, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort, inputsFedBy, canRemovePort, connectToBlock, sourceCandidates, targetCandidates, sendBack } from "../model/graph";
 import type { Artifact, ExpectKind, Project } from "../model/types";
 import { setInputAnyOf } from "../model/branch";
 import { ROOT_ID } from "../model/types";
@@ -116,6 +116,14 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
   const setToast = useProjectStore((s) => s.setToast);
   // 線を引かずに一覧から選ぶ: 入力なら供給元 (計画の入力・上の階層の入力・ほかの箱の出力)、出力なら使う箱。遠い箱や別の階層でも、ズームせずにつなげる (利用者の指摘 2026-10-19)
   const [picking, setPicking] = useState<null | { kind: "source" } | { kind: "target"; portId: string }>(null);
+  // 差し戻しの記入欄を開いている入力 (null = 閉じている)。供給元の箱へ、この入力の成果物を理由つきで戻す
+  const [sendingBack, setSendingBack] = useState<{ portId: string; note: string } | null>(null);
+  const submitSendBack = (toBlockId: string) => {
+    if (!sendingBack || !sendingBack.note.trim()) return;
+    const note = sendingBack.note.trim();
+    setSendingBack(null);
+    apply((p) => { const r = sendBack(p, blockId, toBlockId, "human", note); setToast(r.error ?? t("「{title}」に差し戻しました (In Progress に戻りました)", { title: p.blocks[toBlockId]?.title ?? "" })); return r.project; });
+  };
   const pickSource = (from: { portId: string; side: "outer" | "inner" }) => { setPicking(null); apply((p) => { const r = connectToBlock(p, from, blockId); if (r.error) setToast(r.error); return r.project; }); };
   const pickTarget = (portId: string, targetBlockId: string) => { setPicking(null); apply((p) => { const r = connectToBlock(p, { portId, side: "outer" }, targetBlockId); if (r.error) setToast(r.error); return r.project; }); };
 
@@ -163,8 +171,26 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
               {src ? (
                 <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>
                   {t("from {owner}「{name}」", { owner: srcOwner ?? "?", name: src.name })}{src.artifacts.length > 0 ? ` (${src.artifacts.map((a) => a.title).join(", ")})` : ""}
+                  {/* 差し戻す: 届いた成果物が通らなかったとき、作った箱へ理由つきで戻す (その箱は In Progress に戻る) */}
+                  {!readonly && src.blockId !== ROOT_ID && blockId !== ROOT_ID && sendingBack?.portId !== q.id && (
+                    <button type="button" className="btn btn-sm ml-2 sendback-btn" onClick={() => setSendingBack({ portId: q.id, note: "" })}
+                      title={t("この入力の成果物が通らなかったので、「{owner}」へ理由つきで戻す (その箱は In Progress に戻り、成果物は差し戻し済みになる)", { owner: srcOwner ?? "?" })}>↩ {t("差し戻す")}</button>
+                  )}
                 </div>
-              ) : (
+              ) : null}
+              {src && sendingBack?.portId === q.id && (
+                <div className="sendback__form mt-1">
+                  <div className="text-[12px]">{t("「{owner}」へ差し戻す理由", { owner: srcOwner ?? "?" })}</div>
+                  <textarea className="input" rows={2} autoFocus placeholder={t("理由 (作り直す人が読む。例: テストが 2 件落ちる)")} value={sendingBack.note}
+                    onChange={(e) => setSendingBack({ portId: q.id, note: e.target.value })}
+                    onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submitSendBack(src.blockId); if (e.key === "Escape") setSendingBack(null); }} />
+                  <div className="flex gap-1 justify-end">
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setSendingBack(null)}>Cancel</button>
+                    <button type="button" className="btn btn-primary btn-sm" disabled={!sendingBack.note.trim()} onClick={() => submitSendBack(src.blockId)}>{t("差し戻す")}</button>
+                  </div>
+                </div>
+              )}
+              {src ? null : (
                 <>
                   <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{direction === "in" ? t("入力物") : t("成果物")}</div>
                   {/* 差し戻された成果物: 届いた扱いにはしないが、履歴として見える */}

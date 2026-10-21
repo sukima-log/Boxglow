@@ -270,7 +270,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         {view.waitingBranch && !view.skipped && <span className="meta-chip branch-waiting" title={t("まだ答えていない分岐の先です。答えると、この道へ進むかが決まります")}>{t("分岐待ち")}</span>}
         {/* 要具体化: 着手の前に、出力の予定成果物と完了条件を決める。親には配下の件数 */}
         {/* 押すと右パネルの状態タブ (着手の前に決めること) を開く */}
-        {view.sentBack.length > 0 && <button type="button" className="meta-chip sentback nodrag" title={t("差し戻し: {note} ({from})", { note: view.sentBack[0].record.note, from: view.sentBack[0].from.title })} onClick={(e) => { e.stopPropagation(); select({ blockId, panelTab: "status" }); }}>{t("差し戻し {n}", { n: view.sentBack.length })}</button>}
+        {view.sentBack.length > 0 && <button type="button" className="meta-chip sentback nodrag" title={t("差し戻し: {note} ({from})", { note: view.sentBack[0].record.note, from: view.sentBack[0].from.title })} onClick={(e) => { e.stopPropagation(); select({ blockId, panelTab: "io" }); }}>{t("差し戻し {n}", { n: view.sentBack.length })}</button>}
         {view.unprepared && !view.skipped && <button type="button" className="meta-chip unprepared nodrag" title={t("着手の前に、出力の予定成果物 (expect) と完了条件を決めます (押すと状態タブ)")} onClick={(e) => { e.stopPropagation(); select({ blockId, panelTab: "status" }); }}>{t("要具体化")}</button>}
         {!view.unprepared && view.unpreparedBelow > 0 && !view.skipped && <span className="meta-chip unprepared below" title={t("中に、要具体化のボックスが {n} 個あります", { n: view.unpreparedBelow })}>{t("要具体化 {n}", { n: view.unpreparedBelow })}</span>}
         {view.dueDate && view.status !== "white" && (

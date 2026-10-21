@@ -106,4 +106,9 @@ export const parts: Record<string, string> = {
 , "未接続の入力 (自動では上の階層へ引き上げません。線をつなぐと元に戻ります)": "Unconnected input (not promoted to the levels above; connecting a wire restores that)"
 , "この判断を消す (Undo で戻せます。分岐の問いなら、ふつうの箱に戻ります)": "Delete this decision (Undo brings it back; for a branch's question the box becomes an ordinary box)"
 , "問いを取り下げる (Undo で戻せます。分岐の問いなら、ふつうの箱に戻ります)": "Withdraw the question (Undo brings it back; for a branch's question the box becomes an ordinary box)"
+, "この入力の成果物が通らなかったので、「{owner}」へ理由つきで戻す (その箱は In Progress に戻り、成果物は差し戻し済みになる)": "This input's deliverable did not pass: send it back to \"{owner}\" with a reason (that box returns to In Progress and its deliverable is marked rejected)"
+, "「{owner}」へ差し戻す理由": "Reason for sending back to \"{owner}\""
+, "差し戻す": "Send back"
+, "理由 (作り直す人が読む。例: テストが 2 件落ちる)": "Reason (read by whoever redoes it, e.g. 2 tests fail)"
+, "「{title}」に差し戻しました (In Progress に戻りました)": "Sent back to \"{title}\" (it is In Progress again)"
 };
