@@ -1033,7 +1033,7 @@ describe("線でつながる入出力は 1 つの名前 (どこで変えても�
     expect(portsOf(p, ROOT_ID, "out").map((x) => x.name)).toContain("設計書 v3");
   });
 
-  it("子の出力 → 親の出力は、両方に本当の名前があればつないでも変えない (別名で束ねる・転記する使い方)", () => {
+  it("子の出力 → 親の出力をつなぐと、親の出力 (外から見える名前) に合わせ、以後はどちらを変えても両方変わる", () => {
     let p = createProject("t");
     const pj = projectBlocks(p)[0].id;
     const parent = addBlock(p, { parentId: pj, title: "親", outputName: "仕様 (転記)" }); p = parent.project;
@@ -1042,7 +1042,9 @@ describe("線でつながる入出力は 1 つの名前 (どこで変えても�
     const kidOut = portsOf(p, kid.blockId, "out")[0];
     p = connect(p, { portId: kidOut.id, side: "outer" }, { portId: parentOut.id, side: "inner" }).project;
     expect(p.ports[parentOut.id].name).toBe("仕様 (転記)");
-    expect(p.ports[kidOut.id].name).toBe("仕様");
+    expect(p.ports[kidOut.id].name).toBe("仕様 (転記)");
+    p = updatePort(p, kidOut.id, { name: "仕様 v2" });
+    expect(p.ports[parentOut.id].name).toBe("仕様 v2");
   });
 
   it("上流が仮の名前 (新しい出力) のままなら、つないだときに受ける側の名前を採る", () => {
@@ -1307,7 +1309,7 @@ describe("normalizePortNames: 古い食い違いをそろえる", () => {
     expect(normalizePortNames(r.project).renamed).toBe(0);
   });
 
-  it("子の出力 → 親の出力 (上向きの線) の食い違いは直さない (親の出力は別名で束ねてよい)", () => {
+  it("子の出力 → 親の出力 (上向きの線) の食い違いは、親の出力の名前にそろえる", () => {
     let p = createProject("t");
     const pj = projectBlocks(p)[0].id;
     const parent = addBlock(p, { parentId: pj, title: "親", outputName: "設計書" }); p = parent.project;
@@ -1319,7 +1321,9 @@ describe("normalizePortNames: 古い食い違いをそろえる", () => {
     broken.ports[parentOut.id].name = "古い名前";
     const r = normalizePortNames(broken);
     expect(r.project.ports[parentOut.id].name).toBe("古い名前");
-    expect(r.renamed).toBe(0);
+    expect(r.project.ports[kidOut.id].name).toBe("古い名前");
+    expect(r.renamed).toBe(1);
+    expect(normalizePortNames(r.project).renamed).toBe(0);
   });
 });
 

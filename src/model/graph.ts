@@ -682,7 +682,8 @@ export function portNet(p: Project, portId: string): Set<string> {
   const out = new Set<string>();
   const stack = [portId];
   const edges = Object.values(p.edges);
-  const crosses = (e: Edge): boolean => !isUpEdge(p, e) || p.ports[e.from.portId]?.name === p.ports[e.to.portId]?.name;
+  // 上向きの線 (子の出力 → 親の出力) も含め、線でつながる入出力は 1 つの名前 (利用者の指示 2026-10-21: どちらを変えても必ず両方変わる)
+  const crosses = (_e: Edge): boolean => true;
   while (stack.length > 0) {
     const id = stack.pop()!;
     if (out.has(id) || !p.ports[id]) continue;
@@ -722,7 +723,7 @@ const PLACEHOLDER_NAMES = new Set(["出力", "入力", "新しい出力", "新�
 /**
  * 線でつながる入出力の名前を 1 つにそろえる (規則が入る前に作った線や、手で直したファイルの食い違いを直す)。
  * 名前は一番上流 (供給元をたどって行き着く、線を受けていないポート) のものにする。
- * 子の出力 → 親の出力の上向きの線は見ない (親の出力は別の名前で束ねてよい)。最上位の写し (自動の上向きの線) だけはそろえる
+ * 子の出力 → 親の出力の上向きの線は、親の出力の名前を子へ下ろす (親の出力が外から見える名前)
  * Input : p
  * Output: そろえた複製 (変える物が無ければ p そのもの)。変えたポートの数も返す
  */
@@ -731,7 +732,8 @@ export function normalizePortNames(p: Project): { project: Project; renamed: num
   const feeder = new Map<string, string>(); // ポート id -> 供給元ポート id
   for (const e of Object.values(p.edges)) {
     if (!p.ports[e.to.portId] || !p.ports[e.from.portId]) continue;
-    if (isUpEdge(p, e) && !e.auto) continue;
+    // 上向きの線 (子の出力 → 親の出力) は、親の出力の名前を子へ下ろす (外から見える名前を保つ)
+    if (isUpEdge(p, e) && !e.auto) { feeder.set(e.from.portId, e.to.portId); continue; }
     feeder.set(e.to.portId, e.from.portId);
   }
   const resolved = new Map<string, string>();
@@ -831,9 +833,8 @@ export function connect(p: Project, from: Endpoint, to: Endpoint): { project: Pr
   if (fromPort && toPort && toPort.name !== fromPort.name) {
     const takeTo = isPlaceholderName(fromPort.name) && !isPlaceholderName(toPort.name);
     if (isUpEdge(q, q.edges[id])) {
-      // 子の出力 → 親の出力: 親の出力は別の名前で束ねる・転記することがあるので、仮の名前の側だけを相手に合わせる (両方に本当の名前があれば触らない)
-      if (isPlaceholderName(toPort.name)) renameNet(q, toPort.id, fromPort.name);
-      else if (takeTo) renameNet(q, fromPort.id, toPort.name);
+      // 子の出力 → 親の出力: 外から見える親の出力の名前に合わせる (親が仮の名前のときだけ子の名前)
+      renameNet(q, toPort.id, isPlaceholderName(toPort.name) && !isPlaceholderName(fromPort.name) ? fromPort.name : toPort.name);
     } else {
       renameNet(q, toPort.id, takeTo ? toPort.name : fromPort.name);
     }

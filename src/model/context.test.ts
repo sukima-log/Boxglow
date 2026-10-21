@@ -183,7 +183,7 @@ describe("短いコンテキスト", () => {
     // 束ねた出力には資料が無い: 中の出力 (実体) を展開する。子の出力に資料があるので、用意できている
     const bundled = c.target.inputs.find((i) => i.name === "束ねた出力")!;
     expect(bundled.ready).toBe(true);
-    expect(bundled.sources[0]).toMatchObject({ title: "束ねる親", output: "束ねた出力", bundles: 1, inner: [{ title: "中の子", output: "子の出力" }] });
+    expect(bundled.sources[0]).toMatchObject({ title: "束ねる親", output: "束ねた出力", bundles: 1, inner: [{ title: "中の子", output: "束ねた出力" }] }); // 線でつながる入出力は 1 つの名前 (親の名前に合わせる)
     expect(bundled.sources[0].inner![0].artifacts.map((a) => a.url)).toEqual(["docs/child.md"]);
     // 束ねた出力そのものに資料を付けて用意できていれば、展開しない (数だけ)
     portsOf(q, bundle.blockId, "out")[0].artifacts = [createArtifact("まとめ", "docs/bundle.md")];
@@ -212,7 +212,7 @@ describe("短いコンテキスト", () => {
     wire(out(bundle).id, "outer", input.portId, "outer");
     // 全部の出力に、束ねられた中の出力 (子・孫) が入る。束ねていない「別の子」は入らない。中のボックスを丸ごとは入れない
     const full = agentContext(q, target);
-    expect(full.bundledOutputs.map((o) => [o.title, o.name]).sort()).toEqual([["子", "子の出力"], ["孫", "孫の出力"]].sort());
+    expect(full.bundledOutputs.map((o) => [o.title, o.name]).sort()).toEqual([["子", "束ねた出力"], ["孫", "束ねた出力"]].sort()); // 束ねた線でつながるので親の名前にそろう
     expect(full.blocks.map((b) => b.title)).toEqual(expect.not.arrayContaining(["子", "孫", "別の子"]));
     // 成果物の確認の記録 (checkedAt / state) は、ほかの成果物と同じく、トークンに入れない
     const checked = structuredClone(q);
