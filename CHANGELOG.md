@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- **Each level of nesting has its own tint.** Expanded boxes use a different hue per depth (blue, violet, sky, rose, green, sand) on their outline, header band and background, so the boundaries of deeply nested boxes can be told apart from a distance. Depths past six reuse the sixth.
+- **Nested boxes are easier to tell apart.** Each level of nesting is a little lighter (dark theme) or darker (light theme) than the one around it, and expanded boxes have a clearer 2 px outline with a matching line under the header. Depths past six look like the sixth.
 - **Boxes inside a box sit in the middle.** The space under a box's header and the space under its children are now the same (64 px each; before, 16 px above and 116 px below made the children look pushed up). Existing layouts keep their positions until Auto Layout or a move.
 - **Fewer rules in the way.** The last output of a box can be removed (the box is then just "needs detail"); a decision can be deleted even after it was answered, and deleting a branch's question turns the box back into an ordinary box; branch paths can be added or removed at any time; a wire dragged from an input to an output is connected the right way round; dropping an output on the Outputs node makes it a final deliverable, and dropping it on an ancestor without a free output adds one.
 - **Auto save is a toggle.** Plans opened from a file start with auto save off: edits stay Unsaved (the Save button turns blue) until you press Save or Ctrl+S. serve and VS Code start with auto save on. The toggle sits next to Save and is remembered per kind of source; turning it on writes the pending changes. Plans kept in the browser are always saved automatically.
