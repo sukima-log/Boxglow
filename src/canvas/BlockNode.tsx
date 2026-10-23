@@ -113,7 +113,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     , category: categoryOf(b?.category) ?? null // 詳細の札 (未分類なら null)
     , startable: !!b && b.status === "black" && b.kind !== "project" && ins.length > 0 && waitingFor(p, blockId).length === 0 && !isSkipped(p, blockId) // 必須の入力がそろい、分岐待ちでも見送りでもない New
     , issue: b?.issue ? { url: b.issue, key: issueKeyOf(b.issue) } : null // 外部の課題 (JIRA / Redmine など)
-    , depth: Math.min(4, Math.max(1, ancestorsOf(p, blockId).length)) // 階層の深さ (プロジェクトのボックス = 1)。枠線の太さと地色に使う
+    , depth: Math.min(6, Math.max(1, ancestorsOf(p, blockId).length)) // 階層の深さ (プロジェクトのボックス = 1)。枠線の太さ・色と地色に使う (6 より深いものは 6 と同じ見た目)
     , key: b?.key ?? ""
     , dueDate: b?.dueDate ?? null
     , overdue: b ? isOverdue(b) : false

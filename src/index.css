@@ -259,14 +259,18 @@ textarea.input { resize: vertical; min-height: 64px; }
 }
 /* 展開したボックスの文字色は状態に関係なく本文色 (Done / New の塗り用の文字色が残ると、ダークで黒字、ライトで白字になり読めない) */
 .bg-block.expanded.status-white, .bg-block.expanded.status-black, .bg-block.expanded.status-gray { color: var(--text); }
-.bg-block.expanded.depth-1 { border-width: 4px; background-color: var(--nest-odd); }
-.bg-block.expanded.depth-2 { border-width: 3px; background-color: var(--nest-even); }
-.bg-block.expanded.depth-3 { border-width: 2px; background-color: var(--nest-odd); }
-.bg-block.expanded.depth-4 { border-width: 2px; background-color: var(--nest-even); }
-/* 展開したボックスの題名の行は帯にして、枠の一部だと分かるように */
-.bg-block.expanded > .bg-block__head, .bg-block.expanded > .bg-block__meta { background: rgba(58, 63, 70, 0.06); }
-:root[data-theme="dark"] .bg-block.expanded > .bg-block__head, :root[data-theme="dark"] .bg-block.expanded > .bg-block__meta { background: rgba(232, 234, 237, 0.06); }
-.bg-block.expanded > .bg-block__meta { border-bottom: 2px solid var(--line); }
+/* 階層ごとに色相を変える (利用者の指摘 2026-10-23: 何階層も入れ子にすると、遠目では境界が分からない)。
+   深さ 1〜6 で 6 つの色相を順に使い、枠線・見出しの帯・地色にうすく混ぜる。状態の色 (ティール = 作業中、橙 = 注意、黄 = 待ちの線) とは別の色相にする */
+.bg-block.expanded.depth-1 { --nest-hue: #5b7fd6; --nest-base: var(--nest-odd); border-width: 4px; }
+.bg-block.expanded.depth-2 { --nest-hue: #9a6fd6; --nest-base: var(--nest-even); border-width: 3px; }
+.bg-block.expanded.depth-3 { --nest-hue: #4fa3c7; --nest-base: var(--nest-odd); border-width: 3px; }
+.bg-block.expanded.depth-4 { --nest-hue: #d66f9a; --nest-base: var(--nest-even); border-width: 2px; }
+.bg-block.expanded.depth-5 { --nest-hue: #6aa86a; --nest-base: var(--nest-odd); border-width: 2px; }
+.bg-block.expanded.depth-6 { --nest-hue: #b89a5a; --nest-base: var(--nest-even); border-width: 2px; }
+.bg-block.expanded { background-color: color-mix(in srgb, var(--nest-hue, transparent) 7%, var(--nest-base, var(--nest-odd))); border-color: color-mix(in srgb, var(--nest-hue, var(--line)) 65%, var(--line)); }
+/* 展開したボックスの題名の行は、その階層の色の帯にして、どの枠の見出しかが分かるように */
+.bg-block.expanded > .bg-block__head, .bg-block.expanded > .bg-block__meta { background: color-mix(in srgb, var(--nest-hue, #3a3f46) 16%, transparent); }
+.bg-block.expanded > .bg-block__meta { border-bottom: 2px solid color-mix(in srgb, var(--nest-hue, var(--line)) 65%, var(--line)); }
 /* 展開したボックスの中の線は、枠線より細く薄い色のまま (線と枠を混同しないため) */
 /* WhiteBox (Done): 薄いティールの塗り + 題名の前に ✓。常時は光らせない (完了した瞬間だけ光る) */
 .bg-block.status-white {
@@ -1763,7 +1767,9 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .bg-block:not(.expanded) .react-flow__handle.port-waiting { background: var(--task-paper); border-color: var(--task-wait); }
 .bg-block:not(.expanded) .bg-block__progress { display: none; }
 /* 親は静かな区画にする。物理的な境界幅を残し、親子の内側端点をずらさない。 */
-.bg-block.expanded { border-color: transparent; outline: 1px solid var(--task-border); outline-offset: -1px; box-shadow: none; }
+/* 枠の線は outline で描き、色は階層ごとの色相 (--nest-hue) を混ぜる。深さ 1〜2 は 2px、それより深いものは 1.5px */
+.bg-block.expanded { border-color: transparent; outline: 2px solid color-mix(in srgb, var(--nest-hue, var(--task-border)) 70%, var(--task-border)); outline-offset: -2px; box-shadow: none; }
+.bg-block.expanded.depth-3, .bg-block.expanded.depth-4, .bg-block.expanded.depth-5, .bg-block.expanded.depth-6 { outline-width: 1.5px; outline-offset: -1.5px; }
 .bg-block.expanded.kind-project > .bg-block__head, .bg-block.expanded.kind-project > .bg-block__meta { background: transparent; border-color: transparent; }
 .bg-block.expanded .bg-block__head > .bg-block__cat { display: inline-flex; align-items: center; gap: 4px; }
 .bg-block.expanded .bg-block__progress { opacity: .5; }
@@ -1773,8 +1779,11 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .bg-block:not(.expanded) .bg-block__meta > .needs_decision { margin-right: 8px; }
 .bg-block:not(.expanded).status-black .bg-block__port.ready, .bg-block:not(.expanded).status-white .bg-block__port.ready, .bg-block:not(.expanded) .bg-block__port.ready { color: var(--task-text); }
 .bg-block:not(.expanded).status-black .meta-chip.activity:not(.blocked), .bg-block:not(.expanded).status-black .meta-chip.ready { color: var(--task-head-sub); }
-.bg-block.expanded { background: color-mix(in srgb, var(--task-paper) 35%, var(--bg-paper)); }
-.bg-block.expanded > .bg-block__head, .bg-block.expanded > .bg-block__meta { background: transparent; }
+/* 地色: 紙の色に階層の色相をうすく混ぜる (深さごとに少しずつ色が変わり、遠目でもどこが境界か分かる) */
+.bg-block.expanded { background: color-mix(in srgb, var(--nest-hue, transparent) 8%, color-mix(in srgb, var(--task-paper) 35%, var(--bg-paper))); }
+/* 見出しの帯: 階層の色相の帯にして、どの枠の見出しかを示す (プロジェクトのボックスは上で透明のまま) */
+.bg-block.expanded:not(.kind-project) > .bg-block__head, .bg-block.expanded:not(.kind-project) > .bg-block__meta { background: color-mix(in srgb, var(--nest-hue, transparent) 18%, transparent); }
+.bg-block.expanded:not(.kind-project) > .bg-block__meta { border-bottom: 2px solid color-mix(in srgb, var(--nest-hue, var(--task-border)) 55%, transparent); }
 
 .bg-block__cat[data-category="design"] { --cat: #777bb0; }
 .bg-block:not(.expanded) .bg-block__cat[data-category="design"] { --cat: #9364ee; }
