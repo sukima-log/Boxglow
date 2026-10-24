@@ -851,8 +851,40 @@ export function disconnect(p: Project, edgeId: string): Project {
 }
 
 /**
+ * 選んだ線と、その線が階層の境界を越えて 1 本だけで続いている先・元の線の集まり (境界のポートで枝分かれしていれば、そこで止まる)
+ * Input : p, edgeId / Output: 線の id の集合 (選んだ線を含む)
+ */
+export function wireChainOf(p: Project, edgeId: string): Set<string> {
+  const out = new Set<string>([edgeId]);
+  const start = p.edges[edgeId];
+  if (!start) return out;
+  // 上流へ: 出す側のポートの反対の面に 1 本だけ入っていて、出す側の面から出る線が今の 1 本だけなら続く
+  let cur = start;
+  for (let guard = 0; guard < 64; guard++) {
+    const backSide: "inner" | "outer" = cur.from.side === "outer" ? "inner" : "outer";
+    const outs = outgoingEdges(p, cur.from);
+    const ins = incomingEdges(p, { portId: cur.from.portId, side: backSide });
+    if (outs.length !== 1 || ins.length !== 1 || out.has(ins[0].id)) break;
+    out.add(ins[0].id);
+    cur = ins[0];
+  }
+  // 下流へ: 受ける側のポートの反対の面から 1 本だけ出ていて、受ける側の面に入る線が今の 1 本だけなら続く
+  cur = start;
+  for (let guard = 0; guard < 64; guard++) {
+    const nextSide: "inner" | "outer" = cur.to.side === "outer" ? "inner" : "outer";
+    const ins = incomingEdges(p, cur.to);
+    const outs = outgoingEdges(p, { portId: cur.to.portId, side: nextSide });
+    if (ins.length !== 1 || outs.length !== 1 || out.has(outs[0].id)) break;
+    out.add(outs[0].id);
+    cur = outs[0];
+  }
+  return out;
+}
+
+/**
  * 選んだ線を外す (どんな線でも消せる。利用者の要望 2026-10-20)
- *   - 本物の線: そのまま外す
+ *   - 本物の線: その線と、階層の境界を越えて 1 本だけで続いている先・元の線もまとめて外す (中途半端な外側の線を残さない。利用者の要望 2026-10-24)。
+ *     枝分かれしている境界では、そこで止める (ほかの箱へ続く線は残す)
  *   - 自動の線 (下の階層の入力を自動で上へ引き上げた区間): 受ける側の入力に「上へ引き上げない」印を付けて外す。その入力は箱に未接続のまま残り、
  *     使われなくなった引き上げのポートは消える。本物の線をつなぐと印は外れる
  * Input : p, edgeId / Output: { project } (線が無ければそのまま)
@@ -861,8 +893,12 @@ export function disconnectWire(p: Project, edgeId: string): { project: Project; 
   const e = p.edges[edgeId];
   if (!e) return { project: p };
   const q = touch(p);
-  if (e.auto && q.ports[e.to.portId]?.direction === "in") q.ports[e.to.portId].noPromote = true;
-  delete q.edges[edgeId];
+  if (e.auto) {
+    if (q.ports[e.to.portId]?.direction === "in") q.ports[e.to.portId].noPromote = true;
+    delete q.edges[edgeId];
+  } else {
+    for (const id of wireChainOf(p, edgeId)) if (!p.edges[id].auto) delete q.edges[id];
+  }
   return { project: normalizePromotions(q) };
 }
 

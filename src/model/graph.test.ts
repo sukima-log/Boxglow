@@ -1290,6 +1290,43 @@ describe("どんな線でも Delete で外せる (disconnectWire)", () => {
   });
 });
 
+describe("線を外すと、階層の境界を越えて 1 本で続く線もまとめて外れる (wireChainOf)", () => {
+  /** 親 P の中の子 C の出力 → P の出力 → 兄弟 S の入力 (階層をまたぐ 1 本の線) */
+  const chain = () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const P = addBlock(p, { parentId: pj, title: "Womanモデリング", outputName: "Human Woman Model" }); p = P.project;
+    const C = addBlock(p, { parentId: P.blockId, title: "統合", outputName: "Human Woman Model" }); p = C.project;
+    const S = addBlock(p, { parentId: pj, title: "人物・衣装統合", outputName: "出力" }); p = S.project;
+    p = connect(p, { portId: portsOf(p, C.blockId, "out")[0].id, side: "outer" }, { portId: portsOf(p, P.blockId, "out")[0].id, side: "inner" }).project;
+    p = connectToBlock(p, { portId: portsOf(p, P.blockId, "out")[0].id, side: "outer" }, S.blockId).project;
+    return { p, P: P.blockId, C: C.blockId, S: S.blockId };
+  };
+  it("中の区間を消すと、外側の続き (親の出力 → 兄弟の入力) も消える", () => {
+    const { p, C, S } = chain();
+    const inner = Object.values(p.edges).find((e) => !e.auto && p.ports[e.from.portId].blockId === C)!;
+    const q = disconnectWire(p, inner.id).project;
+    const touches = (e: { from: { portId: string }; to: { portId: string } }) => [C, S].includes(q.ports[e.from.portId]?.blockId) || [C, S].includes(q.ports[e.to.portId]?.blockId);
+    expect(Object.values(q.edges).filter((e) => !e.auto && touches(e))).toHaveLength(0);
+    expect(portsOf(q, S, "in").every((i) => incomingEdges(q, { portId: i.id, side: "outer" }).every((e) => e.auto))).toBe(true);
+  });
+  it("外側の区間を消しても、中の区間まで消える。枝分かれしている境界ではそこで止まる", () => {
+    let { p, P, C, S } = chain();
+    const outer = Object.values(p.edges).find((e) => !e.auto && p.ports[e.to.portId].blockId === S)!;
+    const r = disconnectWire(p, outer.id).project;
+    expect(Object.values(r.edges).filter((e) => !e.auto && [C, S].some((id) => r.ports[e.from.portId]?.blockId === id || r.ports[e.to.portId]?.blockId === id))).toHaveLength(0);
+    // 親の出力をもう 1 つの箱にもつなぐ (枝分かれ): 外側の 1 本を消しても、中の区間ともう 1 本は残る
+    const pj = projectBlocks(p)[0].id;
+    const T = addBlock(p, { parentId: pj, title: "別の箱" }); p = T.project;
+    p = connectToBlock(p, { portId: portsOf(p, P, "out")[0].id, side: "outer" }, T.blockId).project;
+    const q = disconnectWire(p, outer.id).project;
+    const left = Object.values(q.edges).filter((e) => !e.auto);
+    expect(left.some((e) => q.ports[e.from.portId].blockId === C)).toBe(true);
+    expect(left.some((e) => q.ports[e.to.portId].blockId === T.blockId)).toBe(true);
+    expect(left.some((e) => q.ports[e.to.portId].blockId === S)).toBe(false);
+  });
+});
+
 describe("normalizePortNames: 古い食い違いをそろえる", () => {
   it("食い違ったファイルを読み込んだ時点で、親の出力の名前にそろう (開いただけで見た目がそろう)", () => {
     let p = createProject("t");
