@@ -50,4 +50,9 @@ export const canvas: Record<string, string> = {
 , "中止 (Esc)": "Cancel (Esc)"
 , "差し戻し: {note} ({from})": "Sent back: {note} ({from})"
 , "差し戻し {n}": "Sent back {n}"
+, "この箱の出力は方針として範囲の箱すべてに配られます": "This box's output is shared as a policy to every box in scope"
+, "方針待ち {n}": "Waiting for policy {n}"
+, "方針 {n}": "Policies {n}"
+, "完了した後に方針が変わりました (確かめ直しの候補)": "A policy changed after this box was done (check it again)"
+, "方針が変わった": "Policy changed"
 };

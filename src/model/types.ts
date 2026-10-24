@@ -84,6 +84,12 @@ export interface Port {
   artifacts: Artifact[];
   /** 差し戻された成果物 (履歴として残す。届いた扱いにしない) */
   rejectedArtifacts?: (Artifact & { rejectedAt: string; rejectedBy: string; rejectedNote?: string })[];
+  /**
+   * 方針として配る (出力だけ): 線を引かずに、範囲の中の箱すべてへ届く (全体に効く技術選定・方針など)。
+   *   scope = 届く範囲の箱の id (その箱の中の全階層)。省略は持ち主の親 (同じ親の中)。"root" で計画全体。
+   *   advisory = 参考 (届いていなくても着手を待たせない)
+   */
+  policy?: { scope?: string; advisory?: boolean };
   /** 自動で上の階層へ引き上げない (自動の線を Delete で消したとき。本物の線をつなぐと外れる) */
   noPromote?: boolean;
   /** 下の階層の未接続の入力を自動で引き上げて作ったポートなら、元のポートの id */
@@ -229,6 +235,10 @@ export interface Block {
   scope?: WorkScope;
   /** 完了のときの検査結果 (done --checked ...)。未完了に戻しても残す (次の完了で上書き) */
   verification?: BlockVerification;
+  /** 範囲の中でも受け取らない方針 (方針の出力ポートの id) */
+  policyOptOut?: string[];
+  /** 完了したときの方針の版 (方針の出力ポートの id → 版の印)。完了後に方針が変わったら「方針が変わった」と分かる */
+  policyStamps?: Record<string, string>;
   /** 差し戻し (このボックスが評価して通らなかったとき、作り直す箱へ戻した記録。線では戻さない) */
   sendbacks?: SendBack[];
   /** 説明を実際に変えた日時。古い記録には推測で補わない。 */

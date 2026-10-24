@@ -2020,6 +2020,17 @@ button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent)
 .sendback__list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 .sendback__item { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
 .sendback__note { white-space: pre-wrap; }
+/* 方針 (線なしで範囲に配る全体の決定) */
+.policy-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; font-size: 11px; color: var(--text-muted); }
+.policy-row__toggle { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.policy-row select { width: auto; font-size: 11px; padding: 0 4px; }
+.policies__item { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12px; }
+.policies__item--skipped { color: var(--text-muted); }
+.policies__arts { font-size: 11px; color: var(--text-muted); }
+.policies__wait { font-size: 11px; color: var(--accent); }
+.meta-chip.policy-give { border-style: double; }
+.meta-chip.policy-get { background: none; cursor: pointer; }
+.meta-chip.policy-get.waiting, .meta-chip.policy-changed { color: var(--accent); border-color: var(--accent); }
 /* 差し戻されている箱: 作り直しの理由を囲んで目立たせる */
 .sendback--received { padding: 8px; border: 1px solid var(--accent); border-radius: 8px; }
 .sendback--received .label { color: var(--accent); }

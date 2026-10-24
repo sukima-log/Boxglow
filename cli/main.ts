@@ -59,7 +59,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { addLogEntry, childrenOf, setNow, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor, canRemovePort, inputsFedBy, removePort, removeDecision, sendBack, sendBackTargets } from "../src/model/graph";
+import { addLogEntry, childrenOf, setNow, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor, canRemovePort, inputsFedBy, removePort, removeDecision, sendBack, sendBackTargets, setPolicy, setPolicyOptOut } from "../src/model/graph";
 import { checkStart, checkDone, descriptionReminder, scopeEntries } from "../src/model/workflow";
 import type { WorkScope, WorkflowPolicy } from "../src/model/types";
 import type { Artifact } from "../src/model/types";
@@ -448,7 +448,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   branch --box <block> --add-option <道> / --remove-option <道>   分岐の道 (選択肢) を足す / 消す (答える前だけ。道は 2 つ以上残す)
   join [--title <題名>] [--parent <block>]           合流の部品を足す (分かれた道を 1 つにまとめる。道の出力を connect でつなぐと、どれか 1 つが届けば先へ進む)
   move <block> --parent <block|project>            ボックスを別の親の中へ移す (線は間のボックスのポートを経由してつながったまま)
-  port <block|project|inputs> [--in <名前>]... [--out <名前>]... [--remove <名前>]... [--expect "<出力名>=<kind>:<hint>"]... [--self <出力名>]... [--no-self <出力名>]... [--rename <旧名>=<新名>] [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、消す (入力を消すと使う箱の入力も消える。最後の出力は消せない)、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス、inputs = 最上位の入力)
+  port <block|project|inputs> [--in <名前>]... [--out <名前>]... [--remove <名前>]... [--policy <出力名> [--policy-scope all|<block>] [--advisory]]... [--no-policy <出力名>]... [--skip-policy <箱>.<出力名>]... [--expect "<出力名>=<kind>:<hint>"]... [--self <出力名>]... [--no-self <出力名>]... [--rename <旧名>=<新名>] [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、消す (入力を消すと使う箱の入力も消える。最後の出力は消せない)、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス、inputs = 最上位の入力)
   disconnect <題名.出力名> <題名.入力名>          線を外す
   tidy                                              ファイルを規則にそろえて保存し直す (線でつながる入出力の名前をそろえる、重なりを解く)
   remove <block> [--force]                          ボックスを消す (中にボックスがあるとき・プロジェクトのボックスは --force。最後のプロジェクトのボックスは消せない。中にボックスがあるときは --force。線も外れる。元に戻せないので Git で管理していること)
@@ -571,7 +571,7 @@ Usage (npx boxglow <command> ...):
   branch --box <block> --options "A|B" [--question <question>] [--context <background>]   Turn an existing box into a branch (its output becomes the first option's path; not for boxes with children)
   join [--title <title>] [--parent <block>]          Add a merge part (where paths come together; connect the paths' outputs to it, and any one of them arriving lets the work go on)
   move <block> --parent <block|project>            Move a box into another parent (wires stay connected through the ports of the boxes in between)
-  port <block|project|inputs> [--in <name>]... [--out <name>]... [--remove <name>]... [--expect "<output>=<kind>:<hint>"]... [--self <output>]... [--no-self <output>]... [--rename <old>=<new>] [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, remove them (removing an input also removes the inputs it feeds; the last output stays), rename them, set an output's planned deliverable (expect: kind file / dir / url / doc / note / decision / result + a path or title) or mark it as made by this box itself (--self). --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
+  port <block|project|inputs> [--in <name>]... [--out <name>]... [--remove <name>]... [--policy <output> [--policy-scope all|<block>] [--advisory]]... [--no-policy <output>]... [--skip-policy <box>.<output>]... [--expect "<output>=<kind>:<hint>"]... [--self <output>]... [--no-self <output>]... [--rename <old>=<new>] [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, remove them (removing an input also removes the inputs it feeds; the last output stays), rename them, set an output's planned deliverable (expect: kind file / dir / url / doc / note / decision / result + a path or title) or mark it as made by this box itself (--self). --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
   disconnect <title.output> <title.input>          Remove a wire
   tidy                                              Normalize the file and save it again (give connected inputs and outputs one name, resolve overlaps)
   remove <block> [--force]                          Delete a box (--force if it contains boxes or is a project box; the last project box cannot be deleted. Its wires are removed too. This cannot be undone, so keep the file in Git)
@@ -1277,6 +1277,31 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       // project = 最初のプロジェクトのボックス、inputs = 最上位の入力ノード (Inputs。--in で足す、--remove で消す)
       const blockId = target === "project" ? (projectBlocks(p)[0]?.id ?? ROOT_ID) : target === "inputs" || target === ROOT_ID ? ROOT_ID : mustFind(p, target).id;
       const added: string[] = [];
+      // 方針: --policy "<出力名>" で、その出力を範囲 (--policy-scope all = 計画全体 / <block> = その箱の中、省略 = 同じ親の中) に線なしで配る。--advisory で参考 (待たせない)。--no-policy でやめる
+      for (const name of list(options.policy)) {
+        const port = portsOf(p, blockId, "out").find((x) => x.name === name);
+        if (!port) throw new Error(t("出力「{name}」がありません", { name }));
+        const sc = str(options["policy-scope"]);
+        const scope = !sc ? undefined : sc === "all" ? ROOT_ID : mustFind(p, sc).id;
+        p = setPolicy(p, port.id, { scope, advisory: !!options.advisory });
+        added.push(t("方針 {name}", { name }));
+      }
+      for (const name of list(options["no-policy"])) {
+        const port = portsOf(p, blockId, "out").find((x) => x.name === name);
+        if (!port) throw new Error(t("出力「{name}」がありません", { name }));
+        p = setPolicy(p, port.id, null);
+        added.push(t("方針をやめる {name}", { name }));
+      }
+      // この箱では受け取らない方針: --skip-policy "<箱>.<出力名>" / --use-policy で戻す
+      for (const [flag, skip] of [["skip-policy", true], ["use-policy", false]] as const) {
+        for (const ref of list(options[flag])) {
+          const all = Object.values(p.ports).filter((q) => q.policy);
+          const hit = all.find((q) => `${p.blocks[q.blockId]?.title}.${q.name}` === ref || `${p.blocks[q.blockId]?.key}.${q.name}` === ref || q.name === ref);
+          if (!hit) throw new Error(t("方針「{ref}」が見つかりません", { ref }));
+          p = setPolicyOptOut(p, blockId, hit.id, skip);
+          added.push(skip ? t("受け取らない方針 {ref}", { ref }) : t("受け取る方針 {ref}", { ref }));
+        }
+      }
       // 消す: --remove "<名前>" (入力と出力に同じ名前があるときは in:<名前> / out:<名前>)。入力を消すと、配られる先 (使う箱) の入力も一緒に消える
       for (const spec of list(options.remove)) {
         const dir = spec.startsWith("in:") ? "in" : spec.startsWith("out:") ? "out" : undefined;
@@ -1330,7 +1355,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
         p = updatePort(p, port.id, { name: to });
         added.push(`${from} -> ${to}`);
       }
-      if (added.length === 0) throw new Error(t("--in <名前> / --out <名前> / --remove <名前> / --expect <出力名>=<kind>:<hint> / --self <出力名> / --rename <旧名>=<新名> / --any-of <入力名> / --all-of <入力名> のいずれかを指定してください"));
+      if (added.length === 0) throw new Error(t("--in <名前> / --out <名前> / --remove <名前> / --policy <出力名> / --expect <出力名>=<kind>:<hint> / --self <出力名> / --rename <旧名>=<新名> / --any-of <入力名> / --all-of <入力名> のいずれかを指定してください"));
       save(path, p);
       out(t("ポート: {title}: {list}", { title: p.blocks[blockId]?.title ?? "project", list: added.join(", ") }));
       return;

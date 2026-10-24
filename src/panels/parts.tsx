@@ -3,7 +3,7 @@
  * ポートの行は「名前」と、その直下に「成果物 (リンク)」を主役として並べる。形式・制約は 1 行の補足。
  */
 import { useEffect, useRef, useState } from "react";
-import { addPort, consumersOf, createArtifact, inputGroupsOf, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort, inputsFedBy, canRemovePort, connectToBlock, sourceCandidates, targetCandidates, sendBack } from "../model/graph";
+import { addPort, consumersOf, createArtifact, inputGroupsOf, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort, inputsFedBy, canRemovePort, connectToBlock, sourceCandidates, targetCandidates, sendBack, setPolicy, setPolicyOptOut, policiesFor, isPolicyReady, policyScopeOf } from "../model/graph";
 import type { Artifact, ExpectKind, Project } from "../model/types";
 import { setInputAnyOf } from "../model/branch";
 import { ROOT_ID } from "../model/types";
@@ -201,6 +201,28 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
               )}
               {desc && !isOpen(q.id) && <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{desc}</div>}
               {/* 下流: この出力を使う箱 (押すと移る)。変えるとどこを確かめ直すかの手がかり。入力なら、この入力が配られる先の箱 (最上位の入力は、下の階層のどの箱が待っているか) */}
+              {/* 方針として配る: 線を引かずに範囲の箱すべてへ (技術選定など全体に効く決定) */}
+              {direction === "out" && blockId !== ROOT_ID && (!readonly || q.policy) && (
+                <div className="policy-row">
+                  <label className="policy-row__toggle" title={t("この出力を方針として、線を引かずに範囲の箱すべてへ配る (技術選定など全体に効く決定)")}>
+                    <input type="checkbox" checked={!!q.policy} disabled={readonly} onChange={(e) => apply((p) => setPolicy(p, q.id, e.target.checked ? {} : null))} />
+                    {t("方針として配る")}
+                  </label>
+                  {q.policy && (
+                    <>
+                      <select className="input input-plain" disabled={readonly} aria-label={t("方針の範囲")} value={q.policy.scope === ROOT_ID ? "all" : "parent"}
+                        onChange={(e) => apply((p) => setPolicy(p, q.id, { ...(p.ports[q.id].policy ?? {}), scope: e.target.value === "all" ? ROOT_ID : undefined }))}>
+                        <option value="parent">{t("同じ親の中")}</option>
+                        <option value="all">{t("計画全体")}</option>
+                      </select>
+                      <label className="policy-row__toggle" title={t("参考: 決まっていなくても、範囲の箱の着手を待たせない")}>
+                        <input type="checkbox" checked={!!q.policy.advisory} disabled={readonly} onChange={(e) => apply((p) => setPolicy(p, q.id, { ...(p.ports[q.id].policy ?? {}), advisory: e.target.checked }))} />
+                        {t("参考")}
+                      </label>
+                    </>
+                  )}
+                </div>
+              )}
               {direction === "out" && !readonly && blockId !== ROOT_ID && (
                 <div className="text-[11px] mt-1">
                   <button type="button" className="port-consumers__item" aria-expanded={picking?.kind === "target" && picking.portId === q.id} onClick={() => setPicking(picking?.kind === "target" && picking.portId === q.id ? null : { kind: "target", portId: q.id })} title={t("この出力を使う箱を一覧から選んでつなぐ (階層が違ってもよい)")}>{t("使う箱を足す…")}</button>
@@ -296,6 +318,46 @@ export function ResizeHandle({ side, width, min, max, onWidth, style }: { side: 
     el.addEventListener("pointercancel", up);
   };
   return <div className={`resize-handle ${side}`} data-active={active} style={style} onPointerDown={onPointerDown} title={t("ドラッグで幅を変える")} />;
+}
+
+/**
+ * この箱に届いている方針 (I/O タブの入力の下)。線は無いが入力と同じく作業を縛る。決まっていなければ「待ち」、外すと受け取らない
+ * Input : project, blockId / Output: 一覧 (届いている方針も、外した方針も無ければ null)
+ */
+export function PoliciesReceived({ project, blockId }: { project: Project; blockId: string }) {
+  useLang();
+  const readonly = useProjectStore((s) => s.readonly);
+  const apply = useProjectStore((s) => s.apply);
+  const select = useProjectStore((s) => s.select);
+  const got = policiesFor(project, blockId);
+  const skipped = (project.blocks[blockId]?.policyOptOut ?? []).map((id) => project.ports[id]).filter((q): q is NonNullable<typeof q> => !!q?.policy);
+  if (got.length === 0 && skipped.length === 0) return null;
+  const owner = (id: string) => project.blocks[id]?.title ?? "?";
+  return (
+    <section className="sec policies">
+      <div className="sec__head"><span className="label" title={t("範囲に配られている全体の決定。線は引かれないが、この箱の作業を縛る")}>{t("方針")}</span></div>
+      {got.map((q) => {
+        const ready = isPolicyReady(project, q.id);
+        return (
+          <div key={q.id} className="policies__item">
+            <button type="button" className="port-consumers__item" onClick={() => select({ blockId: q.blockId, panelTab: "io" })} title={t("方針を決める箱へ")}>{owner(q.blockId)}</button>
+            <span>「{q.name}」</span>
+            {q.artifacts.length > 0 && <span className="policies__arts">{q.artifacts.map((a) => a.title).join(", ")}</span>}
+            {q.policy?.advisory ? <span className="meta-chip muted">{t("参考")}</span> : !ready && <span className="policies__wait">{t("待ち")}</span>}
+            {!readonly && <button type="button" className="btn btn-ghost btn-sm ml-auto" title={t("この箱では受け取らない")} onClick={() => apply((p) => setPolicyOptOut(p, blockId, q.id, true))}>×</button>}
+          </div>
+        );
+      })}
+      {skipped.map((q) => (
+        <div key={q.id} className="policies__item policies__item--skipped">
+          <span>{owner(q.blockId)}「{q.name}」</span><span className="meta-chip muted">{t("受け取らない")}</span>
+          {!readonly && <button type="button" className="btn btn-ghost btn-sm ml-auto" onClick={() => apply((p) => setPolicyOptOut(p, blockId, q.id, false))}>{t("受け取る")}</button>}
+        </div>
+      ))}
+      {/* 範囲の説明 (どこまで届くか) は方針の箱の側で決める */}
+      <span className="sr-only">{got.map((q) => policyScopeOf(project, q.id)).join(",")}</span>
+    </section>
+  );
 }
 
 /**

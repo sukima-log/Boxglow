@@ -3,7 +3,7 @@
  * 対象のボックス・その親 (上の階層すべて)・入力の供給元 (上流) のボックスについて、説明・判断 (確認済みの回答も含む)・
  * 入出力の条件・成果物・引き継ぎメモを集める。CLI の context と、確認トークン (cli/context.ts) の元になる
  */
-import { ancestorsOf, incomingEdges, isInputReady, isSourceReady, portsOf, sentBackTo } from "./graph";
+import { ancestorsOf, incomingEdges, isInputReady, isSourceReady, portsOf, sentBackTo, policiesFor, isPolicyReady, changedPolicies } from "./graph";
 import { branchState } from "./branch";
 import { freshnessText, descriptionReminder } from "./workflow";
 
@@ -68,6 +68,9 @@ export function agentContext(p: Project, blockId: string) {
     workScope: { target: target.scope, parents: ancestorsOf(p, blockId).reverse().filter(b => b.scope).map(b => ({ key: b.key, title: b.title, scope: b.scope })) }
   , focus: focus ? { blockId: focus.id, key: focus.key, title: focus.title, scope: focus.scope } : undefined
   , workflowPolicy: p.workflowPolicy
+    // 方針: 範囲に配られている全体の決定 (技術選定など)。線は無いが、この箱の作業を縛る。決まっていない (ready=false) なら待つ
+  , policies: policiesFor(p, blockId).map((q) => { const owner = p.blocks[q.blockId]; return { from: owner?.key ?? owner?.title, title: owner?.title, name: q.name, description: q.description, advisory: !!q.policy?.advisory, ready: isPolicyReady(p, q.id), artifacts: q.artifacts.map((a) => ({ title: a.title, url: a.url })), decisions: (owner?.decisions ?? []).filter((d) => d.answer !== undefined).map((d) => ({ question: d.question, answer: d.answer })) }; })
+  , policyChanged: changedPolicies(p, blockId).map((q) => q.name)
   , project: { name: p.name, description: p.description }
   , task: p.blocks[blockId].key ?? blockId
     // AI への注意書き。確認トークンの計算に含まれるので、言語で変わらないよう翻訳しない (t() で包まない)
@@ -239,6 +242,9 @@ export function briefContext(p: Project, blockId: string) {
   , workScope: full.workScope
   , focus: full.focus
   , workflowPolicy: full.workflowPolicy
+    // 方針は省かない (全体の決定。線が無いので、ここでしか伝わらない)
+  , policies: full.policies
+  , policyChanged: full.policyChanged
     // 計画全体の説明は省かない (計画の説明にだけ書かれた制約がある。R27-01)
   , project: full.project
   , task: full.task

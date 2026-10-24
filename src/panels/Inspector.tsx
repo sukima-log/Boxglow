@@ -28,7 +28,7 @@ import { blockToPrompt } from "../model/export";
 import { ROOT_ID, type BlockStatus, type Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
 import { copyText, downloadText, pickTextFile, safeFilename } from "../lib/download";
-import { ArtifactsEditor, DateField, DebouncedText, PortsEditor } from "./parts";
+import { ArtifactsEditor, DateField, DebouncedText, PortsEditor, PoliciesReceived } from "./parts";
 import { GLYPH, MEMBER_COLORS } from "./Drawer";
 import { CATEGORIES } from "../model/categories";
 import { STATUS_HELP, STATUS_LABEL } from "../model/status";
@@ -504,6 +504,8 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
       {/* 3. 入力 / 4. 出力 */}
       {tab === "io" && (<>
       <PortsEditor project={project} blockId={blockId} direction="in" readonly={readonly} title="Inputs" />
+      {/* 方針: 線なしで届く全体の決定 (技術選定など)。入力と同じく作業を縛る */}
+      <PoliciesReceived project={project} blockId={blockId} />
       {/* 差し戻された理由は、作り直す出力のすぐ上に出す (下にあると見落とす) */}
       <SendBackPanel project={project} blockId={blockId} show="received" />
       <PortsEditor project={project} blockId={blockId} direction="out" readonly={readonly} title="Outputs" />

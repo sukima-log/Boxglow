@@ -30,6 +30,19 @@ function fixture(guard=false) {
   return {file,id:r.blockId,cli,token,read};
 }
 
+describe("方針 (port --policy)",()=>{
+  it("出力を方針にすると、範囲の箱が線なしで方針待ちになり、context に方針が入る。--skip-policy で外せる",()=>{
+    const {cli,read}=fixture();
+    expect(cli("add","技術選定","--out","ゲームエンジン").status).toBe(0);
+    const r=cli("port","技術選定","--policy","ゲームエンジン");expect(r.status,r.stderr).toBe(0);
+    expect(Object.values(read().ports).some((q:any)=>q.name==="ゲームエンジン"&&q.policy)).toBe(true);
+    const ctx=JSON.parse(cli("context","対象").stdout);
+    expect(ctx.context.policies.map((x:any)=>x.name)).toEqual(["ゲームエンジン"]);
+    expect(cli("port","対象","--skip-policy","技術選定.ゲームエンジン").status).toBe(0);
+    expect(JSON.parse(cli("context","対象").stdout).context.policies).toEqual([]);
+  });
+});
+
 describe("差し戻し (sendback)",()=>{
   it("評価の箱から作った箱へ差し戻すと In Progress に戻り、--to と --note が無ければ案内する",()=>{
     const {cli,read,id}=fixture();

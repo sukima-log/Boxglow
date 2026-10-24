@@ -298,6 +298,14 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     const recv=await page.locator('.panel.right .sendback').innerText().catch(()=> '');
     check('差し戻し: 戻された箱の I/O タブに「差し戻されています」と理由が出る',recv.includes('差し戻されています')&&recv.includes('画面設計に一覧画面が無い'),recv);
     await page.evaluate(()=>{const s=window.boxglow.store.getState();s.undo();s.select({});});await page.waitForTimeout(300);
+    // 方針: 「設計する」の出力を I/O タブで方針にすると、同じ親の中の箱に「方針」の札が付き、受け取る側の I/O タブに出る。Undo で戻す
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.setViewScope(null);const d=Object.values(s.project.blocks).find(x=>x.title==='要件を決める');s.select({blockId:d.id,panelTab:'io'});});await page.waitForTimeout(500);
+    await page.locator('.panel.right .policy-row__toggle input').first().check();await page.waitForTimeout(500);
+    const pol=await page.evaluate(()=>{const s=window.boxglow.store.getState();const p=s.project;const d=Object.values(p.blocks).find(x=>x.title==='要件を決める');const port=Object.values(p.ports).find(q=>q.blockId===d.id&&q.direction==='out');return {policy:!!port.policy,chips:document.querySelectorAll('.meta-chip.policy-get').length,give:document.querySelectorAll('.meta-chip.policy-give').length};});
+    check('方針: I/O タブで出力を方針にすると、範囲の箱に札が付く (配る側にも印)',pol.policy&&pol.chips>0&&pol.give===1,JSON.stringify(pol));
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();const b=Object.values(s.project.blocks).find(x=>x.title==='公開する');s.select({blockId:b.id,panelTab:'io'});});await page.waitForTimeout(400);
+    check('方針: 受け取る箱の I/O タブに「方針」の一覧が出る',(await page.locator('.panel.right .policies').innerText().catch(()=>'')).includes('要件を決める'));
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.undo();s.select({});});await page.waitForTimeout(300);
     // View でも、線を選んで Delete で外せる (Undo で戻す)
     const edgeId=await page.evaluate(()=>{const s=window.boxglow.store.getState();s.setEditMode(false);const e=Object.values(s.project.edges).find(x=>!x.auto);s.select({edgeId:e.id});return e.id;});await page.waitForTimeout(300);
     await page.keyboard.press('Delete');await page.waitForTimeout(400);

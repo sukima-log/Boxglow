@@ -1096,6 +1096,129 @@ export function missingRequiredInputs(p: Project, blockId: string): Port[] {
   return missing.filter((q) => !(q.anyOf || isMergeBox) || !gone.has(q.id));
 }
 
+/* ------------------------------------------------------------------ */
+/* 方針 (全体に効く決定を、線を引かずに範囲へ配る)                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * 方針の届く範囲の箱 (その箱の中の全階層が対象)。省略は持ち主の親 (同じ親の中)
+ * Input : p, portId = 方針の出力 / Output: 範囲の箱の id (ROOT_ID = 計画全体)
+ */
+export function policyScopeOf(p: Project, portId: string): string {
+  const port = p.ports[portId];
+  const scope = port?.policy?.scope;
+  if (scope && (scope === ROOT_ID || p.blocks[scope])) return scope;
+  return p.blocks[port?.blockId ?? ""]?.parentId ?? ROOT_ID;
+}
+
+/**
+ * この箱に届く方針 (範囲の中にあり、自分で外していないもの)。方針の箱そのものと、その中の箱には届かない
+ * Input : p, blockId / Output: 方針の出力ポートの一覧 (持ち主の箱の題名順)
+ */
+/**
+ * 箱の上流 (入力の供給元をたどって行き着く箱と、それを含む箱)。方針の箱の上流には方針を届けない (届けると、お互いに待ち合って進めない)
+ * Input : p, blockId / Output: 箱の id の集合 (自分は含まない)
+ */
+function upstreamOf(p: Project, blockId: string): Set<string> {
+  const out = new Set<string>();
+  const stack = [blockId];
+  const seen = new Set<string>();
+  while (stack.length > 0) {
+    const id = stack.pop()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    for (const i of portsOf(p, id, "in")) {
+      const src = sourceOfInput(p, i.id);
+      if (!src || src.blockId === ROOT_ID || src.blockId === blockId) continue;
+      out.add(src.blockId);
+      for (const a of ancestorsOf(p, src.blockId)) if (a.id !== ROOT_ID) out.add(a.id);
+      stack.push(src.blockId);
+    }
+  }
+  return out;
+}
+
+export function policiesFor(p: Project, blockId: string): Port[] {
+  const b = p.blocks[blockId];
+  if (!b || blockId === ROOT_ID) return [];
+  const ancestors = new Set(ancestorsOf(p, blockId).map((a) => a.id));
+  const out: Port[] = [];
+  const upstreamCache = new Map<string, Set<string>>();
+  for (const q of Object.values(p.ports)) {
+    if (!q.policy || q.direction !== "out") continue;
+    if (q.blockId === blockId || ancestors.has(q.blockId)) continue; // 自分の方針、または自分を含む箱の方針 (自分がそれを作る側)
+    // 方針の箱の上流 (方針を決める材料を作る箱) には届けない
+    if (!upstreamCache.has(q.blockId)) upstreamCache.set(q.blockId, upstreamOf(p, q.blockId));
+    if (upstreamCache.get(q.blockId)!.has(blockId)) continue;
+    const scope = policyScopeOf(p, q.id);
+    if (scope !== ROOT_ID && !ancestors.has(scope)) continue; // 範囲の外
+    if (b.policyOptOut?.includes(q.id)) continue;
+    out.push(q);
+  }
+  return out.sort((x, y) => (p.blocks[x.blockId]?.title ?? "").localeCompare(p.blocks[y.blockId]?.title ?? "") || x.name.localeCompare(y.name));
+}
+
+/** 方針が届いているか (供給元と同じ判定: 成果物があるか、持ち主が完了か) */
+export function isPolicyReady(p: Project, portId: string): boolean {
+  return isSourceReady(p, { portId, side: "outer" });
+}
+
+/**
+ * 方針の版の印: 成果物と持ち主の状態から作る (変わったら「方針が変わった」)
+ * Input : p, portId / Output: 文字列
+ */
+export function policyStamp(p: Project, portId: string): string {
+  const q = p.ports[portId];
+  if (!q) return "";
+  return `${p.blocks[q.blockId]?.status ?? ""}|${q.artifacts.map((a) => `${a.id}:${a.url}`).join(",")}`;
+}
+
+/**
+ * 完了した後に変わった方針 (確かめ直しの候補)。完了のときの印と今の印が違うもの
+ * Input : p, blockId / Output: 方針の出力ポートの一覧 (完了していなければ空)
+ */
+export function changedPolicies(p: Project, blockId: string): Port[] {
+  const b = p.blocks[blockId];
+  if (!b || b.status !== "white" || !b.policyStamps) return [];
+  return policiesFor(p, blockId).filter((q) => b.policyStamps![q.id] !== undefined && b.policyStamps![q.id] !== policyStamp(p, q.id));
+}
+
+/**
+ * 出力を方針にする / やめる
+ * Input : p, portId, policy = { scope?, advisory? } (null でやめる) / Output: 更新した計画 (出力でなければそのまま)
+ */
+export function setPolicy(p: Project, portId: string, policy: { scope?: string; advisory?: boolean } | null): Project {
+  const port = p.ports[portId];
+  if (!port || port.direction !== "out") return p;
+  const q = touch(p);
+  if (policy) q.ports[portId] = { ...q.ports[portId], policy: { ...(policy.scope ? { scope: policy.scope } : {}), ...(policy.advisory ? { advisory: true } : {}) } };
+  else { const { policy: _pl, ...rest } = q.ports[portId]; void _pl; q.ports[portId] = rest; }
+  return q;
+}
+
+/**
+ * この箱では方針を受け取らない / 受け取り直す
+ * Input : p, blockId, portId = 方針の出力, skip / Output: 更新した計画
+ */
+export function setPolicyOptOut(p: Project, blockId: string, portId: string, skip: boolean): Project {
+  const b = p.blocks[blockId];
+  if (!b) return p;
+  const cur = new Set(b.policyOptOut ?? []);
+  if (skip) cur.add(portId); else cur.delete(portId);
+  const q = touch(p);
+  const next = { ...b };
+  if (cur.size) next.policyOptOut = [...cur]; else delete next.policyOptOut;
+  q.blocks[blockId] = next;
+  return q;
+}
+
+/** 完了のときの方針の印を記録する (q を書き換える) */
+function stampPolicies(q: Project, blockId: string): void {
+  const ps = policiesFor(q, blockId);
+  if (ps.length === 0) { delete q.blocks[blockId].policyStamps; return; }
+  q.blocks[blockId].policyStamps = Object.fromEntries(ps.map((x) => [x.id, policyStamp(q, x.id)]));
+}
+
 /**
  * 着手を待たせている理由 (必須の入力の名前と、まだ答えていない分岐)。空なら着手できる
  * Input : p, blockId / Output: 理由の文の一覧 (入力の名前、または「分岐「…」の判断」)
@@ -1109,6 +1232,8 @@ export function waitingFor(p: Project, blockId: string): string[] {
     ...missing.filter((q) => !(q.anyOf || isMergeBox)).map((q) => q.name)
   , ...(merge.length === 0 ? [] : merge.length === 1 ? [merge[0]] : [t("{names} のどれか", { names: merge.join(" / ") })])
   , ...waitingBranches(p, blockId).map((title) => t("分岐「{title}」の判断", { title }))
+    // 方針 (参考でないもの) がまだ決まっていなければ待つ
+  , ...policiesFor(p, blockId).filter((q) => !q.policy?.advisory && !isPolicyReady(p, q.id)).map((q) => t("方針「{name}」", { name: q.name }))
   ];
 }
 
@@ -1364,6 +1489,7 @@ export function finishBlock(
   q.blocks[blockId].activity = null;
   if (q.blocks[blockId].status !== "white") q.blocks[blockId].statusChangedAt = now();
   q.blocks[blockId].status = "white";
+  stampPolicies(q, blockId); // 完了のときの方針の版 (後で方針が変わったら確かめ直しの候補になる)
   // 検査結果 (B160): 書かれたときだけ置き換える (書かれなければ前の完了の分を残す)。日時は状態の変更と同じにして「この完了のときの検査」と分かるようにする
   if (args.verification) q.blocks[blockId].verification = { ...args.verification, at: b.status !== "white" ? (q.blocks[blockId].statusChangedAt ?? args.verification.at) : args.verification.at };   // (完了済みへの追記は今の日時のまま。R30b-02)
   const arts = (args.artifacts ?? []).map((a) => a.title).join(", ");
@@ -1620,7 +1746,7 @@ export function setStatus(p: Project, blockId: string, status: BlockStatus, acto
   const b = p.blocks[blockId];
   if (!b || b.status === status) return p;
   const q = updateBlock(p, blockId, { status });
-  if (status === "white") q.blocks[blockId].activity = null;
+  if (status === "white") { q.blocks[blockId].activity = null; stampPolicies(q, blockId); }
   appendLog(q, { actor, kind: "status", blockId, message: t("「{title}」を {status} に", { title: b.title, status }) });
   return q;
 }
