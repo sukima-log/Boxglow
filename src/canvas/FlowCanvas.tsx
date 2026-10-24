@@ -7,7 +7,7 @@ import { readingColumns } from "../model/readingLayout";
 import { sharedWires } from "./sharedWires";
 import { Background, BackgroundVariant, PanOnScrollMode, MiniMap, ReactFlow, useNodesState, useReactFlow, useStore, type ReactFlowState, type Connection, type Edge as RFEdge, type NodeChange, type OnConnectEnd, type OnNodeDrag } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { canConnectAcross, connectAcross, connectToBlock, isHiddenByCollapse, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, withIndex } from "../model/graph";
+import { policyReceivers, canConnectAcross, connectAcross, connectToBlock, isHiddenByCollapse, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, withIndex } from "../model/graph";
 import { blockSize, isExpanded } from "../model/size";
 import { ROOT_ID } from "../model/types";
 import { nextFreePosition } from "../model/autolayout";
@@ -323,8 +323,16 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
   );
 
   /** 丸ではなくボックスの上で離したときも結線する (空いている入力か、新しい入力へ) */
+  /** 線を引き始めた: 方針の出力からなら、すでに方針が届いている箱を薄く描く (線が要るのは範囲の外の箱だけ) */
+  const onConnectStart = useCallback((_e: unknown, params: { handleId: string | null }) => {
+    const from = parseHandle(params.handleId);
+    const st = useProjectStore.getState();
+    const port = from && st.project ? st.project.ports[from.portId] : undefined;
+    st.setPolicyDrag(port?.policy && st.project ? policyReceivers(st.project, port.id).map((b) => b.id) : null);
+  }, []);
   const onConnectEnd: OnConnectEnd = useCallback(
     (event, state) => {
+      useProjectStore.getState().setPolicyDrag(null); // 引き終わったら薄い表示を戻す
       if (!canEdit || state.isValid || !state.fromHandle || !state.fromHandle.id) return;
       const from = parseHandle(state.fromHandle.id);
       if (!from) return;
@@ -429,6 +437,7 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
       onNodeDrag={onNodeDrag}
       onNodeDragStop={onNodeDragStop}
       onConnect={onConnect}
+      onConnectStart={onConnectStart}
       onConnectEnd={onConnectEnd}
       connectOnClick
       snapToGrid={snap}

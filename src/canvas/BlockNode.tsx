@@ -175,8 +175,11 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     else if (view.kids > 0) toggleCollapsed(blockId);
   };
 
+  // 方針の出力から線を引いている間、すでに方針が届いている箱 (線が要らない) は薄く描く
+  const policyCovered = useProjectStore((s) => !!s.policyDrag?.includes(blockId));
   const cls = [
-    "bg-block"
+    policyCovered ? "policy-covered" : ""
+  , "bg-block"
   , vertical ? "vertical-card" : ""
   , `status-${view.status}`
   , `depth-${view.depth}`

@@ -1153,6 +1153,8 @@ export function policiesFor(p: Project, blockId: string): Port[] {
     const scope = policyScopeOf(p, q.id);
     if (scope !== ROOT_ID && !ancestors.has(scope)) continue; // 範囲の外
     if (b.policyOptOut?.includes(q.id)) continue;
+    // 線でも同じ方針を受けている箱では、方針から外す (入力として届くので二重にしない。線を優先)
+    if (portsOf(p, blockId, "in").some((i) => sourceOfInput(p, i.id)?.id === q.id)) continue;
     out.push(q);
   }
   return out.sort((x, y) => (p.blocks[x.blockId]?.title ?? "").localeCompare(p.blocks[y.blockId]?.title ?? "") || x.name.localeCompare(y.name));

@@ -216,6 +216,9 @@ interface State {
   lastEdgeId: string | null;
   /** 2 クリック結線の出す側 (丸をクリックしたとき)。接続先の箱か丸をクリックするまで保つ */
   pendingConnect: Endpoint | null;
+  /** 方針の出力から線を引いている間、すでに方針が届いている箱の id (線が要らないので薄く描く)。引いていなければ null */
+  policyDrag: string[] | null;
+  setPolicyDrag: (ids: string[] | null) => void;
   setPendingConnect: (ep: Endpoint | null) => void;
   past: Project[];
   future: Project[];
@@ -1063,6 +1066,8 @@ export const useProjectStore = create<State>((set, get) => {
   , selection: NO_SELECTION
   , lastEdgeId: null
   , pendingConnect: null
+  , policyDrag: null
+  , setPolicyDrag: (policyDrag) => set({ policyDrag })
   , setPendingConnect: (pendingConnect) => set({ pendingConnect })
   , past: []
   , future: []

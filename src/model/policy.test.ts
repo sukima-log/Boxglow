@@ -3,7 +3,7 @@
  *   範囲・待ち・参考・受け取らない・完了後の変化・文脈 (context) への載り方
  */
 import { describe, expect, it } from "vitest";
-import { ackPolicy, addBlock, addPort, connect, changedPolicies, policyReceivers, setStatus, createProject, finishBlock, policiesFor, portsOf, projectBlocks, setPolicy, setPolicyOptOut, waitingFor } from "./graph";
+import { ackPolicy, connectToBlock, addBlock, addPort, connect, changedPolicies, policyReceivers, setStatus, createProject, finishBlock, policiesFor, portsOf, projectBlocks, setPolicy, setPolicyOptOut, waitingFor } from "./graph";
 import { agentContext, briefContext } from "./context";
 import { lint } from "./lint";
 import { ROOT_ID } from "./types";
@@ -97,6 +97,15 @@ describe("方針", () => {
     expect(lint(p).some((i) => i.kind === "dangling-output" && i.blockId === tech)).toBe(true);
     p = setPolicy(p, engine, {});
     expect(lint(p).some((i) => i.kind === "dangling-output" && i.blockId === tech)).toBe(false);
+  });
+
+  it("範囲の中の箱に線でもつなぐと、方針の一覧からは外れて入力として届く (二重にしない)", () => {
+    let { p, a, engine } = fixture();
+    p = setPolicy(p, engine, {});
+    expect(policiesFor(p, a).map((q) => q.id)).toEqual([engine]);
+    p = connectToBlock(p, { portId: engine, side: "outer" }, a).project;
+    expect(policiesFor(p, a)).toHaveLength(0);
+    expect(portsOf(p, a, "in").map((q) => q.name)).toContain("ゲームエンジン");
   });
 
   it("文脈 (context) に方針の中身が入る (省略版も)", () => {
