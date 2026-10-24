@@ -894,8 +894,20 @@ export function disconnectWire(p: Project, edgeId: string): { project: Project; 
   if (!e) return { project: p };
   const q = touch(p);
   if (e.auto) {
-    if (q.ports[e.to.portId]?.direction === "in") q.ports[e.to.portId].noPromote = true;
-    delete q.edges[edgeId];
+    // 自動の線: 下へたどって、引き上げの元になっている本当の入力 (自動で作った入力ではないもの) すべてに「引き上げない」印を付ける。
+    // 途中の自動の線と、使われなくなった引き上げのポートは normalizePromotions が消すので、上下の続きも残らない (利用者の指摘 2026-10-24)
+    const stack = [e];
+    const seen = new Set<string>();
+    while (stack.length > 0) {
+      const cur = stack.pop()!;
+      if (seen.has(cur.id)) continue;
+      seen.add(cur.id);
+      delete q.edges[cur.id];
+      const target = q.ports[cur.to.portId];
+      if (!target || target.direction !== "in") continue;
+      if (!target.promotedFrom) { q.ports[target.id] = { ...target, noPromote: true }; continue; }
+      for (const x of Object.values(q.edges)) if (x.auto && x.from.portId === target.id && x.from.side === "inner") stack.push(x);
+    }
   } else {
     const chain = wireChainOf(p, edgeId);
     for (const id of chain) if (!p.edges[id].auto) delete q.edges[id];

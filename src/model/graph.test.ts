@@ -1263,6 +1263,22 @@ describe("差し戻し (sendBack): 線で戻さず、作った箱を In Progress
 });
 
 describe("どんな線でも Delete で外せる (disconnectWire)", () => {
+  it("上の階層の自動の区間 (引き上げたポートから中へ下りる線) を消しても、上下の続きが残らない", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const m = addBlock(p, { parentId: pj, title: "3Dモデリング" }); p = m.project;
+    const c = addBlock(p, { parentId: m.blockId, title: "キャラ" }); p = c.project;
+    const leaf = addBlock(p, { parentId: c.blockId, title: "抽出" }); p = leaf.project;
+    p = addPort(p, { blockId: leaf.blockId, direction: "in", name: "シナリオ" }).project; // 3 階層を自動で上がる
+    // プロジェクトのボックスの (自動の) 入力から 3Dモデリング へ下りる区間を選んで消す
+    const top = Object.values(p.edges).find((e) => e.auto && p.ports[e.from.portId].blockId === pj && e.from.side === "inner")!;
+    p = disconnectWire(p, top.id).project;
+    expect(Object.values(p.edges).filter((e) => e.auto && p.ports[e.to.portId]?.name === "シナリオ")).toHaveLength(0);
+    expect(portsOf(p, m.blockId, "in")).toHaveLength(0);
+    expect(portsOf(p, pj, "in").filter((x) => x.name === "シナリオ")).toHaveLength(0);
+    expect(portsOf(p, leaf.blockId, "in")[0].noPromote).toBe(true);
+  });
+
   it("自動の線を外すと、その入力は箱に未接続のまま残り、上へは引き上げられない。線をつなぐと元に戻る", () => {
     let p = createProject("t");
     const pj = projectBlocks(p)[0].id;
