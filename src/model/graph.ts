@@ -1179,8 +1179,34 @@ export function policyStamp(p: Project, portId: string): string {
  */
 export function changedPolicies(p: Project, blockId: string): Port[] {
   const b = p.blocks[blockId];
-  if (!b || b.status !== "white" || !b.policyStamps) return [];
-  return policiesFor(p, blockId).filter((q) => b.policyStamps![q.id] !== undefined && b.policyStamps![q.id] !== policyStamp(p, q.id));
+  if (!b || b.status !== "white") return [];
+  // 完了のときの版と違う方針。完了のときに無かった (後から方針にした) ものは、決まった時点で対象にする (済んだ作業がその決定に合っているかを確かめる)
+  return policiesFor(p, blockId).filter((q) => {
+    const stamp = b.policyStamps?.[q.id];
+    return stamp === undefined ? isPolicyReady(p, q.id) : stamp !== policyStamp(p, q.id);
+  });
+}
+
+/**
+ * 方針に合っていることを確かめた (済んだ箱の「方針が変わった」を消す)。今の版を記録する
+ * Input : p, blockId, portId = 方針の出力 (省略で届いている方針すべて) / Output: 更新した計画
+ */
+export function ackPolicy(p: Project, blockId: string, portId?: string): Project {
+  const b = p.blocks[blockId];
+  if (!b) return p;
+  const targets = portId ? [portId] : policiesFor(p, blockId).map((q) => q.id);
+  const q = touch(p);
+  q.blocks[blockId] = { ...b, policyStamps: { ...(b.policyStamps ?? {}), ...Object.fromEntries(targets.map((id) => [id, policyStamp(p, id)])) } };
+  return q;
+}
+
+/**
+ * 方針が届く箱 (受け取る側) の一覧
+ * Input : p, portId = 方針の出力 / Output: 箱の配列
+ */
+export function policyReceivers(p: Project, portId: string): Block[] {
+  if (!p.ports[portId]?.policy) return [];
+  return Object.values(p.blocks).filter((b) => b.id !== ROOT_ID && policiesFor(p, b.id).some((q) => q.id === portId));
 }
 
 /**
@@ -1232,8 +1258,8 @@ export function waitingFor(p: Project, blockId: string): string[] {
     ...missing.filter((q) => !(q.anyOf || isMergeBox)).map((q) => q.name)
   , ...(merge.length === 0 ? [] : merge.length === 1 ? [merge[0]] : [t("{names} のどれか", { names: merge.join(" / ") })])
   , ...waitingBranches(p, blockId).map((title) => t("分岐「{title}」の判断", { title }))
-    // 方針 (参考でないもの) がまだ決まっていなければ待つ
-  , ...policiesFor(p, blockId).filter((q) => !q.policy?.advisory && !isPolicyReady(p, q.id)).map((q) => t("方針「{name}」", { name: q.name }))
+    // 方針 (参考でないもの) がまだ決まっていなければ待つ。待たせるのは未着手 (New) の箱だけ (途中から方針にしても、進めている箱は止めない)
+  , ...(p.blocks[blockId]?.status === "black" ? policiesFor(p, blockId).filter((q) => !q.policy?.advisory && !isPolicyReady(p, q.id)).map((q) => t("方針「{name}」", { name: q.name })) : [])
   ];
 }
 

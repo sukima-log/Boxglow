@@ -1,7 +1,7 @@
 import { ClaimMark, useClaimClock, visibleClaim } from "../panels/Claims";
 import { chosenOption, isSkipped, waitingBranches } from "../model/branch";
 import { unpreparedState } from "../model/readiness";
-import { workingNow, sentBackTo, policiesFor, isPolicyReady, changedPolicies } from "../model/graph";
+import { workingNow, sentBackTo, policiesFor, isPolicyReady, changedPolicies, policyReceivers, policyScopeOf } from "../model/graph";
 /**
  * ブロック (ボックス) のノード
  * 分類・題名・状態・入力・出力を縦に読むカード。親は子を包む領域として描く。
@@ -19,6 +19,7 @@ import { readingColumns } from "../model/readingLayout";
 import { CategoryIcon } from "./CategoryIcon";
 import { STATUS_LABEL } from "../model/status";
 import { t, useLang } from "../i18n";
+import { ROOT_ID } from "../model/types";
 
 /** 状態の印 */
 export const STATUS_GLYPH: Record<BlockStatus, string> = { black: "?", gray: "~", white: "✓" };
@@ -88,7 +89,10 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     , outs: outs.map((q) => {
         const chosen = b?.branch ? chosenOption(b) : undefined;
         const branchState = q.branchOption === undefined ? null : chosen === undefined ? "open" : q.branchOption === chosen ? "chosen" : "rejected";
-        return { id: q.id, name: q.name, ready: isSourceReady(p, { portId: q.id, side: "outer" }), branchState };
+        // 方針の出力: 線をつなぐ代わりに範囲へ配る。届く範囲の名前と箱の数を添える
+        const scope = q.policy ? policyScopeOf(p, q.id) : null;
+        const policy = q.policy ? { scope: scope === ROOT_ID ? t("計画全体") : p.blocks[scope!]?.title ?? "", count: policyReceivers(p, q.id).length, advisory: !!q.policy.advisory } : null;
+        return { id: q.id, name: q.name, ready: isSourceReady(p, { portId: q.id, side: "outer" }), branchState, policy };
       })
       // 分岐: このボックスが分岐か / 選ばなかった道の先 (見送り) か / まだ答えていない分岐の先 (分岐待ち) か
     , branch: !!b?.branch
@@ -103,7 +107,9 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     , sentBack: b?.status !== "white" ? sentBackTo(p, blockId) : []
       // 方針: 届いている数と、まだ決まっていない (待ち) 数。完了後に変わった方針
     , policies: policiesFor(p, blockId)
-    , policyWaiting: policiesFor(p, blockId).filter((q) => !q.policy?.advisory && !isPolicyReady(p, q.id)).length
+      // 待ち: 未着手の箱だけ (途中から方針にしても、進めている箱は止めない)。進めている箱では「未決定」とだけ示す
+    , policyWaiting: b?.status === "black" ? policiesFor(p, blockId).filter((q) => !q.policy?.advisory && !isPolicyReady(p, q.id)).length : 0
+    , policyUndecided: b?.status === "gray" ? policiesFor(p, blockId).filter((q) => !isPolicyReady(p, q.id)).length : 0
     , policyChanged: changedPolicies(p, blockId).length
       // この箱の出力が方針になっているか (配る側の印)
     , givesPolicy: outs.some((q) => !!q.policy)
@@ -277,8 +283,8 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         {/* 要具体化: 着手の前に、出力の予定成果物と完了条件を決める。親には配下の件数 */}
         {/* 押すと右パネルの状態タブ (着手の前に決めること) を開く */}
         {view.givesPolicy && <span className="meta-chip policy-give" title={t("この箱の出力は方針として範囲の箱すべてに配られます")}>{t("方針")}</span>}
-        {view.policies.length > 0 && <button type="button" className={`meta-chip policy-get nodrag${view.policyWaiting > 0 ? " waiting" : ""}`} title={view.policies.map((q) => `${project.blocks[q.blockId]?.title ?? ""}「${q.name}」`).join("\n")} onClick={(e) => { e.stopPropagation(); select({ blockId, panelTab: "io" }); }}>{view.policyWaiting > 0 ? t("方針待ち {n}", { n: view.policyWaiting }) : t("方針 {n}", { n: view.policies.length })}</button>}
-        {view.policyChanged > 0 && <span className="meta-chip policy-changed" title={t("完了した後に方針が変わりました (確かめ直しの候補)")}>{t("方針が変わった")}</span>}
+        {view.policies.length > 0 && <button type="button" className={`meta-chip policy-get nodrag${view.policyWaiting > 0 ? " waiting" : ""}`} title={view.policies.map((q) => `${project.blocks[q.blockId]?.title ?? ""}「${q.name}」`).join("\n")} onClick={(e) => { e.stopPropagation(); select({ blockId, panelTab: "io" }); }}>{view.policyWaiting > 0 ? t("方針待ち {n}", { n: view.policyWaiting }) : view.policyUndecided > 0 ? t("方針: 未決定 {n}", { n: view.policyUndecided }) : t("方針 {n}", { n: view.policies.length })}</button>}
+        {view.policyChanged > 0 && <button type="button" className="meta-chip policy-changed nodrag" title={t("完了した後に方針が決まった・変わりました (確かめ直しの候補。I/O タブの方針で「確かめた」を押すと消えます)")} onClick={(e) => { e.stopPropagation(); select({ blockId, panelTab: "io" }); }}>{t("方針: 確かめ直し")}</button>}
         {view.sentBack.length > 0 && <button type="button" className="meta-chip sentback nodrag" title={t("差し戻し: {note} ({from})", { note: view.sentBack[0].record.note, from: view.sentBack[0].from.title })} onClick={(e) => { e.stopPropagation(); select({ blockId, panelTab: "io" }); }}>{t("差し戻し {n}", { n: view.sentBack.length })}</button>}
         {view.unprepared && !view.skipped && <button type="button" className="meta-chip unprepared nodrag" title={t("着手の前に、出力の予定成果物 (expect) と完了条件を決めます (押すと状態タブ)")} onClick={(e) => { e.stopPropagation(); select({ blockId, panelTab: "status" }); }}>{t("要具体化")}</button>}
         {!view.unprepared && view.unpreparedBelow > 0 && !view.skipped && <span className="meta-chip unprepared below" title={t("中に、要具体化のボックスが {n} 個あります", { n: view.unpreparedBelow })}>{t("要具体化 {n}", { n: view.unpreparedBelow })}</span>}
@@ -309,6 +315,9 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
               <span className="bg-block__direction">{q.branchState ? t("道") : t("出力")}</span>
               <span className="bg-block__port-name">{q.branchState === "chosen" ? "✓ " : ""}{q.name}</span>
               {q.branchState === "rejected" && <span className="opt">{t("見送り")}</span>}
+              {/* 方針の出力: 右端の丸の代わりに「配る」印。線をつなぐ必要が無いことを示す (丸はマウスを乗せると出る) */}
+              {q.policy && <span className="opt policy" title={t("方針として配っています: {scope} の {n} 箱に線なしで届きます", { scope: q.policy.scope, n: q.policy.count })}>{t("方針 → {scope} {n}", { scope: q.policy.scope, n: q.policy.count })}</span>}
+              {q.policy && <span className="policy-mark" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><circle cx="4" cy="8" r="1.6" fill="currentColor" stroke="none" /><path d="M7 4.5a5 5 0 0 1 0 7M10 2.5a8 8 0 0 1 0 11" /></svg></span>}
             </div>
           ))}
         </div>
@@ -359,7 +368,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           position={Position.Right}
           id={handleId("out", q.id, "outer")}
           title={t("出力: {name} (クリックまたはドラッグで接続)", { name: q.name })}
-          className={`port-out ${q.ready ? "port-ready" : "port-waiting"}`}
+          className={`port-out ${q.ready ? "port-ready" : "port-waiting"}${q.policy ? " port-policy" : ""}`}
           style={{ top: rowAt(i, "out"), zIndex: 1 }}
           isConnectable={canEdit}
           onMouseDown={(ev) => ev.preventDefault()}

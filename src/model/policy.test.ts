@@ -3,8 +3,9 @@
  *   範囲・待ち・参考・受け取らない・完了後の変化・文脈 (context) への載り方
  */
 import { describe, expect, it } from "vitest";
-import { addBlock, addPort, connect, changedPolicies, createProject, finishBlock, policiesFor, portsOf, projectBlocks, setPolicy, setPolicyOptOut, waitingFor } from "./graph";
+import { ackPolicy, addBlock, addPort, connect, changedPolicies, policyReceivers, setStatus, createProject, finishBlock, policiesFor, portsOf, projectBlocks, setPolicy, setPolicyOptOut, waitingFor } from "./graph";
 import { agentContext, briefContext } from "./context";
+import { lint } from "./lint";
 import { ROOT_ID } from "./types";
 
 /** 計画: 技術選定 (方針の箱) と、別の大項目「モデリング」の中に 2 つの箱 */
@@ -69,6 +70,33 @@ describe("方針", () => {
     expect(changedPolicies(p, a)).toHaveLength(0);
     p = finishBlock(p, tech, "human", { artifacts: [{ title: "Unreal 5", url: "docs/engine2.md" }] }).project;
     expect(changedPolicies(p, a).map((q) => q.name)).toEqual(["ゲームエンジン"]);
+  });
+
+  it("途中から方針にしても、進めている箱 (In Progress) は待たない。待つのは未着手の箱だけ", () => {
+    let { p, a, b, engine } = fixture();
+    p = setStatus(p, a, "gray", "human");
+    p = setPolicy(p, engine, {});
+    expect(waitingFor(p, a)).not.toContain("方針「ゲームエンジン」");
+    expect(waitingFor(p, b)).toContain("方針「ゲームエンジン」");
+    expect(policyReceivers(p, engine).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("方針にする前に済んでいた箱は、方針が決まった時点で確かめ直しの候補になり、「確かめた」で消える", () => {
+    let { p, tech, a, engine } = fixture();
+    p = finishBlock(p, a, "human", { artifacts: [{ title: "人物.fbx", url: "a.fbx" }] }).project; // 方針の前に完了
+    p = setPolicy(p, engine, {});
+    expect(changedPolicies(p, a)).toHaveLength(0); // まだ決まっていない
+    p = finishBlock(p, tech, "human", { artifacts: [{ title: "Unity 6", url: "docs/engine.md" }] }).project;
+    expect(changedPolicies(p, a).map((q) => q.name)).toEqual(["ゲームエンジン"]);
+    p = ackPolicy(p, a, engine);
+    expect(changedPolicies(p, a)).toHaveLength(0);
+  });
+
+  it("方針の出力は「どこにもつながらない出力」の見直し候補にならない", () => {
+    let { p, tech, engine } = fixture();
+    expect(lint(p).some((i) => i.kind === "dangling-output" && i.blockId === tech)).toBe(true);
+    p = setPolicy(p, engine, {});
+    expect(lint(p).some((i) => i.kind === "dangling-output" && i.blockId === tech)).toBe(false);
   });
 
   it("文脈 (context) に方針の中身が入る (省略版も)", () => {

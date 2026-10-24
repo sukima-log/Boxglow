@@ -3,7 +3,7 @@
  * ポートの行は「名前」と、その直下に「成果物 (リンク)」を主役として並べる。形式・制約は 1 行の補足。
  */
 import { useEffect, useRef, useState } from "react";
-import { addPort, consumersOf, createArtifact, inputGroupsOf, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort, inputsFedBy, canRemovePort, connectToBlock, sourceCandidates, targetCandidates, sendBack, setPolicy, setPolicyOptOut, policiesFor, isPolicyReady, policyScopeOf } from "../model/graph";
+import { addPort, consumersOf, createArtifact, inputGroupsOf, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort, inputsFedBy, canRemovePort, connectToBlock, sourceCandidates, targetCandidates, sendBack, setPolicy, setPolicyOptOut, policiesFor, isPolicyReady, policyScopeOf, policyReceivers, changedPolicies, ackPolicy } from "../model/graph";
 import type { Artifact, ExpectKind, Project } from "../model/types";
 import { setInputAnyOf } from "../model/branch";
 import { ROOT_ID } from "../model/types";
@@ -219,6 +219,9 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                         <input type="checkbox" checked={!!q.policy.advisory} disabled={readonly} onChange={(e) => apply((p) => setPolicy(p, q.id, { ...(p.ports[q.id].policy ?? {}), advisory: e.target.checked }))} />
                         {t("参考")}
                       </label>
+                      {/* 届く箱の数と、決まるまで待つ (未着手の) 箱の数。線をつなぐ必要は無い */}
+                      {(() => { const rs = policyReceivers(project, q.id); const waiting = !q.policy?.advisory && !isPolicyReady(project, q.id) ? rs.filter((b) => b.status === "black").length : 0; return (
+                        <span className="policy-row__info">{t("{n} 箱に線なしで届きます", { n: rs.length })}{waiting > 0 ? t("。うち未着手の {n} 箱は決まるまで待ちます", { n: waiting }) : ""}</span>); })()}
                     </>
                   )}
                 </div>
@@ -330,6 +333,7 @@ export function PoliciesReceived({ project, blockId }: { project: Project; block
   const apply = useProjectStore((s) => s.apply);
   const select = useProjectStore((s) => s.select);
   const got = policiesFor(project, blockId);
+  const changed = new Set(changedPolicies(project, blockId).map((q) => q.id)); // 完了の後に決まった・変わった方針
   const skipped = (project.blocks[blockId]?.policyOptOut ?? []).map((id) => project.ports[id]).filter((q): q is NonNullable<typeof q> => !!q?.policy);
   if (got.length === 0 && skipped.length === 0) return null;
   const owner = (id: string) => project.blocks[id]?.title ?? "?";
@@ -343,7 +347,8 @@ export function PoliciesReceived({ project, blockId }: { project: Project; block
             <button type="button" className="port-consumers__item" onClick={() => select({ blockId: q.blockId, panelTab: "io" })} title={t("方針を決める箱へ")}>{owner(q.blockId)}</button>
             <span>「{q.name}」</span>
             {q.artifacts.length > 0 && <span className="policies__arts">{q.artifacts.map((a) => a.title).join(", ")}</span>}
-            {q.policy?.advisory ? <span className="meta-chip muted">{t("参考")}</span> : !ready && <span className="policies__wait">{t("待ち")}</span>}
+            {q.policy?.advisory ? <span className="meta-chip muted">{t("参考")}</span> : !ready && <span className="policies__wait">{project.blocks[blockId]?.status === "black" ? t("待ち") : t("未決定")}</span>}
+            {changed.has(q.id) && !readonly && <button type="button" className="btn btn-sm policies__ack" title={t("済んだ作業がこの方針に合っていることを確かめた (確かめ直しの札を消す)")} onClick={() => apply((p) => ackPolicy(p, blockId, q.id))}>{t("確かめた")}</button>}
             {!readonly && <button type="button" className="btn btn-ghost btn-sm ml-auto" title={t("この箱では受け取らない")} onClick={() => apply((p) => setPolicyOptOut(p, blockId, q.id, true))}>×</button>}
           </div>
         );

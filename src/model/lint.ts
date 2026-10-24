@@ -87,7 +87,7 @@ export function lint(p: Project, rootId?: string): LintIssue[] {
     }
     for (const q of portsOf(p, b.id, "out")) {
       // どこにもつながらない出力 (プロジェクトのボックスの出力は最上位の出力につながる前提。合流・分岐の出力も同じ)
-      if (outgoingEdges(p, { portId: q.id, side: "outer" }).length === 0) {
+      if (outgoingEdges(p, { portId: q.id, side: "outer" }).length === 0 && !q.policy) { // 方針の出力は線なしで配るので対象外
         if (b.branch && q.branchOption !== undefined) push("review", "branch-empty-path", b, t("分岐の道「{name}」の先にボックスがありません", { name: q.name }), q.id);
         else push("review", "dangling-output", b, t("出力「{name}」がどこにもつながっていません", { name: q.name }), q.id);
       }

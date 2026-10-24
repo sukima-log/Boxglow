@@ -55,4 +55,10 @@ export const canvas: Record<string, string> = {
 , "方針 {n}": "Policies {n}"
 , "完了した後に方針が変わりました (確かめ直しの候補)": "A policy changed after this box was done (check it again)"
 , "方針が変わった": "Policy changed"
+, "方針として配っています: {scope} の {n} 箱に線なしで届きます": "Shared as a policy: reaches {n} boxes in {scope} without wires"
+, "方針 → {scope} {n}": "policy → {scope} {n}"
+, "方針: 未決定 {n}": "Policy undecided {n}"
+, "完了した後に方針が決まった・変わりました (確かめ直しの候補。I/O タブの方針で「確かめた」を押すと消えます)": "A policy was decided or changed after this box was done (check it again; press \"Checked\" under Policies on the I/O tab to clear this)"
+, "方針: 確かめ直し": "Policy: check again"
+, "計画全体": "Whole plan"
 };

@@ -125,4 +125,9 @@ export const parts: Record<string, string> = {
 , "この箱では受け取らない": "Do not apply to this box"
 , "受け取らない": "Not applied"
 , "受け取る": "Apply"
+, "{n} 箱に線なしで届きます": "Reaches {n} boxes without wires"
+, "。うち未着手の {n} 箱は決まるまで待ちます": "; {n} not-started boxes wait until it is decided"
+, "未決定": "Undecided"
+, "済んだ作業がこの方針に合っていることを確かめた (確かめ直しの札を消す)": "The finished work matches this policy (clears the check-again mark)"
+, "確かめた": "Checked"
 };
