@@ -897,7 +897,17 @@ export function disconnectWire(p: Project, edgeId: string): { project: Project; 
     if (q.ports[e.to.portId]?.direction === "in") q.ports[e.to.portId].noPromote = true;
     delete q.edges[edgeId];
   } else {
-    for (const id of wireChainOf(p, edgeId)) if (!p.edges[id].auto) delete q.edges[id];
+    const chain = wireChainOf(p, edgeId);
+    for (const id of chain) if (!p.edges[id].auto) delete q.edges[id];
+    // 中継のポート (線の集まりの途中で、受ける側にも出す側にもなっていたポート) が、ほかにどこにもつながっていなければ消す
+    // (階層をまたぐ結線で途中の箱に作られた入出力が、線を消した後に丸だけ残らないように。利用者の指摘 2026-10-24)
+    const tos = new Set([...chain].map((id) => p.edges[id].to.portId));
+    const froms = new Set([...chain].map((id) => p.edges[id].from.portId));
+    for (const portId of tos) {
+      if (!froms.has(portId) || !q.ports[portId]) continue;
+      if (Object.values(q.edges).some((x) => x.from.portId === portId || x.to.portId === portId)) continue;
+      delete q.ports[portId];
+    }
   }
   return { project: normalizePromotions(q) };
 }

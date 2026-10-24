@@ -1302,12 +1302,14 @@ describe("線を外すと、階層の境界を越えて 1 本で続く線もま�
     p = connectToBlock(p, { portId: portsOf(p, P.blockId, "out")[0].id, side: "outer" }, S.blockId).project;
     return { p, P: P.blockId, C: C.blockId, S: S.blockId };
   };
-  it("中の区間を消すと、外側の続き (親の出力 → 兄弟の入力) も消える", () => {
-    const { p, C, S } = chain();
+  it("中の区間を消すと、外側の続き (親の出力 → 兄弟の入力) も、中継の親の出力も消える", () => {
+    const { p, P, C, S } = chain();
     const inner = Object.values(p.edges).find((e) => !e.auto && p.ports[e.from.portId].blockId === C)!;
     const q = disconnectWire(p, inner.id).project;
     const touches = (e: { from: { portId: string }; to: { portId: string } }) => [C, S].includes(q.ports[e.from.portId]?.blockId) || [C, S].includes(q.ports[e.to.portId]?.blockId);
     expect(Object.values(q.edges).filter((e) => !e.auto && touches(e))).toHaveLength(0);
+    // 中継の親の出力 (ほかにつながっていない) も残らない
+    expect(portsOf(q, P, "out")).toHaveLength(0);
     expect(portsOf(q, S, "in").every((i) => incomingEdges(q, { portId: i.id, side: "outer" }).every((e) => e.auto))).toBe(true);
   });
   it("外側の区間を消しても、中の区間まで消える。枝分かれしている境界ではそこで止まる", () => {
