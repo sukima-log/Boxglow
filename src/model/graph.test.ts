@@ -1326,7 +1326,10 @@ describe("線を外すと、階層の境界を越えて 1 本で続く線もま�
     expect(Object.values(q.edges).filter((e) => !e.auto && touches(e))).toHaveLength(0);
     // 中継の親の出力 (ほかにつながっていない) も残らない
     expect(portsOf(q, P, "out")).toHaveLength(0);
-    expect(portsOf(q, S, "in").every((i) => incomingEdges(q, { portId: i.id, side: "outer" }).every((e) => e.auto))).toBe(true);
+    // 線を外された入力は、箱に未接続のまま残り、上の階層へ引き上げられない
+    const sIn = portsOf(q, S, "in")[0];
+    expect(sIn.noPromote).toBe(true);
+    expect(incomingEdges(q, { portId: sIn.id, side: "outer" })).toHaveLength(0);
   });
   it("外側の区間を消しても、中の区間まで消える。枝分かれしている境界ではそこで止まる", () => {
     let { p, P, C, S } = chain();
@@ -1342,6 +1345,24 @@ describe("線を外すと、階層の境界を越えて 1 本で続く線もま�
     expect(left.some((e) => q.ports[e.from.portId].blockId === C)).toBe(true);
     expect(left.some((e) => q.ports[e.to.portId].blockId === T.blockId)).toBe(true);
     expect(left.some((e) => q.ports[e.to.portId].blockId === S)).toBe(false);
+  });
+});
+
+describe("階層をまたぐ結線は、使われていない仮の出力を中継に使い、消すと丸が残らない", () => {
+  it("3 段の入れ子からつないで消すと、途中の親に出力の丸も、引き上げも残らない", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const G = addBlock(p, { parentId: pj, title: "外側の親" }); p = G.project;
+    const P = addBlock(p, { parentId: G.blockId, title: "内側の親" }); p = P.project;
+    const C = addBlock(p, { parentId: P.blockId, title: "統合", outputName: "Human Woman Model" }); p = C.project;
+    const S = addBlock(p, { parentId: pj, title: "人物・衣装統合" }); p = S.project;
+    p = connectToBlock(p, { portId: portsOf(p, C.blockId, "out")[0].id, side: "outer" }, S.blockId).project;
+    expect(portsOf(p, G.blockId, "out").map((x) => x.name)).toEqual(["Human Woman Model"]); // 仮の「出力」を中継に使う (別に増やさない)
+    const e = Object.values(p.edges).find((x) => !x.auto && p.ports[x.to.portId].blockId === S.blockId)!;
+    const q = disconnectWire(p, e.id).project;
+    expect(portsOf(q, G.blockId, "out")).toHaveLength(0);
+    expect(portsOf(q, P.blockId, "out")).toHaveLength(0);
+    expect(Object.values(q.edges).some((x) => x.auto && q.ports[x.to.portId]?.blockId === S.blockId)).toBe(false);
   });
 });
 

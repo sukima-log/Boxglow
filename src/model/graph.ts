@@ -911,6 +911,12 @@ export function disconnectWire(p: Project, edgeId: string): { project: Project; 
   } else {
     const chain = wireChainOf(p, edgeId);
     for (const id of chain) if (!p.edges[id].auto) delete q.edges[id];
+    // 線を外された入力は、その箱に未接続のまま残す (上の階層へ自動で引き上げない。利用者の指摘 2026-10-26: 消した後に一番上の入力へ引き上げられるのは困る)。
+    // つなぎ直すと印は外れる
+    for (const id of chain) {
+      const to = q.ports[p.edges[id].to.portId];
+      if (to && to.direction === "in" && p.edges[id].to.side === "outer" && !Object.values(q.edges).some((x) => x.to.portId === to.id && x.to.side === "outer")) q.ports[to.id] = { ...to, noPromote: true };
+    }
     // 中継のポート (線の集まりの途中で、受ける側にも出す側にもなっていたポート) が、ほかにどこにもつながっていなければ消す
     // (階層をまたぐ結線で途中の箱に作られた入出力が、線を消した後に丸だけ残らないように。利用者の指摘 2026-10-24)
     const tos = new Set([...chain].map((id) => p.edges[id].to.portId));
@@ -2315,6 +2321,12 @@ function scopeChain(p: Project, scope: string): string[] {
 function findOrAddPort(q: Project, blockId: string, direction: "in" | "out", name: string): Port | null {
   const existing = portsOf(q, blockId, direction).find((x) => x.name === name);
   if (existing) return existing;
+  // 箱を作ったときに付く仮の名前の出力 (「出力」など) が、どこにもつながらず成果物も無いままなら、それを中継に使う (名前を合わせる)。
+  // 新しく足すと、使われない「出力」の丸が別に残って見える (利用者の指摘 2026-10-26)
+  if (direction === "out") {
+    const idle = portsOf(q, blockId, "out").find((x) => isPlaceholderName(x.name) && x.artifacts.length === 0 && !x.expect && !x.policy && !Object.values(q.edges).some((e) => e.from.portId === x.id || e.to.portId === x.id));
+    if (idle) { q.ports[idle.id] = { ...idle, name }; return q.ports[idle.id]; }
+  }
   const r = addPort(q, { blockId, direction, name });
   Object.assign(q, r.project);
   return q.ports[r.portId] ?? null;
