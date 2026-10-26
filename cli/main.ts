@@ -69,8 +69,9 @@ import { assignmentRows, type AssigneeTarget } from "../src/model/assignments";
 import { addBranch, addMerge, canConvertToBranch, convertToBranch, setInputAnyOf, addBranchOption, removeBranchOption } from "../src/model/branch";
 import { STATUS_LABEL } from "../src/model/status";
 import { checkGitRef, findGitRef, gitRefFor } from "./git";
-import { layoutAll, layoutScope, nextFreePosition } from "../src/model/autolayout";
+import { layoutScope, nextFreePosition } from "../src/model/autolayout";
 import { ROOT_ID, type Endpoint, type Project } from "../src/model/types";
+import { layoutLikeView } from "../src/model/readingLayout";
 
 /** 引数を { positional, options } に分ける (--key value / --key=value / --flag) */
 function parseArgs(argv: string[]): { positional: string[]; options: Record<string, string | string[] | true> } {
@@ -1130,7 +1131,8 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     }
     case "layout": {
       // 畳んだ箱は畳んだ大きさで並べる (Top も全階層を見せるので、展開している大項目は中まで含めた大きさ)
-      const q = rest[0] ? layoutScope(p, mustFind(p, rest[0]).id) : layoutAll(p);
+      // View の工程順と同じ並べ方 (画面の Auto Layout と同じ)
+      const q = layoutLikeView(p, rest[0] ? mustFind(p, rest[0]).id : null);
       save(path, q);
       out(rest[0] ? t("整列: 「{title}」の中", { title: mustFind(p, rest[0]).title }) : t("整列: 全体"));
       return;

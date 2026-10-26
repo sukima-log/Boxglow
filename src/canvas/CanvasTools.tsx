@@ -6,7 +6,8 @@
 import { Panel, useReactFlow, useStore, useStoreApi } from "@xyflow/react";
 import { useEffect, useRef } from "react";
 import { t, useLang } from "../i18n";
-import { layoutAll, layoutScope } from "../model/autolayout";
+import { layoutScope } from "../model/autolayout";
+import { layoutLikeView } from "../model/readingLayout";
 import { useProjectStore } from "../store/useProjectStore";
 import { childrenOf, descendantsOf, majorBlocks } from "../model/graph";
 
@@ -76,13 +77,13 @@ export function CanvasTools({ snap, onSnap, showMap, onMap, fit, readFromTop }: 
   /** 全体を依存関係の順に並べ直す (⋯ メニューと同じ。よく使うので道具帯にも置く: 利用者の要望 2026-10-19)。Input / Output: なし */
   const autoLayout = () => {
     if (!canEdit) return;
-    apply((p) => layoutAll(p));
+    apply((p) => layoutLikeView(p, null)); // View の工程順と同じ並べ方 (Edit と View で配置が変わらない)
     toast(t("全体を並べ直しました (Undo で戻せます)"));
     requestAnimationFrame(() => requestAnimationFrame(() => fit()));
   };
   const align = () => {
     if (!scope || !canEdit) return;
-    apply((p) => layoutScope(p, scope, { recursive: false }));
+    apply((p) => layoutScope(p, scope, { recursive: false, presentation: true })); // View と同じ並べ方 (この階層だけ)
     toast(t("この階層を整列しました。Ctrl+Z で元に戻せます。"));
     requestAnimationFrame(() => requestAnimationFrame(() => fit()));
   };

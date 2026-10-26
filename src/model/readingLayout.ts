@@ -33,3 +33,21 @@ export function readingLayout(p: Project, scope: string | null): Project {
   columns.set(q, result);
   return q;
 }
+
+/**
+ * Auto Layout (Edit で保存する配置) を View の工程順の並べ方と同じにする (利用者の要望 2026-10-26: Edit と View で配置が大きく変わる)。
+ * readingLayout と違い、畳んでいる箱の中も並べる (後で開いたときにも同じ並びになるように)。工程の見出しの位置は返さない
+ * Input : p = 計画, scope = 並べる範囲の箱 (null か ROOT_ID は計画全体)
+ * Output: 位置を更新した計画 (元は変更しない)
+ */
+export function layoutLikeView(p: Project, scope: string | null): Project {
+  let q = p;
+  const walk = (id: string) => {
+    for (const child of childrenOf(q, id))
+      if (childrenOf(q, child.id).length > 0)
+        walk(child.id);
+    q = layoutScope(q, id, { recursive: false, presentation: true });
+  };
+  walk(scope ?? ROOT_ID);
+  return q;
+}

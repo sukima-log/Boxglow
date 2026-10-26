@@ -15,7 +15,7 @@ const MAX_ROW_W = 3000;
 
 /** 閲覧配置で使う通路幅・箱の間隔・親内余白・工程見出しの予約高さ */
 const READING_GAP_X = 96;
-const READING_GAP_Y = 64;
+const READING_GAP_Y = 96; // 縦の間隔: Edit の重なりの補正 (graph.ts の GAP = 96) と同じにして、Auto Layout (View と同じ並べ方) の結果が Edit で押し出されないようにする (利用者の要望 2026-10-26)
 const READING_INSET_X = 88;
 const READING_HEADER_SPACE = 56;
 const READING_CHANNEL_REDUCTION = 48;

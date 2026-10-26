@@ -78,6 +78,8 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
 
     // ---- 今あるボックスを分岐に変える (詳細パネルの「その他」タブ →「分岐にする」) ----
     await page.locator('.react-flow__pane').click({ position: { x: 20, y: 20 } }); await page.waitForTimeout(200);
+    // 箱が上の帯に隠れていると押せないので、全体を収めてから押す
+    await page.getByRole('button', { name: 'Fit', exact: true }).click(); await page.waitForTimeout(500);
     await box('設計する').click(); await page.waitForTimeout(400);
     await page.locator('.panel.right .seg__btn', { hasText: 'More' }).click(); await page.waitForTimeout(200);
     await page.locator('.panel.right .more-actions').getByRole('button', { name: /分岐にする/ }).click();

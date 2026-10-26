@@ -8,7 +8,6 @@ import { TreeIcon } from "./TreeIcon";
 import { RestoreDialog, SaveHeldChip, SyncChip } from "./SyncPanel";
 import { AccountButton } from "./AccountMenu";
 import { addBlock, addProjectBlock, searchBlocks, summarize, projectBlocks } from "../model/graph";
-import { layoutAll } from "../model/autolayout";
 import { projectToMarkdown, scopeToMermaid } from "../model/export";
 import { ROOT_ID, type Project } from "../model/types";
 import { parentForNewBlock, useProjectStore } from "../store/useProjectStore";
@@ -17,6 +16,7 @@ import { addMerge } from "../model/branch";
 import { applyTheme, currentTheme, type Theme } from "../lib/theme";
 import { copyText, downloadText, pickTextFile, safeFilename } from "../lib/download";
 import { setLang, t, useLang } from "../i18n";
+import { layoutLikeView } from "../model/readingLayout";
 
 /**
  * 入力: 表示中の Project、ツリーの開閉状態、各パネルの開閉コールバック。
@@ -140,7 +140,8 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
    * Auto Layout: 依存関係の順に全体を並べ直す (畳んだ箱は畳んだ大きさで。Ctrl+Z で戻せる)
    * Input / Output: なし (project を更新する)
    */
-  const autoLayout = () => { apply((p) => layoutAll(p)); setToast(t("全体を並べ直しました (Undo で戻せます)")); };
+  // View の工程順と同じ並べ方で全体を並べ直す (Edit と View で配置が変わらない)
+  const autoLayout = () => { apply((p) => layoutLikeView(p, null)); setToast(t("全体を並べ直しました (Undo で戻せます)")); };
   // 合流の部品を足す: 今見ている階層 (選んでいる箱があればその中) に置き、選ぶ
   const addJoin = () => {
     const parentId = parentForNewBlock(project, selection, useProjectStore.getState().viewScope);
