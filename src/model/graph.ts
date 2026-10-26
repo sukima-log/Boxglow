@@ -921,10 +921,19 @@ export function disconnectWire(p: Project, edgeId: string): { project: Project; 
     // (階層をまたぐ結線で途中の箱に作られた入出力が、線を消した後に丸だけ残らないように。利用者の指摘 2026-10-24)
     const tos = new Set([...chain].map((id) => p.edges[id].to.portId));
     const froms = new Set([...chain].map((id) => p.edges[id].from.portId));
+    const unused = (portId: string) => !Object.values(q.edges).some((x) => x.from.portId === portId || x.to.portId === portId);
     for (const portId of tos) {
       if (!froms.has(portId) || !q.ports[portId]) continue;
-      if (Object.values(q.edges).some((x) => x.from.portId === portId || x.to.portId === portId)) continue;
+      if (!unused(portId)) continue;
       delete q.ports[portId];
+    }
+    // 線の端が、中に箱を持つ箱の出力 (中から外へ渡す中継にしか使わない) で、ほかにつながりも成果物も無ければ、それも消す (丸だけ残らないように。利用者の指摘 2026-10-26)。
+    // 中に箱を持たない箱の出力は、その箱が作る物なので残す
+    for (const portId of [...froms, ...tos]) {
+      const x = q.ports[portId];
+      if (!x || x.direction !== "out" || x.blockId === ROOT_ID) continue;
+      if (childrenOf(q, x.blockId).length === 0 || x.artifacts.length > 0 || x.expect || x.policy) continue;
+      if (unused(portId)) delete q.ports[portId];
     }
   }
   return { project: normalizePromotions(q) };

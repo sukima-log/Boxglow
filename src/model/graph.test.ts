@@ -1349,6 +1349,21 @@ describe("線を外すと、階層の境界を越えて 1 本で続く線もま�
 });
 
 describe("階層をまたぐ結線は、使われていない仮の出力を中継に使い、消すと丸が残らない", () => {
+  it("親の箱の出力から始まる線 (中の箱とはつながっていない) を消しても、親の出力の丸が残らない", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const G = addBlock(p, { parentId: pj, title: "外側の親" }); p = G.project;
+    const P = addBlock(p, { parentId: G.blockId, title: "内側の親", outputName: "Human Woman Model" }); p = P.project;
+    p = addBlock(p, { parentId: P.blockId, title: "統合", outputName: "Human Woman Model" }).project; // 中に箱はあるが、親の出力にはつないでいない
+    const S = addBlock(p, { parentId: pj, title: "人物・衣装統合" }); p = S.project;
+    p = connectToBlock(p, { portId: portsOf(p, P.blockId, "out")[0].id, side: "outer" }, S.blockId).project;
+    const e = Object.values(p.edges).find((x) => !x.auto && p.ports[x.to.portId].blockId === S.blockId)!;
+    const q = disconnectWire(p, e.id).project;
+    expect(portsOf(q, P.blockId, "out")).toHaveLength(0);
+    expect(portsOf(q, G.blockId, "out")).toHaveLength(0);
+    expect(portsOf(q, S.blockId, "in")[0].noPromote).toBe(true); // 線を外された入力は引き上げない
+  });
+
   it("3 段の入れ子からつないで消すと、途中の親に出力の丸も、引き上げも残らない", () => {
     let p = createProject("t");
     const pj = projectBlocks(p)[0].id;
