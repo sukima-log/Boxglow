@@ -1,7 +1,7 @@
 import { ClaimMark, useClaimClock, visibleClaim } from "../panels/Claims";
 import { chosenOption, isSkipped, waitingBranches } from "../model/branch";
 import { unpreparedState } from "../model/readiness";
-import { workingNow, sentBackTo, policiesFor, isPolicyReady, changedPolicies, policyReceivers, policyScopeOf } from "../model/graph";
+import { workingNow, sentBackTo, policiesFor, isPolicyReady, changedPolicies, policyReceivers, policyScopeOf, isPlaceholderName } from "../model/graph";
 /**
  * ブロック (ボックス) のノード
  * 分類・題名・状態・入力・出力を縦に読むカード。親は子を包む領域として描く。
@@ -92,7 +92,11 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         // 方針の出力: 線をつなぐ代わりに範囲へ配る。届く範囲の名前と箱の数を添える
         const scope = q.policy ? policyScopeOf(p, q.id) : null;
         const policy = q.policy ? { scope: scope === ROOT_ID ? t("計画全体") : p.blocks[scope!]?.title ?? "", count: policyReceivers(p, q.id).length, advisory: !!q.policy.advisory } : null;
-        return { id: q.id, name: q.name, ready: isSourceReady(p, { portId: q.id, side: "outer" }), branchState, policy };
+        // 使われていない仮の出力: 中に箱を持つ箱で、名前が仮の「出力」のまま、どこにもつながらず成果物も無い。図に丸を描かない (マウスを乗せると出る)。
+        // 枠として描く箱では名前が見えず、「どこにもつながらない点」に見えるため (利用者の指摘 2026-10-27)
+        const idle = childrenOf(p, blockId).length > 0 && !b?.collapsed && isPlaceholderName(q.name) && q.artifacts.length === 0 && !q.expect && !q.policy
+          && !Object.values(p.edges).some((e) => e.from.portId === q.id || e.to.portId === q.id);
+        return { id: q.id, name: q.name, ready: isSourceReady(p, { portId: q.id, side: "outer" }), branchState, policy, idle };
       })
       // 分岐: このボックスが分岐か / 選ばなかった道の先 (見送り) か / まだ答えていない分岐の先 (分岐待ち) か
     , branch: !!b?.branch
@@ -371,7 +375,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           position={Position.Right}
           id={handleId("out", q.id, "outer")}
           title={t("出力: {name} (クリックまたはドラッグで接続)", { name: q.name })}
-          className={`port-out ${q.ready ? "port-ready" : "port-waiting"}${q.policy ? " port-policy" : ""}`}
+          className={`port-out ${q.ready ? "port-ready" : "port-waiting"}${q.policy ? " port-policy" : ""}${q.idle ? " port-idle" : ""}`}
           style={{ top: rowAt(i, "out"), zIndex: 1 }}
           isConnectable={canEdit}
           onMouseDown={(ev) => ev.preventDefault()}
@@ -384,7 +388,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           type="target"
           position={Position.Left}
           id={handleId("out", q.id, "inner")}
-          className="port-inner"
+          className={`port-inner${q.idle ? " port-idle" : ""}`}
           title={t("中のブロックの出力を {name} へ", { name: q.name })}
           style={{ top: rowAt(i, "out"), zIndex: 0, right: -7, left: "auto", transform: "translate(50%, -50%)" }}
           isConnectable={canEdit}
