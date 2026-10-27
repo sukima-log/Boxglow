@@ -2036,9 +2036,9 @@ button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent)
 .policy-mark { position: absolute; right: -24px; top: 50%; transform: translateY(-50%); color: var(--primary); pointer-events: none; display: inline-flex; }
 .bg-block__port .opt.policy { color: var(--primary); }
 .react-flow__handle.port-policy { opacity: 0; }
-/* 使われていない仮の出力 (中に箱を持つ箱): 丸を描かない。箱にマウスを乗せたとき・線を引いている間だけ出す */
-.react-flow__handle.port-idle { opacity: 0; }
-.bg-block:hover .react-flow__handle.port-idle, .react-flow__handle.port-idle.connecting, .react-flow__handle.port-idle.valid { opacity: 1; }
+/* 使われていない仮の出力 (中に箱を持つ箱): 丸を描かない。マウスを乗せても出さない (利用者の指摘 2026-10-27)。
+   線は I/O タブの「使う箱を足す…」から引くか、出力に名前を付けると丸が出る */
+.react-flow__handle.port-idle { visibility: hidden; pointer-events: none; }
 /* 方針の出力から線を引いている間、すでに方針が届いている箱は薄く (線が要るのは範囲の外の箱だけ) */
 .bg-block.policy-covered { opacity: .4; }
 .bg-block:hover .react-flow__handle.port-policy, .react-flow__handle.port-policy.connecting { opacity: 1; }
