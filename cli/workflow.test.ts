@@ -233,6 +233,47 @@ it("MCPでも範囲・設定・理由・完了履歴を同じ規則で扱う",as
   } finally {await client.close();}
 },15000);
 
+// 最上位の入力に資料を付ける (artifact inputs): 入力に資料が無いと使う箱がすべて入力待ちになるので、AI も CLI / MCP から付けられる (利用者の指摘 2026-10-31)
+describe("最上位の入力に資料を付ける (artifact inputs)",()=>{
+  const rootIn=(read:()=>any,name:string)=>Object.values(read().ports).find((q:any)=>q.blockId==="root"&&q.direction==="in"&&q.name===name) as any;
+  it("入力が 1 つなら --input を省略でき、付けると使う箱の入力が待ちでなくなる",()=>{
+    const {cli,read}=fixture();
+    expect(cli("status","--brief").stdout).toContain("仕様書");
+    const r=cli("artifact","inputs","docs/spec.md");expect(r.status,r.stderr).toBe(0);
+    expect(r.stdout).toContain("仕様書");
+    expect(rootIn(read,"仕様書").artifacts.map((a:any)=>a.title)).toEqual(["spec.md"]);
+    const ctx=JSON.parse(cli("context","対象").stdout);
+    expect(JSON.stringify(ctx)).toContain("spec.md");
+  });
+  it("入力が複数なら --input で選ぶ (無いと候補を示して止め、何も書かない)",()=>{
+    const {cli,read,file}=fixture();
+    expect(cli("port","対象","--in","シナリオ").status).toBe(0);
+    const before=readFileSync(file,"utf8");
+    const bad=cli("artifact","inputs","Doc/scenario.md");expect(bad.status).toBe(1);expect(bad.stderr).toContain("シナリオ");
+    expect(readFileSync(file,"utf8")).toBe(before);
+    expect(cli("artifact","inputs","Doc/scenario.md","--input","シナリオ").status).toBe(0);
+    expect(rootIn(read,"シナリオ").artifacts).toHaveLength(1);
+    expect(rootIn(read,"仕様書").artifacts).toHaveLength(0);
+  });
+  it("確認トークンが有効な計画では、AI は最新の context のトークンを付ける",()=>{
+    const {cli,token,read}=fixture(true);
+    expect(cli("artifact","inputs","docs/spec.md").status).toBe(1);
+    const ok=cli("artifact","inputs","docs/spec.md","--context-token",token());expect(ok.status,ok.stderr).toBe(0);
+    expect(rootIn(read,"仕様書").artifacts).toHaveLength(1);
+  });
+});
+
+it("MCP の boxglow_artifact で最上位の入力に資料を付けられる",async()=>{
+  const {file,read}=fixture();
+  const client=new Client({name:"workflow-test",version:"1"});
+  await client.connect(new StdioClientTransport({command:process.execPath,args:[entry,"mcp","--file",file,"--actor","codex"],stderr:"pipe"}));
+  try {
+    const r=await client.callTool({name:"boxglow_artifact",arguments:{block:"inputs",path:"docs/spec.md",input:"仕様書"}});
+    expect(r.isError).not.toBe(true);
+    expect((Object.values(read().ports) as any[]).find((q)=>q.blockId==="root"&&q.name==="仕様書").artifacts).toHaveLength(1);
+  } finally {await client.close();}
+},15000);
+
 // 担当の一覧 (boxglow list): メンバーの名前で指定して Markdown の表で出す。存在しない名前はメンバーの一覧を添えて止める
 describe("担当の一覧 (list)",()=>{
   it("--assignee の名前で担当を表にし、--json で同じ行を出し、知らない名前はメンバーを添えて失敗する",()=>{

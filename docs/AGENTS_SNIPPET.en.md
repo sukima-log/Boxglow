@@ -102,7 +102,7 @@ Name each output after a "concrete deliverable" (e.g. `Design doc docs/design.md
 Make sure every box's "input → output" is connected to something (an unconnected box is a hole in the plan. Unconnected inputs are raised to the top-level input node automatically).
 If several people edit the same boxglow.json, each of them runs `npx boxglow git-setup` once in their own clone (changes are merged automatically per box, and changes to different boxes do not conflict).
 To manage several repositories with one plan, put boxglow.json in the folder above them and set the environment variable BOXGLOW_FILE to its location in each repository (one project box per repository: `npx boxglow project "name" --repo <path>`).
-Inputs are required by default. On the screen, mark an input as "Optional" if work can start without it. "Next candidates" in status lists boxes whose required inputs are ready first (each is marked "ready to start" or "waiting for required inputs").
+Inputs are required by default. On the screen, mark an input as "Optional" if work can start without it. "Next candidates" in status lists boxes whose required inputs are ready first (each is marked "ready to start" or "waiting for required inputs"). When a top-level plan input (Inputs) has no material (a spec, a scenario or other file or URL), every box that uses it waits. If the material is in the repository, attach it yourself instead of asking a person: `npx boxglow artifact inputs <path or URL> --input <input name>` (MCP: `boxglow_artifact` with block "inputs").
 Do not write descriptions for inputs (the description of the connected output is used). Write the format and constraints in the output's description.
 
 

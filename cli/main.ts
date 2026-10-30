@@ -265,6 +265,11 @@ function reviewSummary(p: Project, blockId: string) {
   };
 }
 
+/** 計画の最上位の入力 (Inputs ノード) を指す名前か ("inputs" / "Inputs" / "root")。Input: ref / Output: true = 最上位の入力 */
+function isInputsRef(ref: string | undefined): boolean {
+  return ref === "inputs" || ref === "Inputs" || ref === ROOT_ID;
+}
+
 /** ブロックを探す (見つからなければ候補を示して終了) */
 function mustFind(p: Project, ref: string | undefined, what = "block") {
   if (!ref) throw new Error(t("<{what}> を指定してください (id または題名)", { what }));
@@ -463,6 +468,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   done <block> [--artifact <題名>=<URL またはパス>]... [--output <出力名>] [--note] [--checked <実行した検査と結果>] [--not-checked <未実施>] [--limits <残る制限>]   完了 (成果物を付けて white)
                                                  パスが Git 管理下なら「コミット + パス + blob」で記録する (アップロードしない)。--checked 以下は検査結果として箱に残る (context・show に出る)
   artifact <block> <URL またはパス> [--title <題名>] [--output <出力名>]   成果物だけ付ける (完了にはしない)
+  artifact inputs <URL またはパス> [--input <入力名>] [--title <題名>]   計画の最上位の入力に資料を付ける (入力が 1 つなら --input は省略可)
   check                                          Git の成果物が今も見つかるか確認し、移動していればパスを付け替える。未コミットのときに記録した成果物は、コミット済みになっていれば Git の参照に補完する
   blocked <block> --note <困っていること>          詰まり
   sendback <block> --to <block> --note <理由>     差し戻し (評価・検査が通らなかった成果物を作った箱へ戻す。その箱は In Progress に戻り、成果物は差し戻し済みに。線では戻さない)
@@ -586,6 +592,7 @@ Usage (npx boxglow <command> ...):
   done <block> [--artifact <title>=<URL or path>]... [--output <output name>] [--note] [--checked <checks run and results>] [--not-checked <not tried>] [--limits <remaining limits>]   Finish (attach artifacts and turn it white)
                                                  If the path is tracked by Git, it is recorded as "commit + path + blob" (nothing is uploaded). --checked etc. stay on the box as its verification (shown by context / show)
   artifact <block> <URL or path> [--title <title>] [--output <output name>]   Attach an artifact only (does not finish the box)
+  artifact inputs <URL or path> [--input <input name>] [--title <title>]   Attach material to a top-level plan input (--input may be omitted when there is only one)
   check                                          Check that Git artifacts can still be found, and update the path if they moved. Artifacts recorded while uncommitted become Git references once they are committed
   blocked <block> --note <what is blocking you>    Blocked
   sendback <block> --to <block> --note <reason>   Send back (the box that made the rejected deliverable goes back to In Progress; its artifacts are kept as rejected; no wire goes backwards)
@@ -765,7 +772,11 @@ function main(argv: string[]): void {
   // 操作のあとに新しい確認トークンを添えるボックス (操作の前のトークンが正しいと確かめられたときだけ決まる)
   let tokenTarget: string | undefined;
   if (p.contextGuard && !isHumanActor(actor)) {
-    if (GUARDED_COMMANDS.includes(cmd) || (cmd === "scope" && Object.keys(SCOPE_OPTIONS).some(k => options[k] !== undefined))) {
+    if (cmd === "artifact" && isInputsRef(rest[0])) {
+      // 最上位の入力はどの箱にも属さないので、計画全体の設定と同じく「最新の context を読んだトークン」を求める
+      if (!isCurrentToken(p, token)) throw new Error(t("最上位の入力に資料を付ける前に context を読み、--context-token を付けてください。"));
+      tokenTarget = Object.keys(p.blocks).find(id => contextReceipt(p, id).contextToken === token);
+    } else if (GUARDED_COMMANDS.includes(cmd) || (cmd === "scope" && Object.keys(SCOPE_OPTIONS).some(k => options[k] !== undefined))) {
       const id = mustFind(p, rest[0]).id;
       requireContext(p, id, token, actor);
       tokenTarget = id;
@@ -1510,6 +1521,21 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       return;
     }
     case "artifact": {
+      // 計画の最上位の入力 (Inputs) に資料を付ける: `artifact inputs <パスか URL> --input <入力名>`。
+      // 入力に資料が無いと、それを使う箱がすべて「入力待ち」で着手できない。以前は画面でしか付けられず、AI が人に頼むしかなかった (利用者の指摘 2026-10-31)
+      if (isInputsRef(rest[0])) {
+        if (!rest[1]) throw new Error(t("<URL またはパス> を指定してください"));
+        const ins = portsOf(p, ROOT_ID, "in");
+        const name = str(options.input);
+        const target = name ? ins.find((x) => x.name === name) : ins.length === 1 ? ins[0] : undefined;
+        if (!target) throw new Error(name
+          ? t("最上位の入力「{name}」が見つかりません ({list})", { name, list: ins.map((x) => x.name).join(", ") })
+          : t("最上位の入力が複数あります。--input <入力名> で選んでください ({list})", { list: ins.map((x) => x.name).join(", ") }));
+        const a = artifactFrom(rest[1], str(options.title));
+        save(path, updatePort(p, target.id, { artifacts: [...target.artifacts, a] }));
+        out(t("最上位の入力に資料を付けました: 「{port}」 <- {artifact}", { port: target.name, artifact: a.title }) + `${a.kind === "git" ? ` (git ${a.path} @ ${(a.commit ?? "").slice(0, 7)})` : ""}`);
+        return;
+      }
       const b = mustFind(p, rest[0]);
       p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
       if (!rest[1]) throw new Error(t("<URL またはパス> を指定してください"));
