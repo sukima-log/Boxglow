@@ -148,7 +148,7 @@ function absolutePosition(p: Project, blockId: string): { x: number; y: number }
  */
 export function buildNodes(
   p: Project
-, opts: { selectedBlockId: string | null; readonly: boolean; matcher?: (blockId: string) => boolean; meId?: string | null; scope?: string | null; presentation?: boolean }
+, opts: { selectedBlockId: string | null; selectedTerminal?: { which: "in" | "out"; group: string | null } | null; readonly: boolean; matcher?: (blockId: string) => boolean; meId?: string | null; scope?: string | null; presentation?: boolean }
 ): AnyRFNode[] {
   const nodes: AnyRFNode[] = [];
   const scope = opts.scope && p.blocks[opts.scope] ? opts.scope : null;
@@ -226,6 +226,8 @@ export function buildNodes(
   , type: "terminal"
   , position: p.terminals.in
   , data: { which: "in" }
+    // 選択は Boxglow の選択 (selection.terminal) から決める。決めないと図の部品の側に選択が残り、Esc の後に同じノードを押しても選び直せなかった
+  , selected: opts.selectedTerminal?.which === "in" && !opts.selectedTerminal.group
   , width: TERMINAL_W
   , height: terminalHeightDefault(p)
   , draggable: !opts.readonly
@@ -238,6 +240,7 @@ export function buildNodes(
     , type: "terminal"
     , position: gp.position
     , data: { which: "in", groupId: gp.id }
+    , selected: opts.selectedTerminal?.which === "in" && opts.selectedTerminal.group === gp.id
     , width: TERMINAL_W
     , height: groupHeight(p, gp.id)
     , draggable: !opts.readonly
@@ -250,6 +253,7 @@ export function buildNodes(
   , type: "terminal"
   , position: p.terminals.out
   , data: { which: "out" }
+  , selected: opts.selectedTerminal?.which === "out"
   , width: TERMINAL_W
   , height: terminalHeight(p, "out")
   , draggable: !opts.readonly

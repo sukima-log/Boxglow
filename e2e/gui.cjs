@@ -345,6 +345,18 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     await page.evaluate(()=>window.boxglow.store.getState().undo());await page.waitForTimeout(300);
     check('丸の削除も Undo で戻る',await page.evaluate((id)=>!!window.boxglow.store.getState().project.ports[id],stray));
     await page.evaluate(()=>{const s=window.boxglow.store.getState();s.undo();s.select({});s.setPendingConnect(null);s.setEditMode(false);});await page.waitForTimeout(300);
+    // 入力ノード (Inputs) も、選ぶと上に「詳細」が出て、押すと右に詳細が開く。選んでも表示位置は動かない (利用者の指摘 2026-10-31)
+    await page.evaluate(()=>window.boxglow.store.getState().select({}));await page.getByRole('button',{name:'Fit',exact:true}).click();await page.waitForTimeout(600);
+    const vpBefore=await page.evaluate(()=>JSON.stringify(window.boxglow.rf.getViewport()));
+    await page.locator('.react-flow__node-terminal .bg-terminal__head').first().click();await page.waitForTimeout(500);
+    const termBtn=page.locator('.bg-terminal .bg-block__details');
+    check('入力ノードを選ぶと「詳細」ボタンが出て、表示位置は動かない',await termBtn.count()===1&&vpBefore===await page.evaluate(()=>JSON.stringify(window.boxglow.rf.getViewport())));
+    await termBtn.click();await page.waitForTimeout(400);
+    check('入力ノードの「詳細」で右に詳細が開く',await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.detailsOpen&&s.selection.terminal==='in'&&!document.querySelector('aside.panel.right.hidden-panel');}));
+    await page.keyboard.press('Escape');await page.waitForTimeout(300);
+    await page.locator('.react-flow__node-terminal .bg-terminal__head').first().click();await page.keyboard.press('Enter');await page.waitForTimeout(400);
+    check('Esc の後でも、入力ノードを選び直して Enter で詳細が開く',await page.evaluate(()=>{const s=window.boxglow.store.getState();return s.detailsOpen&&s.selection.terminal==='in';}));
+    await page.evaluate(()=>window.boxglow.store.getState().select({}));await page.waitForTimeout(300);
     // ▸ で大項目を 1 つ展開した直後でも、ホイールだけで全体 (Fit と同じ倍率) まで縮小できる (下限が古いまま残らない)
     const majorId=await page.evaluate(()=>{const rf=window.boxglow.rf;return rf.getNodes().find(n=>n.type==='block'&&n.data.major&&rf.getNodes().some(c=>c.parentId===n.id))?.id;});
     await page.locator(`[data-id="${majorId}"] .bg-block__toggle`).first().click();await page.waitForTimeout(900);

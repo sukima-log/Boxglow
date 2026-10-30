@@ -102,10 +102,19 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
 
   // ノードはドラッグ中の見た目のために React Flow 側の状態を持ち、project (と言語) が変わるたびに作り直す
   const [nodes, setNodes, onNodesChangeRaw] = useNodesState<AnyRFNode>([]);
+  // 今選んでいる入力 / 出力ノード (ノードを作り直すときに「選ばれているか」を引き継ぐ)
+  const terminalSelRef = useRef<{ which: "in" | "out"; group: string | null } | null>(null);
   useEffect(() => {
-    const base = withIndex(project, () => buildNodes(project, { selectedBlockId: selection.blockId, readonly: !canEdit, matcher: matcher ?? undefined, meId, scope: viewScope, presentation: reading }));
+    const base = withIndex(project, () => buildNodes(project, { selectedBlockId: selection.blockId, selectedTerminal: terminalSelRef.current, readonly: !canEdit, matcher: matcher ?? undefined, meId, scope: viewScope, presentation: reading }));
     setNodes(vertical ? verticalNodes(base, project, viewScope, verticalWrap) : base);
   }, [project, selection.blockId, canEdit, matcher, meId, viewScope, setNodes, lang, reading, vertical, verticalWrap]);
+  // 入力 / 出力ノードの選択は、Boxglow の選択 (selection.terminal) に合わせて「選ばれているか」だけを書き換える。
+  // 図の部品の側に選択が残ると、Esc の後に同じノードを押しても選び直せない。ノードを作り直すと大きさを測り直す間に全体の倍率が計算し直され、表示がずれた
+  useEffect(() => {
+    terminalSelRef.current = selection.terminal ? { which: selection.terminal, group: selection.terminalGroup ?? null } : null;
+    const want = (id: string) => selection.terminal === "out" ? id === "root-out" : selection.terminal === "in" ? id === (selection.terminalGroup ? `root-in:${selection.terminalGroup}` : "root-in") : false;
+    setNodes((ns) => (ns.some((n) => n.type === "terminal" && !!n.selected !== want(n.id)) ? ns.map((n) => (n.type === "terminal" && !!n.selected !== want(n.id) ? { ...n, selected: want(n.id) } : n)) : ns));
+  }, [selection.terminal, selection.terminalGroup, setNodes]);
   useEffect(() => {
     setNodes((ns) => ns.map((n) => (n.type === "block" ? { ...n, data: { ...n.data, dropTarget: n.id === dropTarget } } : n)));
   }, [dropTarget, setNodes]);

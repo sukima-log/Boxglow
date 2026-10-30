@@ -20,6 +20,18 @@ export const TerminalNode = memo(function TerminalNode({ id, data, selected, hei
   const scopeId = data.scopeId ?? null; // タブで開いた大項目のボックスの入出力を表すとき
   const canEdit = useProjectStore((s) => !s.readonly && s.editMode);
   const setViewScope = useProjectStore((s) => s.setViewScope);
+  // 右の詳細パネル: 1 回のクリックでは開かないので、選んだときに上へ「詳細」ボタンを出す (箱と同じ。Enter でも開く)。
+  // 入力ノードから詳細へ行けなかった (利用者の指摘 2026-10-31)
+  const detailsOpen = useProjectStore((s) => s.detailsOpen);
+  const setDetailsOpen = useProjectStore((s) => s.setDetailsOpen);
+  const select = useProjectStore((s) => s.select);
+  /** 詳細を開く。タブの入出力ノードはその大項目の箱、最上位はその入力 / 出力ノード (グループ) の詳細。Input / Output: なし */
+  const openDetails = (ev: React.MouseEvent) => {
+    ev.stopPropagation();
+    if (scopeId) select({ blockId: scopeId });
+    else select({ terminal: which, terminalGroup: groupId });
+    setDetailsOpen(true);
+  };
   // プロジェクト本体だけを取り、表示用の配列は useMemo で導く (セレクタで新しい配列を返すと無限ループになる)
   const project = useProjectStore((s) => s.project)!;
   const ports = useMemo(
@@ -35,6 +47,12 @@ export const TerminalNode = memo(function TerminalNode({ id, data, selected, hei
       // 大項目のタブの入出力ノード: ダブルクリックで、上の階層 (Top) のタブへ戻る (ボックスのダブルクリックで中へ入るのと対になる)
       onDoubleClick={scopeId ? (ev) => { ev.stopPropagation(); setViewScope(null); } : undefined}
       title={scopeId ? t("ダブルクリックで Top に戻る") : undefined}>
+      {/* タブの入出力ノードは、選ぶとその大項目の箱が選ばれ、箱の上に「詳細」が出るので、ここには出さない */}
+      {selected && !scopeId && !detailsOpen && (
+        <button type="button" className="bg-block__details nodrag" title={t("詳細を右に開く (Enter)")} onClick={openDetails} onDoubleClick={(ev) => ev.stopPropagation()}>
+          {t("詳細")} ›
+        </button>
+      )}
       <div className="bg-terminal__head">
         <span className="truncate" title={groupName ?? undefined}>{which === "in" ? (groupName ?? "Inputs") : "Outputs"}</span>
       </div>

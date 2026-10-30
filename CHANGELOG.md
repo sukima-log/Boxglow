@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **The Inputs / Outputs nodes open their details too.** Selecting the top-level Inputs or Outputs node shows the **Details ›** button above it (Enter works as well); selecting it again after Esc works, and selecting it no longer moves the view. In a tab, the Inputs / Outputs nodes select the tab's box, whose own Details button opens the panel.
 - **No more wires that climb up and come back down around a nested box.** When a child's wire cannot leave its parent frame in a straight line because another box inside is in the way, the relay port on the frame is placed between where the wire gets around that box and the height of the box it goes to outside, instead of at the child's height. The wire no longer goes around the box, back up to the port, and back down again outside.
 
 ## 0.6.3 (2026-10-30)
