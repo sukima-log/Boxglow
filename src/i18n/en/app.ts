@@ -467,4 +467,5 @@ export const app: Record<string, string> = {
 , "パスをコピーしました: {path} (ブラウザからは手元のファイルを開けません。VS Code 拡張か serve で開くと、押すだけで開けます)": "Copied the path: {path} (a browser cannot open files on this computer; in the VS Code extension or serve, clicking opens the file)"
 , "このファイルはブラウザからは開けません: {path}": "This file cannot be opened from the browser: {path}"
 , "ファイルを開けませんでした: {path}": "Could not open the file: {path}"
+, "計画のフォルダの外のファイルは開けません: {path}": "Files outside the plan's folder cannot be opened: {path}"
 };

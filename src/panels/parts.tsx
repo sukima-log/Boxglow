@@ -2,6 +2,7 @@
  * 詳細パネルで使う小さな部品: 成果物の一覧、ポートの一覧
  * ポートの行は「名前」と、その直下に「成果物 (リンク)」を主役として並べる。形式・制約は 1 行の補足。
  */
+import { LinkifiedText } from "./LinkifiedText";
 import { useEffect, useRef, useState } from "react";
 import { addPort, consumersOf, createArtifact, inputGroupsOf, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort, inputsFedBy, canRemovePort, connectToBlock, sourceCandidates, targetCandidates, sendBack, setPolicy, setPolicyOptOut, policiesFor, isPolicyReady, policyScopeOf, policyReceivers, changedPolicies, ackPolicy } from "../model/graph";
 import type { Artifact, ExpectKind, Project } from "../model/types";
@@ -235,7 +236,7 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                     onChange={(next) => apply((p) => updatePort(p, q.id, { artifacts: next }))} />
                 </>
               )}
-              {desc && !isOpen(q.id) && <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{desc}</div>}
+              {desc && !isOpen(q.id) && <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}><LinkifiedText text={desc} /></div>}
               {/* 下流: この出力を使う箱 (押すと移る)。変えるとどこを確かめ直すかの手がかり。入力なら、この入力が配られる先の箱 (最上位の入力は、下の階層のどの箱が待っているか) */}
               {/* 方針として配る: 線を引かずに範囲の箱すべてへ (技術選定など全体に効く決定) */}
               {direction === "out" && blockId !== ROOT_ID && (!readonly || q.policy) && (

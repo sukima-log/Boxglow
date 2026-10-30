@@ -822,7 +822,18 @@ export const useProjectStore = create<State>((set, get) => {
   , openAttachedFile: (path) => {
       const src = get().source;
       if (src === "vscode" && vscodeApi) { vscodeApi.postMessage({ type: "open-file", path }); return; }
-      if (src === "serve") { window.open(serveApi(`api/file?path=${encodeURIComponent(path)}`), "_blank", "noopener"); return; }
+      if (src === "serve") {
+        // タブはクリックの直後に空で開き (後から開くとポップアップとして止められる)、ファイルがあると確かめてから中身を表示する。
+        // 無ければタブを閉じて通知する (以前は新しいタブにエラーの文字 (JSON) が出るだけだった)
+        const url = serveApi(`api/file?path=${encodeURIComponent(path)}`);
+        const tab = window.open("about:blank", "_blank");
+        void fetch(url, { method: "HEAD" }).then((r) => {
+          if (r.ok) { if (tab) { tab.opener = null; tab.location.href = url; } else window.open(url, "_blank", "noopener"); return; }
+          tab?.close();
+          get().setToast(r.status === 403 ? t("計画のフォルダの外のファイルは開けません: {path}", { path }) : t("ファイルを開けませんでした: {path}", { path }));
+        }, () => { tab?.close(); get().setToast(t("ファイルを開けませんでした: {path}", { path })); });
+        return;
+      }
       // ブラウザから手元のファイルは開けないので、パスをコピーする (探すときに貼り付けられる)
       void navigator.clipboard?.writeText(path).then(
         () => get().setToast(t("パスをコピーしました: {path} (ブラウザからは手元のファイルを開けません。VS Code 拡張か serve で開くと、押すだけで開けます)", { path }))

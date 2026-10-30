@@ -5,6 +5,7 @@ import { ClaimSettings, ClaimDetails } from "./Claims";
  * 何も選んでいなければ何も出さない (App 側でパネルごと隠す)
  * 文言は日本語で書き t() で包む (英語は src/i18n/en/inspector.ts の辞書で引く)
  */
+import { LinkifiedText } from "./LinkifiedText";
 import { BranchDialog } from "./BranchDialog";
 import { BranchPicker } from "./BranchPicker";
 import { branchDecision, canConvertToBranch } from "../model/branch";
@@ -349,9 +350,9 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           <section className="sec verification">
             <div className="sec__head"><span className="label">{b.status === "white" && (!b.statusChangedAt || Date.parse(b.verification.at) >= Date.parse(b.statusChangedAt)) ? t("検査 (完了のとき)") : t("検査 (前回の完了のとき)")}</span><span className="text-[11px]" style={{ color: "var(--text-muted)" }}>{b.verification.by} · {new Date(b.verification.at).toLocaleString()}</span></div>
             <dl className="text-[12px] flex flex-col gap-1">
-              <div><dt className="font-bold inline">{t("検査")}: </dt><dd className="inline whitespace-pre-wrap break-words">{b.verification.checked}</dd></div>
-              {b.verification.notChecked && <div><dt className="font-bold inline">{t("未実施")}: </dt><dd className="inline whitespace-pre-wrap break-words">{b.verification.notChecked}</dd></div>}
-              {b.verification.limits && <div><dt className="font-bold inline">{t("制限")}: </dt><dd className="inline whitespace-pre-wrap break-words">{b.verification.limits}</dd></div>}
+              <div><dt className="font-bold inline">{t("検査")}: </dt><dd className="inline whitespace-pre-wrap break-words"><LinkifiedText text={b.verification.checked} /></dd></div>
+              {b.verification.notChecked && <div><dt className="font-bold inline">{t("未実施")}: </dt><dd className="inline whitespace-pre-wrap break-words"><LinkifiedText text={b.verification.notChecked} /></dd></div>}
+              {b.verification.limits && <div><dt className="font-bold inline">{t("制限")}: </dt><dd className="inline whitespace-pre-wrap break-words"><LinkifiedText text={b.verification.limits} /></dd></div>}
             </dl>
           </section>
         )}
@@ -403,7 +404,7 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
               <span style={{ color: "var(--text-muted)" }}>{agoText(b.activity.since)}</span>
               {!readonly && <button className="btn btn-ghost btn-sm ml-auto" title={t("活動の印を外す")} onClick={() => apply((p) => clearActivity(p, blockId))}>×</button>}
             </div>
-            {b.activity.note && b.activity.state !== "needs_decision" && <div className="text-[13px]">{b.activity.note}</div>}
+            {b.activity.note && b.activity.state !== "needs_decision" && <div className="text-[13px]"><LinkifiedText text={b.activity.note} /></div>}
           </div>
         )}
         {/* レビューの記録の状態: 分解 (子があるとき) と着手準備。なし / 済 / 古い (何が変わったか)。人も「確認」で記録できる */}

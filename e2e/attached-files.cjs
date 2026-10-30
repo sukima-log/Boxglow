@@ -16,10 +16,10 @@ function plan() {
     blocks: {
       root: { id: 'root', parentId: null, title: 'root', description: '', status: 'black', position: { x: 0, y: 0 }, collapsed: false, assigneeIds: [], decisions: [] },
       pj: { id: 'pj', parentId: 'root', kind: 'project', title: '開く検査', description: '', status: 'black', position: { x: 260, y: 40 }, collapsed: false, assigneeIds: [], decisions: [] },
-      b1: { id: 'b1', parentId: 'pj', title: '抽出', description: '詳しくは [仕様](docs/spec.md) と [サイト](https://example.com)', status: 'black', position: { x: 80, y: 120 }, collapsed: false, assigneeIds: [], decisions: [] },
+      b1: { id: 'b1', parentId: 'pj', title: '抽出', description: '詳しくは [仕様](docs/spec.md) と [サイト](https://example.com)\n\n補足は docs/more.md にある', status: 'black', position: { x: 80, y: 120 }, collapsed: false, assigneeIds: [], decisions: [] },
     },
     ports: {
-      rin: { id: 'rin', blockId: 'root', direction: 'in', name: 'シナリオ', description: '', required: true, artifacts: [{ id: 'a1', title: 'scenario.md', url: '', kind: 'file', note: '', path: 'Doc/scenario.md' }] },
+      rin: { id: 'rin', blockId: 'root', direction: 'in', name: 'シナリオ', description: '書式は docs/format.md を参照', required: true, artifacts: [{ id: 'a1', title: 'scenario.md', url: '', kind: 'file', note: '', path: 'Doc/scenario.md' }] },
       pin: { id: 'pin', blockId: 'pj', direction: 'in', name: 'シナリオ', description: '', required: true, artifacts: [] },
       bin: { id: 'bin', blockId: 'b1', direction: 'in', name: 'シナリオ', description: '', required: true, artifacts: [] },
       bout: { id: 'bout', blockId: 'b1', direction: 'out', name: '登場人物', description: '', required: true, artifacts: [] },
@@ -63,6 +63,14 @@ function plan() {
     await page.waitForTimeout(200);
     const sentFromInput = await page.evaluate(() => window.__posted.filter((m) => m.type === 'open-file'));
     check('VS Code: 箱の入力のカード (供給元の資料) からも open-file を送る', inputBtn && sentFromInput.length === 1 && sentFromInput[0].path === 'Doc/scenario.md', JSON.stringify(sentFromInput));
+    // 入出力の説明に書いたパスも押せる (自由に書く欄の文中のパス)
+    const descPath = page.locator('.artifact-open', { hasText: 'docs/format.md' }).first();
+    await page.evaluate(() => { window.__posted.length = 0; });
+    const hasDesc = (await descPath.count()) === 1;
+    if (hasDesc) await descPath.click();
+    await page.waitForTimeout(200);
+    const sentDesc = await page.evaluate(() => window.__posted.filter((m) => m.type === 'open-file'));
+    check('VS Code: 入出力の説明の文中のパスを押すと open-file を送る', hasDesc && sentDesc.length === 1 && sentDesc[0].path === 'docs/format.md', JSON.stringify(sentDesc));
     // Notes のリンク: Ctrl + クリックで開く (ふつうのクリックでは送らない)
     await page.evaluate(() => window.boxglow.store.getState().select({ blockId: 'b1', panelTab: 'log' }));
     await page.waitForTimeout(800);
@@ -83,6 +91,29 @@ function plan() {
     await page.evaluate(() => window.postMessage({ type: 'asset-base', base: 'https://file+.vscode-resource.example/plan/boxglow.assets/' }, '*'));
     await page.waitForTimeout(200);
     check('VS Code: 画像の置き場 (asset-base) の知らせを受け取る', (await page.evaluate(() => window.boxglow.store.getState().assetBase)) === 'https://file+.vscode-resource.example/plan/boxglow.assets/');
+    // Notes の文中のパス ([文字](パス) の形でないもの) も Ctrl + クリックで開ける
+    const bare = page.locator('.live-md .cm-line', { hasText: 'docs/more.md' }).first();
+    if ((await bare.count()) === 1) {
+      // パスの文字の実際の位置 (Range の矩形) の真ん中を押す
+      const pt = await page.evaluate(() => {
+        const line = [...document.querySelectorAll('.live-md .cm-line')].find((l) => l.textContent.includes('docs/more.md'));
+        const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+          const i = n.data.indexOf('docs/more.md');
+          if (i < 0) continue;
+          const r = document.createRange(); r.setStart(n, i + 2); r.setEnd(n, i + 8);
+          const b = r.getBoundingClientRect(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+        }
+        return null;
+      });
+      const x = pt ? pt.x : 0;
+      const box = { y: pt ? pt.y - 5 : 0, height: 10 };
+      await page.evaluate(() => { window.__posted.length = 0; });
+      await page.keyboard.down('Control'); await page.mouse.click(x, box.y + box.height / 2); await page.keyboard.up('Control');
+      await page.waitForTimeout(200);
+      const sentBare = await page.evaluate(() => window.__posted.filter((m) => m.type === 'open-file'));
+      check('VS Code: Notes の文中のパスも Ctrl + クリックで open-file を送る', sentBare.length === 1 && sentBare[0].path === 'docs/more.md', JSON.stringify(sentBare));
+    } else check('VS Code: Notes の文中のパスの行が出る', false);
     check('VS Code: コンソールにエラーが無い', errors.length === 0, errors.slice(0, 2).join(' | '));
     await page.context().close();
   }

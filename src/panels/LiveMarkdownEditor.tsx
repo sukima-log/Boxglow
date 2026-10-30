@@ -8,6 +8,7 @@
  *         placeholder, autoFocus, assetBase = 相対パスの画像の置き場
  * Output: 編集欄の JSX
  */
+import { splitLinks } from "../lib/localLink";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { syntaxTree } from "@codemirror/language";
@@ -171,6 +172,14 @@ function linkTargetAt(view: EditorView, pos: number): string | undefined {
       const url = node.getChild("URL");
       return url ? view.state.sliceDoc(url.from, url.to) : undefined;
     }
+  }
+  // [文字](行き先) の形でなくても、文中の URL やファイルらしいパス (docs/design.md など) の上なら、それを行き先にする
+  const line = view.state.doc.lineAt(pos);
+  let at = line.from;
+  for (const piece of splitLinks(line.text)) {
+    const end = at + piece.text.length;
+    if (piece.kind !== "text" && pos >= at && pos <= end) return piece.text;
+    at = end;
   }
   return undefined;
 }

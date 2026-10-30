@@ -4,6 +4,8 @@
 
 _Changes after 0.5.5 go here._
 
+- File paths and URLs written in descriptions, verification, decision context, notes and send-back reasons open when clicked (Ctrl / Cmd + click in the Notes editor).
+
 - Files attached to an input's source, to a policy or to sent-back deliverables also open when clicked.
 
 ## 0.5.5

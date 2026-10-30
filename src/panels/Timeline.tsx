@@ -2,6 +2,7 @@
  * タイムライン: 判断待ち・作業中・ログを時系列で見る (上の帯の要約チップから開く)
  * 「再開」タブは、作業を再開するときに読み直すもの (AI 未確認の回答・引き継ぎメモ・次の候補) を 1 か所にまとめる
  */
+import { LinkifiedText } from "./LinkifiedText";
 import { CloseButton } from "./CloseButton";
 import { candidateGroups } from "../model/workflow";
 import { lint } from "../model/lint";
@@ -48,7 +49,7 @@ export function DecisionCard({ project, blockId, decisionId }: { project: Projec
       <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>{t("{actor} · {ago}", { actor: actorLabel(d.askedBy), ago: agoText(d.askedAt) })}</div>
       <div className="text-[13px] font-bold">{d.question}</div>
       {/* 判断材料: 質問だけで判断できるように、前提・比較・影響をここに出す */}
-      {d.context && <div className="text-[12px] whitespace-pre-wrap" style={{ color: "var(--text-muted)", background: "var(--bg-paper)", border: "1px solid var(--line-soft)", borderRadius: 8, padding: "6px 8px" }}>{d.context}</div>}
+      {d.context && <div className="text-[12px] whitespace-pre-wrap" style={{ color: "var(--text-muted)", background: "var(--bg-paper)", border: "1px solid var(--line-soft)", borderRadius: 8, padding: "6px 8px" }}><LinkifiedText text={d.context} /></div>}
       {d.answer !== undefined ? (
         <div className="flex flex-col gap-1 text-[13px]">
           {editing !== null ? (
@@ -262,7 +263,7 @@ export function Timeline({ project }: { project: Project }) {
                 <span className="ml-auto text-[11px] flex-none" style={{ color: "var(--text-muted)" }}>{w.since ? agoText(w.since) : ""}</span>
                 {/* 題名とメモは省略しない (何の作業で、何を待っているのかが切れると意味が取れない) */}
                 <span className="basis-full font-bold" style={{ whiteSpace: "normal" }}>{w.block.title}</span>
-                {w.note && <span className="basis-full text-[12px]" style={{ whiteSpace: "normal" }}>{w.note}</span>}
+                {w.note && <span className="basis-full text-[12px]" style={{ whiteSpace: "normal" }}><LinkifiedText text={w.note} /></span>}
                 <span className="basis-full text-[11px]" style={{ color: "var(--text-muted)", whiteSpace: "normal" }}>{where ? `${where} › ` : ""}{outs ? t("出力: {outs}", { outs }) : ""}</span>
               </button>
             );
