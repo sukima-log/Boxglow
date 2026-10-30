@@ -160,8 +160,25 @@ function livePreview(getAssetBase: () => string | null): Extension {
 /** 画像の置き場 (store から引く。この欄は store に依存しないよう、関数で受け取る) */
 function placeholderOf(text: string): Extension { return cmPlaceholder(text); }
 
-export function LiveMarkdownEditor({ value, onChange, onBlur, onFiles, placeholder, autoFocus, assetBase, readOnly = false, minHeight = 240 }: {
+/**
+ * クリックした位置の Markdown のリンクの行き先 ([文字](行き先) の行き先、<https://...> の中身)
+ * Input : view, pos = 文書の位置 / Output: 行き先の文字列 (リンクの上でなければ undefined)
+ */
+function linkTargetAt(view: EditorView, pos: number): string | undefined {
+  for (let node: SyntaxNode | null = syntaxTree(view.state).resolveInner(pos, 1); node; node = node.parent) {
+    if (node.name === "URL") return view.state.sliceDoc(node.from, node.to);
+    if (node.name === "Link" || node.name === "Image" || node.name === "Autolink") {
+      const url = node.getChild("URL");
+      return url ? view.state.sliceDoc(url.from, url.to) : undefined;
+    }
+  }
+  return undefined;
+}
+
+export function LiveMarkdownEditor({ value, onChange, onBlur, onFiles, onOpenLink, placeholder, autoFocus, assetBase, readOnly = false, minHeight = 240 }: {
   value: string; onChange: (v: string) => void; onBlur?: () => void; onFiles?: (files: FileList | null, e: { preventDefault: () => void }) => void
+  /** Ctrl (Mac は Cmd) + クリックしたリンクの行き先を受け取る (手元のファイル・URL を開く。ふつうのクリックは文字の編集のまま) */
+; onOpenLink?: (href: string) => void
 ; placeholder?: string; autoFocus?: boolean; assetBase: string | null; readOnly?: boolean; minHeight?: number;
 }) {
   const host = useRef<HTMLDivElement>(null);
@@ -170,6 +187,7 @@ export function LiveMarkdownEditor({ value, onChange, onBlur, onFiles, placehold
   const onChangeRef = useRef(onChange); onChangeRef.current = onChange;
   const onBlurRef = useRef(onBlur); onBlurRef.current = onBlur;
   const onFilesRef = useRef(onFiles); onFilesRef.current = onFiles;
+  const onOpenLinkRef = useRef(onOpenLink); onOpenLinkRef.current = onOpenLink;
   const readOnlyComp = useRef(new Compartment());
   // 欄を作る (1 回)。本文の更新は下の effect で差分として入れる
   useEffect(() => {
@@ -184,6 +202,16 @@ export function LiveMarkdownEditor({ value, onChange, onBlur, onFiles, placehold
       , EditorView.updateListener.of((u) => { if (u.docChanged) onChangeRef.current(u.state.doc.toString()); })
       , EditorView.domEventHandlers({
           blur: () => { onBlurRef.current?.(); return false; }
+        , mousedown: (e, view) => {
+            // Ctrl / Cmd + クリック: リンクの行き先を開く (編集のカーソル移動はしない)
+            if (!(e.ctrlKey || e.metaKey) || !onOpenLinkRef.current) return false;
+            const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+            const href = pos === null ? undefined : linkTargetAt(view, pos);
+            if (!href) return false;
+            e.preventDefault();
+            onOpenLinkRef.current(href);
+            return true;
+          }
         , paste: (e) => { if (e.clipboardData?.files.length) { onFilesRef.current?.(e.clipboardData.files, e); return e.defaultPrevented; } return false; }
         , drop: (e) => { if (e.dataTransfer?.files.length) { onFilesRef.current?.(e.dataTransfer.files, e); return e.defaultPrevented; } return false; }
         })

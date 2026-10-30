@@ -2187,3 +2187,6 @@ button.meta-chip.unprepared:hover { background: color-mix(in srgb, var(--accent)
 /* 折り畳み (details) の見出しに添える「開くと何が出るか」の 1 行 */
 .summary-hint { margin-left: 6px; font-size: 11px; font-weight: 400; color: var(--text-muted); }
 /* 左下の横 / 縦 / 表 の切り替えに添える短い文字 */
+
+/* 成果物・資料の「手元のファイルを開く」ボタン: リンクと同じ見た目 (ボタンの枠や地の色を付けない) */
+.artifact-open { border: 0; padding: 0; background: none; font: inherit; text-align: left; cursor: pointer; min-width: 0; }

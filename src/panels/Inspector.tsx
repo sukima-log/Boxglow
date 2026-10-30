@@ -26,6 +26,7 @@ import { DecisionCard, Timeline } from "./Timeline";
 import { agentContext } from "../model/context";
 import { blockToPrompt } from "../model/export";
 import { ROOT_ID, type BlockStatus, type Project } from "../model/types";
+import { localTarget } from "../lib/localLink";
 import { useProjectStore } from "../store/useProjectStore";
 import { copyText, downloadText, pickTextFile, safeFilename } from "../lib/download";
 import { ArtifactsEditor, DateField, DebouncedText, PortsEditor, PoliciesReceived } from "./parts";
@@ -659,6 +660,9 @@ function TabIcon({ id }: { id: "status" | "io" | "owner" | "dates" | "log" | "mo
  */
 function NotesEditor({ value, placeholder, onCommit, onFiles }: { value: string; placeholder: string; onCommit: (v: string) => void; onFiles: (files: FileList | null, e: { preventDefault: () => void }) => void }) {
   const assetBase = useProjectStore((s) => s.assetBase);
+  const openAttachedFile = useProjectStore((s) => s.openAttachedFile);
+  // Notes のリンク (Ctrl / Cmd + クリック): 手元のファイルは開く (VS Code = エディタ、serve = 新しいタブ)、URL はブラウザで開く
+  const openLink = (href: string) => { const local = localTarget(href); if (local) openAttachedFile(local); else window.open(href, "_blank", "noopener"); };
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const draft = useRef(value);
   const latest = useRef(value); latest.current = value;
@@ -668,6 +672,6 @@ function NotesEditor({ value, placeholder, onCommit, onFiles }: { value: string;
   return (
     <LiveMarkdownEditor value={value} placeholder={placeholder} assetBase={assetBase} minHeight={240}
       onChange={(v) => { draft.current = v; if (timer.current) clearTimeout(timer.current); timer.current = setTimeout(() => { timer.current = null; if (v !== latest.current) onCommit(v); }, 400); }}
-      onBlur={flush} onFiles={onFiles} />
+      onBlur={flush} onFiles={onFiles} onOpenLink={openLink} />
   );
 }

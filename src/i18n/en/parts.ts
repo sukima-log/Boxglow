@@ -130,4 +130,8 @@ export const parts: Record<string, string> = {
 , "未決定": "Undecided"
 , "済んだ作業がこの方針に合っていることを確かめた (確かめ直しの札を消す)": "The finished work matches this policy (clears the check-again mark)"
 , "確かめた": "Checked"
+, "エディタで開く: {path}": "Open in the editor: {path}"
+, "新しいタブで開く: {path}": "Open in a new tab: {path}"
+, "パスをコピー: {path}": "Copy the path: {path}"
+, "記録したときの版をブラウザで見る": "See the recorded version in the browser"
 };

@@ -2,6 +2,7 @@
  * Boxglow の VS Code 拡張: boxglow.json をボックスと線の図として開く (カスタムエディタ)。
  * 同梱した Web アプリ (media/) を webview に出し、ファイルの中身はメッセージでやり取りする。
  *   webview -> 拡張: { type: "ready" } (最初の中身をくれ)
+ *                    { type: "open-file", path } (成果物・資料のファイルをエディタで開いて。見つからなければ { type: "open-file-error", path } を返す)
  *                    { type: "save", requestId, text, baseText, version } (この中身で保存して。baseText / version = 画面が元にした中身とドキュメントの版)
  *   拡張 -> webview: { type: "load", text, version, name, appVersion, protocol, extensionVersion } / { type: "update", ... } (外 (CLI や AI) でファイルが変わった)
  *                    { type: "saved", requestId, version } (ディスクまで保存できた)
@@ -14,6 +15,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { saveDocument, diskAccess, conflictSnapshot, saveFailureBase } from "./save";
+import { resolveAttachedFile } from "../../cli/attached-file";
 import { FileConflict } from "../../cli/file-store";
 import { dpapiAvailable } from "../../cli/sync/dpapi";
 import { credentialsPath, inspectCredentials, removeCredentials, saveCredentials, withCredentialsLock } from "../../cli/sync/credentials";
@@ -134,6 +136,15 @@ class BoxglowEditorProvider implements vscode.CustomTextEditorProvider {
     };
     const sub = vscode.workspace.onDidChangeTextDocument((e) => { if (e.document.uri.toString() === document.uri.toString() && !saving) send("update"); });
     const messages = panel.webview.onDidReceiveMessage(async (msg) => {
+      // 成果物・資料・Notes のリンクに書かれた手元のファイルを、図の横の列のエディタで開く (計画のフォルダとリポジトリの一番上を基準に探す)。
+      // 見つからなければ画面に知らせる (利用者の要望 2026-10-31: 紐づいたファイルを自分で探すのが手間)
+      if (msg?.type === "open-file") {
+        const path = typeof msg.path === "string" ? msg.path : "";
+        const found = document.uri.scheme === "file" ? resolveAttachedFile(document.uri.fsPath, path) : null;
+        if (!found) { void panel.webview.postMessage({ type: "open-file-error", path }); return; }
+        await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(found), { preview: false, viewColumn: vscode.ViewColumn.Beside });
+        return;
+      }
       if (msg?.type === "ready") { send("load"); void panel.webview.postMessage({ type: "asset-base", base: panel.webview.asWebviewUri(assetsDir).toString() + "/" }); return; }
       // メモに貼り付けた画像を boxglow.assets/ に保存する (名前は 1 段のファイル名だけ。同じ名前は上書きしない)
       if (msg?.type === "save-asset") {

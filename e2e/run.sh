@@ -33,6 +33,8 @@ node e2e/gui.cjs
 node e2e/ui-feedback.cjs
 node e2e/conflict-review.cjs
 node e2e/canvas.cjs
+# 成果物・資料・Notes のリンクから手元のファイルを開く (VS Code の webview を真似る / ブラウザはパスのコピー)
+node e2e/attached-files.cjs
 
 node e2e/experience.cjs
 # 自分の計画 (boxglow.json があるときだけ): 交差の合計とタブ切り替えの速さ

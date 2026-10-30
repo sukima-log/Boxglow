@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-_Changes after 0.6.4 go here._
+- **Click an attached file to open it.** Deliverables and materials that point to a file (Git files, paths such as `Doc/scenario.md`, relative links in the URL field) and relative links in a box's Notes now open the file: in the VS Code extension it opens in the editor beside the diagram; with `npx boxglow serve` it opens in a new browser tab (only files inside the plan's folder or its repository; HTML, SVG and scripts are shown as text, in a sandbox); in a browser that opened the plan directly, the path is copied. Paths are looked up from the plan's folder and from the repository root. Git files keep a small "web" link to the recorded version. In Notes, use Ctrl (Cmd on Mac) + click on a link.
+- **Fixed: images pasted into Notes in VS Code.** The extension's messages for the image folder and for a saved image were ignored by the diagram (they were checked after a filter that only let plan contents through), so pasted images did not show and the save did not report back.
 
 ## 0.6.4 (2026-10-31)
 

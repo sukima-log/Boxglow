@@ -1,12 +1,13 @@
 /**
  * Markdown の表示 (メモ・作業記録)。marked で HTML にし、DOMPurify で無害化してから描く
  *   - 見出し・箇条書き・チェックボックス・表・コード・リンク・画像に対応 (GFM)。改行はそのまま改行にする (メモの書き方に合わせる)
- *   - リンクは新しいタブで開く。スクリプトやイベント属性は落とす
+ *   - リンクは新しいタブで開く。手元のファイルを指すリンク (相対パス・file://) は、押すと openAttachedFile で開く (VS Code = エディタ、serve = 新しいタブ)。スクリプトやイベント属性は落とす
  *   - 画像: http(s) の URL はそのまま。相対パス (boxglow.assets/... など) は assetBase を前に付ける (serve / VS Code が解決する)。
  *     assetBase が無い環境 (ブラウザだけ) では、相対パスの画像は代替文 (alt) だけを出す
  * Input : text = Markdown, assetBase = 相対パスの画像の置き場の URL (末尾は / で終える。無ければ undefined)
  * Output: 整形した HTML を描く JSX
  */
+import { localTarget } from "../lib/localLink";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { useMemo } from "react";
@@ -54,5 +55,14 @@ export function Markdown({ text, className }: { text: string; className?: string
     const clean = DOMPurify.sanitize(raw, { USE_PROFILES: { html: true }, FORBID_TAGS: ["style", "script", "iframe", "object", "embed", "form", "input"], ADD_ATTR: ["target"] });
     return resolveImages(clean, assetBase ?? undefined);
   }, [text, assetBase]);
-  return <div className={`md ${className ?? ""}`} dangerouslySetInnerHTML={{ __html: html }} />;
+  const openAttachedFile = useProjectStore((s) => s.openAttachedFile);
+  // 手元のファイルを指すリンク (相対パス・file://) は、押すと開く (VS Code = エディタ、serve = 新しいタブ)。URL のリンクは今までどおり
+  const onClick = (e: React.MouseEvent) => {
+    const a = (e.target as HTMLElement).closest("a");
+    const local = a ? localTarget(a.getAttribute("href")) : undefined;
+    if (!local) return;
+    e.preventDefault();
+    openAttachedFile(local);
+  };
+  return <div className={`md ${className ?? ""}`} onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />;
 }

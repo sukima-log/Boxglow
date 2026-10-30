@@ -170,6 +170,12 @@ interface State {
   evacuateAndTakeLatest: () => Promise<void>;
   /** 退避した編集を読み込んで、衝突として見比べる (拡張のファイル選択) */
   loadEvacuated: () => void;
+  /**
+   * 成果物・資料・Notes のリンクに書かれた手元のファイルを開く (利用者の要望 2026-10-31: 紐づいたファイルを自分で探すのが手間)
+   *   VS Code の中 = 拡張に頼んでエディタで開く / serve = ブラウザの新しいタブで表示 / それ以外 (ブラウザで直接開いた計画) = パスをコピー
+   * Input : path = リポジトリか計画のフォルダからの相対パス (絶対パスも可) / Output: なし (開けなければトーストで知らせる)
+   */
+  openAttachedFile: (path: string) => void;
   /** 今の中身のハッシュ (退避済みかの判定に使う) */
   contentHash: () => Promise<string>;
   peerVersion: PeerVersion | null;
@@ -813,6 +819,15 @@ export const useProjectStore = create<State>((set, get) => {
       set({ restoreNotice: { kind: "info", text: t("退避しました ({path})。最新のファイルを開きました。退避した編集は、⋯ メニューの「退避した編集を読み込む」で取り込めます", { path: evacuated.path }) } });
     }
   , loadEvacuated: () => { vscodeApi?.postMessage({ type: "load-evacuated" }); }
+  , openAttachedFile: (path) => {
+      const src = get().source;
+      if (src === "vscode" && vscodeApi) { vscodeApi.postMessage({ type: "open-file", path }); return; }
+      if (src === "serve") { window.open(serveApi(`api/file?path=${encodeURIComponent(path)}`), "_blank", "noopener"); return; }
+      // ブラウザから手元のファイルは開けないので、パスをコピーする (探すときに貼り付けられる)
+      void navigator.clipboard?.writeText(path).then(
+        () => get().setToast(t("パスをコピーしました: {path} (ブラウザからは手元のファイルを開けません。VS Code 拡張か serve で開くと、押すだけで開けます)", { path }))
+      , () => get().setToast(t("このファイルはブラウザからは開けません: {path}", { path })));
+    }
   , restorePending: null
   , saveHeld: false
   , restoreNotice: null
@@ -1480,12 +1495,14 @@ export const useProjectStore = create<State>((set, get) => {
         }
         // 画面からの同期の状態 (拡張の裏方から)
         if (msg.type === "sync-status" && msg.status && typeof msg.status === "object") { get().acceptSyncStatus(msg.status as SyncStatus); return; }
+        // 画像の置き場 (拡張が webview 用の URI を渡す)、画像の保存の応答、ファイルを開けなかった知らせ。
+        // 下の「load / update 以外は無視」より前で受ける (後ろに置いていたため、VS Code の中で画像の置き場も保存の応答も届いていなかった)
+        if (msg.type === "asset-base") { set({ assetBase: typeof msg.base === "string" ? msg.base : null }); return; }
+        if (msg.type === "open-file-error") { get().setToast(t("ファイルを開けませんでした: {path}", { path: String(msg.path ?? "") })); return; }
+        if (msg.type === "asset-saved") { const w = assetWaiters.get(msg.requestId); assetWaiters.delete(msg.requestId); w?.(typeof msg.path === "string" ? msg.path : null, typeof msg.error === "string" ? msg.error : undefined); return; }
         if ((msg.type !== "load" && msg.type !== "update") || typeof msg.text !== "string") return;
         // 確認用の中身 (VS Code のエディタが、ディスクの最新に追い付いていない間)。編集用の基準は進めず、「エディタ待ち」として持つ
         if (msg.type === "update" && msg.fromDisk === true) { set({ editorBehind: { text: msg.text }, evacuated: null }); return; }
-        // 画像の置き場 (拡張が webview 用の URI を渡す) と、画像の保存の応答
-        if (msg.type === "asset-base") { set({ assetBase: typeof msg.base === "string" ? msg.base : null }); return; }
-        if (msg.type === "asset-saved") { const w = assetWaiters.get(msg.requestId); assetWaiters.delete(msg.requestId); w?.(typeof msg.path === "string" ? msg.path : null, typeof msg.error === "string" ? msg.error : undefined); return; }
         // エディタ待ちは、エディタの中身が受け取った最新 (R) と同じになったと確かめたときだけ解く (load / update 共通。古い版の update では解かない。R39-07)
         if (get().editorBehind) {
           if (editorCaughtUp(get().editorBehind!.text, msg.text)) set({ editorBehind: null });

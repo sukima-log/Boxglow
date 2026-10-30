@@ -14,9 +14,10 @@ import { rememberSync, syncWasEnabled } from "./sync/server-config";
 import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
-import { basename, dirname, extname, join, relative, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { commitFile, FileBusy, FileConflict, revisionOf } from "./file-store";
+import { attachedFileBases, resolveAttachedFile } from "./attached-file";
 import { validateProjectText } from "../src/model/validate-file";
 // 文言を今の言語 (日本語 / 英語) で出す。言語は main.ts の serve の入口で決めてある
 import { t } from "../src/i18n/core";
@@ -43,6 +44,10 @@ class HttpError extends Error {
  */
 /** メモの画像の置き場のフォルダ名 (計画のファイルの隣) と、扱う種類、1 枚の上限 */
 export const ASSETS_DIR = "boxglow.assets";
+/** 成果物・資料のファイルを表示するときの種類。ここに無いもの (HTML・SVG・JavaScript・ソースコードなど) は文字 (text/plain) として返し、ページとして動かさない */
+const ATTACHED_MIME: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".pdf": "application/pdf", ".mp4": "video/mp4", ".webm": "video/webm", ".mp3": "audio/mpeg", ".wav": "audio/wav" };
+/** 表示するファイルの大きさの上限 (50MB) */
+const MAX_ATTACHED = 50 * 1024 * 1024;
 const ASSET_MIME: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml" };
 const MAX_ASSET = 10 * 1024 * 1024;
 /** 本文をバイト列のまま読む (画像の保存用) */
@@ -191,6 +196,24 @@ export function startServe(opts: { file: string; port: number; dist: string; ope
         // 接続が切られないよう、定期的に空のコメントを送る
         const ping = setInterval(() => res.write(": ping\n\n"), 25000);
         res.on("close", () => { clearInterval(ping); clients.delete(res); });
+        return;
+      }
+      // ---- 成果物・資料・Notes のリンクに書かれた手元のファイルを表示する: GET /api/file?path=<パス> ----
+      // 計画のフォルダとリポジトリの一番上を基準に探し、その中のファイルだけを返す (リンク先も実体でたどって確かめる)。
+      // 画像・PDF・音声・動画はそのまま、それ以外は文字として返す。sandbox で、返したページの中ではスクリプトを動かさない (利用者の要望 2026-10-31)
+      if (url.pathname === "/api/file") {
+        if (req.method !== "GET" && req.method !== "HEAD") throw new HttpError(405, t("このメソッドは使えません"));
+        const asked = url.searchParams.get("path") ?? "";
+        const found = resolveAttachedFile(file, asked);
+        if (!found) throw new HttpError(404, t("ファイルが見つかりません: {path}", { path: asked }));
+        const real = realpathSync(found);
+        // 基準のフォルダのどれかの中にあるか (".." で外へ出ない。別のドライブなどで絶対パスが返るときも外とみなす)
+        const inside = attachedFileBases(file).some((base) => { const rel = relative(realpathSync(base), real); return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel); });
+        if (!inside) throw new HttpError(403, t("計画のフォルダの外のファイルは表示できません: {path}", { path: asked }));
+        if (statSync(real).size > MAX_ATTACHED) throw new HttpError(413, t("ファイルが大きすぎて表示できません: {path}", { path: asked }));
+        const type = ATTACHED_MIME[extname(real).toLowerCase()] ?? "text/plain; charset=utf-8";
+        // PDF は CSP を付けない (付けるとブラウザの PDF 表示が止まることがある。PDF は文字や画像と同じく、このページの中でアプリのスクリプトとして動かない)
+        send(200, req.method === "HEAD" ? "" : readFileSync(real), type, type === "application/pdf" ? {} : { "content-security-policy": "sandbox; default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'" });
         return;
       }
       // ---- メモの画像の置き場: 計画のファイルの隣の boxglow.assets/ (GET で配信、PUT で保存。フォルダの外には出ない) ----

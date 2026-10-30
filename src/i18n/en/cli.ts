@@ -385,4 +385,7 @@ export const cli: Record<string, string> = {
 , "方針を参考にする (決まっていなくても着手を待たせない)": "Make the policy advisory (boxes can start before it is decided)"
 , "方針をやめる出力の名前": "Outputs that are no longer policies"
 , "この箱では受け取らない方針 (<箱>.<出力名>)": "Policies this box does not take (<box>.<output>)"
+, "ファイルが見つかりません: {path}": "File not found: {path}"
+, "計画のフォルダの外のファイルは表示できません: {path}": "Files outside the plan's folder cannot be shown: {path}"
+, "ファイルが大きすぎて表示できません: {path}": "The file is too large to show: {path}"
 };

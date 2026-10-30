@@ -464,4 +464,7 @@ export const app: Record<string, string> = {
 , "自動保存: オン (変更のたびに書き込みます。押すとオフ)": "Auto save: on (every change is written; click to turn off)"
 , "自動保存: オフ (Save か Ctrl+S で書き込みます。押すとオン)": "Auto save: off (Save or Ctrl+S writes; click to turn on)"
 , "{file} に保存します (自動保存はオフ: Save か Ctrl+S で書きます)": "Saves to {file} (auto save is off: Save or Ctrl+S writes)"
+, "パスをコピーしました: {path} (ブラウザからは手元のファイルを開けません。VS Code 拡張か serve で開くと、押すだけで開けます)": "Copied the path: {path} (a browser cannot open files on this computer; in the VS Code extension or serve, clicking opens the file)"
+, "このファイルはブラウザからは開けません: {path}": "This file cannot be opened from the browser: {path}"
+, "ファイルを開けませんでした: {path}": "Could not open the file: {path}"
 };

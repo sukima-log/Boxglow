@@ -8,8 +8,17 @@ import type { Artifact, ExpectKind, Project } from "../model/types";
 import { setInputAnyOf } from "../model/branch";
 import { ROOT_ID } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
+import { localTarget } from "../lib/localLink";
 // 言語切り替え: 日本語の文は t() で包み、英語の辞書 (src/i18n/en/parts.ts) で引く
 import { t, useLang } from "../i18n";
+
+/**
+ * 成果物・資料が指す手元のファイルのパス (Git のファイル、パスで付けたファイル、URL 欄に書いた相対パス)。URL (https: など) やメモだけのものは undefined
+ * Input : a = 成果物 / Output: パスか undefined
+ */
+export function localPathOf(a: Artifact): string | undefined {
+  return a.path || localTarget(a.url);
+}
 
 /** 成果物 (URL / メモ) の一覧。「+ Add」を押したときだけ入力欄が出る */
 export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add" }: {
@@ -19,6 +28,8 @@ export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add
   addLabel?: string;
 }) {
   useLang(); // 言語が変わったら描き直す
+  const openAttachedFile = useProjectStore((s) => s.openAttachedFile);
+  const source = useProjectStore((s) => s.source);
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
@@ -34,11 +45,17 @@ export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add
       {artifacts.map((a) => (
         <div key={a.id} className="flex items-center gap-2 text-[13px]">
           {a.kind === "git" && <span className="chip" style={{ cursor: "default", fontSize: 10, padding: "0 5px" }} title={`Git: ${a.path ?? ""} @ ${(a.commit ?? "").slice(0, 7)}${a.repo ? " (" + a.repo + ")" : ""}`}>git</span>}
-          {a.url ? (
-            <a className="truncate underline" style={{ color: "var(--primary-strong)" }} href={a.url} target="_blank" rel="noopener noreferrer" title={a.kind === "git" ? `${a.path} @ ${(a.commit ?? "").slice(0, 7)}` : a.url}>{a.title}</a>
+          {localPathOf(a) ? (
+            // 手元のファイル: 押すと開く (VS Code = エディタ、serve = 新しいタブ、ブラウザで直接開いた計画 = パスをコピー)
+            <button type="button" className="artifact-open truncate underline" style={{ color: "var(--primary-strong)" }} onClick={() => openAttachedFile(localPathOf(a)!)}
+              title={(source === "vscode" ? t("エディタで開く: {path}", { path: localPathOf(a)! }) : source === "serve" ? t("新しいタブで開く: {path}", { path: localPathOf(a)! }) : t("パスをコピー: {path}", { path: localPathOf(a)! })) + (a.kind === "git" ? ` @ ${(a.commit ?? "").slice(0, 7)}` : "")}>{a.title}</button>
+          ) : a.url ? (
+            <a className="truncate underline" style={{ color: "var(--primary-strong)" }} href={a.url} target="_blank" rel="noopener noreferrer" title={a.url}>{a.title}</a>
           ) : (
             <span className="truncate" title={a.kind === "git" ? `${a.path} @ ${(a.commit ?? "").slice(0, 7)}` : undefined}>{a.title}</span>
           )}
+          {/* Git のファイルで、リモートのコミット固定の URL があれば、記録したときの版を見るリンクも残す */}
+          {localPathOf(a) && a.kind === "git" && a.url && <a className="chip" style={{ fontSize: 10, padding: "0 5px" }} href={a.url} target="_blank" rel="noopener noreferrer" title={t("記録したときの版をブラウザで見る")}>web</a>}
           {a.kind === "git" && a.state === "moved" && <span className="chip" style={{ cursor: "default", fontSize: 10, padding: "0 5px", borderColor: "var(--accent)" }} title={t("ファイルの移動を検出し、パスを付け替えました")}>moved</span>}
           {a.kind === "git" && a.state === "missing" && <span className="chip" style={{ cursor: "default", fontSize: 10, padding: "0 5px", borderColor: "var(--danger)", color: "var(--danger)" }} title={t("現在のリポジトリに見つかりません (コミットからは取り出せます)")}>missing</span>}
           {!readonly && <button className="btn btn-ghost btn-sm ml-auto" title="Remove" onClick={() => onChange(artifacts.filter((x) => x.id !== a.id))}>×</button>}
