@@ -11,6 +11,18 @@ Tasks are boxes with inputs and outputs; a box goes New (BlackBox: output decide
 - CLI for agents: `npx boxglow` (status / start / done / split / ask / answer ...)
 - License: MIT
 
+## What's new in 0.6.5
+
+- **Click an attached file to open it**: deliverables, materials and relative links in Notes (Ctrl / Cmd + click) open the file in the VS Code editor, or in a new tab with `npx boxglow serve` (a browser that opened the plan directly copies the path).
+- **Fixed**: images pasted into Notes in VS Code now show.
+
+Details: [CHANGELOG.md](CHANGELOG.md). Update the CLI, `serve` and the VS Code extension (0.5.5) together.
+
+### 日本語: 0.6.5 の要点
+
+- **紐づいたファイルを押すだけで開ける**: 成果物・資料・Notes の相対パスのリンク (Ctrl / Cmd + クリック) が、VS Code ではエディタで、`npx boxglow serve` では新しいタブで開く (ブラウザで直接開いた計画はパスをコピー)。
+- **修正**: VS Code の中で Notes に貼った画像が表示されるようになった。
+
 ## What's new in 0.6.4
 
 - **Agents attach material to the plan's inputs themselves**: `npx boxglow artifact inputs <path or URL> --input <input name>` (MCP: `boxglow_artifact` with block "inputs"). Boxes waiting for a spec or scenario can start without asking a person to attach it on the screen.
@@ -234,7 +246,7 @@ Writes become new versions on the server and reach the synced devices on their n
 
 ## VS Code extension
 
-Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.4 goes with boxglow 0.6.4).
+Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.5 goes with boxglow 0.6.5).
 
 `vscode/` holds the extension's source. It opens `boxglow.json` as the same diagram inside the editor (custom editor "Boxglow"; right-click the file or use the editor title button / command *Boxglow: Open boxglow.json as a diagram*). The diagram follows the file when the CLI or an agent writes it, edits in the diagram are written back, and light / dark follow the VS Code theme. Deliverables, materials and relative links in Notes (Ctrl / Cmd + click) that point to a file open in the editor beside the diagram. To build it yourself: `npm run build:vscode` (bundles the web app into `vscode/media/`), then `cd vscode && npm run package` (`.vsix`, install via *Extensions: Install from VSIX...*).
 

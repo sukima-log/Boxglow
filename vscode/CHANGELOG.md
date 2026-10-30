@@ -2,8 +2,11 @@
 
 ## Unreleased
 
-_Changes after 0.5.4 go here._
+_Changes after 0.5.5 go here._
 
+## 0.5.5
+
+- Follows boxglow 0.6.5. Update together with the CLI and `serve`.
 - Clicking a deliverable or material that points to a file (or Ctrl / Cmd + clicking a relative link in Notes) opens the file in the editor beside the diagram.
 - Fixed: images pasted into Notes did not show and their save did not report back (the extension's messages were ignored by the diagram).
 
