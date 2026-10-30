@@ -88,7 +88,18 @@ export function taskCardPorts(p: Project, blockId: string, direction: Port["dire
   };
   const rows = ports.map((port, index) => {
     const edges = direction === "in" ? incomingEdges(p, { portId: port.id, side: "outer" }) : outgoingEdges(p, { portId: port.id, side: "outer" });
-    const ys = edges.map(e => p.ports[direction === "in" ? e.from.portId : e.to.portId]?.blockId).filter((id): id is string => !!id).map(absoluteY);
+    // 相手が中に箱を持つ展開中の箱なら、その丸の向こう (枠の内側でつながる中の箱) の高さを使う。
+    // 展開中の箱の丸は中の箱の高さに並ぶので (expandedPortRows)、箱そのものの高さでは同じ箱から来る線どうしの順が決まらない
+    const peerY = (portId: string): number | undefined => {
+      const peer = p.ports[portId];
+      if (!peer) return undefined;
+      const inside = isExpanded(p, peer.blockId)
+        ? (peer.direction === "out" ? incomingEdges(p, { portId, side: "inner" }).map(e => e.from.portId) : outgoingEdges(p, { portId, side: "inner" }).map(e => e.to.portId))
+          .map(id => p.ports[id]?.blockId).filter((id): id is string => !!id && id !== peer.blockId)
+        : [];
+      return inside.length ? inside.map(absoluteY).reduce((a, b) => a + b, 0) / inside.length : absoluteY(peer.blockId);
+    };
+    const ys = edges.map(e => peerY(direction === "in" ? e.from.portId : e.to.portId)).filter((y): y is number => y !== undefined);
     return { port, index, y: ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : Infinity };
   });
   return rows.sort((a, b) => (a.y === b.y ? 0 : a.y - b.y) || a.index - b.index).map(row => row.port);
@@ -209,7 +220,9 @@ export function blockSize(p: Project, blockId: string): Size {
  *   - 出力: その出力へ線を出している中の箱の出力 (複数なら平均)
  *   中の箱がさらに展開中なら、その箱の丸の高さ (この関数で再帰的に求めたもの) を使う。
  *   中でつながっていないポートは、今までどおり上から並べた位置を希望の高さにする。
- * 希望の高さの順に並べ、隣どうしは 1 行 (ROW_H) 以上離し、見出しの下から枠の下までに収める (順番を保つので枠の縁で線が交差しない)。
+ * 並び順は、枠の外の相手 (兄弟の箱の丸、最上位の Inputs / Outputs の行) の上下の順を優先する。外の相手の順と逆に並べると、枠の外で線が交差する
+ * (Logic DAW の例: 中の箱の高さだけで並べたら、Inputs の 3 本が枠の手前で交差した)。外の相手が無いものは中の丸の高さで並べる。
+ * 隣どうしは 1 行 (ROW_H) 以上離し、見出しの下から枠の下までに収める。
  * Input : p, blockId = 展開中のボックス
  * Output: Map<ポート id, 上端からの y>。展開中でなければ空の Map
  */
@@ -231,6 +244,27 @@ export function expandedPortRows(p: Project, blockId: string): Map<string, numbe
     }
     return y === undefined ? undefined : child.position.y + y;
   };
+  // ボックスの絶対の y (祖先の位置の和)
+  const absY = (id: string): number => { let y = 0; let cur: string | null = id; while (cur && cur !== ROOT_ID) { const b: Project["blocks"][string] | undefined = p.blocks[cur]; if (!b) break; y += b.position.y; cur = b.parentId; } return y; };
+  const selfY = absY(blockId);
+  const parentId = p.blocks[blockId]?.parentId ?? null;
+  // 枠の外の相手の丸の高さ (このボックスの上端から)。兄弟の箱の丸と、最上位の Inputs / Outputs の行だけを見る
+  // (親の丸は親の並びがこの関数の結果で決まるので見ない: 循環する)
+  const outerPortY = (portId: string): number | undefined => {
+    const port = p.ports[portId];
+    if (!port) return undefined;
+    if (port.blockId === ROOT_ID) {
+      const same = portsOf(p, ROOT_ID, port.direction).filter((x) => (x.groupId ?? null) === (port.groupId ?? null));
+      const group = port.groupId ? (p.inputGroups ?? []).find((g) => g.id === port.groupId) : undefined;
+      const base = group ? group.position.y : port.direction === "in" ? p.terminals.in.y : p.terminals.out.y;
+      return base + HEADER_H + same.findIndex((x) => x.id === port.id) * ROW_H + ROW_H / 2 - selfY;
+    }
+    const peer = p.blocks[port.blockId];
+    if (!peer || peer.parentId !== parentId || peer.id === blockId) return undefined;
+    const y = isExpanded(p, peer.id) ? undefined : (port.direction === "in" ? taskCardLayout(p, peer.id).inputs : taskCardLayout(p, peer.id).outputs).find((r) => r.id === portId)?.center;
+    return y === undefined ? undefined : absY(peer.id) + y - selfY;
+  };
+  const mean = (ys: number[]) => (ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : undefined);
   const place = (direction: "in" | "out") => {
     const ports = portsOf(p, blockId, direction);
     const rows = ports.map((port, index) => {
@@ -238,11 +272,16 @@ export function expandedPortRows(p: Project, blockId: string): Map<string, numbe
       const peers = direction === "in"
         ? outgoingEdges(p, { portId: port.id, side: "inner" }).map((e) => e.to.portId)
         : incomingEdges(p, { portId: port.id, side: "inner" }).map((e) => e.from.portId);
-      const ys = peers.map(childPortY).filter((y): y is number => y !== undefined);
+      // 枠の外側の線の相手 (入力: 外側に来る線の出どころ / 出力: 外側から出る線の行き先)
+      const outers = direction === "in"
+        ? incomingEdges(p, { portId: port.id, side: "outer" }).map((e) => e.from.portId)
+        : outgoingEdges(p, { portId: port.id, side: "outer" }).map((e) => e.to.portId);
       const fallback = size.headerH + index * ROW_H + ROW_H / 2;
-      return { port, index, y: ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : fallback };
+      const y = mean(peers.map(childPortY).filter((v): v is number => v !== undefined)) ?? fallback;
+      const outer = mean(outers.map(outerPortY).filter((v): v is number => v !== undefined));
+      return { port, index, y, key: outer ?? y };
     });
-    rows.sort((a, b) => a.y - b.y || a.index - b.index);
+    rows.sort((a, b) => a.key - b.key || a.y - b.y || a.index - b.index);
     // 上から順に、見出しの下・前の丸から 1 行以上離す
     const top = size.headerH + ROW_H / 2;
     const bottom = size.height - ROW_H / 2;
