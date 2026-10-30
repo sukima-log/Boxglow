@@ -11,6 +11,22 @@ Tasks are boxes with inputs and outputs; a box goes New (BlackBox: output decide
 - CLI for agents: `npx boxglow` (status / start / done / split / ask / answer ...)
 - License: MIT
 
+## What's new in 0.6.3
+
+- **Policies**: share any output as a project-wide decision without wires (`port --policy`, MCP `boxglow_port`). Boxes in its scope wait for it before they start and are flagged "Policy: check again" when it changes after they are done.
+- **Send back** instead of wiring a loop: an evaluation that fails returns the work to the box that made it, with the reason (`boxglow sendback`, MCP `boxglow_sendback`, "↩ Send back" on the I/O tab).
+- **Wiring across levels**: drop a wire on a box in another level, connect from a list ("Connect from… / Connect to…"), or click two ports; inputs with the same name connect through the levels by themselves. A box can have several outputs, and connected ports share one name.
+- **Easier editing and a calmer canvas**: everything that can be added can be removed (Delete works on wires, boxes and picked ports), a single click selects without opening the details panel, auto save is a toggle, Top shows every level, and wires around nested boxes are straighter, cross less and stay visible when zoomed out.
+
+Details: [CHANGELOG.md](CHANGELOG.md). Update the CLI, `serve` and the VS Code extension (0.5.3) together.
+
+### 日本語: 0.6.3 の要点
+
+- **方針**: 出力を線なしで範囲全体に配る決定にできる (`port --policy`、MCP `boxglow_port`)。範囲の箱は着手の前に方針を待ち、完了後に方針が変わると「方針: 確かめ直し」が付く。
+- **差し戻し**: 評価が通らなかったら、線で戻さずに作った箱へ理由付きで戻す (`boxglow sendback`、MCP `boxglow_sendback`、I/O タブの「↩ 差し戻す」)。
+- **階層をまたぐ結線**: 別の階層の箱へ線を落とす、一覧から選ぶ (「供給元から選ぶ… / 使う箱を足す…」)、丸を 2 回クリックする、のどれでもつながる。同じ名前の入力は階層を通って自動でつながる。箱は出力を複数持て、つながった入出力は名前が 1 つにそろう。
+- **編集しやすく、見やすく**: 足せるものはすべて消せる (Delete で線・箱・選んだ丸)、1 回のクリックは選ぶだけで詳細は開かない、自動保存の切り替え、Top で全階層を表示、入れ子の箱の周りの線がまっすぐ・交差が少なく・縮小しても見える。
+
 ## What's new in 0.6.2
 
 - **`setup-agent` sets up everything for Claude Code and Codex**: hooks (the plan's resume summary is injected when a session starts, resumes or is compacted; an agent about to finish with an unrecorded box is told to record first; direct edits of `boxglow.json` are blocked), MCP registration, a review subagent, and the context guard. `setup-agent --check` shows what is installed, when each hook last fired, and the one-time steps left to you (Codex: trust the project and approve the hooks in the terminal CLI).
@@ -204,7 +220,7 @@ Writes become new versions on the server and reach the synced devices on their n
 
 ## VS Code extension
 
-Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.2 goes with boxglow 0.6.2).
+Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.3 goes with boxglow 0.6.3).
 
 `vscode/` holds the extension's source. It opens `boxglow.json` as the same diagram inside the editor (custom editor "Boxglow"; right-click the file or use the editor title button / command *Boxglow: Open boxglow.json as a diagram*). The diagram follows the file when the CLI or an agent writes it, edits in the diagram are written back, and light / dark follow the VS Code theme. To build it yourself: `npm run build:vscode` (bundles the web app into `vscode/media/`), then `cd vscode && npm run package` (`.vsix`, install via *Extensions: Install from VSIX...*).
 

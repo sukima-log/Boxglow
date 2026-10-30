@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+_Changes after 0.6.3 go here._
+
+## 0.6.3 (2026-10-30)
+
+Goes with the VS Code extension 0.5.3. Update the CLI, `serve` and the extension together. The hosted sync server was updated on 2026-10-30 (policies, send back, cross-level wiring and the layout changes below).
+
 - **No tiny steps where a wire enters a nested box.** A child box's port and the relay port on its parent's frame now sit at exactly the same height. Before, the frames' thicker borders (2-4 px) shifted the parent's ports by 1-2 px and the wire drew a small step there.
 - **Room for bundles of wires.** Auto Layout and View count the wires that pass between two columns (each source port once, including wires coming in from the parent's inputs and going out to its outputs) and keep that gap wide enough for 16 px spacing; View no longer narrows a busy gap below that. An expanded box also widens its right margin when several child outputs leave through it.
 - **Wires stay visible when zoomed out.** Below 100% zoom, wires get thicker on screen as you zoom out (1.5x at 50%, about 2.3x at 25%, up to 3x), and their dashes get longer in the same proportion, so they no longer fade into dots on a plan seen from afar. At 100% and above they look as before.

@@ -2,7 +2,13 @@
 
 ## Unreleased
 
-_Changes after 0.5.2 go here._
+_Changes after 0.5.3 go here._
+
+## 0.5.3
+
+- Follows boxglow 0.6.3. Update together with the CLI and `serve`.
+- Auto save is a toggle (on by default in VS Code); Ctrl+S saves. Browser prompt / confirm dialogs, which never appeared in the webview, are replaced by in-page confirmations, so New Project, input groups, Reopen with a reason and deletes work again.
+- Same app as 0.6.3: policies, send back, wiring across levels and two-click connect, Delete for wires, boxes and ports, a single click selects without opening the details panel, cleaner wires around nested boxes, and the other changes listed in the boxglow CHANGELOG.
 
 ## 0.5.2
 
