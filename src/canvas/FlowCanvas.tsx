@@ -14,7 +14,6 @@ import { nextFreePosition } from "../model/autolayout";
 import type { Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
 import { CanvasTools } from "./CanvasTools";
-import { EdgeBar } from "./EdgeBar";
 import { BlockNode } from "./BlockNode";
 import { TerminalNode } from "./TerminalNode";
 import { RoutedEdge } from "./RoutedEdge";
@@ -466,8 +465,7 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
       proOptions={{ hideAttribution: false }}
     >
       <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--bg-grid)" />
-      {/* 線を選んだときは、右の詳細パネルではなく図の上部の帯で、線の向きと状態を出す */}
-      <EdgeBar />
+      {/* 線を選んでも図の上部に帯は出さない (図が隠れて邪魔: 利用者の指摘 2026-10-30)。線は強調で示し、外すのは Delete キー */}
       {/* 2 クリック結線の途中: 何から接続中かと、次の操作を示す (Esc か × で中止) */}
       {pendingConnect && (
         <div className="connect-pending" role="status">

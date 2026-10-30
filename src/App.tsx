@@ -283,7 +283,7 @@ export function App() {
   }, []);
 
   // 詳細パネルは何かを選んでいるときだけ出す
-  // 右の詳細パネルを出すか (線だけを選んでいるときは出さない: 線の向きと状態は図の上部の帯 EdgeBar に出す)
+  // 右の詳細パネルを出すか (線だけを選んでいるときは出さない: 線は図の上で強調するだけ。外すのは Delete キー)
   const hasSelection = !!project && !embed && (selection.blockId !== null || selection.terminal !== null || selection.project || selection.timeline);
   const gridClass = ["app-grid", embed ? "embed" : "", hasSelection ? "" : "no-right"].filter(Boolean).join(" ");
   // キャンバスのタブ: Top (全体) + 大項目ごと (埋め込みでは出さない)
