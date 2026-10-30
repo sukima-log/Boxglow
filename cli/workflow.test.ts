@@ -263,6 +263,45 @@ describe("最上位の入力に資料を付ける (artifact inputs)",()=>{
   });
 });
 
+// 画面でしかできなかった操作を AI も CLI / MCP から行える (利用者の指摘 2026-10-31: 同じ形の問題の洗い出し)
+describe("画面だけだった操作を CLI でも (ack --policy / port --optional・--required・--describe / artifact --remove)",()=>{
+  it("済んだ箱の「方針: 確かめ直し」を ack --policy で消せる",()=>{
+    const {cli,read,id}=fixture();
+    expect(cli("add","技術選定","--out","ゲームエンジン").status).toBe(0);
+    expect(cli("port","技術選定","--policy","ゲームエンジン").status).toBe(0);
+    expect(cli("done","対象").status).toBe(0);
+    // 完了の後に方針が決まる (成果物が付く) と、確かめ直しになる
+    expect(cli("artifact","技術選定","https://example.com/engine").status).toBe(0);
+    expect(JSON.parse(cli("context","対象").stdout).context.policyChanged).toEqual(["ゲームエンジン"]);
+    const r=cli("ack","対象","--policy");expect(r.status,r.stderr).toBe(0);expect(r.stdout).toContain("ゲームエンジン");
+    expect(JSON.parse(cli("context","対象").stdout).context.policyChanged).toEqual([]);
+    expect(read().blocks[id].status).toBe("white");
+    expect(cli("ack","対象","--policy","無い方針").status).toBe(1);
+  });
+  it("入力を任意 / 必須に切り替え、入出力に説明を書ける",()=>{
+    const {cli,read,id}=fixture();
+    const inPort=()=>Object.values(read().ports).find((q:any)=>q.blockId===id&&q.name==="仕様書") as any;
+    expect(cli("port","対象","--optional","仕様書").status).toBe(0);expect(inPort().required).toBe(false);
+    expect(cli("status").stdout).not.toContain("必須の入力待ち: 仕様書");
+    expect(cli("port","対象","--required","仕様書").status).toBe(0);expect(inPort().required).toBe(true);
+    const d=cli("port","対象","--describe","仕様書=画面の仕様 (docs/spec.md)","--describe","コード=実装一式");expect(d.status,d.stderr).toBe(0);
+    expect(inPort().description).toBe("画面の仕様 (docs/spec.md)");
+    expect((Object.values(read().ports).find((q:any)=>q.blockId===id&&q.name==="コード") as any).description).toBe("実装一式");
+    expect(cli("port","対象","--optional","無い入力").status).toBe(1);
+  });
+  it("付けた成果物・資料を artifact --remove で外せる (箱の出力も、最上位の入力も)",()=>{
+    const {cli,read,id}=fixture();
+    expect(cli("artifact","対象","https://example.com/a","--title","間違い").status).toBe(0);
+    expect(cli("artifact","対象","https://example.com/b","--title","正しい").status).toBe(0);
+    const r=cli("artifact","対象","--remove","間違い");expect(r.status,r.stderr).toBe(0);
+    expect((Object.values(read().ports).find((q:any)=>q.blockId===id&&q.name==="コード") as any).artifacts.map((a:any)=>a.title)).toEqual(["正しい"]);
+    expect(cli("artifact","inputs","docs/spec.md").status).toBe(0);
+    expect(cli("artifact","inputs","--remove","spec.md").status).toBe(0);
+    expect((Object.values(read().ports).find((q:any)=>q.blockId==="root"&&q.name==="仕様書") as any).artifacts).toHaveLength(0);
+    expect(cli("artifact","対象","--remove","無いもの").status).toBe(1);
+  });
+});
+
 it("MCP の boxglow_artifact で最上位の入力に資料を付けられる",async()=>{
   const {file,read}=fixture();
   const client=new Client({name:"workflow-test",version:"1"});
@@ -271,6 +310,11 @@ it("MCP の boxglow_artifact で最上位の入力に資料を付けられる",a
     const r=await client.callTool({name:"boxglow_artifact",arguments:{block:"inputs",path:"docs/spec.md",input:"仕様書"}});
     expect(r.isError).not.toBe(true);
     expect((Object.values(read().ports) as any[]).find((q)=>q.blockId==="root"&&q.name==="仕様書").artifacts).toHaveLength(1);
+    expect((await client.callTool({name:"boxglow_artifact",arguments:{block:"inputs",path:"spec.md",remove:true}})).isError).not.toBe(true);
+    expect((Object.values(read().ports) as any[]).find((q)=>q.blockId==="root"&&q.name==="仕様書").artifacts).toHaveLength(0);
+    expect((await client.callTool({name:"boxglow_port",arguments:{block:"対象",optional:["仕様書"],describe:["仕様書=画面の仕様"]}})).isError).not.toBe(true);
+    expect((Object.values(read().ports) as any[]).find((q)=>q.blockId!=="root"&&q.name==="仕様書").required).toBe(false);
+    expect((await client.callTool({name:"boxglow_ack",arguments:{block:"対象",policy:true}})).isError).not.toBe(true);
   } finally {await client.close();}
 },15000);
 

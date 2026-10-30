@@ -102,7 +102,7 @@ boxglow.json はリポジトリ直下に置く (`npx boxglow init --name "<プ�
 すべてのボックスは「入力 → 出力」が何かにつながっているようにする (つながっていないボックスは計画の穴。最上位の入力ノードは、未接続の入力が自動で上がる)。
 複数人で同じ boxglow.json を編集するなら、各自の clone で一度 `npx boxglow git-setup` を実行する (ボックスの単位で自動マージされ、別のボックスの変更は衝突しない)。
 複数リポジトリを 1 つの計画で管理するときは、boxglow.json を上のフォルダに置き、各リポジトリでは環境変数 BOXGLOW_FILE にその場所を入れる (プロジェクトのボックスはリポジトリごとに 1 つ。`npx boxglow project "名前" --repo <パス>`)。
-入力は既定で必須。無くても着手できる入力は画面で「任意」にする。status の「次の候補」は必須の入力がそろったボックスから並ぶ (「着手できる」/「必須の入力待ち」が付く)。計画の最上位の入力 (Inputs) に資料 (仕様書・シナリオなどのファイルや URL) が無いと、それを使う箱はすべて入力待ちになる。資料が手元にあれば、人に頼まずに `npx boxglow artifact inputs <パスか URL> --input <入力名>` (MCP は `boxglow_artifact` に block: "inputs") で自分で付ける。
+入力は既定で必須。無くても着手できる入力は `npx boxglow port <block> --optional <入力名>` で「任意」にする (戻すのは `--required`)。入出力の説明は `--describe "<名前>=<説明>"`。status の「次の候補」は必須の入力がそろったボックスから並ぶ (「着手できる」/「必須の入力待ち」が付く)。計画の最上位の入力 (Inputs) に資料 (仕様書・シナリオなどのファイルや URL) が無いと、それを使う箱はすべて入力待ちになる。資料が手元にあれば、人に頼まずに `npx boxglow artifact inputs <パスか URL> --input <入力名>` (MCP は `boxglow_artifact` に block: "inputs") で自分で付ける。間違えて付けた成果物・資料は `npx boxglow artifact <block|inputs> --remove <題名かパス>` で外す。済んだ箱に「方針: 確かめ直し」が付いたら、作業が方針に合っているかを確かめ、合っていれば `npx boxglow ack <block> --policy` で印を消す (合っていなければ reopen して直す)。
 入力の説明は書かない (つながった出力側の説明が使われる)。出力の説明に形式・制約を書く。
 
 

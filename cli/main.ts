@@ -59,7 +59,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { addLogEntry, childrenOf, setNow, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor, canRemovePort, inputsFedBy, removePort, removeDecision, sendBack, sendBackTargets, setPolicy, setPolicyOptOut } from "../src/model/graph";
+import { addLogEntry, childrenOf, setNow, changedPolicies, ackPolicy, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor, canRemovePort, inputsFedBy, removePort, removeDecision, sendBack, sendBackTargets, setPolicy, setPolicyOptOut } from "../src/model/graph";
 import { checkStart, checkDone, descriptionReminder, scopeEntries } from "../src/model/workflow";
 import type { WorkScope, WorkflowPolicy } from "../src/model/types";
 import type { Artifact } from "../src/model/types";
@@ -451,10 +451,10 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   claim <block> [--scope block|subtree] [--note]    受け持ちだけを取る (実行中にはしない)。分解・具体化の前に: context → claim → split / port / scope → context → start。受け持ち制御が無効な計画では「取得不要」
   branch <題名> --options "A|B" | --option <A> --option <B> [--question <問い>] [--context <判断材料>] [--in <入力名>]... [--parent <block>]   まだ決まっていない分かれ道 (分岐) を足す。選択肢ごとに道 (出力) ができ、answer で答えると選ばなかった道は見送り
   branch --box <block> --options "A|B" [--question <問い>] [--context <判断材料>]   今あるボックスを分岐に変える (今の出力は 1 つ目の選択肢の道になる。中にボックスを持つものは不可)
-  branch --box <block> --add-option <道> / --remove-option <道>   分岐の道 (選択肢) を足す / 消す (答える前だけ。道は 2 つ以上残す)
+  branch --box <block> --add-option <道> / --remove-option <道>   分岐の道 (選択肢) を足す / 消す (答えた後もできる)
   join [--title <題名>] [--parent <block>]           合流の部品を足す (分かれた道を 1 つにまとめる。道の出力を connect でつなぐと、どれか 1 つが届けば先へ進む)
   move <block> --parent <block|project>            ボックスを別の親の中へ移す (線は間のボックスのポートを経由してつながったまま)
-  port <block|project|inputs> [--in <名前>]... [--out <名前>]... [--remove <名前>]... [--policy <出力名> [--policy-scope all|<block>] [--advisory]]... [--no-policy <出力名>]... [--skip-policy <箱>.<出力名>]... [--expect "<出力名>=<kind>:<hint>"]... [--self <出力名>]... [--no-self <出力名>]... [--rename <旧名>=<新名>] [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、消す (入力を消すと使う箱の入力も消える。最後の出力は消せない)、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス、inputs = 最上位の入力)
+  port <block|project|inputs> [--in <名前>]... [--out <名前>]... [--remove <名前>]... [--policy <出力名> [--policy-scope all|<block>] [--advisory]]... [--no-policy <出力名>]... [--skip-policy <箱>.<出力名>]... [--expect "<出力名>=<kind>:<hint>"]... [--self <出力名>]... [--no-self <出力名>]... [--rename <旧名>=<新名>] [--optional <入力名>]... [--required <入力名>]... [--describe "<名前>=<説明>"]... [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、消す (入力を消すと使う箱の入力も消える)、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス、inputs = 最上位の入力)
   disconnect <題名.出力名> <題名.入力名>          線を外す
   tidy                                              ファイルを規則にそろえて保存し直す (線でつながる入出力の名前をそろえる、重なりを解く)
   remove <block> [--force]                          ボックスを消す (中にボックスがあるとき・プロジェクトのボックスは --force。最後のプロジェクトのボックスは消せない。中にボックスがあるときは --force。線も外れる。元に戻せないので Git で管理していること)
@@ -469,6 +469,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  パスが Git 管理下なら「コミット + パス + blob」で記録する (アップロードしない)。--checked 以下は検査結果として箱に残る (context・show に出る)
   artifact <block> <URL またはパス> [--title <題名>] [--output <出力名>]   成果物だけ付ける (完了にはしない)
   artifact inputs <URL またはパス> [--input <入力名>] [--title <題名>]   計画の最上位の入力に資料を付ける (入力が 1 つなら --input は省略可)
+  artifact <block|inputs> --remove <題名かパスか URL> [--output <出力名> | --input <入力名>]   付けた成果物・資料を外す
   check                                          Git の成果物が今も見つかるか確認し、移動していればパスを付け替える。未コミットのときに記録した成果物は、コミット済みになっていれば Git の参照に補完する
   blocked <block> --note <困っていること>          詰まり
   sendback <block> --to <block> --note <理由>     差し戻し (評価・検査が通らなかった成果物を作った箱へ戻す。その箱は In Progress に戻り、成果物は差し戻し済みに。線では戻さない)
@@ -477,6 +478,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   decision <block> --id <decision id> [--question] [--options "A|B"] [--context]   未回答の判断を書き直す
   answer <block> <回答> [--id <decision id>] [--by <名前>]   判断に答える (既定は最新の未回答)
   ack <block> [--id <decision id>]                人の回答を読んで引き取ったと記録する (status の「回答あり」から消える。start / done / blocked / review / set / split でも自動で引き取る)
+  ack <block> --policy [<方針の出力名>]           済んだ作業が、完了の後に決まった・変わった方針に合っていることを確かめた (「方針: 確かめ直し」を消す)
   reopen <block> [--id <decision id>] [--note <理由>]   判断をやり直す (方針転換)。前の答えは履歴に、候補はそのまま残る
   unask <block> [--id <decision id>]                 問いを取り下げる (未回答だけ。分岐の問いは消せない)
   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <題名>] [--note <説明>] [--category <カテゴリ>|none] [--repo <パス>|none] [--issue <URL>|none]
@@ -576,9 +578,10 @@ Usage (npx boxglow <command> ...):
   claim <block> [--scope block|subtree] [--note]    Hold a box without starting it. Before planning: context → claim → split / port / scope → context → start. Prints "not needed" when claims are off
   branch <title> --options "A|B" | --option <A> --option <B> [--question <question>] [--context <background>] [--in <input name>]... [--parent <block>]   Add an undecided fork (branch). Each option gets a path (output); answering it with answer skips the paths not chosen
   branch --box <block> --options "A|B" [--question <question>] [--context <background>]   Turn an existing box into a branch (its output becomes the first option's path; not for boxes with children)
+  branch --box <block> --add-option <path> / --remove-option <path>   Add / remove a path (option) of a branch (also after it was answered)
   join [--title <title>] [--parent <block>]          Add a merge part (where paths come together; connect the paths' outputs to it, and any one of them arriving lets the work go on)
   move <block> --parent <block|project>            Move a box into another parent (wires stay connected through the ports of the boxes in between)
-  port <block|project|inputs> [--in <name>]... [--out <name>]... [--remove <name>]... [--policy <output> [--policy-scope all|<block>] [--advisory]]... [--no-policy <output>]... [--skip-policy <box>.<output>]... [--expect "<output>=<kind>:<hint>"]... [--self <output>]... [--no-self <output>]... [--rename <old>=<new>] [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, remove them (removing an input also removes the inputs it feeds; the last output stays), rename them, set an output's planned deliverable (expect: kind file / dir / url / doc / note / decision / result + a path or title) or mark it as made by this box itself (--self). --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
+  port <block|project|inputs> [--in <name>]... [--out <name>]... [--remove <name>]... [--policy <output> [--policy-scope all|<block>] [--advisory]]... [--no-policy <output>]... [--skip-policy <box>.<output>]... [--expect "<output>=<kind>:<hint>"]... [--self <output>]... [--no-self <output>]... [--rename <old>=<new>] [--optional <input>]... [--required <input>]... [--describe "<name>=<description>"]... [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, remove them (removing an input also removes the inputs it feeds), rename them, set an output's planned deliverable (expect: kind file / dir / url / doc / note / decision / result + a path or title) or mark it as made by this box itself (--self). --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
   disconnect <title.output> <title.input>          Remove a wire
   tidy                                              Normalize the file and save it again (give connected inputs and outputs one name, resolve overlaps)
   remove <block> [--force]                          Delete a box (--force if it contains boxes or is a project box; the last project box cannot be deleted. Its wires are removed too. This cannot be undone, so keep the file in Git)
@@ -593,6 +596,7 @@ Usage (npx boxglow <command> ...):
                                                  If the path is tracked by Git, it is recorded as "commit + path + blob" (nothing is uploaded). --checked etc. stay on the box as its verification (shown by context / show)
   artifact <block> <URL or path> [--title <title>] [--output <output name>]   Attach an artifact only (does not finish the box)
   artifact inputs <URL or path> [--input <input name>] [--title <title>]   Attach material to a top-level plan input (--input may be omitted when there is only one)
+  artifact <block|inputs> --remove <title, path or URL> [--output <output name> | --input <input name>]   Remove an attached deliverable or material
   check                                          Check that Git artifacts can still be found, and update the path if they moved. Artifacts recorded while uncommitted become Git references once they are committed
   blocked <block> --note <what is blocking you>    Blocked
   sendback <block> --to <block> --note <reason>   Send back (the box that made the rejected deliverable goes back to In Progress; its artifacts are kept as rejected; no wire goes backwards)
@@ -601,6 +605,7 @@ Usage (npx boxglow <command> ...):
   decision <block> --id <decision id> [--question] [--options "A|B"] [--context]   Rewrite an unanswered decision
   answer <block> <answer> [--id <decision id>] [--by <name>]   Answer a decision (default: the latest unanswered one)
   ack <block> [--id <decision id>]                Record that you have read a person's answer and taken it on (removes it from "Answered" in status. start / done / blocked / review / set / split also do this automatically)
+  ack <block> --policy [<policy output>]          Record that finished work still matches a policy decided or changed after it was done (clears "Policy: check again")
   reopen <block> [--id <decision id>] [--note <reason>]   Reopen a decision (change of direction). The previous answer stays in the history and the options are kept
   unask <block> [--id <decision id>]                 Withdraw a question (unanswered only; a branch's question cannot be removed)
   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <title>] [--note <description>] [--category <category>|none] [--repo <path>|none] [--issue <URL>|none]
@@ -1211,7 +1216,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       // 分岐のボックスを足す: まだ決まっていない分かれ道。選択肢ごとに出力 (道) ができ、判断に答えると選ばなかった道の先は「見送り」になる
       // 例: branch "API の方式を決める" --question "API の方式はどれにしますか?" --options "REST|GraphQL" --in 設計書 --context "比較: ..."
       // 選択肢: --option を繰り返す (選択肢に「|」を含められる) か、--options "A|B" (「|」で区切る)
-      // 今ある分岐の道を足す / 消す: branch --box <block> --add-option "C" / --remove-option "B" (答える前だけ)
+      // 今ある分岐の道を足す / 消す: branch --box <block> --add-option "C" / --remove-option "B" (答えた後もできる)
       if (str(options.box) && (list(options["add-option"]).length || list(options["remove-option"]).length)) {
         const target = mustFind(p, str(options.box));
         const done: string[] = [];
@@ -1368,7 +1373,29 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
         p = updatePort(p, port.id, { name: to });
         added.push(`${from} -> ${to}`);
       }
-      if (added.length === 0) throw new Error(t("--in <名前> / --out <名前> / --remove <名前> / --policy <出力名> / --expect <出力名>=<kind>:<hint> / --self <出力名> / --rename <旧名>=<新名> / --any-of <入力名> / --all-of <入力名> のいずれかを指定してください"));
+      // 入力を任意 (無くても着手できる) / 必須 に切り替える: --optional <入力名> / --required <入力名>。以前は画面でしかできなかった (利用者の指摘 2026-10-31)
+      for (const [flag, required] of [["optional", false], ["required", true]] as const) {
+        for (const name of list(options[flag])) {
+          const port = portsOf(p, blockId, "in").find((x) => x.name === name);
+          if (!port) throw new Error(t("入力「{name}」が見つかりません", { name }));
+          p = updatePort(p, port.id, { required });
+          added.push(required ? t("必須 {name}", { name }) : t("任意 {name}", { name }));
+        }
+      }
+      // 入出力の説明: --describe "<名前>=<説明>" (入力と出力に同じ名前があるときは in:<名前> / out:<名前>。説明を空にすると消す)
+      for (const spec of list(options.describe)) {
+        const eq = spec.indexOf("=");
+        if (eq < 0) throw new Error(t("--describe は <名前>=<説明> の形で指定してください: {spec}", { spec }));
+        const key = spec.slice(0, eq);
+        const dir = key.startsWith("in:") ? "in" : key.startsWith("out:") ? "out" : undefined;
+        const name = dir ? key.slice(dir.length + 1) : key;
+        const hits = portsOf(p, blockId, dir).filter((x) => x.name === name);
+        if (hits.length === 0) throw new Error(t("ポート「{name}」が見つかりません", { name }));
+        if (hits.length > 1) throw new Error(t("「{name}」は入力と出力の両方にあります。in:{name} / out:{name} で指定してください", { name }));
+        p = updatePort(p, hits[0].id, { description: spec.slice(eq + 1) });
+        added.push(t("説明 {name}", { name }));
+      }
+      if (added.length === 0) throw new Error(t("--in <名前> / --out <名前> / --remove <名前> / --policy <出力名> / --expect <出力名>=<kind>:<hint> / --self <出力名> / --rename <旧名>=<新名> / --any-of <入力名> / --all-of <入力名> / --optional <入力名> / --required <入力名> / --describe <名前>=<説明> のいずれかを指定してください"));
       save(path, p);
       out(t("ポート: {title}: {list}", { title: p.blocks[blockId]?.title ?? "project", list: added.join(", ") }));
       return;
@@ -1523,6 +1550,22 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     case "artifact": {
       // 計画の最上位の入力 (Inputs) に資料を付ける: `artifact inputs <パスか URL> --input <入力名>`。
       // 入力に資料が無いと、それを使う箱がすべて「入力待ち」で着手できない。以前は画面でしか付けられず、AI が人に頼むしかなかった (利用者の指摘 2026-10-31)
+      // 付けた成果物・資料を外す: --remove <題名かパスか URL> (箱は --output、最上位の入力は --input で絞れる)。以前は画面でしか外せなかった
+      if (options.remove !== undefined) {
+        const key = str(options.remove);
+        if (!key) throw new Error(t("--remove <題名かパスか URL> を指定してください"));
+        const inputs = isInputsRef(rest[0]);
+        const ports = inputs
+          ? portsOf(p, ROOT_ID, "in").filter((x) => !str(options.input) || x.name === str(options.input))
+          : portsOf(p, mustFind(p, rest[0]).id, "out").filter((x) => !str(options.output) || x.name === str(options.output));
+        const match = (a: { title: string; url: string; path?: string }) => a.title === key || a.url === key || a.path === key;
+        const hit = ports.filter((x) => x.artifacts.some(match));
+        if (hit.length === 0) throw new Error(t("「{key}」という成果物・資料は付いていません ({list})", { key, list: ports.flatMap((x) => x.artifacts.map((a) => `${x.name}: ${a.title}`)).join(", ") || "-" }));
+        for (const port of hit) p = updatePort(p, port.id, { artifacts: port.artifacts.filter((a) => !match(a)) });
+        save(path, p);
+        out(t("外しました: {key} ({list})", { key, list: hit.map((x) => x.name).join(", ") }));
+        return;
+      }
       if (isInputsRef(rest[0])) {
         if (!rest[1]) throw new Error(t("<URL またはパス> を指定してください"));
         const ins = portsOf(p, ROOT_ID, "in");
@@ -1652,6 +1695,20 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     }
     case "ack": {
       const b = mustFind(p, rest[0]);
+      // --policy [<方針の出力名>]: 済んだ作業が、完了の後に決まった・変わった方針に合っていることを確かめた (「方針: 確かめ直し」を消す)。
+      // 以前は画面の「確かめた」ボタンでしか消せず、context に確かめ直しが出ても AI は人に頼むしかなかった (利用者の指摘 2026-10-31)
+      if (options.policy !== undefined) {
+        const changed = changedPolicies(p, b.id);
+        const name = typeof options.policy === "string" ? options.policy : undefined;
+        const targets = name ? changed.filter((q) => q.name === name) : changed;
+        if (name && targets.length === 0) throw new Error(t("「{title}」に確かめ直しの方針「{name}」はありません ({list})", { title: b.title, name, list: changed.map((q) => q.name).join(", ") || "-" }));
+        if (targets.length === 0) { out(t("「{title}」に確かめ直しの方針はありません", { title: b.title })); return; }
+        let q = p;
+        for (const port of targets) q = ackPolicy(q, b.id, port.id);
+        save(path, q);
+        out(t("方針を確かめました: 「{title}」 <- {list}", { title: b.title, list: targets.map((x) => x.name).join(", ") }));
+        return;
+      }
       const q = ackDecisions(p, b.id, actor, str(options.id));
       if (q === p) { out(t("「{title}」に未確認の回答はありません", { title: b.title })); return; }
       save(path, q);

@@ -85,7 +85,8 @@ npx boxglow done B12 --artifact "<名前>=<パス>" --context-token <新しい�
 - ボックスの任意5項目を scope で設定する。goal = 今回達成すること、non-goals = 今回は扱わないこと、constraints = 出力を作るうえで守る条件 (性能・品質・サイズ・寸法・消費電力など)、acceptance = 完了と判断する条件、consult = 範囲を広げる前に相談する条件。context の先頭で対象と親の範囲を読み、着手前と完了前に照合する。完了条件の本文をAIが満たしたかは自動判定しない。
 - scope B12 --goal "達成すること" --non-goals "今回扱わないこと" --constraints "守る条件" --acceptance "確認する条件" --consult "相談する条件" で設定する。scope B12 は表示だけ。各項目に none または空文字を渡すと消す。画面では詳細パネルの「その他」タブ →「作業範囲を編集」。記入済みの項目だけが「今回の範囲」に出る。
 - focus B12 でこのボックスと配下を次候補の先頭にする。focus は現在の対象の表示、focus none は解除。対象外も別の組に残る。候補に出ること自体は作業範囲の拡大や公開を許可しない。
-- 計画の最上位の入力に資料が無いと、使う箱はすべて入力待ちになる。資料がリポジトリにあれば `npx boxglow artifact inputs <パスか URL> --input <入力名>` で自分で付ける (人に頼まない)。
+- 計画の最上位の入力に資料が無いと、使う箱はすべて入力待ちになる。資料がリポジトリにあれば `npx boxglow artifact inputs <パスか URL> --input <入力名>` で自分で付ける (人に頼まない)。外すのは `artifact <block|inputs> --remove <題名かパス>`。無くても着手できる入力は `port <block> --optional <入力名>`。
+- 済んだ箱の「方針: 確かめ直し」は、作業が方針に合っていれば `npx boxglow ack <block> --policy` で消す (合っていなければ reopen)。
 - start の必須入力不足は既定で警告するが、従来どおり開始できる。先行作業が必要なら --reason "先に行う理由" を付ける。警告は出ず、理由は活動とログに残る。done の出力成果物なしも既定で警告のみ。既存の出力成果物または --artifact を数え、ボックスの参考資料は数えない。
 - 計画で選ぶ場合だけ policy --start reject --done reject --unprepared reject にする。それぞれ warn に戻せる。入力待ちの拒否でも理由付きの開始は可能だが、要具体化の拒否は理由では通れない。成果物なしの拒否は set --status white にも効く。人の操作 (画面 / --actor human) は拒否しない。AIが拒否を避けるために人を名乗ったり、設定を弱めたりしない。
 - guard 有効時、scope の変更、focus の設定・解除、policy の変更にも --context-token が必要。scope/focus/policy を変えると新しいトークンが出るので、次の操作はそれを使う。表示だけには不要。
