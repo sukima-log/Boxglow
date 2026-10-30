@@ -145,11 +145,16 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   // タブで開いているボックスだけは、左右の入力/出力ノードの行とそろえるため、今までどおり見出しの下に並べる
   const alignRows = view.expanded && viewScope !== blockId;
   const expandedRows = useMemo(() => alignRows ? expandedPortRows(project, blockId) : new Map<string, number>(), [alignRows, project, blockId]);
-  const rowAt = (i: number, direction: "in" | "out", portId: string) => view.expanded
+  // 箱の枠線の太さ (px)。丸は枠線の内側を基準に置かれるので、その分を引いて「箱の外側の上端から」の位置にそろえる。
+  // 枠線は普通の箱 1px・展開中の箱 2〜4px と違うため、引かないと中の箱の丸と親の枠の丸が 1〜2px ずれ、線に小さな段差が出た (利用者の指摘 2026-10-30)
+  // 太さは index.css の値と同じ (普通の箱 .bg-block:not(.expanded) = 1px、合流 .kind-merge = 0、展開中 .expanded.depth-N = 4 / 3 / 3 / 2px)。
+  // 画面で測ると、測った後に全部の箱を描き直すことになり、大きな計画でタブの切り替えが 0.4 秒から 2.6 秒に遅くなった。CSS を変えたらここも合わせる
+  const borderW = view.expanded ? (view.depth <= 1 ? 4 : view.depth <= 3 ? 3 : 2) : view.merge ? 0 : 1;
+  const rowAt = (i: number, direction: "in" | "out", portId: string) => (view.expanded
     ? expandedRows.get(portId) ?? headerH + i * 26 + 13
-    : (direction === "in" ? card.inputs : card.outputs)[i].center;
+    : (direction === "in" ? card.inputs : card.outputs)[i].center) - borderW;
   const updateNodeInternals = useUpdateNodeInternals();
-  const portLayout = `${JSON.stringify(vertical)}|${width}|${height}|${headerH}|${view.expanded}|${card.inputs.map(q => `${q.id}:${q.center}`)}|${card.outputs.map(q => `${q.id}:${q.center}`)}|${[...expandedRows].map(([id, y]) => `${id}:${y}`)}`;
+  const portLayout = `${JSON.stringify(vertical)}|${width}|${height}|${headerH}|${view.expanded}|${card.inputs.map(q => `${q.id}:${q.center}`)}|${card.outputs.map(q => `${q.id}:${q.center}`)}|${[...expandedRows].map(([id, y]) => `${id}:${y}`)}|${borderW}`;
   const previousPortLayout = useRef(portLayout);
   useEffect(() => {
     if (previousPortLayout.current !== portLayout) {

@@ -106,18 +106,34 @@ export function layoutScope(p: Project, scopeId: string, options: {
       members.forEach((id, i) => order.set(id, i));
     }
   }
-  // 層と層の隙間を通る線の本数 (隙間 g = 層 g と層 g+1 の間)。本数が多いほど隙間を広げ、線が 16px 間隔で並べるようにする
-  const crossing = new Array<number>(Math.max(1, maxLayer)).fill(0);
+  // 層と層の隙間を通る線の本数 (隙間 g = 層 g と層 g+1 の間)。本数が多いほど隙間を広げ、線が 16px 間隔で並べるようにする。
+  // 箱の組ではなく線を数える (同じ 2 つの箱の間の線が 2 本なら 2 本)。同じ丸から分かれる線は通路で 1 本の幹になるので、出どころの丸ごとに 1 本。
+  // 親の枠の入力から中の箱へ入る線 (左の縁から) と、中の箱から親の枠の出力へ出る線 (右の縁へ) も、通る隙間に数える
+  // (箱の組だけを数えていて、最終統合の手前に 7 本が 10px 間隔で詰まった: 利用者の指摘 2026-10-30)
+  const crossingSets = Array.from({ length: Math.max(1, maxLayer) }, () => new Set<string>());
+  const pass = (from: number, to: number, key: string) => { for (let g = Math.max(0, from); g < Math.min(maxLayer, to); g++) crossingSets[g].add(key); };
   for (const id of ids) {
-    for (const nxt of succ.get(id)!) {
-      const a = layer.get(id)!;
-      const b = layer.get(nxt)!;
-      for (let g = Math.min(a, b); g < Math.max(a, b); g++) crossing[g]++;
+    for (const port of portsOf(q, id, "out")) {
+      for (const e of outgoingEdges(q, { portId: port.id, side: "outer" })) {
+        const to = q.ports[e.to.portId];
+        if (!to) continue;
+        if (ids.includes(to.blockId)) pass(Math.min(layer.get(id)!, layer.get(to.blockId)!), Math.max(layer.get(id)!, layer.get(to.blockId)!), port.id);
+        else if (to.blockId === scopeId) pass(layer.get(id)!, maxLayer, port.id); // 親の出力へ (右の縁まで)
+      }
     }
   }
+  for (const port of portsOf(q, scopeId, "in")) {
+    for (const e of outgoingEdges(q, { portId: port.id, side: "inner" })) {
+      const to = q.ports[e.to.portId];
+      if (to && ids.includes(to.blockId)) pass(0, layer.get(to.blockId)!, port.id); // 親の入力から (左の縁から)
+    }
+  }
+  const crossing = crossingSets.map((s) => s.size);
   // 通路の幅: 縁から 36px x 2 + 線の間隔 16px x (本数 - 1) + 余裕 16px。最低は GAP_X
   const gapAfter = (L: number): number => Math.max(GAP_X, 72 + 16 * Math.max(0, (crossing[L] ?? 0) - 1) + 16);
   const compact = !!options.presentation;
+  // 閲覧の配置の通路: 既定は Edit より狭くする (READING_CHANNEL_REDUCTION) が、通る線が 16px 間隔で並ぶ幅 (縁から 36px x 2 + 16px x (本数 - 1)) は必ず取る
+  const readingGap = (L: number): number => Math.max(READING_GAP_X, gapAfter(L) - READING_CHANNEL_REDUCTION, 72 + 16 * Math.max(0, (crossing[L] ?? 0) - 1));
   const horizontalGap = compact ? READING_GAP_X : GAP_X;
   const verticalGap = compact ? READING_GAP_Y : GAP_Y;
   const startX = scopeId === ROOT_ID ? TERMINAL_W + horizontalGap : compact ? READING_INSET_X : CHILD_PADDING.left;
@@ -136,7 +152,7 @@ export function layoutScope(p: Project, scopeId: string, options: {
     let to = from, rowWidth = 0;
     while (to < columns.length) {
       const col = columns[to];
-      const gap = to === from ? 0 : (compact ? Math.max(horizontalGap, gapAfter(to - 1) - READING_CHANNEL_REDUCTION) : gapAfter(to - 1));
+      const gap = to === from ? 0 : (compact ? readingGap(to - 1) : gapAfter(to - 1));
       if (to > from && rowWidth + gap + col.width > rowLimit)
         break;
       rowWidth += gap + col.width;
@@ -149,7 +165,7 @@ export function layoutScope(p: Project, scopeId: string, options: {
       let y = rowTop + (compact ? Math.round((rowHeight - col.height) / 16) * 8 : 0);
       options.columns?.push({ x, y: rowTop - COLUMN_LABEL_SPACE, width: col.width, ids: col.members.map(m => m.id), index: col.L });
       col.members.forEach((m, i) => { q.blocks[m.id].position = { x, y }; y += col.sizes[i].height + verticalGap; });
-      x += col.width + (compact ? Math.max(horizontalGap, gapAfter(col.L) - READING_CHANNEL_REDUCTION) : gapAfter(col.L));
+      x += col.width + (compact ? readingGap(col.L) : gapAfter(col.L));
     }
     maxBottom = Math.max(maxBottom, rowTop + rowHeight);
     rowTop = maxBottom + verticalGap * 2 + (compact ? COLUMN_LABEL_SPACE : 0);

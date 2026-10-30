@@ -261,6 +261,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .bg-block.expanded.status-white, .bg-block.expanded.status-black, .bg-block.expanded.status-gray { color: var(--text); }
 /* 階層ごとに明度を少しずつ変える (利用者の指摘 2026-10-23: 何階層も入れ子にすると、遠目では境界が分からない。色相までは変えない)。
    --nest-step = 文字色を混ぜる割合: 深いほど大きく、ダークでは少し明るく、ライトでは少し暗くなる */
+/* 枠線の太さを変えたら BlockNode.tsx の borderW (丸の位置の補正) も合わせる */
 .bg-block.expanded.depth-1 { --nest-step: 0%; border-width: 4px; }
 .bg-block.expanded.depth-2 { --nest-step: 3.5%; border-width: 3px; }
 .bg-block.expanded.depth-3 { --nest-step: 7%; border-width: 3px; }

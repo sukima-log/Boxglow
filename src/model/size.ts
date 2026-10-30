@@ -206,7 +206,8 @@ export function blockSize(p: Project, blockId: string): Size {
     bottom = Math.max(bottom, c.position.y + s.height);
   }
   return {
-    width: Math.max(EXPANDED_MIN_W, width, right + EXPANDED_PAD)
+    // 右の余白は、中の箱から親の出力へ出る線が 16px 間隔で並べる幅 (縁から 36px x 2 + 16px x (本数 - 1)) を取る。最低は EXPANDED_PAD
+    width: Math.max(EXPANDED_MIN_W, width, right + Math.max(EXPANDED_PAD, 72 + 16 * Math.max(0, outsP.filter((o) => incomingEdges(p, { portId: o.id, side: "inner" }).length > 0).length - 1)))
   , height: Math.max(baseH + 16, bottom + EXPANDED_PAD_Y + 12 + (headerH - HEADER_H))
   , headerH
   };
