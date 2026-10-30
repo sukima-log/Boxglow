@@ -9,7 +9,8 @@ import { t, useLang } from "../i18n";
 import { layoutScope } from "../model/autolayout";
 import { layoutLikeView } from "../model/readingLayout";
 import { useProjectStore } from "../store/useProjectStore";
-import { childrenOf, descendantsOf, majorBlocks } from "../model/graph";
+import { childrenOf, descendantsOf, majorBlocks, removePort } from "../model/graph";
+import { parseHandle } from "./layout";
 
 /**
  * キャンバスの操作欄
@@ -71,6 +72,30 @@ export function CanvasTools({ snap, onSnap, showMap, onMap, fit, readFromTop }: 
     const onKey = (ev: KeyboardEvent) => { if (ev.key === "Escape") cancel(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, [flow]);
+  // 丸をクリックして接続先を待っている (リングが出ている) ときの Delete は、その丸の入出力を消す。
+  // 線が外れて中途半端に残った入力を、I/O タブを開かずに図の上で消したい (利用者の要望 2026-10-30)。
+  // 選んでいる箱を消す App の Delete より先に受ける (window の capture で受けて、ほかへ伝えない)
+  useEffect(() => {
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key !== "Delete" && ev.key !== "Backspace") return;
+      if (ev.isComposing || document.querySelector("dialog[open]")) return;
+      const target = ev.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)) return;
+      const st = useProjectStore.getState();
+      if (st.readonly || !st.editMode || !st.project) return;
+      const at = parseHandle(flow.getState().connectionClickStartHandle?.id);
+      const port = at ? st.project.ports[at.portId] : undefined;
+      if (!port) return;
+      ev.preventDefault();
+      ev.stopImmediatePropagation();
+      cancel();
+      st.setPendingConnect(null);
+      st.apply((p) => removePort(p, port.id));
+      st.setToast(t("「{name}」を削除しました (Undo で戻せます)", { name: port.name }));
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [flow]);
   /** 全体表示: 今の階層のボックスがすべて収まる倍率にする (拡大は 100% まで)。Input / Output: なし */
   /** 今開いているタブ (階層) の直下のボックスだけを整列する。子の中の配置は変えない。Ctrl+Z で戻せる。Input / Output: なし */

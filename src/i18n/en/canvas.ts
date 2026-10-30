@@ -46,7 +46,7 @@ export const canvas: Record<string, string> = {
 , "幅に合わせる": "Fit width"
 , "Shift＋ホイールで上下へ、Ctrl＋Shift＋ホイールで左右へ移動できます。": "Shift + scroll to pan vertically; Ctrl + Shift + scroll to pan horizontally."
 , "ホイールで上下へ · Ctrl＋ホイールで拡大縮小": "Scroll to read · Ctrl + scroll to zoom"
-, "「{name}」から接続中 — 接続先の箱か丸をクリック": "Connecting from \"{name}\" — click the target box or port"
+, "「{name}」から接続中 — 接続先の箱か丸をクリック (Delete で削除)": "Connecting from \"{name}\" — click the target box or port (Delete removes it)"
 , "中止 (Esc)": "Cancel (Esc)"
 , "差し戻し: {note} ({from})": "Sent back: {note} ({from})"
 , "差し戻し {n}": "Sent back {n}"

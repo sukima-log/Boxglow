@@ -471,7 +471,7 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
       {/* 2 クリック結線の途中: 何から接続中かと、次の操作を示す (Esc か × で中止) */}
       {pendingConnect && (
         <div className="connect-pending" role="status">
-          {t("「{name}」から接続中 — 接続先の箱か丸をクリック", { name: pendingName })}
+          {t("「{name}」から接続中 — 接続先の箱か丸をクリック (Delete で削除)", { name: pendingName })}
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPendingConnect(null)} title={t("中止 (Esc)")}>×</button>
         </div>
       )}

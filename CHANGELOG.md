@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Delete removes a port picked on the canvas.** Click a port (the dot; a ring appears around it) and press Delete to remove that input or output together with its wires, without opening the I/O tab. Undo brings it back.
 - **Two boxes inside the same parent can both be wired out.** Connecting a second child's output to a box outside the parent no longer replaces the first child's wire. When the parent's output with that name already carries another child's wire, a separate relay output is added (named after the child box when the output still has the placeholder name "Output"). The same applies to relay inputs on the way down.
 - **No stray dots on boxes with children.** An expanded box's output that still has the placeholder name ("Output"), is not connected and has no deliverable is no longer drawn as a dot on the frame, not even on hover. It stays editable on the I/O tab (name it, or use "Connect to…" to wire it).
 - **Auto Layout matches View.** Auto Layout (Edit), "Align this level" and `boxglow layout` now use the same stage-ordered arrangement as View, including inside collapsed boxes, so switching between Edit and View no longer rearranges the plan. The vertical gap in View is 96 px (was 64 px) so the layout is not pushed apart by Edit's spacing rule.

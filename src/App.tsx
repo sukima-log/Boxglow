@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { FlowCanvas } from "./canvas/FlowCanvas";
-import { addBlock, computeProgress, pendingDecisions, portsOf, removeBlock, disconnectWire } from "./model/graph";
+import { addBlock, computeProgress, pendingDecisions, portsOf, removeBlock, removePort, disconnectWire } from "./model/graph";
 import { ROOT_ID } from "./model/types";
 import { majorBlocks, parentForNewBlock, useProjectStore, useShownProject } from "./store/useProjectStore";
 import { DEFAULT_SYNC_SERVER } from "../cli/sync/server-policy";
@@ -220,7 +220,15 @@ export function App() {
       } else if (ev.key === "Delete" || ev.key === "Backspace") {
         // View でも効く (配置を固定しているだけで、線や箱の削除は Undo で戻せる。利用者の要望 2026-10-20: 線を選んで Delete ですぐ外したい)
         if (readonly) return;
-        if (sel.edgeId) {
+        const pending = useProjectStore.getState().pendingConnect;
+        if (pending && p.ports[pending.portId]) {
+          // 丸をクリックして選んだ (2 クリック結線の途中) 入出力を消す。つながる線も一緒に外れる。
+          // 線が外れて中途半端に残った入力を、I/O タブを開かずに図の上で消したい (利用者の要望 2026-10-30)
+          const name = p.ports[pending.portId].name;
+          useProjectStore.getState().setPendingConnect(null);
+          apply((q) => removePort(q, pending.portId));
+          useProjectStore.getState().setToast(t("「{name}」を削除しました (Undo で戻せます)", { name }));
+        } else if (sel.edgeId) {
           // 自動の線 (引き上げた区間) を選んでいても、その経路の本物の線を外す
           const r = disconnectWire(p, sel.edgeId);
           select({});

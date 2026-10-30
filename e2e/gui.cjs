@@ -333,6 +333,18 @@ const { chromium, ROOT, open, check, result } = require('./lib.cjs');
     twoClick.under=underEl;twoClick.designId=designId;
     check('2 クリック結線: 箱をクリックするとつながり、チップが消える',twoClick.pending===null&&twoClick.ok,JSON.stringify(twoClick));
     await page.evaluate(()=>{const s=window.boxglow.store.getState();s.undo();s.select({});s.setEditMode(false);});await page.waitForTimeout(300);
+    // 丸をクリックして (リングが出た状態で) Delete を押すと、その入力を消せる (中途半端に残った入力を図の上で消す。利用者の要望 2026-10-30)
+    const stray=await page.evaluate((id)=>{const s=window.boxglow.store.getState();s.setEditMode(true);s.select({});const pid='e2e-stray-in';s.apply((q)=>({...q,ports:{...q.ports,[pid]:{id:pid,blockId:id,direction:'in',name:'残った入力',description:'',required:true,artifacts:[],noPromote:true}}}));return pid;},designId);
+    await page.getByRole('button',{name:'Fit',exact:true}).click();await page.waitForTimeout(500);
+    const strayEl=page.locator(`.react-flow__handle[data-handleid*="${stray}"]`).first();
+    await page.evaluate((id)=>{const rf=window.boxglow.rf;const n=rf.getInternalNode(id);rf.setCenter(n.internals.positionAbsolute.x,n.internals.positionAbsolute.y+60,{zoom:1});},designId);await page.waitForTimeout(400);
+    await strayEl.click();await page.waitForTimeout(300);
+    const picked=await strayEl.evaluate((h)=>h.classList.contains('clickconnecting'));
+    await page.keyboard.press('Delete');await page.waitForTimeout(400);
+    check('丸をクリックして (リングが出る) Delete で、その入力を削除できる',picked&&await page.evaluate((id)=>!window.boxglow.store.getState().project.ports[id],stray)&&await page.locator('.react-flow__handle.clickconnecting').count()===0,String(picked));
+    await page.evaluate(()=>window.boxglow.store.getState().undo());await page.waitForTimeout(300);
+    check('丸の削除も Undo で戻る',await page.evaluate((id)=>!!window.boxglow.store.getState().project.ports[id],stray));
+    await page.evaluate(()=>{const s=window.boxglow.store.getState();s.undo();s.select({});s.setPendingConnect(null);s.setEditMode(false);});await page.waitForTimeout(300);
     // ▸ で大項目を 1 つ展開した直後でも、ホイールだけで全体 (Fit と同じ倍率) まで縮小できる (下限が古いまま残らない)
     const majorId=await page.evaluate(()=>{const rf=window.boxglow.rf;return rf.getNodes().find(n=>n.type==='block'&&n.data.major&&rf.getNodes().some(c=>c.parentId===n.id))?.id;});
     await page.locator(`[data-id="${majorId}"] .bg-block__toggle`).first().click();await page.waitForTimeout(900);
