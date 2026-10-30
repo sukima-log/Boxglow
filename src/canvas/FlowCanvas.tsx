@@ -3,6 +3,7 @@
  */
 import { verticalNodes, routeVertical } from "./verticalLayout";
 import { useFitViewport } from "./useFitViewport";
+import { edgeScale } from "./edgeScale";
 import { readingColumns } from "../model/readingLayout";
 import { sharedWires } from "./sharedWires";
 import { Background, BackgroundVariant, PanOnScrollMode, MiniMap, ReactFlow, useNodesState, useReactFlow, useStore, type ReactFlowState, type Connection, type Edge as RFEdge, type NodeChange, type OnConnectEnd, type OnNodeDrag } from "@xyflow/react";
@@ -61,6 +62,14 @@ interface Props {
   panelLayoutKey: string;
   /** フィルタ (false を返したブロックは薄く描く)。null なら全部そのまま */
   matcher: ((blockId: string) => boolean) | null;
+}
+
+/** 図の要素に線の太さの倍率 (CSS の --edge-k) を入れる部品。描画は無し (倍率が変わったときだけ動く小さな部品にして、図全体を描き直さない) */
+function EdgeScale() {
+  const k = useStore((s: ReactFlowState) => edgeScale(s.transform[2]));
+  const dom = useStore((s: ReactFlowState) => s.domNode);
+  useEffect(() => { dom?.style.setProperty("--edge-k", String(k)); }, [dom, k]);
+  return null;
 }
 
 /** 図の上のクリックで選ぶときの指定: 選ぶだけで、右の詳細パネルは開かない (開いていれば中身が切り替わる) */
@@ -476,6 +485,7 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPendingConnect(null)} title={t("中止 (Esc)")}>×</button>
         </div>
       )}
+      <EdgeScale />
       <CanvasTools readFromTop={readFromTop} fit={fit} snap={snap} onSnap={() => setSnap((v) => !v)} showMap={showMap} onMap={() => setShowMap((v) => !v)} />
       {showMap && <MiniMap
         position="bottom-right"

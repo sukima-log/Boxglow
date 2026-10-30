@@ -26,9 +26,12 @@ const geometry=p=>p.evaluate(()=>window.boxglow.rf.getNodes().map(n=>[n.id,n.pos
     const before=await core(p,id);
     await p.evaluate(id=>window.boxglow.store.getState().select({edgeId:id}),id);await settle(p);
     const after=await core(p,id);
+    // 破線の長さは縮小したときの線の太さの倍率 (--edge-k) を掛けた長さ
+    const k=await p.evaluate(()=>Number(document.querySelector('.react-flow').style.getPropertyValue('--edge-k')||1));
+    const dashIs=(s,a,b)=>{const v=String(s).split(',').map(x=>parseFloat(x));return v.length===2&&Math.abs(v[0]-a*k)<0.06&&Math.abs(v[1]-b*k)<0.06;};
     const accent=await p.evaluate(()=>{const h=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim().slice(1);return 'rgb('+[0,2,4].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';});
-    check(`${theme} ${ready?'確定':'未確定'}: 選択経路はオレンジの動く破線`,after.stroke===accent&&after.arrow===accent&&after.junctionsMatch&&after.dash==='14px, 10px'&&after.animation==='edge-flow');
-    check(`${theme} ${ready?'確定':'未確定'}: 非選択時は元の線種`,ready?before.dash==='none':before.dash==='6px, 5px');
+    check(`${theme} ${ready?'確定':'未確定'}: 選択経路はオレンジの動く破線`,after.stroke===accent&&after.arrow===accent&&after.junctionsMatch&&dashIs(after.dash,14,10)&&after.animation==='edge-flow');
+    check(`${theme} ${ready?'確定':'未確定'}: 非選択時は元の線種`,ready?before.dash==='none':dashIs(before.dash,6,5),`${before.dash} (k ${k})`);
     const offset=()=>p.locator(`.react-flow__edge[data-id="${id}"] .react-flow__edge-path`).evaluate(e=>getComputedStyle(e).strokeDashoffset);
     const firstOffset=await offset();await p.waitForTimeout(160);
     check(`${theme} ${ready?'確定':'未確定'}: 破線が実際に流れる`,firstOffset!==await offset());

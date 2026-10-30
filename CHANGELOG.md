@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Wires stay visible when zoomed out.** Below 100% zoom, wires get thicker on screen as you zoom out (1.5x at 50%, about 2.3x at 25%, up to 3x), and their dashes get longer in the same proportion, so they no longer fade into dots on a plan seen from afar. At 100% and above they look as before.
 - **A single click no longer opens the details panel.** Clicking a box (or the Inputs/Outputs node) on the canvas only selects it. Open the details on the right with the **Details ›** button that appears above the selected box, or press Enter. While the panel is open, clicking another box switches its content; Esc or × closes it. Choosing a box from the tree, search, lists or the chips on a box (Policies, Needs detail, Sent back) still opens the panel directly.
 - **Fewer crossings where wires enter a nested box.** The ports of an expanded box follow the order of what they connect to outside (sibling boxes, the Inputs/Outputs nodes) before the height of the child port inside, and a box receiving several wires from one expanded box orders them by the child boxes inside it. Crossings in the examples: Logic DAW 5 → 1, notes-app 9 → 6.
 - **No bar over the canvas when a wire is selected.** Selecting a wire only highlights it; the bar at the top of the canvas (source → target, state, "Remove wire") is gone because it covered the plan. Press Delete to remove the selected wire.

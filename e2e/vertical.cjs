@@ -90,7 +90,7 @@ const { fixture } = require('./overview-fixture.cjs');
       const id = await p.locator('.react-flow__edge.edge-ready').first().getAttribute('data-id');
       await p.evaluate(id => window.boxglow.store.getState().select({ edgeId: id }), id);
       await pause();
-      check(`${theme}: 縦の配線も選択時は従来の動く破線`, await p.locator(`.react-flow__edge[data-id="${id}"] .react-flow__edge-path`).evaluate(e => getComputedStyle(e).animationName === 'edge-flow' && getComputedStyle(e).strokeDasharray === '14px, 10px'));
+      check(`${theme}: 縦の配線も選択時は従来の動く破線`, await p.locator(`.react-flow__edge[data-id="${id}"] .react-flow__edge-path`).evaluate(e => { const k = Number(document.querySelector('.react-flow').style.getPropertyValue('--edge-k') || 1); const v = getComputedStyle(e).strokeDasharray.split(',').map(parseFloat); return getComputedStyle(e).animationName === 'edge-flow' && Math.abs(v[0] - 14 * k) < 0.06 && Math.abs(v[1] - 10 * k) < 0.06; })); // 破線の長さは線の太さの倍率 (--edge-k) を掛けた長さ
       await p.evaluate(() => window.boxglow.store.getState().select({}));
       await p.locator('.mode-toggle').click();
       await pause();
