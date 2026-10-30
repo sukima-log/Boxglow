@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+_Changes after 0.6.6 go here._
+
+## 0.6.6 (2026-10-31)
+
+Goes with the VS Code extension 0.5.6. Update the CLI, `serve` and the extension together.
+
 - **Paths and URLs written in free text are clickable.** In port descriptions, the verification recorded at done, a decision's context, activity notes and send-back reasons, a URL opens in a new tab and a file path (it contains a slash and ends with an extension, such as `docs/design.md`) opens like an attached file. In Notes, hand-off notes and the work log, such paths written without `[text](path)` (also inside code) are links too; in the Notes editor, Ctrl / Cmd + click them.
 - **serve: a missing file is reported instead of opening an error page.** The new tab is closed and a message says the file could not be opened (or that it is outside the plan's folder).
 - **Attached files open from the input side too.** On an input card, the source's deliverables ("from … (spec.md)"), the contents of a policy and the sent-back deliverables are now clickable like the outputs' list: a file opens (VS Code editor / serve tab / path copied in a browser) and a URL opens as a link. Before, they were plain text.
