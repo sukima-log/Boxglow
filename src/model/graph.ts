@@ -2326,10 +2326,32 @@ function scopeChain(p: Project, scope: string): string[] {
   return out;
 }
 
-/** ボックスに同名のポートがあればそれを、無ければ作って返す (自動で上がった入力も使う: 本物の線が来れば自動の線は置き換わる) */
-function findOrAddPort(q: Project, blockId: string, direction: "in" | "out", name: string): Port | null {
-  const existing = portsOf(q, blockId, direction).find((x) => x.name === name);
+/**
+ * 階層を越えて線を通すときの中継のポートを選ぶ (無ければ作る)。
+ *   同名のポートがあり、まだ本物の線を受けていないか、受けている線が同じ供給元 (feed) からなら、それを使う (自動で上がった入力も使う: 本物の線が来れば自動の線は置き換わる)。
+ *   同名でも別の供給元の線をすでに受けているポートは使わない。使うと、その線が新しい線に置き換わって消える
+ *   (サウンドの中の BGM とボイスを両方外へ出すと、片方しか残らなかった: 利用者の指摘 2026-10-30)。そのときは別名の中継を足す
+ * Input : q = 変更中の Project (直接書き換える), blockId = 中継する箱, direction = 出力 / 入力, name = 通す線の名前, feed = 中継へ入れる線の出す側の端点
+ * Output: 中継のポート (作れなければ null)
+ */
+function findOrAddPort(q: Project, blockId: string, direction: "in" | "out", name: string, feed: Endpoint): Port | null {
+  // 中継のポートの、線を受ける面 (出力は内側、入力は外側)
+  const side: "inner" | "outer" = direction === "out" ? "inner" : "outer";
+  const usable = (x: Port) => incomingEdges(q, { portId: x.id, side }).every((e) => e.auto || (e.from.portId === feed.portId && e.from.side === feed.side));
+  const same = portsOf(q, blockId, direction).filter((x) => x.name === name);
+  const existing = same.find(usable);
   if (existing) return existing;
+  // 同名のポートが別の供給元に使われている: 名前がぶつからない中継を足す。仮の名前 (「出力」) なら供給元の箱の題名を名前にする
+  if (same.length > 0) {
+    const src = q.blocks[q.ports[feed.portId]?.blockId ?? ""];
+    const base = isPlaceholderName(name) && src && src.id !== ROOT_ID ? src.title : name;
+    const taken = new Set(portsOf(q, blockId, direction).map((x) => x.name));
+    let unique = base;
+    for (let i = 2; taken.has(unique); i++) unique = `${base} ${i}`;
+    const r = addPort(q, { blockId, direction, name: unique });
+    Object.assign(q, r.project);
+    return q.ports[r.portId] ?? null;
+  }
   // 箱を作ったときに付く仮の名前の出力 (「出力」など) が、どこにもつながらず成果物も無いままなら、それを中継に使う (名前を合わせる)。
   // 新しく足すと、使われない「出力」の丸が別に残って見える (利用者の指摘 2026-10-26)
   if (direction === "out") {
@@ -2363,7 +2385,7 @@ export function routeConnect(q: Project, from: Endpoint, to: Endpoint): void {
   // 出す側を共通の階層まで上げる
   for (const sc of fChain.slice(0, fChain.indexOf(common))) {
     if (sc === ROOT_ID) return;
-    const via = findOrAddPort(q, sc, "out", fromPort.name);
+    const via = findOrAddPort(q, sc, "out", fromPort.name, f);
     if (!via) return;
     const r = connect(q, f, { portId: via.id, side: "inner" });
     if (!r.error) Object.assign(q, r.project);
@@ -2372,7 +2394,7 @@ export function routeConnect(q: Project, from: Endpoint, to: Endpoint): void {
   // 受ける側へ共通の階層から下ろす (上のボックスから順に)
   for (const sc of tChain.slice(0, tChain.indexOf(common)).reverse()) {
     if (sc === ROOT_ID) return;
-    const via = findOrAddPort(q, sc, "in", toPort.name);
+    const via = findOrAddPort(q, sc, "in", toPort.name, f);
     if (!via) return;
     const r = connect(q, f, { portId: via.id, side: "outer" });
     if (!r.error) Object.assign(q, r.project);

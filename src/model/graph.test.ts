@@ -1223,6 +1223,27 @@ describe("階層をまたぐ結線 (connectAcross / connectToBlock) と、名前
     expect(up.error).toBeUndefined();
     expect(incomingEdges(up.project, { portId: portsOf(up.project, m3d, "out")[0].id, side: "inner" }).some((e) => !e.auto)).toBe(true);
   });
+  it("同じ親の中の 2 つの箱の出力を、両方とも外の箱へつなげる (中継の出力を使い回して前の線を消さない)", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const snd = addBlock(p, { parentId: pj, title: "サウンド" }); p = snd.project;
+    const bgm = addBlock(p, { parentId: snd.blockId, title: "BGM" }); p = bgm.project;
+    const voice = addBlock(p, { parentId: snd.blockId, title: "ボイス作成" }); p = voice.project;
+    const fin = addBlock(p, { parentId: pj, title: "最終統合" }); p = fin.project;
+    let r = connectToBlock(p, { portId: portsOf(p, voice.blockId, "out")[0].id, side: "outer" }, fin.blockId);
+    expect(r.error).toBeUndefined(); p = r.project;
+    r = connectToBlock(p, { portId: portsOf(p, bgm.blockId, "out")[0].id, side: "outer" }, fin.blockId);
+    expect(r.error).toBeUndefined(); p = r.project;
+    // サウンドの出力は 2 本 (ボイスの「出力」と、BGM の題名を名前にした中継)。どちらも中の箱から線を受けている
+    const outs = portsOf(p, snd.blockId, "out");
+    expect(outs.map((x) => x.name)).toEqual(["出力", "BGM"]);
+    const feeders = outs.map((x) => incomingEdges(p, { portId: x.id, side: "inner" }).map((e) => p.ports[e.from.portId].blockId));
+    expect(feeders).toEqual([[voice.blockId], [bgm.blockId]]);
+    // 最終統合には 2 本の入力が、それぞれ本物の線で届く
+    const ins = portsOf(p, fin.blockId, "in");
+    expect(ins.map((x) => x.name)).toEqual(["出力", "BGM"]);
+    expect(ins.every((x) => incomingEdges(p, { portId: x.id, side: "outer" }).some((e) => !e.auto))).toBe(true);
+  });
   it("供給元の候補は 計画の入力 → 上の階層の入力 → ほかの箱の出力 の順で、自分・先祖・子孫の出力は含まない", () => {
     const { p, pj, chara, leaf } = deep();
     const other = addBlock(p, { parentId: pj, title: "音響", outputName: "BGM" }); const q = other.project;
