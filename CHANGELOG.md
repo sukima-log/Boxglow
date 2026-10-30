@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-_Changes after 0.6.3 go here._
+- **No more wires that climb up and come back down around a nested box.** When a child's wire cannot leave its parent frame in a straight line because another box inside is in the way, the relay port on the frame is placed between where the wire gets around that box and the height of the box it goes to outside, instead of at the child's height. The wire no longer goes around the box, back up to the port, and back down again outside.
 
 ## 0.6.3 (2026-10-30)
 

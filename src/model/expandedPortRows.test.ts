@@ -50,3 +50,31 @@ describe("展開中のボックスの丸の高さ (expandedPortRows)", () => {
     expect(expandedPortRows(p, a).size).toBe(0);
   });
 });
+
+describe("間の箱でまっすぐ出られない中継の丸 (遠回りを作らない)", () => {
+  it("中の箱の丸が上にあり、間の箱を下から回り込んで下の外の箱へ行くなら、中継の丸は上ではなく下に置く", () => {
+    let p = createProject("t");
+    const pj = projectBlocks(p)[0].id;
+    const frame = addBlock(p, { parentId: pj, title: "デザイン" }); p = frame.project;
+    const src = addBlock(p, { parentId: frame.blockId, title: "体形", outputName: "体形" }); p = src.project;
+    const wall = addBlock(p, { parentId: frame.blockId, title: "間の箱", outputName: "壁" }); p = wall.project;
+    const dst = addBlock(p, { parentId: pj, title: "胴体", outputName: "胴体" }); p = dst.project;
+    p = connectToBlock(p, { portId: portsOf(p, src.blockId, "out")[0].id, side: "outer" }, dst.blockId).project;
+    p = structuredClone(p);
+    p.blocks[frame.blockId].collapsed = false;
+    // 体形は上 (y 100)、その右に背の高い間の箱 (y 60〜)、外の胴体は枠の下のほう
+    p.blocks[src.blockId].position = { x: 40, y: 100 };
+    p.blocks[wall.blockId].position = { x: 400, y: 60 };
+    p.blocks[wall.blockId].description = "";
+    const frameY = 200;
+    p.blocks[frame.blockId].position = { x: 0, y: frameY };
+    const wallH = blockSize(p, wall.blockId).height;
+    p.blocks[dst.blockId].position = { x: 1400, y: frameY + 60 + wallH + 40 };
+    const relay = portsOf(p, frame.blockId, "out").find((x) => x.name === "体形")!;
+    const y = expandedPortRows(p, frame.blockId).get(relay.id)!;
+    const srcY = 100 + taskCardLayout(p, src.blockId).outputs[0].center;
+    // 中の丸の高さ (上) ではなく、間の箱の下の端より下 (回り込みの出口から外の相手の側) に置く
+    expect(y).toBeGreaterThan(60 + wallH);
+    expect(y).not.toBe(srcY);
+  });
+});

@@ -245,6 +245,7 @@ export function expandedPortRows(p: Project, blockId: string): Map<string, numbe
     }
     return y === undefined ? undefined : child.position.y + y;
   };
+  const mean = (ys: number[]) => (ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : undefined);
   // ボックスの絶対の y (祖先の位置の和)
   const absY = (id: string): number => { let y = 0; let cur: string | null = id; while (cur && cur !== ROOT_ID) { const b: Project["blocks"][string] | undefined = p.blocks[cur]; if (!b) break; y += b.position.y; cur = b.parentId; } return y; };
   const selfY = absY(blockId);
@@ -262,10 +263,48 @@ export function expandedPortRows(p: Project, blockId: string): Map<string, numbe
     }
     const peer = p.blocks[port.blockId];
     if (!peer || peer.parentId !== parentId || peer.id === blockId) return undefined;
-    const y = isExpanded(p, peer.id) ? undefined : (port.direction === "in" ? taskCardLayout(p, peer.id).inputs : taskCardLayout(p, peer.id).outputs).find((r) => r.id === portId)?.center;
-    return y === undefined ? undefined : absY(peer.id) + y - selfY;
+    const y = estimateY(portId);
+    return y === undefined ? undefined : y - selfY;
   };
-  const mean = (ys: number[]) => (ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : undefined);
+  // 丸の絶対の高さの見積もり。展開中の箱の丸は、その中でつながる丸の高さを下へたどって求める (下へだけたどるので、この関数の結果に戻ってこない)
+  const estimateY = (portId: string, depth = 0): number | undefined => {
+    const port = p.ports[portId];
+    const b = port ? p.blocks[port.blockId] : undefined;
+    if (!port || !b || depth > 8) return undefined;
+    if (!isExpanded(p, b.id)) {
+      const c = (port.direction === "in" ? taskCardLayout(p, b.id).inputs : taskCardLayout(p, b.id).outputs).find((r) => r.id === portId)?.center;
+      return c === undefined ? undefined : absY(b.id) + c;
+    }
+    const inner = port.direction === "in"
+      ? outgoingEdges(p, { portId, side: "inner" }).map((e) => e.to.portId)
+      : incomingEdges(p, { portId, side: "inner" }).map((e) => e.from.portId);
+    return mean(inner.map((id) => estimateY(id, depth + 1)).filter((v): v is number => v !== undefined));
+  };
+  // 中の箱の丸から枠の縁まで、その高さでまっすぐ進めるか (間に別の中の箱があれば進めない)。
+  // 進めない高さに中継の丸を置くと、線は箱を回り込んでから丸まで戻り、外でまた戻る大きな遠回りになる (利用者の指摘 2026-10-31)
+  const kidRects = childrenOf(p, blockId).map((c) => ({ id: c.id, x: c.position.x, y: c.position.y, ...blockSize(p, c.id) }));
+  // 進めないときは、間の箱 (縦に重なって並ぶものはまとめて 1 つ) の上の端と下の端を返す (線はそのどちらかを回り込む)
+  // Output: null = まっすぐ進める / [上の端, 下の端] = 回り込みの出口の高さ
+  const detour = (peerPortId: string, y: number, direction: "in" | "out"): [number, number] | null => {
+    const child = p.blocks[p.ports[peerPortId]?.blockId ?? ""];
+    const me = kidRects.find((r) => r.id === child?.id);
+    if (!me) return null;
+    const x0 = direction === "out" ? me.x + me.width : 0;
+    const x1 = direction === "out" ? size.width : me.x;
+    const m = 12; // 箱の縁から離す余白
+    const inPath = kidRects.filter((r) => r.id !== me.id && r.x - m < x1 && r.x + r.width + m > x0);
+    if (!inPath.some((r) => r.y - m < y && r.y + r.height + m > y)) return null;
+    // y を含む縦の区間を、重なる箱でつなげて広げる
+    let lo = y;
+    let hi = y;
+    for (let changed = true; changed;) {
+      changed = false;
+      for (const r of inPath) {
+        if (r.y - m < hi && r.y + r.height + m > lo && (r.y - m < lo || r.y + r.height + m > hi)) { lo = Math.min(lo, r.y - m); hi = Math.max(hi, r.y + r.height + m); changed = true; }
+      }
+    }
+    return [lo, hi];
+  };
   const place = (direction: "in" | "out") => {
     const ports = portsOf(p, blockId, direction);
     const rows = ports.map((port, index) => {
@@ -278,11 +317,23 @@ export function expandedPortRows(p: Project, blockId: string): Map<string, numbe
         ? incomingEdges(p, { portId: port.id, side: "outer" }).map((e) => e.from.portId)
         : outgoingEdges(p, { portId: port.id, side: "outer" }).map((e) => e.to.portId);
       const fallback = size.headerH + index * ROW_H + ROW_H / 2;
-      const y = mean(peers.map(childPortY).filter((v): v is number => v !== undefined)) ?? fallback;
+      const innerY = mean(peers.map(childPortY).filter((v): v is number => v !== undefined));
       const outer = mean(outers.map(outerPortY).filter((v): v is number => v !== undefined));
-      return { port, index, y, key: outer ?? y };
+      // 中の丸の高さでまっすぐ出られないとき: 線は間の箱の上か下を回り込む。中継の丸は「回り込みの出口」と「外の相手の高さ」の間で、
+      // 中の丸に一番近い高さに置く。出口より外側 (中の丸の側) に置くと、線は出口から丸まで戻り、外でまた戻る遠回りになる
+      let y = innerY ?? fallback;
+      const gap = innerY !== undefined && outer !== undefined ? peers.map((id) => detour(id, innerY, direction)).find((d) => d !== null) : undefined;
+      if (gap && innerY !== undefined && outer !== undefined) {
+        const exit = Math.abs(innerY - gap[0]) + Math.abs(gap[0] - outer) <= Math.abs(innerY - gap[1]) + Math.abs(gap[1] - outer) ? gap[0] : gap[1];
+        y = Math.max(Math.min(exit, outer), Math.min(innerY, Math.max(exit, outer)));
+      }
+      return { port, index, y, outer, hasOuter: outers.length > 0 };
     });
-    rows.sort((a, b) => a.key - b.key || a.y - b.y || a.index - b.index);
+    // 外の相手の高さで並べるのは、外へ線が出ている丸すべてで高さが分かるときだけ。分かるものと分からないもの (親の枠の丸から来る線など) を
+    // 混ぜて比べると、基準の違う値どうしで順番が入れ替わり、かえって交差する (Logic DAW の例で交差が増えた)
+    const byOuter = rows.every((r) => !r.hasOuter || r.outer !== undefined);
+    const keyOf = (r: (typeof rows)[number]) => (byOuter ? r.outer ?? r.y : r.y);
+    rows.sort((a, b) => keyOf(a) - keyOf(b) || a.y - b.y || a.index - b.index);
     // 上から順に、見出しの下・前の丸から 1 行以上離す
     const top = size.headerH + ROW_H / 2;
     const bottom = size.height - ROW_H / 2;
