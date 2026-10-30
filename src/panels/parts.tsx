@@ -20,6 +20,25 @@ export function localPathOf(a: Artifact): string | undefined {
   return a.path || localTarget(a.url);
 }
 
+/**
+ * 成果物・資料の名前を「、」でつないで並べる (入力のカードの供給元の成果物、方針の中身、差し戻し済みの成果物)。
+ * 手元のファイルを指すものは押すと開き (VS Code = エディタ、serve = 新しいタブ、ブラウザ = パスをコピー)、URL はリンクにする。
+ * 以前は名前をつないだ文字だけで、入力の側からはファイルを開けなかった (利用者の指摘 2026-10-31)
+ * Input : artifacts = 並べる成果物 / Output: 名前の並び (JSX)
+ */
+export function ArtifactNames({ artifacts }: { artifacts: Artifact[] }) {
+  const openAttachedFile = useProjectStore((s) => s.openAttachedFile);
+  const source = useProjectStore((s) => s.source);
+  return <>{artifacts.map((a, i) => {
+    const local = localPathOf(a);
+    const sep = i > 0 ? ", " : "";
+    if (local) return <span key={a.id}>{sep}<button type="button" className="artifact-open underline" onClick={() => openAttachedFile(local)}
+      title={source === "vscode" ? t("エディタで開く: {path}", { path: local }) : source === "serve" ? t("新しいタブで開く: {path}", { path: local }) : t("パスをコピー: {path}", { path: local })}>{a.title}</button></span>;
+    if (a.url) return <span key={a.id}>{sep}<a className="underline" href={a.url} target="_blank" rel="noopener noreferrer" title={a.url}>{a.title}</a></span>;
+    return <span key={a.id}>{sep}{a.title}</span>;
+  })}</>;
+}
+
 /** 成果物 (URL / メモ) の一覧。「+ Add」を押したときだけ入力欄が出る */
 export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add" }: {
   artifacts: Artifact[];
@@ -187,7 +206,7 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
             <div className="pl-1 pb-1">
               {src ? (
                 <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>
-                  {t("from {owner}「{name}」", { owner: srcOwner ?? "?", name: src.name })}{src.artifacts.length > 0 ? ` (${src.artifacts.map((a) => a.title).join(", ")})` : ""}
+                  {t("from {owner}「{name}」", { owner: srcOwner ?? "?", name: src.name })}{src.artifacts.length > 0 && <> (<ArtifactNames artifacts={src.artifacts} />)</>}
                   {/* 差し戻す: 届いた成果物が通らなかったとき、作った箱へ理由つきで戻す (その箱は In Progress に戻る) */}
                   {!readonly && src.blockId !== ROOT_ID && blockId !== ROOT_ID && sendingBack?.portId !== q.id && (
                     <button type="button" className="btn btn-sm ml-2 sendback-btn" onClick={() => setSendingBack({ portId: q.id, note: "" })}
@@ -211,7 +230,7 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                 <>
                   <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{direction === "in" ? t("入力物") : t("成果物")}</div>
                   {/* 差し戻された成果物: 届いた扱いにはしないが、履歴として見える */}
-                  {(q.rejectedArtifacts?.length ?? 0) > 0 && <div className="text-[11px]" style={{ color: "var(--text-muted)", textDecoration: "line-through" }} title={q.rejectedArtifacts!.map((a) => `${a.title}: ${a.rejectedNote ?? ""} (${a.rejectedBy})`).join("\n")}>{t("差し戻し済み: {list}", { list: q.rejectedArtifacts!.map((a) => a.title).join(", ") })}</div>}
+                  {(q.rejectedArtifacts?.length ?? 0) > 0 && <div className="text-[11px]" style={{ color: "var(--text-muted)", textDecoration: "line-through" }} title={q.rejectedArtifacts!.map((a) => `${a.title}: ${a.rejectedNote ?? ""} (${a.rejectedBy})`).join("\n")}>{t("差し戻し済み: {list}", { list: "" })}<ArtifactNames artifacts={q.rejectedArtifacts!} /></div>}
                   <ArtifactsEditor artifacts={q.artifacts} readonly={readonly} addLabel={direction === "in" ? t("入力物を追加") : t("成果物を追加")}
                     onChange={(next) => apply((p) => updatePort(p, q.id, { artifacts: next }))} />
                 </>
@@ -363,7 +382,7 @@ export function PoliciesReceived({ project, blockId }: { project: Project; block
           <div key={q.id} className="policies__item">
             <button type="button" className="port-consumers__item" onClick={() => select({ blockId: q.blockId, panelTab: "io" })} title={t("方針を決める箱へ")}>{owner(q.blockId)}</button>
             <span>「{q.name}」</span>
-            {q.artifacts.length > 0 && <span className="policies__arts">{q.artifacts.map((a) => a.title).join(", ")}</span>}
+            {q.artifacts.length > 0 && <span className="policies__arts"><ArtifactNames artifacts={q.artifacts} /></span>}
             {q.policy?.advisory ? <span className="meta-chip muted">{t("参考")}</span> : !ready && <span className="policies__wait">{project.blocks[blockId]?.status === "black" ? t("待ち") : t("未決定")}</span>}
             {changed.has(q.id) && !readonly && <button type="button" className="btn btn-sm policies__ack" title={t("済んだ作業がこの方針に合っていることを確かめた (確かめ直しの札を消す)")} onClick={() => apply((p) => ackPolicy(p, blockId, q.id))}>{t("確かめた")}</button>}
             {!readonly && <button type="button" className="btn btn-ghost btn-sm ml-auto" title={t("この箱では受け取らない")} onClick={() => apply((p) => setPolicyOptOut(p, blockId, q.id, true))}>×</button>}

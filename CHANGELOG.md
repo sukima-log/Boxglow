@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-_Changes after 0.6.5 go here._
+- **Attached files open from the input side too.** On an input card, the source's deliverables ("from … (spec.md)"), the contents of a policy and the sent-back deliverables are now clickable like the outputs' list: a file opens (VS Code editor / serve tab / path copied in a browser) and a URL opens as a link. Before, they were plain text.
 
 ## 0.6.5 (2026-10-31)
 

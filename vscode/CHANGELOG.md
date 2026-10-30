@@ -4,6 +4,8 @@
 
 _Changes after 0.5.5 go here._
 
+- Files attached to an input's source, to a policy or to sent-back deliverables also open when clicked.
+
 ## 0.5.5
 
 - Follows boxglow 0.6.5. Update together with the CLI and `serve`.

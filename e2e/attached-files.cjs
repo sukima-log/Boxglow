@@ -53,6 +53,16 @@ function plan() {
     await page.evaluate(() => window.postMessage({ type: 'open-file-error', path: 'Doc/scenario.md' }, '*'));
     await page.waitForTimeout(300);
     check('VS Code: 見つからない返事で通知を出す', ((await page.evaluate(() => window.boxglow.store.getState().toast)) || '').includes('Doc/scenario.md'));
+    // 箱の入力のカード (供給元の成果物) からも開ける (利用者の指摘 2026-10-31: 入力している側から開けなかった)
+    await page.evaluate(() => window.boxglow.store.getState().select({ blockId: 'b1', panelTab: 'io' }));
+    await page.waitForTimeout(800);
+    const fromInput = page.locator('.artifact-open', { hasText: 'scenario.md' }).first();
+    await page.evaluate(() => { window.__posted.length = 0; });
+    const inputBtn = (await fromInput.count()) === 1;
+    if (inputBtn) await fromInput.click();
+    await page.waitForTimeout(200);
+    const sentFromInput = await page.evaluate(() => window.__posted.filter((m) => m.type === 'open-file'));
+    check('VS Code: 箱の入力のカード (供給元の資料) からも open-file を送る', inputBtn && sentFromInput.length === 1 && sentFromInput[0].path === 'Doc/scenario.md', JSON.stringify(sentFromInput));
     // Notes のリンク: Ctrl + クリックで開く (ふつうのクリックでは送らない)
     await page.evaluate(() => window.boxglow.store.getState().select({ blockId: 'b1', panelTab: 'log' }));
     await page.waitForTimeout(800);
