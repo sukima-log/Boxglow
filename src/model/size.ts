@@ -201,6 +201,62 @@ export function blockSize(p: Project, blockId: string): Size {
   };
 }
 
+/**
+ * 展開中のボックスの入出力の丸の高さ (ボックスの上端からの距離)。
+ * 丸を見出しの下に上から並べると、中の箱の線が一度枠の上まで上がってから外へ出て、また下がる遠回りになる (利用者の指摘 2026-10-30)。
+ * そこで、各ポートを「枠の内側でつながる中の箱の丸」と同じ高さに置く:
+ *   - 入力: その入力から配られる中の箱の入力 (複数なら平均)
+ *   - 出力: その出力へ線を出している中の箱の出力 (複数なら平均)
+ *   中の箱がさらに展開中なら、その箱の丸の高さ (この関数で再帰的に求めたもの) を使う。
+ *   中でつながっていないポートは、今までどおり上から並べた位置を希望の高さにする。
+ * 希望の高さの順に並べ、隣どうしは 1 行 (ROW_H) 以上離し、見出しの下から枠の下までに収める (順番を保つので枠の縁で線が交差しない)。
+ * Input : p, blockId = 展開中のボックス
+ * Output: Map<ポート id, 上端からの y>。展開中でなければ空の Map
+ */
+export function expandedPortRows(p: Project, blockId: string): Map<string, number> {
+  const out = new Map<string, number>();
+  if (!isExpanded(p, blockId)) return out;
+  const size = blockSize(p, blockId);
+  const kids = new Set(childrenOf(p, blockId).map((c) => c.id));
+  // 中の箱の丸の高さ (このボックスの上端から)。見つからなければ undefined
+  const childPortY = (portId: string): number | undefined => {
+    const port = p.ports[portId];
+    const child = port ? p.blocks[port.blockId] : undefined;
+    if (!port || !child || !kids.has(child.id)) return undefined;
+    let y: number | undefined;
+    if (isExpanded(p, child.id)) y = expandedPortRows(p, child.id).get(portId);
+    else {
+      const card = taskCardLayout(p, child.id);
+      y = (port.direction === "in" ? card.inputs : card.outputs).find((r) => r.id === portId)?.center;
+    }
+    return y === undefined ? undefined : child.position.y + y;
+  };
+  const place = (direction: "in" | "out") => {
+    const ports = portsOf(p, blockId, direction);
+    const rows = ports.map((port, index) => {
+      // 枠の内側の線の相手 (入力: 内側から出る線の行き先 / 出力: 内側に入る線の出どころ)
+      const peers = direction === "in"
+        ? outgoingEdges(p, { portId: port.id, side: "inner" }).map((e) => e.to.portId)
+        : incomingEdges(p, { portId: port.id, side: "inner" }).map((e) => e.from.portId);
+      const ys = peers.map(childPortY).filter((y): y is number => y !== undefined);
+      const fallback = size.headerH + index * ROW_H + ROW_H / 2;
+      return { port, index, y: ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : fallback };
+    });
+    rows.sort((a, b) => a.y - b.y || a.index - b.index);
+    // 上から順に、見出しの下・前の丸から 1 行以上離す
+    const top = size.headerH + ROW_H / 2;
+    const bottom = size.height - ROW_H / 2;
+    const ys = rows.map((r) => r.y);
+    for (let i = 0; i < ys.length; i++) ys[i] = Math.max(ys[i], top, i > 0 ? ys[i - 1] + ROW_H : top);
+    // 下にはみ出したら、下から順に押し上げる (上限は見出しの下)
+    for (let i = ys.length - 1; i >= 0; i--) ys[i] = Math.max(top + i * ROW_H, Math.min(ys[i], i < ys.length - 1 ? ys[i + 1] - ROW_H : bottom));
+    rows.forEach((r, i) => out.set(r.port.id, ys[i]));
+  };
+  place("in");
+  place("out");
+  return out;
+}
+
 /** 入力/出力ノードの高さ */
 export function terminalHeight(p: Project, which: "in" | "out"): number {
   const n = portsOf(p, ROOT_ID, which).length;

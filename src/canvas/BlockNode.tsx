@@ -14,7 +14,7 @@ import { useProjectStore, useShownProject } from "../store/useProjectStore";
 import { handleId, isExpanded, type BlockRFNode } from "./layout";
 import { actorName, ACTIVITY_LABEL } from "../model/report";
 import { categoryOf } from "../model/categories";
-import { taskCardLayout, taskCardPorts } from "../model/size";
+import { expandedPortRows, taskCardLayout, taskCardPorts } from "../model/size";
 import { readingColumns } from "../model/readingLayout";
 import { CategoryIcon } from "./CategoryIcon";
 import { STATUS_LABEL } from "../model/status";
@@ -138,11 +138,15 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   }, [project, blockId, data.major]);
 
   const card = useMemo(() => taskCardLayout(project, blockId), [project, blockId]);
-  const rowAt = (i: number, direction: "in" | "out") => view.expanded
-    ? headerH + i * 26 + 13
+  // 展開中のボックスの丸: 枠の内側でつながる中の箱の丸と同じ高さに置く (見出しの下に並べると、線が枠の上まで上がって戻る遠回りになる)。
+  // タブで開いているボックスだけは、左右の入力/出力ノードの行とそろえるため、今までどおり見出しの下に並べる
+  const alignRows = view.expanded && viewScope !== blockId;
+  const expandedRows = useMemo(() => alignRows ? expandedPortRows(project, blockId) : new Map<string, number>(), [alignRows, project, blockId]);
+  const rowAt = (i: number, direction: "in" | "out", portId: string) => view.expanded
+    ? expandedRows.get(portId) ?? headerH + i * 26 + 13
     : (direction === "in" ? card.inputs : card.outputs)[i].center;
   const updateNodeInternals = useUpdateNodeInternals();
-  const portLayout = `${JSON.stringify(vertical)}|${width}|${height}|${headerH}|${view.expanded}|${card.inputs.map(q => `${q.id}:${q.center}`)}|${card.outputs.map(q => `${q.id}:${q.center}`)}`;
+  const portLayout = `${JSON.stringify(vertical)}|${width}|${height}|${headerH}|${view.expanded}|${card.inputs.map(q => `${q.id}:${q.center}`)}|${card.outputs.map(q => `${q.id}:${q.center}`)}|${[...expandedRows].map(([id, y]) => `${id}:${y}`)}`;
   const previousPortLayout = useRef(portLayout);
   useEffect(() => {
     if (previousPortLayout.current !== portLayout) {
@@ -349,7 +353,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           id={handleId("in", q.id, "outer")}
           title={t("入力: {name}", { name: q.name })}
           className={`${q.promoted ? "port-promoted" : ""} ${q.ready ? "port-ready" : "port-waiting"}`}
-          style={{ top: rowAt(i, "in") }}
+          style={{ top: rowAt(i, "in", q.id) }}
           isConnectable={canEdit}
           onMouseDown={(ev) => ev.preventDefault()}
         />
@@ -363,7 +367,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           id={handleId("in", q.id, "inner")}
           className="port-inner"
           title={t("{name} を中のブロックへ (ここから中のボックスの入力へドラッグ)", { name: q.name })}
-          style={{ top: rowAt(i, "in"), zIndex: 2, left: -7, right: "auto", transform: "translate(-50%, -50%)" }}
+          style={{ top: rowAt(i, "in", q.id), zIndex: 2, left: -7, right: "auto", transform: "translate(-50%, -50%)" }}
           isConnectable={canEdit}
           onMouseDown={(ev) => ev.preventDefault()}
         />
@@ -376,7 +380,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           id={handleId("out", q.id, "outer")}
           title={t("出力: {name} (クリックまたはドラッグで接続)", { name: q.name })}
           className={`port-out ${q.ready ? "port-ready" : "port-waiting"}${q.policy ? " port-policy" : ""}${q.idle ? " port-idle" : ""}`}
-          style={{ top: rowAt(i, "out"), zIndex: 1 }}
+          style={{ top: rowAt(i, "out", q.id), zIndex: 1 }}
           isConnectable={canEdit}
           onMouseDown={(ev) => ev.preventDefault()}
         />
@@ -390,7 +394,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           id={handleId("out", q.id, "inner")}
           className={`port-inner${q.idle ? " port-idle" : ""}`}
           title={t("中のブロックの出力を {name} へ", { name: q.name })}
-          style={{ top: rowAt(i, "out"), zIndex: 0, right: -7, left: "auto", transform: "translate(50%, -50%)" }}
+          style={{ top: rowAt(i, "out", q.id), zIndex: 0, right: -7, left: "auto", transform: "translate(50%, -50%)" }}
           isConnectable={canEdit}
           onMouseDown={(ev) => ev.preventDefault()}
         />

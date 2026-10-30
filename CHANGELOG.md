@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Wires leave nested boxes in a straight line.** On an expanded box (a box drawn as a frame around its children), each input and output port now sits at the height of the child port it connects to inside, instead of being stacked under the header. Wires no longer climb to the top of the frame and come back down; ports keep their top-to-bottom order and stay at least one row apart, so wires do not cross at the frame edge. A box opened in its own tab keeps the old layout so its ports line up with the Inputs/Outputs nodes beside it.
 - **Delete removes a port picked on the canvas.** Click a port (the dot; a ring appears around it) and press Delete to remove that input or output together with its wires, without opening the I/O tab. Undo brings it back.
 - **Two boxes inside the same parent can both be wired out.** Connecting a second child's output to a box outside the parent no longer replaces the first child's wire. When the parent's output with that name already carries another child's wire, a separate relay output is added (named after the child box when the output still has the placeholder name "Output"). The same applies to relay inputs on the way down.
 - **No stray dots on boxes with children.** An expanded box's output that still has the placeholder name ("Output"), is not connected and has no deliverable is no longer drawn as a dot on the frame, not even on hover. It stays editable on the I/O tab (name it, or use "Connect to…" to wire it).
