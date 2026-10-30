@@ -27,7 +27,7 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
     const totalBefore = await page.evaluate(() => document.body.innerText.match(/Done \d+ \/ (\d+)/)?.[1]);
 
     // ---- 詳細パネルの先頭の「道」の欄で REST を選ぶ ----
-    await box('API の方式を決める').click(); await page.waitForTimeout(400);
+    await box('API の方式を決める').click(); await page.keyboard.press('Enter'); await page.waitForTimeout(400); // 1 回のクリックは選ぶだけ。Enter で詳細を開く
     const picker = page.locator('.panel.right .branch-picker');
     check('道を選ぶ: 分岐のボックスを選ぶと、パネルの先頭に道ごとの「選ぶ」が並ぶ', await picker.isVisible() && await picker.getByRole('button', { name: '選ぶ', exact: true }).count() === 2);
     check('道を選ぶ: 分岐の問いは「未回答」には重ねて出さない', await page.locator('.panel.right .attention-section', { hasText: '未回答' }).count() === 0);
@@ -80,7 +80,7 @@ const { chromium, ROOT, open, load, check, result } = require('./lib.cjs');
     await page.locator('.react-flow__pane').click({ position: { x: 20, y: 20 } }); await page.waitForTimeout(200);
     // 箱が上の帯に隠れていると押せないので、全体を収めてから押す
     await page.getByRole('button', { name: 'Fit', exact: true }).click(); await page.waitForTimeout(500);
-    await box('設計する').click(); await page.waitForTimeout(400);
+    await box('設計する').click(); await page.keyboard.press('Enter'); await page.waitForTimeout(400); // Enter で詳細を開く
     await page.locator('.panel.right .seg__btn', { hasText: 'More' }).click(); await page.waitForTimeout(200);
     await page.locator('.panel.right .more-actions').getByRole('button', { name: /分岐にする/ }).click();
     const convert = page.getByRole('dialog', { name: '分岐にする' });

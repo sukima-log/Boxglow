@@ -351,6 +351,9 @@ textarea.input { resize: vertical; min-height: 64px; }
   opacity: 0.8;
 }
 .bg-block__toggle:hover { opacity: 1; background: rgba(127, 127, 127, 0.15); }
+/* 選んだ箱の右上の外に出す「詳細」ボタン (押すと右の詳細パネルを開く)。箱の中身 (題名・▸) に重ねない */
+.bg-block__details { position: absolute; right: 0; bottom: calc(100% + 6px); z-index: 5; padding: 2px 10px; border: 1px solid var(--accent); border-radius: 999px; background: var(--bg-paper); color: var(--accent); font-size: 12px; font-weight: 700; line-height: 20px; cursor: pointer; box-shadow: var(--shadow-card, 0 2px 8px rgba(0,0,0,.15)); white-space: nowrap; }
+.bg-block__details:hover { background: var(--accent); color: var(--on-primary); }
 
 .bg-block__ports {
   display: grid;

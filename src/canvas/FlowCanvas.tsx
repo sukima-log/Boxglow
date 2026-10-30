@@ -63,6 +63,9 @@ interface Props {
   matcher: ((blockId: string) => boolean) | null;
 }
 
+/** 図の上のクリックで選ぶときの指定: 選ぶだけで、右の詳細パネルは開かない (開いていれば中身が切り替わる) */
+const PEEK = { peek: true } as const;
+
 export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
   const readonly = useProjectStore((s) => s.readonly);
   const editMode = useProjectStore((s) => s.editMode);
@@ -209,11 +212,11 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
       onNodesChangeRaw(changes);
       for (const ch of changes) {
         if (ch.type === "select" && ch.selected) {
-          if (ch.id === "root-in") select({ terminal: "in" });
-          else if (ch.id.startsWith("root-in:")) select({ terminal: "in", terminalGroup: ch.id.slice(8) });
-          else if (ch.id === "root-out") select({ terminal: "out" });
+          if (ch.id === "root-in") select({ terminal: "in" }, PEEK);
+          else if (ch.id.startsWith("root-in:")) select({ terminal: "in", terminalGroup: ch.id.slice(8) }, PEEK);
+          else if (ch.id === "root-out") select({ terminal: "out" }, PEEK);
           // 大項目の入力/出力ノードを選んだら、その大項目のボックスを選ぶ (右のパネルで入出力を直せる)
-          else if (ch.id === SCOPE_IN || ch.id === SCOPE_OUT) { const sc = useProjectStore.getState().viewScope; if (sc) select({ blockId: sc }); }
+          else if (ch.id === SCOPE_IN || ch.id === SCOPE_OUT) { const sc = useProjectStore.getState().viewScope; if (sc) select({ blockId: sc }, PEEK); }
           else {
             // 2 クリック結線の途中なら、クリックした箱を接続先にする (階層が違っても途中の箱を通す)
             const st = useProjectStore.getState();
@@ -224,7 +227,7 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
               st.apply((p) => { const r = connectToBlock(p, pending, ch.id); error = r.error; return r.project; });
               if (error) st.setToast(error);
             }
-            select({ blockId: ch.id });
+            select({ blockId: ch.id }, PEEK);
           }
           // キャンバスでの選択は表示位置を動かさない。
           // Tree や検索から「移動する」操作は、それぞれの focusBlock に任せる。

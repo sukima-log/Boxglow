@@ -30,6 +30,7 @@ const path = require("path");
         check(`${theme}/${lang}: 俯瞰でもカテゴリ札を隠さない`, await badge.isVisible());
         await page.evaluate(() => window.boxglow.rf.fitView({ padding: 0.15, minZoom: 0.05, maxZoom: 1 }));
         await node.locator(".bg-block__title").click();
+        await page.keyboard.press("Enter"); // 1 回のクリックは選ぶだけ。Enter で詳細を開く
         const field = page.getByRole("combobox", { name: lang === "ja" ? "カテゴリ" : "Category", exact: true });
         check(
           `${theme}/${lang}: 詳細の先頭に現在のカテゴリ`,

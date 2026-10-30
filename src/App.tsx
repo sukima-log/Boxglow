@@ -254,8 +254,11 @@ export function App() {
           setTimeout(() => { select({ blockId: r.blockId }); focusBlock(r.blockId); }, 0);
           return q2;
         });
+      } else if (ev.key === "Enter" && !ev.ctrlKey && !ev.metaKey && !ev.altKey) {
+        // Enter = 選んでいる物の詳細パネルを開く (図の上で 1 回クリックしただけでは開かない)
+        if (sel.blockId || sel.terminal) { ev.preventDefault(); useProjectStore.getState().setDetailsOpen(true); }
       } else if (ev.key === "Escape") {
-        select({});
+        select({}); // 選択を外す (詳細パネルも閉じる)
         setHelpOpen(false);
         useProjectStore.getState().setPendingConnect(null); // 2 クリック結線の中止
       }
@@ -284,7 +287,12 @@ export function App() {
 
   // 詳細パネルは何かを選んでいるときだけ出す
   // 右の詳細パネルを出すか (線だけを選んでいるときは出さない: 線は図の上で強調するだけ。外すのは Delete キー)
-  const hasSelection = !!project && !embed && (selection.blockId !== null || selection.terminal !== null || selection.project || selection.timeline);
+  // 図の上で 1 回クリックしただけでは開かない。箱の「詳細」ボタン・Enter キー・一覧や札から選んだときに開く (利用者の要望 2026-10-30)
+  const detailsOpen = useProjectStore((s) => s.detailsOpen);
+  const anySelected = !!project && !embed && (selection.blockId !== null || selection.terminal !== null || selection.project || selection.timeline);
+  const hasSelection = anySelected && detailsOpen;
+  // 選択が外れたら (計画を開き直したときなど) 開いていた印も戻す。次にクリックで選んだだけで開かないように
+  useEffect(() => { if (!anySelected && useProjectStore.getState().detailsOpen) useProjectStore.getState().setDetailsOpen(false); }, [anySelected]);
   const gridClass = ["app-grid", embed ? "embed" : "", hasSelection ? "" : "no-right"].filter(Boolean).join(" ");
   // キャンバスのタブ: Top (全体) + 大項目ごと (埋め込みでは出さない)
   const majors = useMemo(() => (project ? majorBlocks(project) : []), [project]);

@@ -72,7 +72,7 @@ const settle=p=>p.waitForTimeout(500);
    await p.keyboard.press('Escape');
    if(theme==='light') {
     await p.getByRole('tab',{name:'In Progress 公開する',exact:true}).click();await settle(p); // (公開するはサンプルで In Progress にしてある)
-    await p.locator('.react-flow__node-block .bg-block__title').filter({hasText:/^公開する$/}).click();
+    await p.locator('.react-flow__node-block .bg-block__title').filter({hasText:/^公開する$/}).click();await p.keyboard.press('Enter'); // 1 回のクリックは選ぶだけ。Enter で詳細を開く
     await p.getByRole('heading',{name:'未回答',exact:true}).waitFor();await settle(p);
     await p.screenshot({path:path.join(out,'experience-decision.png')});
     await p.getByRole('button',{name:'静的ホスティング',exact:true}).click();

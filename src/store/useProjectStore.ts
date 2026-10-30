@@ -245,7 +245,14 @@ interface State {
   apply: (fn: (p: Project) => Project, opts?: { history?: boolean }) => void;
   undo: () => void;
   redo: () => void;
-  select: (sel: Partial<Selection>) => void;
+  /**
+   * 選ぶ。既定では右の詳細パネルも開く (ツリー・検索・一覧・箱の札から選んだとき)。
+   * opts.peek = true は図の上でのクリック: 選ぶだけで、パネルの開閉は変えない (開いていれば中身が切り替わる)
+   */
+  select: (sel: Partial<Selection>, opts?: { peek?: boolean }) => void;
+  /** 右の詳細パネルを開いているか (何かを選んでいて、かつ開く操作をしたときだけ出す。利用者の要望 2026-10-30) */
+  detailsOpen: boolean;
+  setDetailsOpen: (open: boolean) => void;
   /** 右パネルのタブの要求を消す (パネルが読んだ後) */
   clearPanelTab: () => void;
   setToast: (msg: string | null) => void;
@@ -1065,6 +1072,8 @@ export const useProjectStore = create<State>((set, get) => {
   , projects: []
   , selection: NO_SELECTION
   , lastEdgeId: null
+  , detailsOpen: false
+  , setDetailsOpen: (detailsOpen) => set({ detailsOpen })
   , pendingConnect: null
   , policyDrag: null
   , setPolicyDrag: (policyDrag) => set({ policyDrag })
@@ -1147,13 +1156,16 @@ export const useProjectStore = create<State>((set, get) => {
     }
 
     // 選択は 1 種類だけ (ブロック / 線 / 入出力ノード / プロジェクト設定)。指定した項目以外は解除する
-  , select: (sel) => {
+  , select: (sel, opts) => {
       const cur = get().selection;
       const next = { ...NO_SELECTION, ...sel };
+      // 詳細パネル: 何も選んでいなければ閉じる。図の上のクリック (peek) は今の開閉のまま、それ以外 (一覧・札・検索から) は開く
+      const empty = !next.blockId && !next.terminal && !next.project && !next.timeline;
+      const detailsOpen = empty ? false : opts?.peek ? get().detailsOpen : true;
       // 「線を選んでいた → ボックスを選んだ」の直後だけ、その線を覚える (同じボックスを続けて選ぶダブルクリックの 2 回目では保つ)。
       // 線を外しただけ (何もない所を押した) や別の物を選んだときは忘れる (あとで無関係に線が選び直されないように)
       const lastEdgeId = cur.edgeId && next.blockId ? cur.edgeId : next.blockId && next.blockId === cur.blockId ? get().lastEdgeId : null;
-      set({ selection: next, lastEdgeId });
+      set({ selection: next, lastEdgeId, detailsOpen });
     }
   , clearPanelTab: () => { const { panelTab: _t, ...rest } = get().selection; void _t; set({ selection: rest as Selection }); }
   , setToast: (msg) => set({ toast: msg })

@@ -64,6 +64,9 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   const viewScope = useProjectStore((s) => s.viewScope);
   const overviewZoom = useStore((s) => s.transform[2] < 0.65);
   const canEdit = useProjectStore((s) => !s.readonly && s.editMode);
+  // 右の詳細パネルを開いているか。選んだ箱の上に「詳細」ボタンを出すのは、パネルが閉じているときだけ
+  const detailsOpen = useProjectStore((s) => s.detailsOpen);
+  const setDetailsOpen = useProjectStore((s) => s.setDetailsOpen);
   // ストアからはプロジェクト本体だけを取り (参照が変わるのは変更時だけ)、表示用の値は useMemo で導く。
   // セレクタで毎回新しい配列を作ると React が無限ループ (エラー #185) になるため。
   const project = useShownProject()!;
@@ -267,6 +270,13 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
           </button>
         )}
       </div>
+      {/* 選んだ箱の右上 (箱の外の上) に「詳細」ボタン: 1 回のクリックでは右のパネルを開かず、これか Enter で開く (利用者の要望 2026-10-30) */}
+      {selected && !detailsOpen && (
+        <button type="button" className="bg-block__details nodrag" title={t("詳細を右に開く (Enter)")}
+          onClick={(ev) => { ev.stopPropagation(); select({ blockId }); setDetailsOpen(true); }} onDoubleClick={(ev) => ev.stopPropagation()}>
+          {t("詳細")} ›
+        </button>
+      )}
       {!vertical && view.expanded && readingColumns(project, blockId).map(column => (
         <div key={`${column.x}:${column.y}`} className="bg-stage" style={{ left: column.x, top: column.y, width: column.width }}>{t("工程 {n}", { n: column.index + 1 })}</div>
       ))}
