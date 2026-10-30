@@ -2,7 +2,13 @@
 
 ## Unreleased
 
-_Changes after 0.5.3 go here._
+_Changes after 0.5.4 go here._
+
+## 0.5.4
+
+- Follows boxglow 0.6.4. Update together with the CLI and `serve`.
+- The Inputs / Outputs nodes show the Details button when selected (Enter works too), and selecting them no longer moves the view.
+- Wires around nested boxes no longer climb up and come back down when another box is in the way.
 
 ## 0.5.3
 

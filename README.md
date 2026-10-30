@@ -11,6 +11,20 @@ Tasks are boxes with inputs and outputs; a box goes New (BlackBox: output decide
 - CLI for agents: `npx boxglow` (status / start / done / split / ask / answer ...)
 - License: MIT
 
+## What's new in 0.6.4
+
+- **Agents attach material to the plan's inputs themselves**: `npx boxglow artifact inputs <path or URL> --input <input name>` (MCP: `boxglow_artifact` with block "inputs"). Boxes waiting for a spec or scenario can start without asking a person to attach it on the screen.
+- **Everything an agent needs without the screen**: clear "Policy: check again" (`ack <block> --policy`), make inputs optional or required (`port --optional / --required`), describe ports (`port --describe`) and remove attachments (`artifact --remove`).
+- **Details from the Inputs / Outputs nodes** (Details button or Enter), and **no more wires that climb up and come back down** around nested boxes.
+
+Details: [CHANGELOG.md](CHANGELOG.md). Update the CLI, `serve` and the VS Code extension (0.5.4) together.
+
+### 日本語: 0.6.4 の要点
+
+- **計画の入力に AI が自分で資料を付けられる**: `npx boxglow artifact inputs <パスか URL> --input <入力名>` (MCP は `boxglow_artifact` に block: "inputs")。仕様書やシナリオを待っている箱が、人に画面で付けてもらわなくても着手できる。
+- **画面を使わずに AI が済ませられる操作を追加**: 「方針: 確かめ直し」を消す (`ack <block> --policy`)、入力を任意 / 必須にする (`port --optional / --required`)、入出力の説明を書く (`port --describe`)、付けたものを外す (`artifact --remove`)。
+- **Inputs / Outputs ノードからも詳細を開ける** (「詳細」ボタンか Enter)。入れ子の箱の周りで、上がってから戻る遠回りの線が出ない。
+
 ## What's new in 0.6.3
 
 - **Policies**: share any output as a project-wide decision without wires (`port --policy`, MCP `boxglow_port`). Boxes in its scope wait for it before they start and are flagged "Policy: check again" when it changes after they are done.
@@ -220,7 +234,7 @@ Writes become new versions on the server and reach the synced devices on their n
 
 ## VS Code extension
 
-Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.3 goes with boxglow 0.6.3).
+Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.4 goes with boxglow 0.6.4).
 
 `vscode/` holds the extension's source. It opens `boxglow.json` as the same diagram inside the editor (custom editor "Boxglow"; right-click the file or use the editor title button / command *Boxglow: Open boxglow.json as a diagram*). The diagram follows the file when the CLI or an agent writes it, edits in the diagram are written back, and light / dark follow the VS Code theme. To build it yourself: `npm run build:vscode` (bundles the web app into `vscode/media/`), then `cd vscode && npm run package` (`.vsix`, install via *Extensions: Install from VSIX...*).
 

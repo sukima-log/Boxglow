@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+_Changes after 0.6.4 go here._
+
+## 0.6.4 (2026-10-31)
+
+Goes with the VS Code extension 0.5.4. Update the CLI, `serve` and the extension together. The hosted sync server was updated on 2026-10-31 (`boxglow_artifact`, and the commands below).
+
+- **Agents can do what used to need the screen.** `npx boxglow ack <block> --policy [<policy>]` clears "Policy: check again" after checking that finished work still matches a policy (MCP: `boxglow_ack` with `policy`). `port <block|inputs> --optional <input>` / `--required <input>` makes an input optional or required again, and `--describe "<name>=<description>"` writes a port's description (MCP: `boxglow_port` with `optional`, `required`, `describe`). `artifact <block|inputs> --remove <title, path or URL>` removes something attached by mistake (MCP: `boxglow_artifact` with `remove`). The agent instructions no longer say to use the screen for optional inputs. The help no longer says the last output cannot be removed, and branch paths can be added or removed after the branch was answered (as the model already allowed); the English help now lists `branch --add-option / --remove-option`.
 - **Agents can attach material to the plan's inputs.** `npx boxglow artifact inputs <path or URL> --input <input name>` (MCP: the new `boxglow_artifact` tool with block "inputs") attaches a spec, a scenario or any file or URL to a top-level input, so the boxes waiting for it can start. Before, only the screen could do it and agents asked a person. `--input` may be omitted when the plan has one input; with the context guard on, an agent passes its latest context token. The agent instructions and the skill now say to attach it instead of asking.
 - **The Inputs / Outputs nodes open their details too.** Selecting the top-level Inputs or Outputs node shows the **Details ›** button above it (Enter works as well); selecting it again after Esc works, and selecting it no longer moves the view. In a tab, the Inputs / Outputs nodes select the tab's box, whose own Details button opens the panel.
 - **No more wires that climb up and come back down around a nested box.** When a child's wire cannot leave its parent frame in a straight line because another box inside is in the way, the relay port on the frame is placed between where the wire gets around that box and the height of the box it goes to outside, instead of at the child's height. The wire no longer goes around the box, back up to the port, and back down again outside.
