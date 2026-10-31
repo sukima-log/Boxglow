@@ -7,6 +7,7 @@ _Changes after 0.5.6 go here._
 ## 0.5.6
 
 - Follows boxglow 0.6.6. Update together with the CLI and `serve`.
+- Work-in-progress material: attach an artifact as "WIP", confirm it later, and let an input accept work in progress.
 - File paths and URLs written in descriptions, verification, decision context, notes and send-back reasons open when clicked (Ctrl / Cmd + click in the Notes editor).
 
 - Files attached to an input's source, to a policy or to sent-back deliverables also open when clicked.

@@ -3,7 +3,7 @@
  * 対象のボックス・その親 (上の階層すべて)・入力の供給元 (上流) のボックスについて、説明・判断 (確認済みの回答も含む)・
  * 入出力の条件・成果物・引き継ぎメモを集める。CLI の context と、確認トークン (cli/context.ts) の元になる
  */
-import { ancestorsOf, incomingEdges, isInputReady, isSourceReady, portsOf, sentBackTo, policiesFor, isPolicyReady, changedPolicies } from "./graph";
+import { ancestorsOf, incomingEdges, isInputReady, isSourceReady, portsOf, sentBackTo, policiesFor, isPolicyReady, changedPolicies, hasDraftOnly } from "./graph";
 import { branchState } from "./branch";
 import { freshnessText, descriptionReminder } from "./workflow";
 
@@ -98,7 +98,9 @@ export function agentContext(p: Project, blockId: string) {
       , ports: Object.values(p.ports)
           .filter((port) => port.blockId === id)
           .sort((a, b) => a.id.localeCompare(b.id))
-          .map((port) => ({ id: port.id, direction: port.direction, name: port.name, description: port.description, required: port.required, artifacts: port.artifacts }))
+          // 入力の「作成中で着手可」と「作成中の資料だけ届いている」も渡す (無いときは項目を出さない: 確認トークンを変えない)
+          .map((port) => ({ id: port.id, direction: port.direction, name: port.name, description: port.description, required: port.required, artifacts: port.artifacts
+          , ...(port.acceptDraft ? { acceptDraft: true } : {}), ...(port.direction === "in" && hasDraftOnly(p, port.id) ? { draftOnly: true } : {}) }))
       };
     })
     // 供給元の出力が束ねている、中の出力 (何段でも)。中のボックスの判断や説明は入らない (要るときは、その key で context を読む)
@@ -200,6 +202,9 @@ export function briefContext(p: Project, blockId: string) {
     const skippedPath = gone.has(port.id);
     return {
       name: port.name, description: port.description, required: port.required, artifacts: port.artifacts, sources, ready
+      // 作成中: 供給元に作成中 (draft) の資料だけがある (確定はまだ)。acceptDraft の入力ならそれで着手してよい
+    , ...(hasDraftOnly(p, port.id) ? { draftOnly: true } : {})
+    , ...(port.acceptDraft ? { acceptDraft: true } : {})
       // 不足: 必須の入力なのに、用意できていない (供給元が未完了・つながっていない・資料が付いていない)。見送りの道からの入力は除く
     , missing: !!port.required && !ready && !skippedPath
     , ...(skippedPath ? { skippedPath: true } : {})

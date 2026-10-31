@@ -1,7 +1,7 @@
 import { ClaimMark, useClaimClock, visibleClaim } from "../panels/Claims";
 import { chosenOption, isSkipped, waitingBranches } from "../model/branch";
 import { unpreparedState } from "../model/readiness";
-import { workingNow, sentBackTo, policiesFor, isPolicyReady, changedPolicies, policyReceivers, policyScopeOf, isPlaceholderName } from "../model/graph";
+import { workingNow, sentBackTo, policiesFor, isPolicyReady, changedPolicies, policyReceivers, policyScopeOf, isPlaceholderName, hasDraftOnly } from "../model/graph";
 /**
  * ブロック (ボックス) のノード
  * 分類・題名・状態・入力・出力を縦に読むカード。親は子を包む領域として描く。
@@ -87,7 +87,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     , kids
     , progressRatio: prog.ratio
     , progressText: `${prog.white}/${prog.total}`
-    , ins: ins.map((q) => ({ id: q.id, name: q.name, required: q.required, promoted: !!q.promotedFrom, ready: isInputReady(p, q.id), anyOf: !!q.anyOf }))
+    , ins: ins.map((q) => ({ id: q.id, name: q.name, required: q.required, promoted: !!q.promotedFrom, ready: isInputReady(p, q.id), anyOf: !!q.anyOf, draft: hasDraftOnly(p, q.id) }))
       // 出力: 分岐のボックスなら、その出力が選んだ道 (chosen) か、見送りの道 (rejected) か、まだ未定 (open) か
     , outs: outs.map((q) => {
         const chosen = b?.branch ? chosenOption(b) : undefined;
@@ -332,7 +332,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
             <div key={q.id} data-port-id={q.id} style={{ height: card.inputs[i].height }} className={`bg-block__port in ${q.required ? "" : "optional"} ${q.promoted ? "promoted" : ""} ${q.ready ? "ready" : ""}`} title={t("入力: {name}", { name: q.name })}>
               <span className="bg-block__direction">{t("入力")}</span>
               <span className="bg-block__port-name">{q.name}</span>
-              {q.anyOf ? <span className="opt merge" title={t("合流: どれか 1 つが届けばよい入力")}>{t("合流")}</span> : !q.required ? <span className="opt">{t("(任意)")}</span> : !q.ready && <span className="bg-block__waiting">{t("待ち")}</span>}
+              {q.anyOf ? <span className="opt merge" title={t("合流: どれか 1 つが届けばよい入力")}>{t("合流")}</span> : !q.required ? <span className="opt">{t("(任意)")}</span> : !q.ready && <span className="bg-block__waiting" title={q.draft ? t("作成中の資料が届いています (この入力を「作成中で着手可」にすると着手できます)") : undefined}>{q.draft ? t("作成中") : t("待ち")}</span>}
             </div>
           ))}
           {view.outs.map((q, i) => (

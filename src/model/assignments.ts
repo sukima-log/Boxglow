@@ -2,7 +2,7 @@
  * 担当の一覧 (表): あるメンバーが担当するボックスを、表の行として取り出す
  * 画面の「表で見る」と CLI の `boxglow list` が同じ行を使う (表示の違いだけを各側で持つ)
  */
-import { ancestorsOf, effectiveProgress, kindOf, waitingFor } from "./graph";
+import { ancestorsOf, effectiveProgress, kindOf, waitingFor, markDraftInputs } from "./graph";
 import { isSkipped } from "./branch";
 import { reasonText, unpreparedReasons } from "./readiness";
 import { ROOT_ID, type BlockStatus, type Project } from "./types";
@@ -76,7 +76,7 @@ export function assignmentRows(p: Project, target: AssigneeTarget, opts: { inclu
     , overdue: !!b.dueDate && b.status !== "white" && b.dueDate < today
     , ...(typeof b.estimateHours === "number" ? { estimateHours: b.estimateHours } : {})
       // 入力の待ち (と、まだ答えていない分岐): 完了済みは、もう材料を待たないので空にする
-    , missingInputs: b.status === "white" ? [] : waitingFor(p, b.id)
+    , missingInputs: b.status === "white" ? [] : markDraftInputs(p, b.id, waitingFor(p, b.id))
     , pendingDecisions: b.decisions.filter((d) => d.answer === undefined).length
     , unprepared: b.status === "white" ? [] : unpreparedReasons(p, b.id).map((r) => reasonText(p, r))
       // 担当の名前: 登録の順にそろえる (消えたメンバーの id は飛ばす)

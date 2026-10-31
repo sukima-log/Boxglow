@@ -32,6 +32,11 @@ export type ArtifactState = "ok" | "moved" | "missing";
 export interface Artifact {
   id: string;
   title: string;
+  /**
+   * 作成中 (作りかけ)。出力に付けても「用意できた」には数えず、使う側の箱は待ったまま (ただし使う側の入力が acceptDraft なら着手できる)。
+   * 作った箱を完了にすると外れる (確定)。作りかけの資料を箱に付けられず、付けるか付けないかの 2 択になっていた (利用者の指摘 2026-10-31)
+   */
+  draft?: boolean;
   /** リンク (git の場合はリモートがあればコミット固定の URL) */
   url: string;
   kind: ArtifactKind;
@@ -81,6 +86,8 @@ export interface Port {
   description: string;
   /** 入力の必須フラグ (出力は常に必須) */
   required: boolean;
+  /** 入力: 供給元の資料が作成中 (draft) でも着手してよい (作りかけの意匠からモデリングを始める、など)。既定は確定した資料を待つ */
+  acceptDraft?: boolean;
   artifacts: Artifact[];
   /** 差し戻された成果物 (履歴として残す。届いた扱いにしない) */
   rejectedArtifacts?: (Artifact & { rejectedAt: string; rejectedBy: string; rejectedNote?: string })[];

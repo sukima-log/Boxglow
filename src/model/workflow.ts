@@ -3,7 +3,7 @@
  * 判定と表示だけを行い、本文や計画はここでは書き換えない。
  */
 import type { Block, Project, WorkScope } from "./types";
-import { isHumanActor, portsOf, waitingFor } from "./graph";
+import { isHumanActor, portsOf, waitingFor, markDraftInputs } from "./graph";
 import { isSkipped } from "./branch";
 import { nextSteps, reasonText, suppliedArtifacts, unpreparedReasons } from "./readiness";
 import { t } from "../i18n/core";
@@ -48,7 +48,8 @@ export function candidateGroups(p: Project, blocks: Block[]) {
     const reasons = unpreparedReasons(p, b.id);
     const missingInputs = waitingFor(p, b.id);
     const state: "ready" | "unprepared" | "waiting" = reasons.length ? "unprepared" : missingInputs.length ? "waiting" : "ready";
-    return { blockId: b.id, key: b.key, title: b.title, inFocus: inFocus(p, b.id), missingInputs, unprepared: reasons.map(r => reasonText(p, r)), state };
+    // 表示用の名前: 作成中の資料が届いている入力には「(作成中あり)」を添える (acceptDraft にすれば着手できると分かるように)
+    return { blockId: b.id, key: b.key, title: b.title, inFocus: inFocus(p, b.id), missingInputs: markDraftInputs(p, b.id, missingInputs), unprepared: reasons.map(r => reasonText(p, r)), state };
   });
   const label = { ready: "着手できる", unprepared: "要具体化", waiting: "入力待ち" } as const;
   return (focused ? [true, false] : [false]).flatMap(scope =>
@@ -77,7 +78,7 @@ export function checkStart(p: Project, id: string, actor: string, reason = "") {
   // 1. 必須の入力と、まだ答えていない分岐 (分岐待ちのボックスに着手すると、選ばれない道の仕事になるかもしれない)
   const names = waitingFor(p, id);
   if (names.length && !reason.trim()) {
-    const warning = t("必須の入力待ち: {names}", { names: names.join(", ") });
+    const warning = t("必須の入力待ち: {names}", { names: markDraftInputs(p, id, names).join(", ") });
     if (p.workflowPolicy?.startWithoutInputs === "reject" && !human) errors.push(warning + " " + t("開始する理由を --reason で記録してください。"));
     else warnings.push(warning);
   }

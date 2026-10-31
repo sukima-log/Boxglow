@@ -22,7 +22,7 @@ function portLine(p: Project, port: Port): string {
   if (desc) parts.push(`: ${desc}`);
   if (port.direction === "in" && !port.required) parts.push(" " + t("(任意)"));
   if (port.artifacts.length > 0) {
-    parts.push(" / " + port.artifacts.map((a) => (a.url ? `[${a.title}](${a.url})` : a.title)).join(", "));
+    parts.push(" / " + port.artifacts.map((a) => (a.url ? `[${a.title}](${a.url})` : a.title) + (a.draft ? " " + t("(作成中)") : "")).join(", "));
   }
   // つながっている先 (入力なら供給元、出力なら行き先)
   const links = port.direction === "in"

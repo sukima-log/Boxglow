@@ -4,7 +4,7 @@
  */
 import { LinkifiedText } from "./LinkifiedText";
 import { useEffect, useRef, useState } from "react";
-import { addPort, consumersOf, createArtifact, inputGroupsOf, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort, inputsFedBy, canRemovePort, connectToBlock, sourceCandidates, targetCandidates, sendBack, setPolicy, setPolicyOptOut, policiesFor, isPolicyReady, policyScopeOf, policyReceivers, changedPolicies, ackPolicy } from "../model/graph";
+import { hasDraftOnly, addPort, consumersOf, createArtifact, inputGroupsOf, portsOf, removePort, rootInputsOf, setInputGroup, sourceOfInput, updatePort, inputsFedBy, canRemovePort, connectToBlock, sourceCandidates, targetCandidates, sendBack, setPolicy, setPolicyOptOut, policiesFor, isPolicyReady, policyScopeOf, policyReceivers, changedPolicies, ackPolicy } from "../model/graph";
 import type { Artifact, ExpectKind, Project } from "../model/types";
 import { setInputAnyOf } from "../model/branch";
 import { ROOT_ID } from "../model/types";
@@ -33,19 +33,22 @@ export function ArtifactNames({ artifacts }: { artifacts: Artifact[] }) {
   return <>{artifacts.map((a, i) => {
     const local = localPathOf(a);
     const sep = i > 0 ? ", " : "";
+    const mark = a.draft ? <span className="artifact-draft-mark">{" " + t("(作成中)")}</span> : null;
     if (local) return <span key={a.id}>{sep}<button type="button" className="artifact-open underline" onClick={() => openAttachedFile(local)}
-      title={source === "vscode" ? t("エディタで開く: {path}", { path: local }) : source === "serve" ? t("新しいタブで開く: {path}", { path: local }) : t("パスをコピー: {path}", { path: local })}>{a.title}</button></span>;
-    if (a.url) return <span key={a.id}>{sep}<a className="underline" href={a.url} target="_blank" rel="noopener noreferrer" title={a.url}>{a.title}</a></span>;
-    return <span key={a.id}>{sep}{a.title}</span>;
+      title={source === "vscode" ? t("エディタで開く: {path}", { path: local }) : source === "serve" ? t("新しいタブで開く: {path}", { path: local }) : t("パスをコピー: {path}", { path: local })}>{a.title}</button>{mark}</span>;
+    if (a.url) return <span key={a.id}>{sep}<a className="underline" href={a.url} target="_blank" rel="noopener noreferrer" title={a.url}>{a.title}</a>{mark}</span>;
+    return <span key={a.id}>{sep}{a.title}{mark}</span>;
   })}</>;
 }
 
 /** 成果物 (URL / メモ) の一覧。「+ Add」を押したときだけ入力欄が出る */
-export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add" }: {
+export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add", draftable = false }: {
   artifacts: Artifact[];
   onChange: (next: Artifact[]) => void;
   readonly: boolean;
   addLabel?: string;
+  /** 「作成中」で付けられるか (入出力の成果物・資料のとき true。箱の参考資料 Links では使わない) */
+  draftable?: boolean;
 }) {
   useLang(); // 言語が変わったら描き直す
   const openAttachedFile = useProjectStore((s) => s.openAttachedFile);
@@ -53,11 +56,15 @@ export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
+  const [draft, setDraft] = useState(false);
   const add = () => {
     if (!title.trim()) return;
-    onChange([...artifacts, createArtifact(title.trim(), url.trim())]);
+    const a = createArtifact(title.trim(), url.trim());
+    if (draftable && draft) a.draft = true;
+    onChange([...artifacts, a]);
     setTitle("");
     setUrl("");
+    setDraft(false);
     setAdding(false);
   };
   return (
@@ -74,6 +81,9 @@ export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add
           ) : (
             <span className="truncate" title={a.kind === "git" ? `${a.path} @ ${(a.commit ?? "").slice(0, 7)}` : undefined}>{a.title}</span>
           )}
+          {/* 作成中 (作りかけ): 使う側は「作成中で着手可」にしていなければ待ったまま。箱を完了にするか「確定にする」で確定になる */}
+          {a.draft && <span className="chip artifact-draft" style={{ cursor: "default", fontSize: 10, padding: "0 5px" }} title={t("作成中: 使う側の箱は、その入力を「作成中で着手可」にしていなければ待ちます。箱を完了にすると確定になります")}>{t("作成中")}</span>}
+          {a.draft && !readonly && <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChange(artifacts.map((x) => (x.id === a.id ? { ...x, draft: undefined } : x)))} title={t("確定にする (使う側の箱が着手できるようになる)")}>{t("確定にする")}</button>}
           {/* Git のファイルで、リモートのコミット固定の URL があれば、記録したときの版を見るリンクも残す */}
           {localPathOf(a) && a.kind === "git" && a.url && <a className="chip" style={{ fontSize: 10, padding: "0 5px" }} href={a.url} target="_blank" rel="noopener noreferrer" title={t("記録したときの版をブラウザで見る")}>web</a>}
           {a.kind === "git" && a.state === "moved" && <span className="chip" style={{ cursor: "default", fontSize: 10, padding: "0 5px", borderColor: "var(--accent)" }} title={t("ファイルの移動を検出し、パスを付け替えました")}>moved</span>}
@@ -89,6 +99,7 @@ export function ArtifactsEditor({ artifacts, onChange, readonly, addLabel = "Add
           <input className="input" autoFocus placeholder={t("名前 (例: 設計書 v1, PR #12)")} value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); if (e.key === "Escape") setAdding(false); }} />
           <input className="input" placeholder={t("URL (任意)")} value={url} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); if (e.key === "Escape") setAdding(false); }} />
           <div className="flex gap-1">
+            {draftable && <label className="artifact-draft-toggle text-[12px] flex items-center gap-1" title={t("作りかけの資料として付ける (使う側の箱は待ったまま。完了で確定)")}><input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} />{t("作成中")}</label>}
             <button className="btn btn-primary btn-sm" onClick={add} disabled={!title.trim()}>Add</button>
             <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancel</button>
           </div>
@@ -208,6 +219,11 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
               {src ? (
                 <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>
                   {t("from {owner}「{name}」", { owner: srcOwner ?? "?", name: src.name })}{src.artifacts.length > 0 && <> (<ArtifactNames artifacts={src.artifacts} />)</>}
+                  {/* 作成中の資料だけが届いている: カードを開かなくても分かるように、ここに札と「作成中で着手可にする」を出す */}
+                  {direction === "in" && hasDraftOnly(project, q.id) && !q.acceptDraft && <>
+                    <span className="meta-chip muted ml-2" title={t("供給元に作成中の資料があります。「作成中で着手可」にすると、この入力はそろったとみなします")}>{t("作成中あり")}</span>
+                    {!readonly && <button type="button" className="btn btn-sm ml-1" onClick={() => apply((p) => updatePort(p, q.id, { acceptDraft: true }))} title={t("作成中で着手可: 供給元の資料が作りかけでも、この入力はそろったとみなす")}>{t("作成中で着手可にする")}</button>}
+                  </>}
                   {/* 差し戻す: 届いた成果物が通らなかったとき、作った箱へ理由つきで戻す (その箱は In Progress に戻る) */}
                   {!readonly && src.blockId !== ROOT_ID && blockId !== ROOT_ID && sendingBack?.portId !== q.id && (
                     <button type="button" className="btn btn-sm ml-2 sendback-btn" onClick={() => setSendingBack({ portId: q.id, note: "" })}
@@ -232,7 +248,7 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                   <div className="text-[11px] mt-1" style={{ color: "var(--text-muted)" }}>{direction === "in" ? t("入力物") : t("成果物")}</div>
                   {/* 差し戻された成果物: 届いた扱いにはしないが、履歴として見える */}
                   {(q.rejectedArtifacts?.length ?? 0) > 0 && <div className="text-[11px]" style={{ color: "var(--text-muted)", textDecoration: "line-through" }} title={q.rejectedArtifacts!.map((a) => `${a.title}: ${a.rejectedNote ?? ""} (${a.rejectedBy})`).join("\n")}>{t("差し戻し済み: {list}", { list: "" })}<ArtifactNames artifacts={q.rejectedArtifacts!} /></div>}
-                  <ArtifactsEditor artifacts={q.artifacts} readonly={readonly} addLabel={direction === "in" ? t("入力物を追加") : t("成果物を追加")}
+                  <ArtifactsEditor artifacts={q.artifacts} readonly={readonly} draftable addLabel={direction === "in" ? t("入力物を追加") : t("成果物を追加")}
                     onChange={(next) => apply((p) => updatePort(p, q.id, { artifacts: next }))} />
                 </>
               )}
@@ -301,6 +317,11 @@ export function PortsEditor({ project, blockId, direction, readonly, title, allo
                       <button className="seg__btn" data-on={q.required} disabled={readonly} onClick={() => apply((p) => updatePort(p, q.id, { required: true }))} title={t("必須: この入力がそろうまで着手できない (ボックスの Ready に効く)")}>{t("必須")}</button>
                       <button className="seg__btn" data-on={!q.required} disabled={readonly} onClick={() => apply((p) => updatePort(p, q.id, { required: false }))} title={t("任意: 無くても着手できる")}>{t("任意")}</button>
                     </div>
+                    {/* 作成中で着手可: 供給元の資料が作りかけ (作成中) でも、この入力はそろったとみなす (作りかけの意匠からモデリングを始める、など) */}
+                    <label className="flex items-center gap-1" title={t("作成中で着手可: 供給元の資料が作りかけでも、この入力はそろったとみなす")}>
+                      <input type="checkbox" checked={!!q.acceptDraft} disabled={readonly} onChange={(e) => apply((p) => updatePort(p, q.id, { acceptDraft: e.target.checked ? true : undefined }))} />{t("作成中で着手可")}
+                    </label>
+
                   </div>
                 )}
                 {/* 合流: 分かれた道が 1 つにまとまるところの入力。合流の入力どうしは、どれか 1 つが届けばよい */}

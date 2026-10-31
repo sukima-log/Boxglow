@@ -15,6 +15,7 @@ Tasks are boxes with inputs and outputs; a box goes New (BlackBox: output decide
 
 - **More things open with a click**: the source's files on an input card, a policy's contents, sent-back deliverables, and file paths or URLs written in descriptions, verification, decision context, notes and send-back reasons. In Notes, plain paths such as `docs/design.md` are links too.
 - **serve** reports a missing file instead of opening an error page.
+- **Work-in-progress material**: attach it as a draft (`artifact --draft`); boxes using it wait unless their input accepts drafts (`port --accept-draft`), and finishing the box confirms it.
 
 Details: [CHANGELOG.md](CHANGELOG.md). Update the CLI, `serve` and the VS Code extension (0.5.6) together.
 
@@ -22,6 +23,7 @@ Details: [CHANGELOG.md](CHANGELOG.md). Update the CLI, `serve` and the VS Code e
 
 - **押して開ける場所が増えた**: 入力のカードの供給元のファイル、方針の中身、差し戻し済みの成果物、説明・検査結果・判断の文脈・メモ・差し戻しの理由に書いたパスや URL。Notes では `docs/design.md` のような文中のパスもリンクになる。
 - **serve** で見つからないファイルを押したときは、エラーのページではなく通知で知らせる。
+- **作りかけの資料**: 作成中として付けられる (`artifact --draft`)。使う側は、その入力を「作成中で着手可」(`port --accept-draft`) にしていなければ待つ。箱を完了にすると確定になる。
 
 ## What's new in 0.6.5
 

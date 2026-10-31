@@ -120,4 +120,9 @@ export const report: Record<string, string> = {
 , "計画を Markdown に書き出す (docs/ROADMAP.md など)": "Export the plan as Markdown (e.g. docs/ROADMAP.md)"
 , "計画の問題 (つながっていない入出力など) を検査する": "Check the plan for problems (e.g. unconnected inputs / outputs)"
 , "そのほかの CLI コマンドをそのまま実行する (例: [\"log\", \"--n\", \"20\"]、[\"layout\"]、[\"help\"])": "Run any other CLI command as is (e.g. [\"log\", \"--n\", \"20\"], [\"layout\"], [\"help\"])"
+, "true なら path の作成中の資料を確定にする (all ですべて)": "If true, confirm the work-in-progress item named by path (all = every one)"
+, "作成中として付ける (使う側の箱は待ったまま。使う側の入力が acceptDraft なら着手できる。完了で確定になる)": "Attach as work in progress (boxes using it keep waiting unless their input accepts drafts; finishing the box confirms it)"
+, "作成中の資料でも着手してよい入力の名前": "Inputs that may start with work-in-progress material"
+, "出力ではなく、箱の参考資料 (Links) に付ける (使う側には渡らない)": "Attach to the box's reference links instead of an output (not passed to other boxes)"
+, "確定した資料を待つ (既定) に戻す入力の名前": "Inputs that wait for confirmed material again (default)"
 };

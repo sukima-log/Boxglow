@@ -302,6 +302,36 @@ describe("画面だけだった操作を CLI でも (ack --policy / port --optio
   });
 });
 
+// 作りかけの資料 (artifact --draft / port --accept-draft / artifact --final / --link): 付けるか付けないかの 2 択にしない (利用者の指摘 2026-10-31)
+describe("作成中の資料 (artifact --draft) と作成中で着手可 (port --accept-draft)",()=>{
+  it("作成中で付けても使う側は待ち (status に作成中あり)、accept-draft で着手でき、--final か done で確定になる",()=>{
+    const {cli,read}=fixture();
+    expect(cli("add","モデリング","--out","胴体").status).toBe(0);
+    expect(cli("connect","対象.コード","モデリング").status).toBe(0);
+    const d=cli("artifact","対象","docs/body.png","--draft");expect(d.status,d.stderr).toBe(0);expect(d.stdout).toContain("作成中");
+    const port=()=>(Object.values(read().ports) as any[]).find((q)=>q.name==="コード"&&q.direction==="out");
+    expect(port().artifacts[0].draft).toBe(true);
+    const st=cli("status").stdout;
+    expect(st).toMatch(/モデリング.*必須の入力待ち: コード \(作成中あり\)/);
+    expect(cli("port","モデリング","--accept-draft","コード").status).toBe(0);
+    expect(cli("status").stdout).not.toMatch(/モデリング.*必須の入力待ち/);
+    const ctx=JSON.parse(cli("context","モデリング").stdout);
+    expect(ctx.context.inputs?.[0]?.acceptDraft ?? ctx.context.target?.inputs?.[0]?.acceptDraft ?? JSON.stringify(ctx).includes('"acceptDraft":true')).toBeTruthy();
+    const f=cli("artifact","対象","--final","body.png");expect(f.status,f.stderr).toBe(0);
+    expect(port().artifacts[0].draft).toBeUndefined();
+    // もう一度作成中で付けて、done で確定になる
+    expect(cli("artifact","対象","docs/body2.png","--draft").status).toBe(0);
+    const done=cli("done","対象");expect(done.status).toBe(0);expect(done.stdout).toContain("確定にしました");
+    expect(port().artifacts.every((a:any)=>!a.draft)).toBe(true);
+  });
+  it("--link は出力ではなく箱の参考資料に付ける",()=>{
+    const {cli,read,id}=fixture();
+    expect(cli("artifact","対象","docs/ref.md","--link").status).toBe(0);
+    expect(read().blocks[id].artifacts.map((a:any)=>a.title)).toEqual(["ref.md"]);
+    expect((Object.values(read().ports) as any[]).find((q)=>q.name==="コード").artifacts).toHaveLength(0);
+  });
+});
+
 it("MCP の boxglow_artifact で最上位の入力に資料を付けられる",async()=>{
   const {file,read}=fixture();
   const client=new Client({name:"workflow-test",version:"1"});
@@ -315,6 +345,10 @@ it("MCP の boxglow_artifact で最上位の入力に資料を付けられる",a
     expect((await client.callTool({name:"boxglow_port",arguments:{block:"対象",optional:["仕様書"],describe:["仕様書=画面の仕様"]}})).isError).not.toBe(true);
     expect((Object.values(read().ports) as any[]).find((q)=>q.blockId!=="root"&&q.name==="仕様書").required).toBe(false);
     expect((await client.callTool({name:"boxglow_ack",arguments:{block:"対象",policy:true}})).isError).not.toBe(true);
+    expect((await client.callTool({name:"boxglow_artifact",arguments:{block:"対象",path:"docs/wip.md",draft:true}})).isError).not.toBe(true);
+    expect((Object.values(read().ports) as any[]).find((q)=>q.name==="コード").artifacts[0].draft).toBe(true);
+    expect((await client.callTool({name:"boxglow_artifact",arguments:{block:"対象",path:"all",final:true}})).isError).not.toBe(true);
+    expect((Object.values(read().ports) as any[]).find((q)=>q.name==="コード").artifacts[0].draft).toBeUndefined();
   } finally {await client.close();}
 },15000);
 

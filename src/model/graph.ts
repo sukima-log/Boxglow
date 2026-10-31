@@ -1110,17 +1110,25 @@ export function setProgress(p: Project, blockId: string, value: number | null, a
  *   供給元が無いポートは成果物の有無、末端の出力はボックスの Done でも確定する。
  *   親の状態や添付物で、未確定の中継を確定へ変えない。
  */
-function hasExternalInputArtifact(p: Project, portId: string, seen = new Set<string>()): boolean {
+function hasExternalInputArtifact(p: Project, portId: string, seen = new Set<string>(), allowDraft = false): boolean {
   if (seen.has(portId)) return false;
   const port = p.ports[portId];
   if (!port || port.direction !== "in") return false;
-  if (port.artifacts.length > 0) return true;
+  if (hasArtifacts(port, allowDraft)) return true;
   // 未接続の入力を外へ伸ばした自動線は同じ資料の別表示。添付場所で状態を変えない。
   const next = new Set(seen).add(portId);
-  return outgoingEdges(p, { portId, side: "inner" }).some((e) => e.auto && hasExternalInputArtifact(p, e.to.portId, next));
+  return outgoingEdges(p, { portId, side: "inner" }).some((e) => e.auto && hasExternalInputArtifact(p, e.to.portId, next, allowDraft));
 }
 
-export function isSourceReady(p: Project, ep: Endpoint, seen: Set<string> = new Set()): boolean {
+/**
+ * ポートに「用意できた」と数える資料があるか。作成中 (draft) の資料は allowDraft のときだけ数える
+ * Input : port, allowDraft = 作成中も数える / Output: true = ある
+ */
+export function hasArtifacts(port: Port, allowDraft = false): boolean {
+  return port.artifacts.some((a) => allowDraft || !a.draft);
+}
+
+export function isSourceReady(p: Project, ep: Endpoint, seen: Set<string> = new Set(), allowDraft = false): boolean {
   const key = `${ep.portId}:${ep.side}`;
   if (seen.has(key)) return false;
   const port = p.ports[ep.portId];
@@ -1130,14 +1138,14 @@ export function isSourceReady(p: Project, ep: Endpoint, seen: Set<string> = new 
   // 複数の供給元を束ねる出力は、すべてそろって初めて利用できる。
   const backSide = ep.side === "outer" ? "inner" : "outer";
   const upstream = incomingEdges(p, { portId: port.id, side: backSide });
-  if (upstream.length > 0) return upstream.every((e) => isSourceReady(p, e.from, nextSeen));
-  if (port.direction === "in") return hasExternalInputArtifact(p, port.id);
+  if (upstream.length > 0) return upstream.every((e) => isSourceReady(p, e.from, nextSeen, allowDraft));
+  if (port.direction === "in") return hasExternalInputArtifact(p, port.id, new Set(), allowDraft);
   // 合流のボックスの出力: 入力のどれか 1 つが届けば届く (道のどれかが選ばれて進んできたら、先へ通す)
   const owner = p.blocks[port.blockId];
-  if (port.direction === "out" && owner?.merge) return portsOf(p, owner.id, "in").some((q) => isSourceReady(p, { portId: q.id, side: "inner" }, nextSeen));
+  if (port.direction === "out" && owner?.merge) return portsOf(p, owner.id, "in").some((q) => isSourceReady(p, { portId: q.id, side: "inner" }, nextSeen, allowDraft));
   // 分岐の出力 (道): 判断の答えそのものが成果物。選んだ道は答えた時点で届き、選ばなかった道は届かない
   if (port.branchOption !== undefined && owner?.branch) return chosenOption(owner) === port.branchOption;
-  if (port.artifacts.length > 0) return true;
+  if (hasArtifacts(port, allowDraft)) return true;
   return port.direction === "out" && p.blocks[port.blockId]?.status === "white";
 }
 
@@ -1149,7 +1157,28 @@ export function isEdgeReady(p: Project, e: Edge): boolean {
 /** 入力ポート (outer) に用意できた線が来ているか (ボックスの入力名に印を付ける用) */
 export function isInputReady(p: Project, portId: string): boolean {
   const port = p.ports[portId];
-  return !!port && port.direction === "in" && isSourceReady(p, { portId, side: "inner" });
+  // 「作成中でも着手してよい」入力は、作成中の資料が届いていればそろったとみなす
+  return !!port && port.direction === "in" && isSourceReady(p, { portId, side: "inner" }, new Set(), !!port.acceptDraft);
+}
+
+/**
+ * 待っている入力の名前に、作成中の資料が届いているものは「(作成中あり)」を添える (status・再開の概要・start の警告の表示用)。
+ * AI が「作成中の資料はある。acceptDraft にすれば着手できる」と気づけるようにする
+ * Input : p, blockId, names = 待っている入力の名前 / Output: 印を添えた名前の配列 (順番・数は同じ)
+ */
+export function markDraftInputs(p: Project, blockId: string, names: string[]): string[] {
+  const ins = portsOf(p, blockId, "in");
+  return names.map((n) => { const q = ins.find((x) => x.name === n); return q && hasDraftOnly(p, q.id) ? `${n} ${t("(作成中あり)")}` : n; });
+}
+
+/**
+ * 入力に、作成中 (draft) の資料だけが届いているか (確定はまだ)。画面の「作成中」の印と、context の説明に使う
+ * Input : p, portId = 入力ポート / Output: true = 作成中の資料はあるが確定の資料はまだ
+ */
+export function hasDraftOnly(p: Project, portId: string): boolean {
+  const port = p.ports[portId];
+  if (!port || port.direction !== "in") return false;
+  return !isSourceReady(p, { portId, side: "inner" }) && isSourceReady(p, { portId, side: "inner" }, new Set(), true);
 }
 
 /**
@@ -1348,7 +1377,7 @@ export function canSuggestWhite(p: Project, blockId: string): boolean {
   const kids = childrenOf(p, blockId);
   if (kids.some((k) => k.status !== "white")) return false;
   const outs = portsOf(p, blockId, "out");
-  return outs.length > 0 && outs.every((o) => o.artifacts.length > 0);
+  return outs.length > 0 && outs.every((o) => hasArtifacts(o)); // 作成中の資料だけでは完了を勧めない
 }
 
 /* ------------------------------------------------------------------ */
@@ -1587,6 +1616,7 @@ export function finishBlock(
   if (target && args.artifacts) {
     for (const a of args.artifacts) q.ports[target.id].artifacts.push("id" in a && "kind" in a ? (a as Artifact) : createArtifact(a.title, a.url ?? ""));
   }
+  finalizeDrafts(q, blockId);
   q.blocks[blockId].activity = null;
   if (q.blocks[blockId].status !== "white") q.blocks[blockId].statusChangedAt = now();
   q.blocks[blockId].status = "white";
@@ -1843,11 +1873,25 @@ export function ackDecisions(p: Project, blockId: string, by: string, decisionId
 }
 
 /** 状態を手で変える (ログ付き) */
+/**
+ * 完了 = 出力の資料が確定した: その箱の出力に付いた作成中 (draft) の資料の印を外す (q を直接書き換える)
+ * Input : q = 変更中の計画, blockId / Output: 確定にした資料の数
+ */
+export function finalizeDrafts(q: Project, blockId: string): number {
+  let n = 0;
+  for (const o of portsOf(q, blockId, "out")) {
+    if (!o.artifacts.some((a) => a.draft)) continue;
+    n += o.artifacts.filter((a) => a.draft).length;
+    q.ports[o.id] = { ...q.ports[o.id], artifacts: q.ports[o.id].artifacts.map(({ draft: _d, ...a }) => { void _d; return a; }) };
+  }
+  return n;
+}
+
 export function setStatus(p: Project, blockId: string, status: BlockStatus, actor: string): Project {
   const b = p.blocks[blockId];
   if (!b || b.status === status) return p;
   const q = updateBlock(p, blockId, { status });
-  if (status === "white") { q.blocks[blockId].activity = null; stampPolicies(q, blockId); }
+  if (status === "white") { q.blocks[blockId].activity = null; stampPolicies(q, blockId); finalizeDrafts(q, blockId); }
   appendLog(q, { actor, kind: "status", blockId, message: t("「{title}」を {status} に", { title: b.title, status }) });
   return q;
 }

@@ -85,4 +85,6 @@ export const model: Record<string, string> = {
 , "「{title}」はこの箱の入力の供給元ではありません (差し戻せるのは、入力を作っている箱だけです)": "\"{title}\" does not feed this box's inputs (you can only send back to a box that makes one of the inputs)"
 , "差し戻し: 「{from}」から「{to}」へ: {note}": "Sent back from \"{from}\" to \"{to}\": {note}"
 , "方針「{name}」": "policy \"{name}\""
+, "(作成中)": "(work in progress)"
+, "(作成中あり)": "(work in progress available)"
 };

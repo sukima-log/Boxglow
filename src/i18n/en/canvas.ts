@@ -62,4 +62,6 @@ export const canvas: Record<string, string> = {
 , "完了した後に方針が決まった・変わりました (確かめ直しの候補。I/O タブの方針で「確かめた」を押すと消えます)": "A policy was decided or changed after this box was done (check it again; press \"Checked\" under Policies on the I/O tab to clear this)"
 , "方針: 確かめ直し": "Policy: check again"
 , "計画全体": "Whole plan"
+, "作成中": "WIP"
+, "作成中の資料が届いています (この入力を「作成中で着手可」にすると着手できます)": "Work-in-progress material has arrived (mark this input \"Accept work in progress\" to start)"
 };

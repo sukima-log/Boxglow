@@ -177,7 +177,7 @@ export function blockReport(p: Project, blockId: string): string {
   lines.push("", "## " + t("出力"));
   for (const q of portsOf(p, blockId, "out")) {
     const dst = outgoingEdges(p, { portId: q.id, side: "outer" }).map((e) => `${name(p.ports[e.to.portId].blockId)}.${p.ports[e.to.portId].name}`);
-    const arts = q.artifacts.map((a) => (a.url ? `${a.title} <${a.url}>` : a.title));
+    const arts = q.artifacts.map((a) => (a.url ? `${a.title} <${a.url}>` : a.title) + (a.draft ? " " + t("(作成中)") : ""));
     lines.push(`- ${q.name}${q.description ? ": " + q.description : ""}${dst.length ? "  -> " + dst.join(", ") : ""}${arts.length ? "  " + t("成果物: {list}", { list: arts.join(", ") }) : ""}`);
   }
   const kids = childrenOf(p, blockId);

@@ -454,7 +454,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   branch --box <block> --add-option <道> / --remove-option <道>   分岐の道 (選択肢) を足す / 消す (答えた後もできる)
   join [--title <題名>] [--parent <block>]           合流の部品を足す (分かれた道を 1 つにまとめる。道の出力を connect でつなぐと、どれか 1 つが届けば先へ進む)
   move <block> --parent <block|project>            ボックスを別の親の中へ移す (線は間のボックスのポートを経由してつながったまま)
-  port <block|project|inputs> [--in <名前>]... [--out <名前>]... [--remove <名前>]... [--policy <出力名> [--policy-scope all|<block>] [--advisory]]... [--no-policy <出力名>]... [--skip-policy <箱>.<出力名>]... [--expect "<出力名>=<kind>:<hint>"]... [--self <出力名>]... [--no-self <出力名>]... [--rename <旧名>=<新名>] [--optional <入力名>]... [--required <入力名>]... [--describe "<名前>=<説明>"]... [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、消す (入力を消すと使う箱の入力も消える)、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス、inputs = 最上位の入力)
+  port <block|project|inputs> [--in <名前>]... [--out <名前>]... [--remove <名前>]... [--policy <出力名> [--policy-scope all|<block>] [--advisory]]... [--no-policy <出力名>]... [--skip-policy <箱>.<出力名>]... [--expect "<出力名>=<kind>:<hint>"]... [--self <出力名>]... [--no-self <出力名>]... [--rename <旧名>=<新名>] [--optional <入力名>]... [--required <入力名>]... [--accept-draft <入力名>]... [--no-accept-draft <入力名>]... [--describe "<名前>=<説明>"]... [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、消す (入力を消すと使う箱の入力も消える)、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス、inputs = 最上位の入力)
   disconnect <題名.出力名> <題名.入力名>          線を外す
   tidy                                              ファイルを規則にそろえて保存し直す (線でつながる入出力の名前をそろえる、重なりを解く)
   remove <block> [--force]                          ボックスを消す (中にボックスがあるとき・プロジェクトのボックスは --force。最後のプロジェクトのボックスは消せない。中にボックスがあるときは --force。線も外れる。元に戻せないので Git で管理していること)
@@ -467,7 +467,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  要具体化 (自身が作る出力が無い、出力の予定成果物 expect・完了条件 acceptance が未定) も既定は警告 (policy --unprepared reject で AI は開始不可。理由では通れない)
   done <block> [--artifact <題名>=<URL またはパス>]... [--output <出力名>] [--note] [--checked <実行した検査と結果>] [--not-checked <未実施>] [--limits <残る制限>]   完了 (成果物を付けて white)
                                                  パスが Git 管理下なら「コミット + パス + blob」で記録する (アップロードしない)。--checked 以下は検査結果として箱に残る (context・show に出る)
-  artifact <block> <URL またはパス> [--title <題名>] [--output <出力名>]   成果物だけ付ける (完了にはしない)
+  artifact <block> <URL またはパス> [--title <題名>] [--output <出力名>] [--draft | --link]   成果物だけ付ける (完了にはしない)。--draft = 作成中 (使う側は待ったまま。完了で確定)、--link = 出力ではなく箱の参考資料に付ける
+  artifact <block|inputs> --final <題名かパス|all>   作成中の資料を確定にする
   artifact inputs <URL またはパス> [--input <入力名>] [--title <題名>]   計画の最上位の入力に資料を付ける (入力が 1 つなら --input は省略可)
   artifact <block|inputs> --remove <題名かパスか URL> [--output <出力名> | --input <入力名>]   付けた成果物・資料を外す
   check                                          Git の成果物が今も見つかるか確認し、移動していればパスを付け替える。未コミットのときに記録した成果物は、コミット済みになっていれば Git の参照に補完する
@@ -581,7 +582,7 @@ Usage (npx boxglow <command> ...):
   branch --box <block> --add-option <path> / --remove-option <path>   Add / remove a path (option) of a branch (also after it was answered)
   join [--title <title>] [--parent <block>]          Add a merge part (where paths come together; connect the paths' outputs to it, and any one of them arriving lets the work go on)
   move <block> --parent <block|project>            Move a box into another parent (wires stay connected through the ports of the boxes in between)
-  port <block|project|inputs> [--in <name>]... [--out <name>]... [--remove <name>]... [--policy <output> [--policy-scope all|<block>] [--advisory]]... [--no-policy <output>]... [--skip-policy <box>.<output>]... [--expect "<output>=<kind>:<hint>"]... [--self <output>]... [--no-self <output>]... [--rename <old>=<new>] [--optional <input>]... [--required <input>]... [--describe "<name>=<description>"]... [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, remove them (removing an input also removes the inputs it feeds), rename them, set an output's planned deliverable (expect: kind file / dir / url / doc / note / decision / result + a path or title) or mark it as made by this box itself (--self). --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
+  port <block|project|inputs> [--in <name>]... [--out <name>]... [--remove <name>]... [--policy <output> [--policy-scope all|<block>] [--advisory]]... [--no-policy <output>]... [--skip-policy <box>.<output>]... [--expect "<output>=<kind>:<hint>"]... [--self <output>]... [--no-self <output>]... [--rename <old>=<new>] [--optional <input>]... [--required <input>]... [--accept-draft <input>]... [--no-accept-draft <input>]... [--describe "<name>=<description>"]... [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, remove them (removing an input also removes the inputs it feeds), rename them, set an output's planned deliverable (expect: kind file / dir / url / doc / note / decision / result + a path or title) or mark it as made by this box itself (--self). --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
   disconnect <title.output> <title.input>          Remove a wire
   tidy                                              Normalize the file and save it again (give connected inputs and outputs one name, resolve overlaps)
   remove <block> [--force]                          Delete a box (--force if it contains boxes or is a project box; the last project box cannot be deleted. Its wires are removed too. This cannot be undone, so keep the file in Git)
@@ -594,7 +595,8 @@ Usage (npx boxglow <command> ...):
                                                  A box that still needs detail (no output of its own, or an output without expect / acceptance) warns by default too (policy --unprepared reject blocks AI starts; a reason does not bypass it)
   done <block> [--artifact <title>=<URL or path>]... [--output <output name>] [--note] [--checked <checks run and results>] [--not-checked <not tried>] [--limits <remaining limits>]   Finish (attach artifacts and turn it white)
                                                  If the path is tracked by Git, it is recorded as "commit + path + blob" (nothing is uploaded). --checked etc. stay on the box as its verification (shown by context / show)
-  artifact <block> <URL or path> [--title <title>] [--output <output name>]   Attach an artifact only (does not finish the box)
+  artifact <block> <URL or path> [--title <title>] [--output <output name>] [--draft | --link]   Attach an artifact only (does not finish the box). --draft = work in progress (boxes using it keep waiting; finishing the box confirms it), --link = attach to the box's reference links instead of an output
+  artifact <block|inputs> --final <title, path or all>   Confirm a work-in-progress artifact
   artifact inputs <URL or path> [--input <input name>] [--title <title>]   Attach material to a top-level plan input (--input may be omitted when there is only one)
   artifact <block|inputs> --remove <title, path or URL> [--output <output name> | --input <input name>]   Remove an attached deliverable or material
   check                                          Check that Git artifacts can still be found, and update the path if they moved. Artifacts recorded while uncommitted become Git references once they are committed
@@ -1382,6 +1384,15 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
           added.push(required ? t("必須 {name}", { name }) : t("任意 {name}", { name }));
         }
       }
+      // 作成中の資料でも着手してよい入力: --accept-draft <入力名> / 戻す: --no-accept-draft <入力名>
+      for (const [flag, on] of [["accept-draft", true], ["no-accept-draft", false]] as const) {
+        for (const name of list(options[flag])) {
+          const port = portsOf(p, blockId, "in").find((x) => x.name === name);
+          if (!port) throw new Error(t("入力「{name}」が見つかりません", { name }));
+          p = updatePort(p, port.id, { acceptDraft: on ? true : undefined });
+          added.push(on ? t("作成中で着手可 {name}", { name }) : t("確定を待つ {name}", { name }));
+        }
+      }
       // 入出力の説明: --describe "<名前>=<説明>" (入力と出力に同じ名前があるときは in:<名前> / out:<名前>。説明を空にすると消す)
       for (const spec of list(options.describe)) {
         const eq = spec.indexOf("=");
@@ -1395,7 +1406,7 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
         p = updatePort(p, hits[0].id, { description: spec.slice(eq + 1) });
         added.push(t("説明 {name}", { name }));
       }
-      if (added.length === 0) throw new Error(t("--in <名前> / --out <名前> / --remove <名前> / --policy <出力名> / --expect <出力名>=<kind>:<hint> / --self <出力名> / --rename <旧名>=<新名> / --any-of <入力名> / --all-of <入力名> / --optional <入力名> / --required <入力名> / --describe <名前>=<説明> のいずれかを指定してください"));
+      if (added.length === 0) throw new Error(t("--in <名前> / --out <名前> / --remove <名前> / --policy <出力名> / --expect <出力名>=<kind>:<hint> / --self <出力名> / --rename <旧名>=<新名> / --any-of <入力名> / --all-of <入力名> / --optional <入力名> / --required <入力名> / --describe <名前>=<説明> / --accept-draft <入力名> のいずれかを指定してください"));
       save(path, p);
       out(t("ポート: {title}: {list}", { title: p.blocks[blockId]?.title ?? "project", list: added.join(", ") }));
       return;
@@ -1534,11 +1545,14 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       // 検査結果 (B160): 実行した検査と結果 / 未実施 / 残る制限 を決まった形で残す
       const checked = str(options.checked), notChecked = str(options["not-checked"]), limits = str(options.limits);
       const verification = checked || notChecked || limits ? { checked: checked ?? "", ...(notChecked ? { notChecked } : {}), ...(limits ? { limits } : {}), at: new Date().toISOString(), by: actor } : undefined;
+      // 作成中の資料は完了で確定になる (出力に知らせる)
+      const drafts = portsOf(p, b.id, "out").reduce((n, o) => n + o.artifacts.filter((a) => a.draft).length, 0);
       const r = finishBlock(p, b.id, actor, { artifacts, outputName: str(options.output), note: str(options.note), verification });
       if (r.error) throw new Error(r.error);
       // 今ここだったら消す (完了した)
       save(path, setNow(r.project, b.id, actor, false)); // 今ここに付いていれば外す (完了した)
       out(t("完了: 「{title}」", { title: b.title }) + `${artifacts.length ? t(" 成果物: ") + artifacts.map((a) => a.title + (a.kind === "git" ? ` (git ${a.path} @ ${(a.commit ?? "").slice(0, 7)})` : "")).join(", ") : ""}`);
+      if (drafts > 0) out(t("作成中だった資料 {count} 件を確定にしました", { count: drafts }));
       // 成果物の無い完了は「何ができたか」が後から分からない。具体的な物 (ファイル・URL・コミット) を付けるよう促す
       if (check.warning) out(check.warning);
       // 検査結果が無い完了は、後から「何を確かめたか」が分からない (拒否はしない。promptで促す)
@@ -1550,6 +1564,20 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     case "artifact": {
       // 計画の最上位の入力 (Inputs) に資料を付ける: `artifact inputs <パスか URL> --input <入力名>`。
       // 入力に資料が無いと、それを使う箱がすべて「入力待ち」で着手できない。以前は画面でしか付けられず、AI が人に頼むしかなかった (利用者の指摘 2026-10-31)
+      // 作成中 (--draft で付けた) の資料を確定にする: --final <題名かパスか URL> (all ですべて)。箱を完了にすると自動で確定になる
+      if (options.final !== undefined) {
+        const key = str(options.final) ?? "all";
+        const inputs = isInputsRef(rest[0]);
+        const ports = inputs ? portsOf(p, ROOT_ID, "in") : portsOf(p, mustFind(p, rest[0]).id, "out");
+        const match = (a: { title: string; url: string; path?: string; draft?: boolean }) => !!a.draft && (key === "all" || a.title === key || a.url === key || a.path === key);
+        const hit = ports.filter((x) => x.artifacts.some(match));
+        if (hit.length === 0) throw new Error(t("作成中の資料「{key}」はありません ({list})", { key, list: ports.flatMap((x) => x.artifacts.filter((a) => a.draft).map((a) => `${x.name}: ${a.title}`)).join(", ") || "-" }));
+        const names: string[] = [];
+        for (const port of hit) { names.push(...port.artifacts.filter(match).map((a) => a.title)); p = updatePort(p, port.id, { artifacts: port.artifacts.map((a) => (match(a) ? { ...a, draft: undefined } : a)) }); }
+        save(path, p);
+        out(t("確定にしました: {list}", { list: names.join(", ") }));
+        return;
+      }
       // 付けた成果物・資料を外す: --remove <題名かパスか URL> (箱は --output、最上位の入力は --input で絞れる)。以前は画面でしか外せなかった
       if (options.remove !== undefined) {
         const key = str(options.remove);
@@ -1575,19 +1603,28 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
           ? t("最上位の入力「{name}」が見つかりません ({list})", { name, list: ins.map((x) => x.name).join(", ") })
           : t("最上位の入力が複数あります。--input <入力名> で選んでください ({list})", { list: ins.map((x) => x.name).join(", ") }));
         const a = artifactFrom(rest[1], str(options.title));
+        if (options.draft) a.draft = true;
         save(path, updatePort(p, target.id, { artifacts: [...target.artifacts, a] }));
-        out(t("最上位の入力に資料を付けました: 「{port}」 <- {artifact}", { port: target.name, artifact: a.title }) + `${a.kind === "git" ? ` (git ${a.path} @ ${(a.commit ?? "").slice(0, 7)})` : ""}`);
+        out(t("最上位の入力に資料を付けました: 「{port}」 <- {artifact}", { port: target.name, artifact: a.title }) + `${a.kind === "git" ? ` (git ${a.path} @ ${(a.commit ?? "").slice(0, 7)})` : ""}` + (a.draft ? t(" (作成中)") : ""));
         return;
       }
       const b = mustFind(p, rest[0]);
       p = ackDecisions(p, b.id, actor); // 作業を記録する = そのボックスの回答を読んで引き取った
       if (!rest[1]) throw new Error(t("<URL またはパス> を指定してください"));
       const a = artifactFrom(rest[1], str(options.title));
+      // --link: 出力ではなく、箱の参考資料 (画面の Links) に付ける。使う側には渡らず、着手の判定にも関わらない
+      if (options.link) {
+        save(path, updateBlock(p, b.id, { artifacts: [...b.artifacts, a] }));
+        out(t("参考資料を付けました: 「{title}」 <- {artifact}", { title: b.title, artifact: a.title }));
+        return;
+      }
+      // --draft: 作成中として出力に付ける (使う側は、その入力が acceptDraft でなければ待ったまま。完了で確定になる)
+      if (options.draft) a.draft = true;
       const outs = portsOf(p, b.id, "out");
       const target = str(options.output) ? outs.find((o) => o.name === str(options.output)) : outs[0];
       if (!target) throw new Error(t("出力ポートが見つかりません"));
       save(path, updatePort(p, target.id, { artifacts: [...target.artifacts, a] }));
-      out(t("成果物を付けました: 「{title}」.{port} <- {artifact}", { title: b.title, port: target.name, artifact: a.title }) + `${a.kind === "git" ? ` (git ${a.path} @ ${(a.commit ?? "").slice(0, 7)})` : ""}`);
+      out(t("成果物を付けました: 「{title}」.{port} <- {artifact}", { title: b.title, port: target.name, artifact: a.title }) + `${a.kind === "git" ? ` (git ${a.path} @ ${(a.commit ?? "").slice(0, 7)})` : ""}` + (a.draft ? t(" (作成中。使う側は待ったまま。完了か --final で確定)") : ""));
       return;
     }
     case "check": {
