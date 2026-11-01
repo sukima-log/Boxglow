@@ -159,6 +159,8 @@ Codexは全CLI呼び出しに `--actor codex`、Claude Codeは `--actor claude-c
 
 ### 並列作業の受け持ち
 
+担当 (誰の仕事かを人が図で見て分かるための割り当て) は `npx boxglow set <block> --assignee <名前>` で決める (複数はカンマ区切り、`--add-assignee` / `--remove-assignee` で足す・外す、`none` で外す。いない名前はメンバーに足される。`npx boxglow members` で一覧)。受け持ち (claim) は複数の AI が同じ箱を同時に書き換えないための約束で、担当とは別のもの。「この範囲は Codex の担当」と決めるなら、担当を付けたうえで、作業するときに受け持ちを取る。
+
 計画で受け持ちが有効なら、CLI実行ごとに一意の `BOXGLOW_INSTANCE_ID` を固定し、`claims` と `context` を読んでから `claim` (具体化・分解の前) または `start` (実行) する。`claim` で取った受け持ちは、そのまま `start` に引き継がれる。独立したエージェント間で実行IDを共有しない。既定はボックスのみ、必要なら `--scope subtree`。成功したCLAIM行のtokenを保持し、保存する操作に `--claim-token` を付ける。MCPは実行IDと受領証を自動で保持する。5分ごと (期限が短ければ半分以内) に `claim-renew` / `boxglow_claim_renew` を呼び、中断前はcheckpoint。done/leaveは対象の受け持ちを解放する。期限切れや世代違いを無視せず、最新contextを確認して取り直す。同名actorでも別実行の受け持ちは奪わない。設定・強制解除・同期競合の解決は人に依頼し、AIがhumanを名乗って代行しない。共有ファイル以外の同期コピー間には排他保証がない。詳しくは `docs/CLAIMS.md`。
 
 他者の実行ID・受領証を使わない。計画やclaimsの出力から他者の受領証を組み立てることも禁止。MCP再起動後の同名actorも別実行なので、自動で引き継がず期限を待つか人に解除を頼む。

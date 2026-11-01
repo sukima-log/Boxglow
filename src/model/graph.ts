@@ -939,6 +939,46 @@ export function disconnectWire(p: Project, edgeId: string): { project: Project; 
   return { project: normalizePromotions(q) };
 }
 
+/** メンバーの色 (足した順に回して使う。画面と CLI で共通) */
+export const MEMBER_COLORS = ["#0d8080", "#e8875e", "#3aa85a", "#6b7075", "#2f6fb3", "#a0522d"];
+
+/**
+ * 名前か id でメンバーを探す (名前は大文字小文字と前後の空白を区別しない)
+ * Input : p, ref = 名前か id / Output: メンバー (いなければ undefined)
+ */
+export function findMember(p: Project, ref: string): Member | undefined {
+  const key = ref.trim().toLowerCase();
+  return p.members.find((m) => m.id === ref) ?? p.members.find((m) => m.name.trim().toLowerCase() === key);
+}
+
+/**
+ * 箱の担当を決める (CLI / MCP から。名前のメンバーがいなければ足す)。以前は画面でしか割り当てられなかった (利用者の指摘 2026-11-01)
+ * Input : p, blockId, args = { set: 置き換える名前 (空配列で担当なし), add: 足す名前, remove: 外す名前 } (どれも省略可)
+ * Output: { project, added: 新しく足したメンバーの名前, error }
+ */
+export function assignMembers(p: Project, blockId: string, args: { set?: string[]; add?: string[]; remove?: string[] }): { project: Project; added: string[]; error?: string } {
+  if (!p.blocks[blockId] || blockId === ROOT_ID) return { project: p, added: [], error: t("ブロックが見つかりません") };
+  let q = p;
+  const added: string[] = [];
+  const idOf = (name: string): string => {
+    const m = findMember(q, name);
+    if (m) return m.id;
+    const r = addMember(q, name.trim(), MEMBER_COLORS[q.members.length % MEMBER_COLORS.length]);
+    q = r.project;
+    added.push(name.trim());
+    return r.memberId;
+  };
+  let ids = [...q.blocks[blockId].assigneeIds];
+  if (args.set) ids = [...new Set(args.set.filter((n) => n.trim()).map(idOf))];
+  for (const n of args.add ?? []) { if (!n.trim()) continue; const id = idOf(n); if (!ids.includes(id)) ids.push(id); }
+  for (const n of args.remove ?? []) {
+    const m = findMember(q, n);
+    if (!m) return { project: p, added: [], error: t("メンバー「{name}」がいません ({list})", { name: n, list: q.members.map((x) => x.name).join(", ") || "-" }) };
+    ids = ids.filter((id) => id !== m.id);
+  }
+  return { project: updateBlock(q, blockId, { assigneeIds: ids }), added };
+}
+
 /** メンバーを追加する */
 export function addMember(p: Project, name: string, color: string): { project: Project; memberId: string } {
   const q = touch(p);

@@ -396,4 +396,7 @@ export const cli: Record<string, string> = {
 , "参考資料を付けました: 「{title}」 <- {artifact}": "Added a reference link: \"{title}\" <- {artifact}"
 , "確定にしました: {list}": "Confirmed: {list}"
 , "確定を待つ {name}": "waits for confirmed {name}"
+, "メンバーを足しました: {names}": "Added members: {names}"
+, "メンバーはいません。担当は set <block> --assignee <名前> で決めます (名前のメンバーは自動で足されます)": "No members yet. Assign with set <block> --assignee <name> (a missing member is added)"
+, "(未完了の担当 {count} 件)": "({count} open)"
 };

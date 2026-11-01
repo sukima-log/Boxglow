@@ -125,4 +125,7 @@ export const report: Record<string, string> = {
 , "作成中の資料でも着手してよい入力の名前": "Inputs that may start with work-in-progress material"
 , "出力ではなく、箱の参考資料 (Links) に付ける (使う側には渡らない)": "Attach to the box's reference links instead of an output (not passed to other boxes)"
 , "確定した資料を待つ (既定) に戻す入力の名前": "Inputs that wait for confirmed material again (default)"
+, "担当を置き換える (メンバーの名前。空の配列で担当なし。いない名前はメンバーに足す)": "Replace the assignees (member names; an empty array clears them; missing members are added)"
+, "担当に足す名前": "Names to add as assignees"
+, "担当から外す名前": "Names to remove from the assignees"
 };

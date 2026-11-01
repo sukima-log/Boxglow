@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-_Changes after 0.6.6 go here._
+- **Assign boxes from the CLI and MCP.** `npx boxglow set <block> --assignee <name>[,<name>]` replaces the assignees (`none` clears them), `--add-assignee` / `--remove-assignee` add or remove one, and a name that is not a member yet is added as one (MCP: `boxglow_set` with `assignee`, `addAssignee`, `removeAssignee`). `npx boxglow members` lists the members and how many open boxes each has. `status` shows the assignees' names ("(assignees: Codex)") and `show` has an "Assignees" line. Before, only the screen could assign, and agents worked around it. The agent instructions explain the difference between assignees and claims.
 
 ## 0.6.6 (2026-10-31)
 

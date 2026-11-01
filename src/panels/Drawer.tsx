@@ -18,7 +18,8 @@ import { t, useLang } from "../i18n";
 import { ConfirmButton } from "./parts";
 
 /** メンバーのアバター色の候補 (テーマの色から) */
-export const MEMBER_COLORS = ["#0d8080", "#e8875e", "#3aa85a", "#6b7075", "#2f6fb3", "#a0522d"];
+import { MEMBER_COLORS } from "../model/graph"; // メンバーの色 (モデルに移した。CLI でも使う)
+export { MEMBER_COLORS };
 
 /** 状態の印 */
 export const GLYPH: Record<BlockStatus, string> = { black: "?", gray: "~", white: "✓" };

@@ -332,6 +332,28 @@ describe("作成中の資料 (artifact --draft) と作成中で着手可 (port -
   });
 });
 
+// 担当 (set --assignee / --add-assignee / --remove-assignee、members): 以前は CLI から割り当てられなかった (利用者の指摘 2026-11-01)
+describe("担当を CLI から決める",()=>{
+  it("--assignee で置き換え (いない名前はメンバーに足す)、足す・外す・none、members と status と show に出る",()=>{
+    const {cli,read,id}=fixture();
+    const r=cli("set","対象","--assignee","Codex");expect(r.status,r.stderr).toBe(0);expect(r.stdout).toContain("メンバーを足しました: Codex");
+    const who=()=>read().blocks[id].assigneeIds.map((m:string)=>read().members.find((x:any)=>x.id===m).name);
+    expect(who()).toEqual(["Codex"]);
+    expect(cli("set","対象","--add-assignee","Claude Code,人").status).toBe(0);
+    expect(who()).toEqual(["Codex","Claude Code","人"]);
+    expect(read().members).toHaveLength(3);
+    expect(cli("status").stdout).toContain("(担当: Codex, Claude Code, 人)");
+    expect(cli("show","対象").stdout).toContain("担当: Codex, Claude Code, 人");
+    expect(cli("members").stdout).toContain("Codex");
+    expect(cli("set","対象","--remove-assignee","codex").status).toBe(0);
+    expect(who()).toEqual(["Claude Code","人"]);
+    expect(cli("set","対象","--assignee","none").status).toBe(0);
+    expect(who()).toEqual([]);
+    expect(read().members).toHaveLength(3); // 担当を外してもメンバーは残る
+    expect(cli("set","対象","--remove-assignee","いない人").status).toBe(1);
+  });
+});
+
 it("MCP の boxglow_artifact で最上位の入力に資料を付けられる",async()=>{
   const {file,read}=fixture();
   const client=new Client({name:"workflow-test",version:"1"});
@@ -348,6 +370,8 @@ it("MCP の boxglow_artifact で最上位の入力に資料を付けられる",a
     expect((await client.callTool({name:"boxglow_artifact",arguments:{block:"対象",path:"docs/wip.md",draft:true}})).isError).not.toBe(true);
     expect((Object.values(read().ports) as any[]).find((q)=>q.name==="コード").artifacts[0].draft).toBe(true);
     expect((await client.callTool({name:"boxglow_artifact",arguments:{block:"対象",path:"all",final:true}})).isError).not.toBe(true);
+    expect((await client.callTool({name:"boxglow_set",arguments:{block:"対象",assignee:["Codex"]}})).isError).not.toBe(true);
+    expect(read().members.map((m:any)=>m.name)).toEqual(["Codex"]);
     expect((Object.values(read().ports) as any[]).find((q)=>q.name==="コード").artifacts[0].draft).toBeUndefined();
   } finally {await client.close();}
 },15000);

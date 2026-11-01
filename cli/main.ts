@@ -59,7 +59,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { addLogEntry, childrenOf, setNow, changedPolicies, ackPolicy, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor, canRemovePort, inputsFedBy, removePort, removeDecision, sendBack, sendBackTargets, setPolicy, setPolicyOptOut } from "../src/model/graph";
+import { addLogEntry, childrenOf, setNow, changedPolicies, ackPolicy, assignMembers, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor, canRemovePort, inputsFedBy, removePort, removeDecision, sendBack, sendBackTargets, setPolicy, setPolicyOptOut } from "../src/model/graph";
 import { checkStart, checkDone, descriptionReminder, scopeEntries } from "../src/model/workflow";
 import type { WorkScope, WorkflowPolicy } from "../src/model/types";
 import type { Artifact } from "../src/model/types";
@@ -484,7 +484,9 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   unask <block> [--id <decision id>]                 問いを取り下げる (未回答だけ。分岐の問いは消せない)
   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <題名>] [--note <説明>] [--category <カテゴリ>|none] [--repo <パス>|none] [--issue <URL>|none]
               [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <時間>|none] [--hours <実績時間>|none] [--split-by <一語>|none]  (--split-by = 直下の子の分け方: 工程 / 成果物 / 機能 など)
+              [--assignee <名前>[,<名前>]|none] [--add-assignee <名前>] [--remove-assignee <名前>]  (担当。名前のメンバーがいなければ足す)
   find <文字>                                    ID や題名でボックスを探す
+  members                                       メンバーの一覧 (担当の名前と未完了の担当の数)
   list --assignee <名前> | --unassigned | --everyone [--all] [--unprepared] [--json]   担当の一覧を表で出す (既定は未完了だけ。--all で完了済みも。--unprepared で要具体化だけ。並びは期日の近い順)
   group <名前>                                   最上位の入力グループを作る (例: "PCIe 仕様書")
   group-set <入力名> <グループ名|none>            最上位の入力をグループに入れる / 外す
@@ -612,7 +614,9 @@ Usage (npx boxglow <command> ...):
   unask <block> [--id <decision id>]                 Withdraw a question (unanswered only; a branch's question cannot be removed)
   set <block> [--status black|gray|white] [--progress 0..100|auto] [--title <title>] [--note <description>] [--category <category>|none] [--repo <path>|none] [--issue <URL>|none]
               [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <hours>|none] [--hours <actual hours>|none] [--split-by <word>|none]  (--split-by = how the direct children are divided: stage / deliverable / feature ...)
+              [--assignee <name>[,<name>]|none] [--add-assignee <name>] [--remove-assignee <name>]  (assignees; a missing member is added)
   find <text>                                    Find boxes by ID or title
+  members                                       List members (names and how many open boxes each has)
   list --assignee <name> | --unassigned | --everyone [--all] [--unprepared] [--json]   List assigned boxes as a table (open ones by default; --all adds done ones; --unprepared only those that need detail; sorted by due date)
   group <name>                                   Create a top-level input group (e.g. "PCIe spec")
   group-set <input name> <group name|none>       Put a top-level input into a group / take it out
@@ -1806,9 +1810,27 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       if (str(options.category) !== undefined) p = setCategory(p, b.id, str(options.category) === "none" ? null : categoryKeyOf(str(options.category)!));
       if (str(options.repo) !== undefined) p = updateBlock(p, b.id, { repo: str(options.repo) === "none" ? undefined : str(options.repo) });
       if (str(options.issue) !== undefined) p = updateBlock(p, b.id, { issue: str(options.issue) === "none" ? undefined : str(options.issue) }); // JIRA / Redmine などの課題 URL
+      // 担当: --assignee <名前>[,<名前>] で置き換え (none で担当なし)、--add-assignee / --remove-assignee で足す・外す。名前のメンバーがいなければ足す
+      const names = (v: unknown) => list(v as string | string[] | undefined).flatMap((x) => x.split(",")).map((x) => x.trim()).filter(Boolean);
+      if (options.assignee !== undefined || options["add-assignee"] !== undefined || options["remove-assignee"] !== undefined) {
+        const setTo = options.assignee !== undefined ? (str(options.assignee) === "none" ? [] : names(options.assignee)) : undefined;
+        const r = assignMembers(p, b.id, { set: setTo, add: names(options["add-assignee"]), remove: names(options["remove-assignee"]) });
+        if (r.error) throw new Error(r.error);
+        p = r.project;
+        if (r.added.length) out(t("メンバーを足しました: {names}", { names: r.added.join(", ") }));
+      }
       if (str(options["split-by"]) !== undefined) p = updateBlock(p, b.id, { splitBy: str(options["split-by"]) === "none" ? undefined : str(options["split-by"])!.trim() }); // 直下の子の分け方 (一語)
       save(path, p);
       out(t("更新: 「{title}」", { title: p.blocks[b.id].title }));
+      return;
+    }
+    // メンバーの一覧 (担当の名前と、担当している未完了の箱の数)
+    case "members": {
+      if (p.members.length === 0) { out(t("メンバーはいません。担当は set <block> --assignee <名前> で決めます (名前のメンバーは自動で足されます)")); return; }
+      for (const m of p.members) {
+        const open = Object.values(p.blocks).filter((b) => b.assigneeIds.includes(m.id) && b.status !== "white").length;
+        out(`- ${m.name}  ${t("(未完了の担当 {count} 件)", { count: open })}`);
+      }
       return;
     }
     case "lang": {

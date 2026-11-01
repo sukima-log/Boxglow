@@ -77,7 +77,9 @@ function treeLines(p: Project, parentId: string, depth: number, lines: string[])
     const cat = categoryOf(b.category);
     const tag = (cat ? ` [${t(cat.label)}]` : "") + (b.kind === "project" ? ` [${t("プロジェクト")}${b.repo ? ": " + b.repo : ""}]` : b.template ? ` [${t("テンプレート: {name}", { name: b.template.name })}]` : "") + (b.issue ? ` [${issueKeyOf(b.issue)}]` : "");
     const pct = b.status === "white" ? "" : (() => { const v = effectiveProgress(p, b.id); return v > 0 ? ` ${v}%` : ""; })();
-    const who = b.assigneeIds.length === 0 && b.kind !== "project" ? " " + t("(未担当)") : "";
+    // 担当: いなければ (未担当)、いれば名前 (AI が status で担当を読み取れるように)
+    const names = b.assigneeIds.map((id) => p.members.find((m) => m.id === id)?.name).filter(Boolean);
+    const who = b.kind === "project" ? "" : names.length === 0 ? " " + t("(未担当)") : " " + t("(担当: {names})", { names: names.join(", ") });
     const due = b.dueDate && b.status !== "white" ? ` ${t("期日 {date}", { date: b.dueDate })}${isOverdue(b) ? " " + t("(超過)") : ""}` : "";
     lines.push(`${"  ".repeat(depth)}- ${MARK[b.status]}${pct} ${b.key ?? ""} ${b.title}${tag}${who}${due} -> ${outs}${act}`);
     treeLines(p, b.id, depth + 1, lines);
@@ -160,6 +162,8 @@ export function blockReport(p: Project, blockId: string): string {
   if (b.issue) lines.push(`- ${t("課題: {key}", { key: issueKeyOf(b.issue) })} <${b.issue}>`);
   if (b.startDate || b.dueDate) lines.push(`- ${t("日程:")} ${b.startDate ? t("開始 {date}", { date: b.startDate }) : ""}${b.startDate && b.dueDate ? " / " : ""}${b.dueDate ? t("期日 {date}", { date: b.dueDate }) + (isOverdue(b) ? " " + t("(超過)") : "") : ""}`);
   if (b.estimateHours !== undefined || b.actualHours !== undefined) lines.push(`- ${t("時間:")} ${b.estimateHours !== undefined ? t("見積 {hours}h", { hours: b.estimateHours }) : ""}${b.estimateHours !== undefined && b.actualHours !== undefined ? " / " : ""}${b.actualHours !== undefined ? t("実績 {hours}h", { hours: b.actualHours }) : ""}`);
+  const assignees = b.assigneeIds.map((id) => p.members.find((m) => m.id === id)?.name).filter(Boolean);
+  if (assignees.length) lines.push(`- ${t("担当: {names}", { names: assignees.join(", ") })}`);
   if (b.activity) lines.push(`- ${t("活動:")} ${b.activity.actor} ${t(ACTIVITY_LABEL[b.activity.state])} ${b.activity.note} (${b.activity.since})`);
   for (const item of scopeEntries(b.scope)) lines.push("", "## " + item.label, item.text);
   // 説明の日時は、分かるときだけ出す (日時の記録が無い古い説明に、毎回「不明」と付けない)

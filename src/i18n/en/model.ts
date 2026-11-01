@@ -87,4 +87,7 @@ export const model: Record<string, string> = {
 , "方針「{name}」": "policy \"{name}\""
 , "(作成中)": "(work in progress)"
 , "(作成中あり)": "(work in progress available)"
+, "メンバー「{name}」がいません ({list})": "Member \"{name}\" not found ({list})"
+, "(担当: {names})": "(assignees: {names})"
+, "担当: {names}": "Assignees: {names}"
 };
