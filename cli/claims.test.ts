@@ -311,5 +311,8 @@ it("log は日付と書き手つきの記録を積み上げる (本文の引数�
  const alpha=Object.values(f.read().blocks).find((b:any)=>b.title==="alpha") as any;
  expect(alpha.log.map((e:any)=>[e.by,e.text])).toEqual([["codex","最初の記録 **太字**"],["human","2 件目\n- 箇条書き"]]);
  expect(alpha.log.every((e:any)=>typeof e.id==="string" && !Number.isNaN(Date.parse(e.at)))).toBe(true);
- expect(f.cli("log","alpha","--actor","codex").status).toBe(1); // 本文なしは失敗
+ // 本文なしは、その箱の記録の一覧 (id 付き。直す・消すときに使う)
+ const listed=f.cli("log","alpha","--actor","codex");
+ expect(listed.status).toBe(0);
+ expect(listed.stdout).toContain(`(log: ${alpha.log[0].id})`);
 });

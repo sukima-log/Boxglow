@@ -53,4 +53,15 @@ describe("hosted MCP", () => {
     const serve = await call({ text, write: true }, "boxglow_run", { args: ["serve"] });
     expect(serve.body.result?.isError).toBe(true);
   });
+  it("members・plan・log <block> は、読むだけの形なら読み取り専用のトークンでも使え、書き込む形は断る", async () => {
+    const text = toJSON(createProject("ホストの計画")) + "\n";
+    const ro = { text, write: false };
+    expect((await call(ro, "boxglow_run", { args: ["plan"] })).body.result?.content[0].text).toContain("ホストの計画");
+    expect((await call(ro, "boxglow_run", { args: ["members"] })).body.result?.isError).toBeFalsy();
+    const rename = await call(ro, "boxglow_run", { args: ["plan", "--name", "別名"] });
+    expect(rename.body.result?.content[0].text).toContain("読み取り専用");
+    expect(rename.changed).toBe(false);
+    expect((await call(ro, "boxglow_run", { args: ["members", "--remove", "誰か"] })).body.result?.content[0].text).toContain("読み取り専用");
+    expect((await call(ro, "boxglow_run", { args: ["log", "B1", "メモ"] })).body.result?.content[0].text).toContain("読み取り専用");
+  });
 });

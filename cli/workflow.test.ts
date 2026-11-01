@@ -354,6 +354,83 @@ describe("担当を CLI から決める",()=>{
   });
 });
 
+// 画面ではできて CLI ではできなかった操作 (利用者の指摘 2026-11-01 の総点検)
+describe("画面と同じ操作を CLI から",()=>{
+  /** 人として CLI を動かす (fixture の cli は --actor codex 固定のため) */
+  const asHuman=(file:string,...args:string[])=>spawnSync(process.execPath,[entry,...args,"--file",file,"--actor","human"],{encoding:"utf8"});
+  it("階層の違う箱どうしを入力名まで書いて結線でき、通った箱が出る。disconnect は両端の名前で途中の線ごと外す",()=>{
+    const {cli,read}=fixture();
+    for (const a of [["add","甲","--out","設計"],["add","乙"],["add","甲子","--parent","甲","--out","図"],["add","乙子","--parent","乙","--in","素材"]]) expect(cli(...a).status).toBe(0);
+    const edges=()=>(Object.values(read().edges) as any[]).filter((e)=>!e.auto).length; // 自動の線 (未接続の入力の引き上げ) は結線で消えるので数えない
+    const before=edges();
+    const r=cli("connect","甲子.図","乙子.素材");expect(r.status,r.stderr).toBe(0);
+    expect(r.stdout).toContain("甲子.図 -> 甲.図 -> 乙.");
+    expect(r.stdout).toContain("-> 乙子.図"); // つながった入出力は上流の名前にそろう (既存の規則)
+    expect(edges()).toBe(before+3);
+    const d=cli("disconnect","甲子.図","乙子.図");expect(d.status,d.stderr).toBe(0);
+    expect(d.stdout).toContain("3 本");
+    expect(edges()).toBe(before);
+    // 入力名を省いた形も、通った箱を実際の通りに出す (以前は「(親の出力)」と違う説明だった)
+    const s=cli("connect","甲子.図","乙子");expect(s.status,s.stderr).toBe(0);
+    expect(s.stdout).toContain("甲子.図 -> 甲.図 -> 乙.");
+    expect(s.stdout).not.toContain("親の出力");
+  });
+  it("答え済みの判断を answer --id で直すと、直した記録が残る。同じ答えは断る",()=>{
+    const {cli,read,id}=fixture();
+    expect(cli("ask","対象","どちら?","--options","X|Y").status).toBe(0);
+    const did=read().blocks[id].decisions[0].id;
+    expect(cli("answer","対象","X").status).toBe(0);
+    const r=cli("answer","対象","Y","--id",did);expect(r.status,r.stderr).toBe(0);
+    expect(r.stdout).toContain("答えを直しました");
+    expect(read().blocks[id].decisions[0].answer).toBe("Y");
+    expect(read().log.some((e:any)=>String(e.message).includes("答えを直した"))).toBe(true);
+    expect(cli("answer","対象","Y","--id",did).status).toBe(1);
+  });
+  it("members --remove でメンバーを一覧と担当から外す",()=>{
+    const {cli,read,id}=fixture();
+    expect(cli("set","対象","--assignee","Codex,人").status).toBe(0);
+    const r=cli("members","--remove","codex");expect(r.status,r.stderr).toBe(0);
+    expect(read().members.map((m:any)=>m.name)).toEqual(["人"]);
+    expect(read().blocks[id].assigneeIds).toHaveLength(1);
+    expect(cli("members","--remove","いない人").status).toBe(1);
+  });
+  it("group で入力グループの名前・説明を変え、消せる",()=>{
+    const {cli,read}=fixture();
+    expect(cli("group","資料").status).toBe(0);
+    expect(cli("group","資料","--rename","仕様書一式","--description","PCIe の仕様").status).toBe(0);
+    expect(read().inputGroups).toMatchObject([{name:"仕様書一式",description:"PCIe の仕様"}]);
+    expect(cli("group","仕様書一式","--remove").status).toBe(0);
+    expect(read().inputGroups).toHaveLength(0);
+    expect(cli("group","無い","--remove").status).toBe(1);
+  });
+  it("plan で計画の名前と説明を見る・変える (一番上の箱の題名は変わらない)",()=>{
+    const {cli,read}=fixture();
+    expect(cli("plan").stdout).toContain("確認");
+    expect(cli("plan","--name","新しい計画","--description","説明文").status).toBe(0);
+    expect(read().name).toBe("新しい計画");
+    expect(read().description).toBe("説明文");
+    expect(cli("plan","--description","none").status).toBe(0);
+    expect(read().description).toBe("");
+  });
+  it("作業記録を一覧し、自分の記録だけ直す・消せる。人はどの記録でも直せる。show にも id 付きで出る",()=>{
+    const {cli,read,id,file}=fixture();
+    expect(cli("log","対象","最初のメモ").status).toBe(0);
+    expect(asHuman(file,"log","対象","人のメモ").status).toBe(0);
+    const [mine,theirs]=read().blocks[id].log;
+    expect(cli("log","対象").stdout).toContain(`(log: ${mine.id})`);
+    expect(cli("show","対象").stdout).toContain(`(log: ${theirs.id})`);
+    expect(cli("log","対象","--edit",mine.id,"直したメモ").status).toBe(0);
+    expect(read().blocks[id].log[0].text).toBe("直したメモ");
+    const denied=cli("log","対象","--remove",theirs.id);
+    expect(denied.status).toBe(1);
+    expect(denied.stderr).toContain("自分の記録だけ");
+    expect(asHuman(file,"log","対象","--edit",mine.id,"人が直した").status).toBe(0);
+    expect(cli("log","対象","--remove",mine.id).status).toBe(0);
+    expect(read().blocks[id].log.map((e:any)=>e.id)).toEqual([theirs.id]);
+    expect(cli("log","対象","--remove").status).toBe(1);
+  });
+});
+
 it("MCP の boxglow_artifact で最上位の入力に資料を付けられる",async()=>{
   const {file,read}=fixture();
   const client=new Client({name:"workflow-test",version:"1"});
@@ -373,6 +450,16 @@ it("MCP の boxglow_artifact で最上位の入力に資料を付けられる",a
     expect((await client.callTool({name:"boxglow_set",arguments:{block:"対象",assignee:["Codex"]}})).isError).not.toBe(true);
     expect(read().members.map((m:any)=>m.name)).toEqual(["Codex"]);
     expect((Object.values(read().ports) as any[]).find((q)=>q.name==="コード").artifacts[0].draft).toBeUndefined();
+    // 作業記録の書き直しと、答え済みの判断の書き直し (利用者の指摘 2026-11-01)
+    expect((await client.callTool({name:"boxglow_log",arguments:{block:"対象",text:"メモ"}})).isError).not.toBe(true);
+    const entry=(Object.values(read().blocks) as any[]).find((b)=>b.title==="対象").log[0];
+    expect((await client.callTool({name:"boxglow_log",arguments:{block:"対象",edit:entry.id,text:"直したメモ"}})).isError).not.toBe(true);
+    expect((Object.values(read().blocks) as any[]).find((b)=>b.title==="対象").log[0].text).toBe("直したメモ");
+    expect((await client.callTool({name:"boxglow_ask",arguments:{block:"対象",question:"どちら?",options:["X","Y"]}})).isError).not.toBe(true);
+    expect((await client.callTool({name:"boxglow_answer",arguments:{block:"対象",answer:"X"}})).isError).not.toBe(true);
+    const did=(Object.values(read().blocks) as any[]).find((b)=>b.title==="対象").decisions[0].id;
+    expect((await client.callTool({name:"boxglow_answer",arguments:{block:"対象",answer:"Y",id:did}})).isError).not.toBe(true);
+    expect((Object.values(read().blocks) as any[]).find((b)=>b.title==="対象").decisions[0].answer).toBe("Y");
   } finally {await client.close();}
 },15000);
 

@@ -59,7 +59,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { addLogEntry, childrenOf, setNow, changedPolicies, ackPolicy, assignMembers, updateDecision, moveBlockToParent, reopenDecision, disconnect, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, connect, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor, canRemovePort, inputsFedBy, removePort, removeDecision, sendBack, sendBackTargets, setPolicy, setPolicyOptOut } from "../src/model/graph";
+import { addLogEntry, childrenOf, setNow, changedPolicies, ackPolicy, assignMembers, updateDecision, moveBlockToParent, reopenDecision, disconnectWire, wirePathBetween, connectAcross, ancestorsOf, editDecisionAnswer, removeMember, findMember, updateInputGroup, removeInputGroup, updateLogEntry, removeLogEntry, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor, canRemovePort, inputsFedBy, removePort, removeDecision, sendBack, sendBackTargets, setPolicy, setPolicyOptOut } from "../src/model/graph";
 import { checkStart, checkDone, descriptionReminder, scopeEntries } from "../src/model/workflow";
 import type { WorkScope, WorkflowPolicy } from "../src/model/types";
 import type { Artifact } from "../src/model/types";
@@ -313,6 +313,33 @@ function resolveRef(p: Project, ref: string): { blockId: string; portName: strin
   return { blockId: best.blockId, portName: best.portName };
 }
 
+/**
+ * 結線で新しくできた線を、出す側から受ける側の順に「題名.ポート名 -> ...」でつないだ文にする
+ * 階層をまたぐ結線は、途中の箱の入出力を通る何本かの線になるので、通った箱が分かるように全部並べる
+ * Input : before = 結線する前の計画, after = 結線した後の計画
+ * Output: 例 "甲子.図 -> 甲.図 -> 乙.図 -> 乙子.図" (枝が分かれていれば ", " で区切る。新しい線が無ければ空文字)
+ */
+function describeNewWires(before: Project, after: Project): string {
+  const added = Object.values(after.edges).filter((e) => !before.edges[e.id] && !e.auto);
+  const label = (portId: string) => {
+    const port = after.ports[portId];
+    return `${port.blockId === ROOT_ID ? "inputs" : after.blocks[port.blockId]?.title ?? "?"}.${port.name}`;
+  };
+  // 経路の始まり = ほかの新しい線から受けていないポートから出る線
+  const starts = added.filter((e) => !added.some((x) => x.to.portId === e.from.portId));
+  return starts.map((first) => {
+    const names = [label(first.from.portId), label(first.to.portId)];
+    let cur = first;
+    for (let i = 0; i < added.length; i++) {
+      const next = added.find((x) => x.from.portId === cur.to.portId);
+      if (!next) break;
+      names.push(label(next.to.portId));
+      cur = next;
+    }
+    return names.join(" -> ");
+  }).join(", ");
+}
+
 /** 出力先 (既定は標準出力。MCP やテストでは文字列に集める) */
 let sink: (text: string) => void = (text) => process.stdout.write(text);
 const out = (text: string) => sink(text.endsWith("\n") ? text : text + "\n");
@@ -414,6 +441,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  --brief = 短い形: 対象の情報は全部、親・上流は題名・状態・有効な判断・対象につながる出力だけ。省いたものの件数と取り方を出す (確認トークンは同じ)
   checkpoint <block> --note <メモ>               引き継ぎメモ (分かったこと・次の手順・未解決の点) を計画に残す。中断や引き継ぎの前に使う
   log <block> "<本文>"                            作業記録を 1 件足す (Markdown 可。日付と書き手が付く。進捗・気づき・経緯を自由に。画面の「記録」タブと同じ)
+  log <block> [--edit <id> "<本文>" | --remove <id>]   本文なしで記録の一覧 (id 付き)。--edit で書き直し、--remove で消す (AI は自分の記録だけ)
   guard on|off                                   確認トークンの要求を有効 / 無効にする (setup-agent は有効にする)。有効な間、AI の start / done / set / split / artifact / ack /
                                                  blocked / review / leave / checkpoint は --context-token <context で得た contextToken> が要る (読んだ後に指示・回答・引き継ぎが変わっていたら拒否)。
                                                  人 (--actor human) には要求しない。AI が off にするときは --context-token が要る
@@ -455,13 +483,13 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   join [--title <題名>] [--parent <block>]           合流の部品を足す (分かれた道を 1 つにまとめる。道の出力を connect でつなぐと、どれか 1 つが届けば先へ進む)
   move <block> --parent <block|project>            ボックスを別の親の中へ移す (線は間のボックスのポートを経由してつながったまま)
   port <block|project|inputs> [--in <名前>]... [--out <名前>]... [--remove <名前>]... [--policy <出力名> [--policy-scope all|<block>] [--advisory]]... [--no-policy <出力名>]... [--skip-policy <箱>.<出力名>]... [--expect "<出力名>=<kind>:<hint>"]... [--self <出力名>]... [--no-self <出力名>]... [--rename <旧名>=<新名>] [--optional <入力名>]... [--required <入力名>]... [--accept-draft <入力名>]... [--no-accept-draft <入力名>]... [--describe "<名前>=<説明>"]... [--any-of <入力名>]... [--all-of <入力名>]...   既存のボックスに入力 / 出力を足す、消す (入力を消すと使う箱の入力も消える)、名前を変える。--any-of で合流の入力 (どれか 1 つが届けばよい) にする (project = 最初のプロジェクトのボックス、inputs = 最上位の入力)
-  disconnect <題名.出力名> <題名.入力名>          線を外す
+  disconnect <題名.出力名> <題名.入力名>          線を外す (階層をまたいだ線も両端の名前で外せる。途中の箱の中継の入出力もまとめて消える)
   tidy                                              ファイルを規則にそろえて保存し直す (線でつながる入出力の名前をそろえる、重なりを解く)
   remove <block> [--force]                          ボックスを消す (中にボックスがあるとき・プロジェクトのボックスは --force。最後のプロジェクトのボックスは消せない。中にボックスがあるときは --force。線も外れる。元に戻せないので Git で管理していること)
   serve [--port 4174] [--open] [--sync|--no-sync]             ローカルサーバ: 同梱の Web アプリを http://localhost:4174/?serve=1 で配信し、boxglow.json を読み書き (Firefox / Safari でも使える)
                                                  通常は「同期を始める」から開始。--sync = 明示有効化、--no-sync = 無効。送り先は --server > BOXGLOW_SERVER > 既存の結び付け > 製品既定。空/off も無効
   mcp [--file <path>]                               MCP サーバ (標準入出力)。Claude Code などから status / start / done / ask ... をツールとして使う (.mcp.json は setup-agent が書く)
-  connect <題名.出力名> <題名[.入力名]>           結線 (受け側は題名だけでよい: 出力名と同じ名前の入力を作ってつなぐ。親子は自動で内側の面。最終成果物へは project)
+  connect <題名.出力名> <題名[.入力名]>           結線 (受け側は題名だけでよい: 出力名と同じ名前の入力を作ってつなぐ。親子は自動で内側の面。階層が違えば途中の箱に入出力を作って通す。最終成果物へは project)
   now [<block>|none] [--off]                     今ここ (本当にいま作業しているボックス。複数の AI や人がいれば、いくつでも) を付ける / 外す (--off) / 全部消す (none) / 見る。start で自動で付き、done / leave で外れる。画面では太い枠と NOW の札
   start <block> [--note <何をするか>] [--reason <理由>]  入力待ちは既定で警告。理由を記録すると警告なしで開始。今ここにもこのボックスが付く。
                                                  要具体化 (自身が作る出力が無い、出力の予定成果物 expect・完了条件 acceptance が未定) も既定は警告 (policy --unprepared reject で AI は開始不可。理由では通れない)
@@ -477,7 +505,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   review <block> [--note]                        確認待ち
   ask <block> <質問> [--options "A|B"] [--context <判断材料>] [--branch]   人間に判断を求める (判断待ちになる)。--branch = 答えで後の作業が分かれる問い: そのボックスを分岐にする (選択肢ごとに道)。質問だけで判断できるよう、前提・比較・影響を --context に書く
   decision <block> --id <decision id> [--question] [--options "A|B"] [--context]   未回答の判断を書き直す
-  answer <block> <回答> [--id <decision id>] [--by <名前>]   判断に答える (既定は最新の未回答)
+  answer <block> <回答> [--id <decision id>] [--by <名前>]   判断に答える (既定は最新の未回答。答え済みの --id を指すと答えを直す)
   ack <block> [--id <decision id>]                人の回答を読んで引き取ったと記録する (status の「回答あり」から消える。start / done / blocked / review / set / split でも自動で引き取る)
   ack <block> --policy [<方針の出力名>]           済んだ作業が、完了の後に決まった・変わった方針に合っていることを確かめた (「方針: 確かめ直し」を消す)
   reopen <block> [--id <decision id>] [--note <理由>]   判断をやり直す (方針転換)。前の答えは履歴に、候補はそのまま残る
@@ -486,9 +514,11 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
               [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <時間>|none] [--hours <実績時間>|none] [--split-by <一語>|none]  (--split-by = 直下の子の分け方: 工程 / 成果物 / 機能 など)
               [--assignee <名前>[,<名前>]|none] [--add-assignee <名前>] [--remove-assignee <名前>]  (担当。名前のメンバーがいなければ足す)
   find <文字>                                    ID や題名でボックスを探す
-  members                                       メンバーの一覧 (担当の名前と未完了の担当の数)
+  members [--remove <名前,>]                    メンバーの一覧 (担当の名前と未完了の担当の数)。--remove で一覧から外す (担当からも外れる)
+  plan [--name <名前>] [--description <説明>|none]   計画の名前と説明を見る / 変える (一番上の箱の題名とは別)
   list --assignee <名前> | --unassigned | --everyone [--all] [--unprepared] [--json]   担当の一覧を表で出す (既定は未完了だけ。--all で完了済みも。--unprepared で要具体化だけ。並びは期日の近い順)
   group <名前>                                   最上位の入力グループを作る (例: "PCIe 仕様書")
+  group <名前> [--rename <新しい名前>] [--description <説明>|none] [--remove]   入力グループを直す / 消す (入っていた入力は Inputs に戻る)
   group-set <入力名> <グループ名|none>            最上位の入力をグループに入れる / 外す
   group-export <グループ名> [--out <path>]        グループを JSON に書き出す (他のプロジェクトで group-import)
   group-import <path>                            グループの JSON を読み込む
@@ -544,6 +574,7 @@ Usage (npx boxglow <command> ...):
                                                  --brief = short form: everything about the box itself; parents and input providers reduced to title, status, answered decisions and the outputs feeding it; says what was left out (same contextToken)
   checkpoint <block> --note <note>               Save a handoff note (findings, next steps, unresolved questions) in the plan. Use it before an interruption or a handoff
   log <block> "<text>"                            Add a work-log entry (Markdown; dated and signed). Progress, findings, context; same as the Log tab in the UI
+  log <block> [--edit <id> "<text>" | --remove <id>]   Without text, list the entries (with ids). --edit rewrites one, --remove deletes one (an AI only its own)
   guard on|off                                   Turn the context-token requirement on / off (setup-agent turns it on). While on, an AI's start / done / set / split / artifact / ack /
                                                  blocked / review / leave / checkpoint need --context-token <contextToken from context> (rejected if instructions, answers or handoff notes changed after reading).
                                                  People (--actor human) are not asked for it. An AI needs --context-token to turn it off
@@ -585,13 +616,13 @@ Usage (npx boxglow <command> ...):
   join [--title <title>] [--parent <block>]          Add a merge part (where paths come together; connect the paths' outputs to it, and any one of them arriving lets the work go on)
   move <block> --parent <block|project>            Move a box into another parent (wires stay connected through the ports of the boxes in between)
   port <block|project|inputs> [--in <name>]... [--out <name>]... [--remove <name>]... [--policy <output> [--policy-scope all|<block>] [--advisory]]... [--no-policy <output>]... [--skip-policy <box>.<output>]... [--expect "<output>=<kind>:<hint>"]... [--self <output>]... [--no-self <output>]... [--rename <old>=<new>] [--optional <input>]... [--required <input>]... [--accept-draft <input>]... [--no-accept-draft <input>]... [--describe "<name>=<description>"]... [--any-of <input>]... [--all-of <input>]...   Add inputs / outputs to an existing box, remove them (removing an input also removes the inputs it feeds), rename them, set an output's planned deliverable (expect: kind file / dir / url / doc / note / decision / result + a path or title) or mark it as made by this box itself (--self). --any-of makes inputs a merge (any one of them is enough) (project = the first project box)
-  disconnect <title.output> <title.input>          Remove a wire
+  disconnect <title.output> <title.input>          Remove a wire (a wire across levels can be removed by naming both ends; the relay inputs and outputs on the boxes in between go too)
   tidy                                              Normalize the file and save it again (give connected inputs and outputs one name, resolve overlaps)
   remove <block> [--force]                          Delete a box (--force if it contains boxes or is a project box; the last project box cannot be deleted. Its wires are removed too. This cannot be undone, so keep the file in Git)
   serve [--port 4174] [--open] [--sync|--no-sync]             Local server: serves the bundled web app at http://localhost:4174/?serve=1 and reads / writes boxglow.json (works in Firefox / Safari too)
                                                  Normally use Start syncing in the UI. --sync enables; --no-sync disables. Server: --server > BOXGLOW_SERVER > existing binding > product default. Empty/off also disables.
   mcp [--file <path>]                               MCP server (stdio). Lets Claude Code and others use status / start / done / ask ... as tools (setup-agent writes .mcp.json)
-  connect <title.output> <title[.input]>           Connect (the receiving side can be just a title: an input with the same name as the output is created and connected. Parent and child connect on the inner side automatically. Use project for the final deliverable)
+  connect <title.output> <title[.input]>           Connect (the receiving side can be just a title: an input with the same name as the output is created and connected. Parent and child connect on the inner side automatically. Across levels, inputs and outputs are added on the boxes in between. Use project for the final deliverable)
   now [<block>|none] [--off]                     The boxes being worked on right now (any number: several agents or people). start adds one, done / leave remove it, --off removes one, none clears all. Shown on the canvas with a thick frame and a NOW tag
   start <block> [--note <what you will do>] [--reason <reason>]  Missing inputs warn by default; a recorded reason allows starting without a warning. Also marks this box as "now".
                                                  A box that still needs detail (no output of its own, or an output without expect / acceptance) warns by default too (policy --unprepared reject blocks AI starts; a reason does not bypass it)
@@ -607,7 +638,7 @@ Usage (npx boxglow <command> ...):
   review <block> [--note]                        Waiting for review
   ask <block> <question> [--options "A|B"] [--context <background>] [--branch]   Ask a person to decide (becomes Needs decision). --branch = the answer changes the work that follows: turn the box into a branch (one path per option). Put the assumptions, comparison and impact in --context so the question can be decided on its own
   decision <block> --id <decision id> [--question] [--options "A|B"] [--context]   Rewrite an unanswered decision
-  answer <block> <answer> [--id <decision id>] [--by <name>]   Answer a decision (default: the latest unanswered one)
+  answer <block> <answer> [--id <decision id>] [--by <name>]   Answer a decision (default: the latest unanswered one. An answered --id corrects the answer)
   ack <block> [--id <decision id>]                Record that you have read a person's answer and taken it on (removes it from "Answered" in status. start / done / blocked / review / set / split also do this automatically)
   ack <block> --policy [<policy output>]          Record that finished work still matches a policy decided or changed after it was done (clears "Policy: check again")
   reopen <block> [--id <decision id>] [--note <reason>]   Reopen a decision (change of direction). The previous answer stays in the history and the options are kept
@@ -616,9 +647,11 @@ Usage (npx boxglow <command> ...):
               [--start YYYY-MM-DD|none] [--due YYYY-MM-DD|none] [--estimate <hours>|none] [--hours <actual hours>|none] [--split-by <word>|none]  (--split-by = how the direct children are divided: stage / deliverable / feature ...)
               [--assignee <name>[,<name>]|none] [--add-assignee <name>] [--remove-assignee <name>]  (assignees; a missing member is added)
   find <text>                                    Find boxes by ID or title
-  members                                       List members (names and how many open boxes each has)
+  members [--remove <name,>]                    List members (names and how many open boxes each has). --remove takes them off the list (and off their boxes)
+  plan [--name <name>] [--description <text>|none]   Show or change the plan's name and description (not the top box's title)
   list --assignee <name> | --unassigned | --everyone [--all] [--unprepared] [--json]   List assigned boxes as a table (open ones by default; --all adds done ones; --unprepared only those that need detail; sorted by due date)
   group <name>                                   Create a top-level input group (e.g. "PCIe spec")
+  group <name> [--rename <new name>] [--description <text>|none] [--remove]   Change or delete an input group (its inputs go back to Inputs)
   group-set <input name> <group name|none>       Put a top-level input into a group / take it out
   group-export <group name> [--out <path>]       Write a group out as JSON (group-import it in another project)
   group-import <path>                            Read a group from JSON
@@ -994,7 +1027,30 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       // 作業記録: 日付・書き手つきの Markdown を、ボックスに積む (進捗・気づき・経緯。引き継ぎメモとは別に残る)
       const b = mustFind(p, rest[0]);
       const text = (str(options.note) ?? rest.slice(1).join(" ")).trim();
-      if (!text) throw new Error(t("記録の本文を指定してください: log <block> \"<本文>\" (または --note)"));
+      // 書き直す・消す (--edit <id> / --remove <id>)。AI が直せるのは自分の書いた記録だけ (人の記録を書き換えない)。人はどれでも直せる
+      if (options.edit === true || options.remove === true) throw new Error(t("--edit / --remove には記録の id を指定してください (log {block} で一覧)", { block: b.key ?? b.id }));
+      const target = str(options.edit) ?? str(options.remove);
+      if (target !== undefined) {
+        const entry = (b.log ?? []).find((e) => e.id === target);
+        if (!entry) throw new Error(t("記録 {id} が見つかりません (log {block} で一覧)", { id: target, block: b.key ?? b.id }));
+        if (!isHumanActor(actor) && entry.by !== actor) throw new Error(t("ほかの書き手 ({by}) の記録は直せません。直すのは自分の記録だけです", { by: entry.by }));
+        if (str(options.remove) !== undefined) {
+          save(path, removeLogEntry(p, b.id, entry.id));
+          out(t("記録を消しました: {id}", { id: entry.id }));
+          return;
+        }
+        if (!text) throw new Error(t("新しい本文を指定してください: log <block> --edit <id> \"<本文>\""));
+        save(path, updateLogEntry(p, b.id, entry.id, text));
+        out(t("記録を直しました: {id}", { id: entry.id }));
+        return;
+      }
+      // 本文なし: そのボックスの作業記録の一覧 (id 付き。直す・消すときに使う)
+      if (!text) {
+        const entries = b.log ?? [];
+        if (entries.length === 0) { out(t("記録はまだありません: {key} 「{title}」", { key: b.key ?? "", title: b.title })); return; }
+        for (const e of entries) out(`- ${e.at} ${e.by} (log: ${e.id})\n  ${e.text.replace(/\n/g, "\n  ")}`);
+        return;
+      }
       save(path, addLogEntry(p, b.id, actor, text));
       out(t("記録しました: {key} 「{title}」({by})", { key: b.key ?? "", title: b.title, by: actor }));
       return;
@@ -1088,6 +1144,24 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     case "group": {
       const name = rest.join(" ");
       if (!name) throw new Error(t("<名前> を指定してください"));
+      // 既にあるグループを直す・消す (--rename / --description / --remove)。以前は作ることしかできなかった (利用者の指摘 2026-11-01)
+      if (options.rename !== undefined || options.description !== undefined || options.remove !== undefined) {
+        const gp = inputGroupsOf(p).find((g) => g.name === name);
+        if (!gp) throw new Error(t("グループ「{name}」がありません ({list})", { name, list: inputGroupsOf(p).map((g) => g.name).join(", ") }));
+        if (options.remove !== undefined) {
+          save(path, removeInputGroup(p, gp.id));
+          out(t("入力グループを消しました: 「{name}」 (入っていた入力は Inputs に戻りました)", { name }));
+          return;
+        }
+        const patch: { name?: string; description?: string } = {};
+        const rename = str(options.rename)?.trim();
+        if (options.rename !== undefined && !rename) throw new Error(t("--rename には新しい名前を指定してください"));
+        if (rename) patch.name = rename;
+        if (options.description !== undefined) patch.description = str(options.description) === "none" ? "" : str(options.description) ?? "";
+        save(path, updateInputGroup(p, gp.id, patch));
+        out(t("入力グループを更新: 「{name}」", { name: patch.name ?? name }));
+        return;
+      }
       const r = addInputGroup(p, name);
       save(path, r.project);
       out(t("入力グループを追加: 「{name}」", { name }));
@@ -1436,10 +1510,15 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const b = resolveRef(p, rest[1] ?? "");
       const aPorts = portsOf(p, a.blockId).filter((x) => x.name === a.portName).map((x) => x.id);
       const bPorts = portsOf(p, b.blockId).filter((x) => x.name === b.portName).map((x) => x.id);
-      const hit = Object.values(p.edges).find((e) => aPorts.includes(e.from.portId) && bPorts.includes(e.to.portId));
-      if (!hit) throw new Error(t("線が見つかりません: {from} -> {to}", { from: String(rest[0]), to: String(rest[1]) }));
-      save(path, disconnect(p, hit.id));
-      out(t("線を外しました: {from} -> {to}", { from: rest[0], to: rest[1] }));
+      // 両端の間の経路をたどる (階層をまたいだ線は、途中の箱の入出力を通る何本かの線でできている)
+      const route = wirePathBetween(p, aPorts, bPorts);
+      if (!route) throw new Error(t("線が見つかりません: {from} -> {to}", { from: String(rest[0]), to: String(rest[1]) }));
+      // 受ける側に届く最後の線を、画面の「線を外す」と同じ処理で外す。1 本だけで続く途中の線と、使われなくなった中継のポートもまとめて消える。
+      // 途中で枝分かれしていれば、ほかの箱へ続く線は残る (利用者の指摘 2026-11-01: 階層をまたいだ線を CLI で外せなかった)
+      const r = disconnectWire(p, route[route.length - 1]);
+      save(path, r.project);
+      const removed = Object.keys(p.edges).filter((id) => !r.project.edges[id] && !p.edges[id].auto).length;
+      out(t("線を外しました: {from} -> {to}", { from: rest[0], to: rest[1] }) + (removed > 1 ? t(" (途中の箱を通る {count} 本)", { count: removed }) : ""));
       return;
     }
     case "connect": {
@@ -1453,28 +1532,27 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
         const r = connectToBlock(p, { portId: fromPort.id, side: fromIsParent ? "inner" : "outer" }, tb.id);
         if (r.error) throw new Error(r.error);
         save(path, r.project);
-        // つながった先のポート名を伝える (受け側が親なら親の出力、そうでなければ出力名と同じ入力)
-        const edge = Object.values(r.project.edges).find((e) => e.from.portId === fromPort.id && !Object.values(p.edges).some((x) => x.id === e.id));
-        const toPort = edge ? r.project.ports[edge.to.portId] : undefined;
-        out(t("結線: {from} -> {to}", { from: rest[0], to: `${tb.title}.${toPort?.name ?? fromPort.name}` }) + (toPort?.direction === "out" ? t(" (親の出力)") : t(" (出力名と同じ入力を使いました)")));
+        // 実際にできた線を、出す側から受ける側の順に伝える (階層をまたぐと途中の箱の入出力を通る。
+        // 以前は最初の 1 本の行き先だけを出していて、「(親の出力)」と実際と違う説明になっていた: 利用者の指摘 2026-11-01)
+        out(t("結線: {route}", { route: describeNewWires(p, r.project) || `${rest[0]} -> ${tb.title}` }));
         return;
       }
       const b = resolveRef(p, rest[1] ?? "");
-      const fromBlock = p.blocks[a.blockId];
-      const toBlock = p.blocks[b.blockId];
-      // 面の決め方: 出す側が受ける側の親なら「親の入力 (内側)」、受ける側が出す側の親なら「親の出力 (内側)」
-      const fromIsParent = toBlock.parentId === a.blockId;
-      const toIsParent = fromBlock.parentId === b.blockId;
-      const fromPort = portsOf(p, a.blockId, fromIsParent ? "in" : "out").find((x) => x.name === a.portName);
-      const toPort = portsOf(p, b.blockId, toIsParent ? "out" : "in").find((x) => x.name === b.portName);
+      // 面の決め方: 出す側が受ける側の先祖 (親、さらに上) なら「先祖の入力 (内側)」、受ける側が出す側の先祖なら「先祖の出力 (内側)」
+      const fromIsAncestor = ancestorsOf(p, b.blockId).some((x) => x.id === a.blockId);
+      const toIsAncestor = ancestorsOf(p, a.blockId).some((x) => x.id === b.blockId);
+      const fromPort = portsOf(p, a.blockId, fromIsAncestor ? "in" : "out").find((x) => x.name === a.portName);
+      const toPort = portsOf(p, b.blockId, toIsAncestor ? "out" : "in").find((x) => x.name === b.portName);
       if (!fromPort) throw new Error(t("「{ref}」のポートが見つかりません", { ref: rest[0] }));
       if (!toPort) throw new Error(t("「{ref}」のポートが見つかりません", { ref: rest[1] }));
-      const from: Endpoint = { portId: fromPort.id, side: fromIsParent ? "inner" : "outer" };
-      const to: Endpoint = { portId: toPort.id, side: toIsParent ? "inner" : "outer" };
-      const r = connect(p, from, to);
+      const from: Endpoint = { portId: fromPort.id, side: fromIsAncestor ? "inner" : "outer" };
+      const to: Endpoint = { portId: toPort.id, side: toIsAncestor ? "inner" : "outer" };
+      // 画面と同じ結線: 同じ階層ならそのまま、階層が違えば途中の箱に入出力を作って通す
+      // (以前は同じ階層しかつなげず、入力名まで書くと失敗した: 利用者の指摘 2026-11-01)
+      const r = connectAcross(p, from, to);
       if (r.error) throw new Error(r.error);
       save(path, r.project);
-      out(t("結線: {from} -> {to}", { from: rest[0], to: rest[1] }));
+      out(t("結線: {route}", { route: describeNewWires(p, r.project) || `${rest[0]} -> ${rest[1]}` }));
       return;
     }
     case "start": {
@@ -1762,7 +1840,25 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       if (!answer) throw new Error(t("<回答> を指定してください"));
       const id = str(options.id) ?? [...b.decisions].reverse().find((d) => d.answer === undefined)?.id;
       if (!id) throw new Error(t("未回答の判断がありません"));
-      save(path, answerDecision(p, b.id, id, answer, str(options.by) ?? (actor === "agent" ? "human" : actor)));
+      const decision = b.decisions.find((d) => d.id === id);
+      if (!decision) throw new Error(t("判断 {id} が見つかりません", { id }));
+      const by = str(options.by) ?? (actor === "agent" ? "human" : actor);
+      if (decision.answer !== undefined) {
+        // 答え済みの判断を --id で指したとき: 画面の「答えを直す」と同じ処理 (直した記録をログに残し、分岐の箱の状態も答えに合わせる)。
+        // 以前は黙って上書きしていた (利用者の指摘 2026-11-01)。前の答えを履歴に残して方針転換するときは reopen
+        if (decision.answer === answer.trim()) throw new Error(t("同じ答えです: {answer}", { answer }));
+        const q = editDecisionAnswer(p, b.id, id, answer, by);
+        // AI が直した答えは、その場で確認済みにする (answerDecision と同じ扱い。人が直した答えは AI が引き取るまで未確認)
+        if (!isHumanActor(by)) {
+          const qd = q.blocks[b.id].decisions.find((d) => d.id === id)!;
+          qd.ackedBy = by;
+          qd.ackedAt = qd.answeredAt;
+        }
+        save(path, q);
+        out(t("答えを直しました: 「{title}」 {before} -> {answer}", { title: b.title, before: decision.answer, answer: answer.trim() }));
+        return;
+      }
+      save(path, answerDecision(p, b.id, id, answer, by));
       out(t("回答: 「{title}」 {answer}", { title: b.title, answer }));
       return;
     }
@@ -1825,7 +1921,34 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       return;
     }
     // メンバーの一覧 (担当の名前と、担当している未完了の箱の数)
+    case "plan": {
+      // 計画の名前と説明を見る / 変える (画面の計画の設定と同じ。一番上の箱の題名とは別物)。以前は CLI から変えられなかった (利用者の指摘 2026-11-01)
+      if (options.name === undefined && options.description === undefined) {
+        out(t("計画の名前: {name}", { name: p.name }));
+        if (p.description) out(t("説明: {text}", { text: p.description }));
+        return;
+      }
+      const name = str(options.name)?.trim();
+      if (options.name !== undefined && !name) throw new Error(t("--name には計画の名前を指定してください"));
+      p = { ...p, ...(name ? { name } : {}), ...(options.description !== undefined ? { description: str(options.description) === "none" ? "" : str(options.description) ?? "" } : {}) };
+      save(path, p);
+      out(t("計画を更新しました: {name}", { name: p.name }));
+      return;
+    }
     case "members": {
+      // メンバーを一覧から外す (担当していた箱からも外れる)。以前は一覧から外す手段が無かった (利用者の指摘 2026-11-01)
+      if (options.remove !== undefined) {
+        const names = (str(options.remove) ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+        if (names.length === 0) throw new Error(t("--remove には外すメンバーの名前を指定してください"));
+        for (const n of names) {
+          const m = findMember(p, n);
+          if (!m) throw new Error(t("メンバー「{name}」がいません ({list})", { name: n, list: p.members.map((x) => x.name).join(", ") }));
+          p = removeMember(p, m.id);
+        }
+        save(path, p);
+        out(t("メンバーを外しました: {names}", { names: names.join(", ") }));
+        return;
+      }
       if (p.members.length === 0) { out(t("メンバーはいません。担当は set <block> --assignee <名前> で決めます (名前のメンバーは自動で足されます)")); return; }
       for (const m of p.members) {
         const open = Object.values(p.blocks).filter((b) => b.assigneeIds.includes(m.id) && b.status !== "white").length;

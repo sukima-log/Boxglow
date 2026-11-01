@@ -20,7 +20,7 @@ import { isAcked as decisionIsAcked } from "../model/graph";
 import { useEffect, useRef, useState } from "react";
 import { Markdown } from "./Markdown";
 import { LiveMarkdownEditor } from "./LiveMarkdownEditor";
-import { addLogEntry, removeLogEntry, isNow, setNow, addInputGroup, addMember, ancestorsOf, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, removeBlock, setCategory, setProgress, setSchedule, updateBlock, waitingFor } from "../model/graph";
+import { addLogEntry, removeLogEntry, updateLogEntry, isNow, setNow, addInputGroup, addMember, ancestorsOf, exportInputGroup, importInputGroup, inputGroupsOf, portsOf, removeInputGroup, rootInputsOf, updateInputGroup, canSuggestWhite, childrenOf, clearActivity, computeProgress, daysToDue, effectiveProgress, extractTemplate, isOverdue, issueKeyOf, kindOf, removeBlock, setCategory, setProgress, setSchedule, updateBlock, waitingFor } from "../model/graph";
 import { saveTemplate } from "../lib/templates";
 import { actorLabel, ACTIVITY_LABEL, agoText } from "../model/report";
 import { DecisionCard, Timeline } from "./Timeline";
@@ -633,7 +633,7 @@ function WorkLog({ project, blockId, readonly, apply }: { project: Project; bloc
           </header>
           {editing === e.id ? (
             <DebouncedText multiline className="input md-edit" value={e.text} autoFocus onBlur={() => setEditing(null)}
-              onCommit={(v) => apply((p) => { const blk = p.blocks[blockId]; if (!blk?.log) return p; return { ...p, blocks: { ...p.blocks, [blockId]: { ...blk, log: blk.log.map((x) => x.id === e.id ? { ...x, text: v } : x) } } }; })} />
+              onCommit={(v) => apply((p) => updateLogEntry(p, blockId, e.id, v))} />
           ) : <Markdown text={e.text} />}
         </article>
       ))}

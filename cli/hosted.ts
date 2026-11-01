@@ -17,7 +17,20 @@ import { APP_VERSION } from "../src/model/version";
 export interface HostedPlan { text: string | null; write: boolean; actor?: string; lang?: "ja" | "en" }
 
 /** 読むだけのコマンド (読み取り専用のトークンで許すもの) */
-const READ_ONLY = new Set(["status", "resume", "show", "context", "lint", "validate", "claims", "review-split", "review-box", "export", "help", "version", "log"]);
+const READ_ONLY = new Set(["status", "resume", "show", "context", "lint", "validate", "claims", "review-split", "review-box", "export", "help", "version", "log", "members", "plan"]);
+/**
+ * 読むだけのコマンドのうち、引数しだいで書き込むもの: 書き込む形かどうか
+ *   log: 引数なし (最近のログ) と「log <block>」(その箱の記録の一覧) だけが読むだけ。本文・--edit・--remove は書き込む
+ *   members: --remove で書き込む / plan: --name・--description で書き込む
+ * Input : argv = コマンドと引数 / Output: true = 書き込む形
+ */
+function writesWith(argv: string[]): boolean {
+  const cmd = argv[0] ?? "";
+  if (cmd === "log") return argv.length > 2 || (argv.length === 2 && argv[1].startsWith("--"));
+  if (cmd === "members") return argv.some((a) => a === "--remove" || a.startsWith("--remove="));
+  if (cmd === "plan") return argv.some((a) => /^--(name|description)(=|$)/.test(a));
+  return false;
+}
 /** 使わせないコマンド (ファイル・ネットワーク・常駐が要る) */
 const NOT_HOSTED = new Set(["serve", "mcp", "sync", "login", "logout", "whoami", "billing", "remote", "setup-agent", "merge", "init", "unlock", "import", "template", "hook"]);
 
@@ -27,7 +40,7 @@ export async function handleMcpRequest(request: Request, plan: HostedPlan): Prom
   const run = (argv: string[]): string => {
     const cmd = argv[0] ?? "";
     if (NOT_HOSTED.has(cmd)) throw new Error(t("このコマンドは、ホスト型の MCP では使えません: {cmd}", { cmd }));
-    if (cmd === "log" && argv.length > 1 && !plan.write) throw new Error(t("このトークンは読み取り専用です"));
+    if (writesWith(argv) && !plan.write) throw new Error(t("このトークンは読み取り専用です"));
     if (!plan.write && !READ_ONLY.has(cmd)) throw new Error(t("このトークンは読み取り専用です"));
     // 記録者の名前 (トークンの名前) を、手元の --actor と同じ仕組みで渡す
     const previousActor = process.env.BOXGLOW_ACTOR;

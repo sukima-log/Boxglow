@@ -550,6 +550,15 @@ export function removeLogEntry(p: Project, blockId: string, entryId: string): Pr
   const log = b.log.filter((e) => e.id !== entryId);
   return { ...p, blocks: { ...p.blocks, [blockId]: { ...b, ...(log.length ? { log } : { log: undefined }) } } };
 }
+/**
+ * 作業記録 1 件の本文を書き直す (画面の「記録」タブの編集と CLI の log --edit で共通)
+ * Input : p, blockId, entryId = 記録の id, text = 新しい本文 / Output: 更新した Project (記録が無い・本文が空ならそのまま)
+ */
+export function updateLogEntry(p: Project, blockId: string, entryId: string, text: string): Project {
+  const b = p.blocks[blockId];
+  if (!b?.log || !text.trim() || !b.log.some((e) => e.id === entryId)) return p;
+  return { ...p, blocks: { ...p.blocks, [blockId]: { ...b, log: b.log.map((e) => (e.id === entryId ? { ...e, text } : e)) } } };
+}
 export function updateBlock(p: Project, blockId: string, patch: Partial<Omit<Block, "id" | "parentId" | "position">>): Project {
   const q = touch(p);
   const b = q.blocks[blockId];
@@ -937,6 +946,32 @@ export function disconnectWire(p: Project, edgeId: string): { project: Project; 
     }
   }
   return { project: normalizePromotions(q) };
+}
+
+/**
+ * 出す側のポートから受ける側のポートまで、線をたどった経路を探す (CLI の disconnect で、階層をまたいだ線を両端の名前で指すため)
+ * 途中の箱の中継のポート (受けた線がそのまま次の線の出す側になるポート) を通ってたどる。自動の線も通る
+ * Input : p, fromPortIds = 出す側の候補のポート, toPortIds = 受ける側の候補のポート
+ * Output: 線の id の配列 (出す側から受ける側の順。見つからなければ null)
+ */
+export function wirePathBetween(p: Project, fromPortIds: string[], toPortIds: string[]): string[] | null {
+  const goal = new Set(toPortIds);
+  const edges = Object.values(p.edges);
+  // 幅優先で、いちばん短い経路を選ぶ (同じポートを 2 度通らない)
+  const queue: { portId: string; path: string[] }[] = fromPortIds.map((portId) => ({ portId, path: [] }));
+  const seen = new Set(fromPortIds);
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    for (const e of edges) {
+      if (e.from.portId !== cur.portId) continue;
+      const path = [...cur.path, e.id];
+      if (goal.has(e.to.portId)) return path;
+      if (seen.has(e.to.portId)) continue;
+      seen.add(e.to.portId);
+      queue.push({ portId: e.to.portId, path });
+    }
+  }
+  return null;
 }
 
 /** メンバーの色 (足した順に回して使う。画面と CLI で共通) */

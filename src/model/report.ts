@@ -203,6 +203,13 @@ export function blockReport(p: Project, blockId: string): string {
     lines.push("", "## " + t("資料"));
     for (const a of b.artifacts) lines.push(`- ${a.url ? `${a.title} <${a.url}>` : a.title}`);
   }
+  // 作業記録 (画面の「記録」タブ)。新しい 5 件を id 付きで出す (直す・消すときに id を使う)。以前は CLI から読めなかった (利用者の指摘 2026-11-01)
+  const entries = b.log ?? [];
+  if (entries.length > 0) {
+    lines.push("", "## " + t("記録"));
+    for (const e of entries.slice(-5)) lines.push(`- ${e.at} ${e.by} (log: ${e.id})`, "  " + e.text.replace(/\n/g, "\n  "));
+    if (entries.length > 5) lines.push(t("(ほか {count} 件。全部は log {block})", { count: entries.length - 5, block: b.key ?? b.id }));
+  }
   lines.push("");
   return lines.join("\n");
 }

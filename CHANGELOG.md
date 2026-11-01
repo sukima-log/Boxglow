@@ -3,6 +3,15 @@
 ## Unreleased
 
 - **Assign boxes from the CLI and MCP.** `npx boxglow set <block> --assignee <name>[,<name>]` replaces the assignees (`none` clears them), `--add-assignee` / `--remove-assignee` add or remove one, and a name that is not a member yet is added as one (MCP: `boxglow_set` with `assignee`, `addAssignee`, `removeAssignee`). `npx boxglow members` lists the members and how many open boxes each has. `status` shows the assignees' names ("(assignees: Codex)") and `show` has an "Assignees" line. Before, only the screen could assign, and agents worked around it. The agent instructions explain the difference between assignees and claims.
+- **The CLI and MCP can do the rest of what the screen does.**
+  - `connect <title.output> <title.input>` now connects boxes on different levels, as the screen does: inputs and outputs are added on the boxes in between. Before, naming the input made it fail with "only ports on the same level can be connected".
+  - `connect` prints the whole route (`A1.design -> A.design -> B.design -> B1.design`). Before, it described only the first wire and could say "(the parent's output)" when that was not where the wire ended.
+  - `disconnect` removes a wire across levels by naming both ends, together with the relay inputs and outputs in between.
+  - `answer --id` on an answered decision corrects the answer, as the screen does: the correction is logged and a branch box follows the new answer. Before, it silently overwrote the answer. MCP: `boxglow_answer` gained `id`.
+  - `members --remove <name>` takes a member off the list and off their boxes.
+  - `group <name> --rename / --description / --remove` changes or deletes an input group.
+  - `plan --name / --description` shows or changes the plan's own name and description. This is not the top box's title.
+  - `log <block>` without text lists the box's work-log entries with their ids, and `show` lists the latest five. `--edit <id>` rewrites an entry and `--remove <id>` deletes one; an agent can change only its own entries. Before, the CLI could only add entries and never showed them. MCP: `boxglow_log` gained `edit` and `remove`.
 
 ## 0.6.6 (2026-10-31)
 

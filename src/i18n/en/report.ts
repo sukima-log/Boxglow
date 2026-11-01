@@ -128,4 +128,9 @@ export const report: Record<string, string> = {
 , "担当を置き換える (メンバーの名前。空の配列で担当なし。いない名前はメンバーに足す)": "Replace the assignees (member names; an empty array clears them; missing members are added)"
 , "担当に足す名前": "Names to add as assignees"
 , "担当から外す名前": "Names to remove from the assignees"
+, "(ほか {count} 件。全部は log {block})": "({count} more. See them all with log {block})"
+, "。text を省くと記録の一覧 (id 付き)。edit で書き直し、remove で消す (自分の記録だけ)": ". Without text, lists the entries (with ids). edit rewrites one, remove deletes one (your own only)"
+, "書き直す記録の id": "Id of the entry to rewrite"
+, "消す記録の id": "Id of the entry to delete"
+, "判断の id (省くと最新の未回答。答え済みの id を指すと答えを直す)": "Decision id (default: the latest unanswered one. An answered id corrects the answer)"
 };
