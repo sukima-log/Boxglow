@@ -7,7 +7,6 @@ import { workingNow, sentBackTo, policiesFor, isPolicyReady, changedPolicies, po
  * 分類・題名・状態・入力・出力を縦に読むカード。親は子を包む領域として描く。
  */
 import { Handle, Position, useStore, type NodeProps } from "@xyflow/react";
-import { useBatchedUpdateNodeInternals } from "./batchedInternals";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { ancestorsOf, childrenOf, computeProgress, daysToDue, effectiveProgress, isInputReady, isSourceReady, isOverdue, issueKeyOf, portsOf, waitingFor } from "../model/graph";
 import type { BlockStatus } from "../model/types";
@@ -155,16 +154,8 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   const rowAt = (i: number, direction: "in" | "out", portId: string) => (view.expanded
     ? expandedRows.get(portId) ?? headerH + i * 26 + 13
     : (direction === "in" ? card.inputs : card.outputs)[i].center) - borderW;
-  // 測り直しは 1 フレームに 1 回にまとめて頼む (箱ごとに別々に頼むと、箱の数だけ状態の更新と線の経路計算が起きる)
-  const updateNodeInternals = useBatchedUpdateNodeInternals();
-  const portLayout = `${JSON.stringify(vertical)}|${width}|${height}|${headerH}|${view.expanded}|${card.inputs.map(q => `${q.id}:${q.center}`)}|${card.outputs.map(q => `${q.id}:${q.center}`)}|${[...expandedRows].map(([id, y]) => `${id}:${y}`)}|${borderW}`;
-  const previousPortLayout = useRef(portLayout);
-  useEffect(() => {
-    if (previousPortLayout.current !== portLayout) {
-      previousPortLayout.current = portLayout;
-      updateNodeInternals(blockId);
-    }
-  }, [blockId, portLayout, updateNodeInternals]);
+  // 丸の位置の測り直しは頼まない: 同じ位置を handleGeometry.ts で求めてノードに載せている (React Flow はそれを使う)。
+  // ここで丸の置き方を変えたら handleGeometry.ts も合わせる (計算と描画が一致することは画面の検査で確かめる)
 
   // white になった瞬間だけ光るアニメーションを付ける
   const prevStatus = useRef(view.status);

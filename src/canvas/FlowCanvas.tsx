@@ -19,44 +19,14 @@ import { BlockNode } from "./BlockNode";
 import { TerminalNode } from "./TerminalNode";
 import { RoutedEdge } from "./RoutedEdge";
 import { buildEdges, buildNodes, parseHandle, SCOPE_IN, SCOPE_OUT, type AnyRFNode } from "./layout";
-import { routeAll, type EdgeSpec, type NodeRect } from "./routeAll";
+import { routeAll, type EdgeSpec } from "./routeAll";
 import { reuseUnchanged } from "./stableElements";
-import { useBatchedUpdateNodeInternals } from "./batchedInternals";
+import { modelGeometry, modelRects, nodeHandles, parseGeometry } from "./handleGeometry";
 import { useLang, t } from "../i18n";
 
 
 const nodeTypes = { block: BlockNode, terminal: TerminalNode };
 
-/** ノードの絶対位置・大きさと、ハンドルの中心位置を 1 つの文字列にする (経路計算の入力) */
-const selectGeometry = (s: ReactFlowState): string => {
-  const lines: string[] = [];
-  for (const n of s.nodes) {
-    if (n.hidden) continue;
-    const internal = s.nodeLookup.get(n.id);
-    const abs = internal?.internals.positionAbsolute ?? n.position;
-    const w = internal?.measured.width ?? n.width ?? 0;
-    const h = internal?.measured.height ?? n.height ?? 0;
-    lines.push(`N\t${n.id}\t${n.parentId ?? ""}\t${Math.round(abs.x)}\t${Math.round(abs.y)}\t${Math.round(w)}\t${Math.round(h)}`);
-    const hb = internal?.internals.handleBounds;
-    for (const hd of [...(hb?.source ?? []), ...(hb?.target ?? [])]) {
-      lines.push(`H\t${n.id}\t${hd.id ?? ""}\t${Math.round(abs.x + hd.x + hd.width / 2)}\t${Math.round(abs.y + hd.y + hd.height / 2)}`);
-    }
-  }
-  return lines.join("\n");
-};
-
-/** selectGeometry の文字列を戻す */
-function parseGeometry(sig: string): { nodeRects: NodeRect[]; handles: Map<string, { x: number; y: number }> } {
-  const nodeRects: NodeRect[] = [];
-  const handles = new Map<string, { x: number; y: number }>();
-  for (const line of sig.split("\n")) {
-    if (!line) continue;
-    const f = line.split("\t");
-    if (f[0] === "N") nodeRects.push({ id: f[1], parentId: f[2], rect: { x: Number(f[3]), y: Number(f[4]), width: Number(f[5]), height: Number(f[6]) } });
-    else if (f[0] === "H") handles.set(`${f[1]}|${f[2]}`, { x: Number(f[3]), y: Number(f[4]) });
-  }
-  return { nodeRects, handles };
-}
 const edgeTypes = { routed: RoutedEdge };
 
 interface Props {
@@ -106,29 +76,17 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
   const [nodes, setNodes, onNodesChangeRaw] = useNodesState<AnyRFNode>([]);
   // 今選んでいる入力 / 出力ノード (ノードを作り直すときに「選ばれているか」を引き継ぐ)
   const terminalSelRef = useRef<{ which: "in" | "out"; group: string | null } | null>(null);
-  // 作り直したときに中身が変わったノード (描いた後に丸の位置を測り直す)
-  const remeasure = useRef<string[]>([]);
-  const updateNodeInternals = useBatchedUpdateNodeInternals();
   useEffect(() => {
     // 画面用の索引 (計画の版ごとに 1 回だけ作る) を引いて組み立てる
     const base = withViewIndex(project, () => buildNodes(project, { selectedBlockId: selection.blockId, selectedTerminal: terminalSelRef.current, readonly: !canEdit, matcher: matcher ?? undefined, meId, scope: viewScope, presentation: reading }));
-    const next = vertical ? withViewIndex(project, () => verticalNodes(base, project, viewScope, verticalWrap)) : base;
+    const laid = vertical ? withViewIndex(project, () => verticalNodes(base, project, viewScope, verticalWrap)) : base;
+    // 丸の位置を計画から求めてノードに載せる (React Flow は DOM を測らなくても線の端が分かる。経路計算の入力にも使う)
+    const next = withViewIndex(project, () => laid.map((n) => ({ ...n, handles: nodeHandles(project, n, viewScope) })));
     // 中身が変わっていないノードは前のオブジェクトのまま渡す (React Flow が使い回し、測り直さない)。
-    // 変わったノードは大きさが同じなら測った大きさを引き継ぎ、描いた後にそのノードだけ丸の位置を測り直す (下の効果)。
-    // 入力 / 出力ノードは中身 (ポートの行) を計画から読むので、部品の項目が同じでも毎回測り直す (数個なので軽い)
-    setNodes((prev) => {
-      const r = reuseUnchanged(prev, next, { carryMeasured: true, alwaysChanged: (n) => n.type === "terminal" });
-      remeasure.current = r.changed;
-      return r.items;
-    });
+    // 丸の位置はノードに載せている (handles) ので、変わったノードも React Flow はそれを使い、DOM を測り直さなくてよい。
+    // 大きさが同じなら測った大きさを引き継ぐ (React Flow が「未測定」として扱わないように)
+    setNodes((prev) => reuseUnchanged(prev, next, { carryMeasured: true }).items);
   }, [project, selection.blockId, canEdit, matcher, meId, viewScope, setNodes, lang, reading, vertical, verticalWrap]);
-  // 中身が変わったノードの丸の位置を測り直す (描き終わった後。変わる前と同じく、変わったノードは必ず測り直す)
-  useEffect(() => {
-    if (remeasure.current.length === 0) return;
-    const ids = remeasure.current;
-    remeasure.current = [];
-    updateNodeInternals(ids);
-  }, [nodes, updateNodeInternals]);
   // 入力 / 出力ノードの選択は、Boxglow の選択 (selection.terminal) に合わせて「選ばれているか」だけを書き換える。
   // 図の部品の側に選択が残ると、Esc の後に同じノードを押しても選び直せない。ノードを作り直すと大きさを測り直す間に全体の倍率が計算し直され、表示がずれた
   useEffect(() => {
@@ -142,9 +100,15 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
     setNodes((ns) => (ns.some(changes) ? ns.map((n) => (n.type === "block" && changes(n) ? { ...n, data: { ...n.data, dropTarget: n.id === dropTarget } } : n)) : ns));
   }, [dropTarget, setNodes]);
 
-  const geometrySig = useStore(selectGeometry);
+  // 線の経路計算・表示範囲の入力 (ノードの絶対位置・大きさ・丸の中心)。DOM を測らず、ノードに載せた位置と丸から作る。
+  // 以前は描いた丸を DOM から測っていたため、丸が 1 つ測り直されるたびに全部の線の経路を計算し直していた
+  const geometrySig = useMemo(() => modelGeometry(nodes), [nodes]);
   const dragging = useStore((s) => s.nodes.some(n => n.dragging));
-  const { minZoom, fit, readFromTop, onMoveStart, onMoveEnd, centerOn } = useFitViewport(geometrySig, panelLayoutKey, dragging, vertical, selection.blockId);
+  // 表示範囲の計算に使うノードの矩形 (計画から求めたもの。最新のノードを読む)
+  const nodesNow = useRef(nodes);
+  nodesNow.current = nodes;
+  const rectsOf = useCallback((ids?: string[]) => modelRects(nodesNow.current, ids), []);
+  const { minZoom, fit, readFromTop, onMoveStart, onMoveEnd, centerOn } = useFitViewport(geometrySig, panelLayoutKey, dragging, vertical, selection.blockId, rectsOf);
   // 一覧などから移ったブロックが見える領域 (パネルを除く) の外にあるときは、その中央へ寄せる (倍率は保つ)
   useEffect(() => {
     if (!focus) return;
@@ -169,8 +133,8 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
   }, [viewScope, reading, vertical, verticalWrap, fit, readFromTop]);
   useEffect(() => {
     if (!pendingFit.current) return;
-    // 見えているノードが全部測られてから (大きさの変化も nodes の更新として届くので、この効果が再び走る)
-    const ready = rf.getNodes().every((n) => n.hidden || ((n.measured?.width ?? 0) > 0 && !!n.data.vertical === vertical && Math.abs((n.measured?.width ?? 0)-(n.width ?? 0)) < 1 && Math.abs((n.measured?.height ?? 0)-(n.height ?? 0)) < 1));
+    // 今の表示 (横 / 縦) のノードが組み立てられてから。位置と大きさは計画から求めるので、DOM を測り終えるのを待たない
+    const ready = nodes.every((n) => n.hidden || !!n.data.vertical === vertical);
     if (!ready) return;
     const t = setTimeout(() => { pendingFit.current = false; vertical ? readFromTop() : fit(); }, 30); // 動きは短め (タブの行き来を軽快に)
     return () => clearTimeout(t);

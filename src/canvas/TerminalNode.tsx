@@ -3,20 +3,18 @@
  * 入力ノードの各ポートは「中へ流す」ので source ハンドル (右側)、出力ノードは target ハンドル (左側)
  */
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { useBatchedUpdateNodeInternals } from "./batchedInternals";
-import { memo, useMemo, useEffect } from "react";
+import { memo, useMemo } from "react";
 import { inputGroupsOf, portsOf, rootInputsOf } from "../model/graph";
 import { ROOT_ID } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
 import { handleId, rowY, type TerminalRFNode } from "./layout";
 import { t, useLang } from "../i18n";
 
-export const TerminalNode = memo(function TerminalNode({ id, data, selected, height, width }: NodeProps<TerminalRFNode>) {
+export const TerminalNode = memo(function TerminalNode({ data, selected, height, width }: NodeProps<TerminalRFNode>) {
   useLang(); // 言語が変わったら文言を描き直す
   const which = data.which;
   const vertical = data.vertical;
-  const update = useBatchedUpdateNodeInternals(); // 測り直しは 1 フレームに 1 回にまとめて頼む
-  useEffect(() => { update(id); }, [id, width, height, vertical, update]);
+  // 丸の位置の測り直しは頼まない: 同じ位置を handleGeometry.ts で求めてノードに載せている (丸の置き方を変えたらそちらも合わせる)
   const groupId = data.groupId ?? null;
   const scopeId = data.scopeId ?? null; // タブで開いた大項目のボックスの入出力を表すとき
   const canEdit = useProjectStore((s) => !s.readonly && s.editMode);

@@ -4,6 +4,7 @@
  */
 import { getViewportForBounds, useReactFlow, type Viewport } from "@xyflow/react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { boundsOfRects, type ModelRect } from "./handleGeometry";
 
 export interface Area {
   x: number;
@@ -57,7 +58,11 @@ export function constrainVertical(view: Viewport, bounds: Area, region: Area, fi
  * Input: 図形の変更印、パネルの変更印、ドラッグ中か、縦表示か
  * Output: 下限倍率、全体表示・幅合わせ・移動イベントのハンドラー
  */
-export function useFitViewport(geometry: string, panelLayoutKey: string, dragging: boolean, vertical = false, selectedId: string | null = null) {
+/**
+ * Input : geometry = 図の位置の印 (変わったら下限を取り直す), rectsOf = 図のノードの矩形 (計画から求めたもの。DOM を測らない),
+ *         panelLayoutKey / dragging / vertical / selectedId
+ */
+export function useFitViewport(geometry: string, panelLayoutKey: string, dragging: boolean, vertical = false, selectedId: string | null = null, rectsOf: (ids?: string[]) => ModelRect[] = () => []) {
   const rf = useReactFlow();
   const selectedNow = useRef(selectedId);
   selectedNow.current = selectedId;
@@ -79,12 +84,10 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
    * ▸ で展開した直後は、まだ測っていないノードがここから外れて縮小の下限が高く決まり、測定が終わっても配置の印が変わらないので取り直されない。
    * そのため、ホイールで縮小するたびに下限を取り直す (下の wheel 処理)。利用者の指摘 2026-10-18: Fit を押さないとホイールでは全体が見えなかった
    */
-  const sizedNodes = useCallback((ids?: string[]) => rf.getNodes().filter(n => !n.hidden && (n.measured?.width ?? 0) > 0 && (!ids || ids.includes(n.id))), [rf]);
-  /** Input: なし。Output: 表示対象全体の矩形 (大きさの分かるノードが無ければ null) */
-  const boundsNow = useCallback(() => {
-    const nodes = sizedNodes();
-    return nodes.length ? rf.getNodesBounds(nodes) : null;
-  }, [rf, sizedNodes]);
+  // ノードの矩形は計画から求めたもの (位置と大きさが決まった時点で分かる。DOM を測り終えるのを待たない)
+  const sizedNodes = rectsOf;
+  /** Input: なし。Output: 表示対象全体の矩形 (ノードが無ければ null) */
+  const boundsNow = useCallback(() => boundsOfRects(sizedNodes()), [sizedNodes]);
 
   /** Input: 現在の図と使用可能領域。Output: 幅に合わせて先頭を読む位置 */
   const readingTarget = useCallback(() => {
@@ -102,12 +105,11 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
   /** Input: 対象 ID (省略時は全体)。Output: 使用可能領域へ収まる位置・倍率 */
   const target = useCallback((ids?: string[]) => {
     const region = area.current;
-    const nodes = sizedNodes(ids);
-    if (!region || !nodes.length) return null;
-    const bounds = rf.getNodesBounds(nodes);
+    const bounds = boundsOfRects(sizedNodes(ids));
+    if (!region || !bounds) return null;
     const v = getViewportForBounds(bounds, region.width, region.height, MIN_ZOOM, 1, ids ? .3 : .12);
     return { x: v.x + region.x, y: v.y + region.y, zoom: v.zoom };
-  }, [rf, sizedNodes]);
+  }, [sizedNodes]);
 
   /**
    * 箱が見える領域 (左右のパネルを除いた部分) に全部入っているか
@@ -115,15 +117,14 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
    */
   const insideRegion = useCallback((id: string) => {
     const region = area.current;
-    const node = rf.getInternalNode(id);
+    const node = sizedNodes([id])[0];
     if (!region || !node) return true;
     const { zoom, x: vx, y: vy } = rf.getViewport();
-    const abs = node.internals.positionAbsolute;
-    const w = (node.measured.width ?? node.width ?? 0) * zoom, h = (node.measured.height ?? node.height ?? 0) * zoom;
-    const left = abs.x * zoom + vx, top = abs.y * zoom + vy;
+    const w = node.width * zoom, h = node.height * zoom;
+    const left = node.x * zoom + vx, top = node.y * zoom + vy;
     const margin = 16;
     return left >= region.x + margin && top >= region.y + margin && left + w <= region.x + region.width - margin && top + h <= region.y + region.height - margin;
-  }, [rf]);
+  }, [rf, sizedNodes]);
   /**
    * 箱を見える領域の中央へ寄せる (倍率は保つ。箱が領域より大きければ領域に収まる倍率まで下げる)。動きをつけて移動する
    * Input: ノード id, opts.force = 見えていても寄せる (既定は、領域からはみ出しているときだけ)
@@ -131,17 +132,17 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
    */
   const centerOn = useCallback((id: string, opts: { force?: boolean; duration?: number } = {}) => {
     const region = area.current;
-    const node = rf.getInternalNode(id);
+    const node = sizedNodes([id])[0];
     if (!region || !node) return false;
     if (!opts.force && insideRegion(id)) return false;
-    const abs = node.internals.positionAbsolute;
-    const w = node.measured.width ?? node.width ?? 0, h = node.measured.height ?? node.height ?? 0;
+    const abs = { x: node.x, y: node.y };
+    const w = node.width, h = node.height;
     const current = rf.getViewport().zoom;
     const zoom = Math.max(minZoomNow.current, Math.min(current, (region.width - 48) / Math.max(w, 1), (region.height - 48) / Math.max(h, 1)));
     const cx = abs.x + w / 2, cy = abs.y + h / 2;
     void rf.setViewport({ x: region.x + region.width / 2 - cx * zoom, y: region.y + region.height / 2 - cy * zoom, zoom }, { duration: opts.duration ?? 240 });
     return true;
-  }, [rf, insideRegion]);
+  }, [rf, insideRegion, sizedNodes]);
 
   /**
    * Input: 対象 ID。Output: 明示的な全体表示を実行
@@ -201,7 +202,7 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
       if (different(current, next))
         void rf.setViewport(next);
     }
-    else if (selectedNow.current && prevArea && (prevArea.x !== nextArea.x || prevArea.width !== nextArea.width || prevArea.height !== nextArea.height) && rf.getInternalNode(selectedNow.current)) {
+    else if (selectedNow.current && prevArea && (prevArea.x !== nextArea.x || prevArea.width !== nextArea.width || prevArea.height !== nextArea.height) && sizedNodes([selectedNow.current]).length > 0) {
       // 箱を選んでパネルが開き、見える領域が変わった: 選んだ箱が隠れたりはみ出したりしていれば、見える領域の中央へ動きをつけて寄せる
       // (以前は全体表示へ瞬間移動していて、押した箱がどこへ行ったか分からなかった: 利用者の指摘 2026-10-19)。
       // 箱が見えたままなら動かさない (クリックのたびに揺れない)。縮小の下限より小さい倍率になっていれば下限まで上げる
