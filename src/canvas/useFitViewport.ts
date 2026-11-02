@@ -163,15 +163,21 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
   }, [rf, target]);
   /**
   * 図と利用可能領域を計測して縮小下限を更新する。
-  * Input: DOM と測定済みノード。ドラッグ中は寸法確定を待つ
+  * Input: DOM と測定済みノード。ドラッグ中は寸法確定を待つ。
+  *        measure = false なら、図の中身が変わっただけとして、前に測った利用可能領域を使う (DOM を測らない)。
+  *        領域 (キャンバス・パネル・ウィンドウ) の変化は ResizeObserver と resize から measure = true で届く。
+  *        中身が変わるたびに測ると、箱が 1000 ある図では DOM 全体の配置計算が強制され、1 回 0.45 秒かかった (2026-11-02 計測)
   * Output: 下限倍率。初回と全体表示中のウィンドウ変更以外は原則位置を維持する
   */
-  const updateBounds = useCallback(() => {
+  const updateBounds = useCallback((measure = true) => {
     if (draggingNow.current) return;
-    const canvas = document.querySelector<HTMLElement>(".react-flow");
-    if (!canvas) return;
-    const panels = [...document.querySelectorAll<HTMLElement>(".tree-panel, .drawer, .panel.right:not(.hidden-panel)")];
-    const nextArea = availableCanvas(canvas.getBoundingClientRect(), panels.filter(p => p.getClientRects().length).map(p => p.getBoundingClientRect()));
+    let nextArea = area.current;
+    if (measure || !nextArea) {
+      const canvas = document.querySelector<HTMLElement>(".react-flow");
+      if (!canvas) return;
+      const panels = [...document.querySelectorAll<HTMLElement>(".tree-panel, .drawer, .panel.right:not(.hidden-panel)")];
+      nextArea = availableCanvas(canvas.getBoundingClientRect(), panels.filter(p => p.getClientRects().length).map(p => p.getBoundingClientRect()));
+    }
     const prevArea = area.current;
     area.current = nextArea;
     const nextFit = target();
@@ -223,7 +229,7 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
     let frame = 0;
     const schedule = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(updateBounds);
+      frame = requestAnimationFrame(() => updateBounds(true));
     };
     const observer = new ResizeObserver(schedule);
     observer.observe(canvas);
@@ -238,7 +244,7 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
     };
   }, [panelLayoutKey, updateBounds]);
   // 内容・寸法が変わっても下限の再計算だけを行う。パネル監視は継続する。
-  useLayoutEffect(() => { updateBounds(); }, [geometry, dragging, updateBounds]);
+  useLayoutEffect(() => { updateBounds(false); }, [geometry, dragging, updateBounds]);
   // 縦の通常ホイールは「移動してから戻す」のではなく、制限した座標だけを反映する。
   // 両表示で Shift は縦移動、Ctrl+Shift は横移動。Ctrl/ピンチは既存のズームへ渡す。
   useEffect(() => {

@@ -20,6 +20,8 @@ import { TerminalNode } from "./TerminalNode";
 import { RoutedEdge } from "./RoutedEdge";
 import { buildEdges, buildNodes, parseHandle, SCOPE_IN, SCOPE_OUT, type AnyRFNode } from "./layout";
 import { routeAll, type EdgeSpec, type NodeRect } from "./routeAll";
+import { reuseUnchanged } from "./stableElements";
+import { useBatchedUpdateNodeInternals } from "./batchedInternals";
 import { useLang, t } from "../i18n";
 
 
@@ -104,11 +106,29 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
   const [nodes, setNodes, onNodesChangeRaw] = useNodesState<AnyRFNode>([]);
   // 今選んでいる入力 / 出力ノード (ノードを作り直すときに「選ばれているか」を引き継ぐ)
   const terminalSelRef = useRef<{ which: "in" | "out"; group: string | null } | null>(null);
+  // 作り直したときに中身が変わったノード (描いた後に丸の位置を測り直す)
+  const remeasure = useRef<string[]>([]);
+  const updateNodeInternals = useBatchedUpdateNodeInternals();
   useEffect(() => {
     // 画面用の索引 (計画の版ごとに 1 回だけ作る) を引いて組み立てる
     const base = withViewIndex(project, () => buildNodes(project, { selectedBlockId: selection.blockId, selectedTerminal: terminalSelRef.current, readonly: !canEdit, matcher: matcher ?? undefined, meId, scope: viewScope, presentation: reading }));
-    setNodes(vertical ? withViewIndex(project, () => verticalNodes(base, project, viewScope, verticalWrap)) : base);
+    const next = vertical ? withViewIndex(project, () => verticalNodes(base, project, viewScope, verticalWrap)) : base;
+    // 中身が変わっていないノードは前のオブジェクトのまま渡す (React Flow が使い回し、測り直さない)。
+    // 変わったノードは大きさが同じなら測った大きさを引き継ぎ、描いた後にそのノードだけ丸の位置を測り直す (下の効果)。
+    // 入力 / 出力ノードは中身 (ポートの行) を計画から読むので、部品の項目が同じでも毎回測り直す (数個なので軽い)
+    setNodes((prev) => {
+      const r = reuseUnchanged(prev, next, { carryMeasured: true, alwaysChanged: (n) => n.type === "terminal" });
+      remeasure.current = r.changed;
+      return r.items;
+    });
   }, [project, selection.blockId, canEdit, matcher, meId, viewScope, setNodes, lang, reading, vertical, verticalWrap]);
+  // 中身が変わったノードの丸の位置を測り直す (描き終わった後。変わる前と同じく、変わったノードは必ず測り直す)
+  useEffect(() => {
+    if (remeasure.current.length === 0) return;
+    const ids = remeasure.current;
+    remeasure.current = [];
+    updateNodeInternals(ids);
+  }, [nodes, updateNodeInternals]);
   // 入力 / 出力ノードの選択は、Boxglow の選択 (selection.terminal) に合わせて「選ばれているか」だけを書き換える。
   // 図の部品の側に選択が残ると、Esc の後に同じノードを押しても選び直せない。ノードを作り直すと大きさを測り直す間に全体の倍率が計算し直され、表示がずれた
   useEffect(() => {
@@ -116,8 +136,10 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
     const want = (id: string) => selection.terminal === "out" ? id === "root-out" : selection.terminal === "in" ? id === (selection.terminalGroup ? `root-in:${selection.terminalGroup}` : "root-in") : false;
     setNodes((ns) => (ns.some((n) => n.type === "terminal" && !!n.selected !== want(n.id)) ? ns.map((n) => (n.type === "terminal" && !!n.selected !== want(n.id) ? { ...n, selected: want(n.id) } : n)) : ns));
   }, [selection.terminal, selection.terminalGroup, setNodes]);
+  // 落とし先の印は、印が変わるノードだけ差し替える (全部を作り直すと、ドラッグ中に全部のノードが描き直される)
   useEffect(() => {
-    setNodes((ns) => ns.map((n) => (n.type === "block" ? { ...n, data: { ...n.data, dropTarget: n.id === dropTarget } } : n)));
+    const changes = (n: AnyRFNode) => n.type === "block" && !!n.data.dropTarget !== (n.id === dropTarget);
+    setNodes((ns) => (ns.some(changes) ? ns.map((n) => (n.type === "block" && changes(n) ? { ...n, data: { ...n.data, dropTarget: n.id === dropTarget } } : n)) : ns));
   }, [dropTarget, setNodes]);
 
   const geometrySig = useStore(selectGeometry);
@@ -213,17 +235,24 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
     const priority = new Set(baseEdges.filter((e) => e.selected || e.data?.net || (hovered && (e.source === hovered || e.target === hovered))).map((e) => e.id));
     return sharedWires(paths, specs, priority);
   }, [paths, baseEdges, hovered]);
-  // 見た目の飾り (選択・ホバー・ラベル) は経路を使い回して付け直すだけ (軽い)
-  const edges = useMemo(() => baseEdges.map((e) => {
-    const path = paths.get(e.id);
-    const hot = hovered && (e.source === hovered || e.target === hovered);
-    const hotClass = hot || (e.className ?? "").includes("edge-hot");
-    return {
-      ...e
-    , data: { ...(e.data ?? {}), path, shared: shared.get(e.id), hot: !!hotClass } // net (選んだ線とのつながり) を残す
-    , className: hot ? `${(e.className ?? "").replace("edge-dim", "")} edge-hot` : e.className
-    };
-  }), [baseEdges, paths, hovered, shared]);
+  // 見た目の飾り (選択・ホバー・ラベル) は経路を使い回して付け直すだけ (軽い)。
+  // 中身が変わっていない線は前のオブジェクトのまま渡す (React Flow が線の部品を描き直さない)
+  const prevEdges = useRef<RFEdge[]>([]);
+  const edges = useMemo(() => {
+    const next = baseEdges.map((e) => {
+      const path = paths.get(e.id);
+      const hot = hovered && (e.source === hovered || e.target === hovered);
+      const hotClass = hot || (e.className ?? "").includes("edge-hot");
+      return {
+        ...e
+      , data: { ...(e.data ?? {}), path, shared: shared.get(e.id), hot: !!hotClass } // net (選んだ線とのつながり) を残す
+      , className: hot ? `${(e.className ?? "").replace("edge-dim", "")} edge-hot` : e.className
+      };
+    });
+    const items = reuseUnchanged(prevEdges.current, next).items;
+    prevEdges.current = items;
+    return items;
+  }, [baseEdges, paths, hovered, shared]);
 
   /** 選択の変化を store に伝え、位置の変化は React Flow の状態に反映する */
   const onNodesChange = useCallback(

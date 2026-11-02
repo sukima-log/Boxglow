@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Selecting a box in a tab with about 1,000 boxes no longer takes 12 seconds.** Selecting, deselecting and renaming took about 12 seconds each, collapsing an inner box 14 seconds and moving a box 19 seconds; they now take 0.3 to 2 seconds. Every selection rebuilt all boxes and wires, so the canvas re-measured every box one by one; boxes and wires that did not change are now kept as they were, and only the changed ones are measured again. Nothing on the screen changes, except that the view no longer jumps when an inner box is collapsed.
 - **Very large plans respond faster.** On a plan with about 1,200 boxes, every edit (renaming, moving, adding) took 5 to 6 seconds, Activity took 2.5 seconds to open and switching to Edit took 1.5 seconds; they now take about half a second or less. A tab with about 1,000 boxes opens in 0.3 seconds when its inner boxes are collapsed (2.4 seconds before); fully expanded it takes about 3.5 seconds (6.4 before), mostly wire routing and drawing; wire routing no longer rebuilds every wire's source key for each wire it compares. Each edit computed the size of every box twice and walked every box inside an open box again for each of its parents; sizes are now computed once per version, without sorting the ports (which does not change the size), and looked up through an index. The CLI saves the same way. Nothing on the screen or in the saved file changes.
 
 ## 0.6.7 (2026-11-02)

@@ -2,7 +2,8 @@
  * 最上位の入力ノード (左端) / 出力ノード (右端)
  * 入力ノードの各ポートは「中へ流す」ので source ハンドル (右側)、出力ノードは target ハンドル (左側)
  */
-import { Handle, Position, useUpdateNodeInternals, type NodeProps } from "@xyflow/react";
+import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { useBatchedUpdateNodeInternals } from "./batchedInternals";
 import { memo, useMemo, useEffect } from "react";
 import { inputGroupsOf, portsOf, rootInputsOf } from "../model/graph";
 import { ROOT_ID } from "../model/types";
@@ -14,7 +15,7 @@ export const TerminalNode = memo(function TerminalNode({ id, data, selected, hei
   useLang(); // 言語が変わったら文言を描き直す
   const which = data.which;
   const vertical = data.vertical;
-  const update = useUpdateNodeInternals();
+  const update = useBatchedUpdateNodeInternals(); // 測り直しは 1 フレームに 1 回にまとめて頼む
   useEffect(() => { update(id); }, [id, width, height, vertical, update]);
   const groupId = data.groupId ?? null;
   const scopeId = data.scopeId ?? null; // タブで開いた大項目のボックスの入出力を表すとき
