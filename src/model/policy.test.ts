@@ -3,7 +3,7 @@
  *   範囲・待ち・参考・受け取らない・完了後の変化・文脈 (context) への載り方
  */
 import { describe, expect, it } from "vitest";
-import { ackPolicy, connectToBlock, addBlock, addPort, connect, changedPolicies, policyReceivers, setStatus, createProject, finishBlock, policiesFor, portsOf, projectBlocks, setPolicy, setPolicyOptOut, waitingFor } from "./graph";
+import { ackPolicy, connectToBlock, addBlock, addPort, connect, changedPolicies, policyReceivers, setStatus, createProject, finishBlock, policiesFor, portsOf, projectBlocks, setPolicy, setPolicyOptOut, summarize, waitingFor } from "./graph";
 import { agentContext, briefContext } from "./context";
 import { lint } from "./lint";
 import { ROOT_ID } from "./types";
@@ -115,5 +115,46 @@ describe("方針", () => {
     const full = agentContext(p, a);
     expect(full.policies).toEqual([expect.objectContaining({ title: "技術選定", name: "ゲームエンジン", ready: true, artifacts: [{ title: "Unity 6", url: "docs/engine.md" }] })]);
     expect(briefContext(p, a).policies).toEqual(full.policies);
+  });
+
+  it("返した一覧を呼び出し側で書き換えても、次に求めた結果は変わらない (同じ計画の結果は覚えて使い回す)", () => {
+    let { p, a, engine } = fixture();
+    p = setPolicy(p, engine, {});
+    policiesFor(p, a).length = 0;
+    policyReceivers(p, engine).length = 0;
+    expect(policiesFor(p, a).map((q) => q.id)).toEqual([engine]);
+    expect(policyReceivers(p, engine).length).toBeGreaterThan(0);
+  });
+
+  it("箱が数百ある計画でも、全部の箱の方針・待ちの理由と集計がすぐ求まる (画面は箱ごとに求める。2026-11-02 に数秒かかっていた)", () => {
+    // 計画: 大項目 12 個 x 中の箱 40 個 (大項目の中で 1 列に線でつなぐ)。4 つの大項目の先頭の箱の出力を、計画全体への方針にする
+    let p = createProject("大きな計画");
+    const pj = projectBlocks(p)[0].id;
+    const policyPorts: string[] = [];
+    for (let m = 0; m < 12; m++) {
+      const major = `m${m}`;
+      p.blocks[major] = { ...structuredClone(p.blocks[pj]), id: major, parentId: pj, kind: undefined, key: `M${m}`, title: `大項目${m}`, decisions: [], activity: null, status: "black" };
+      let prev = "";
+      for (let i = 0; i < 40; i++) {
+        const id = `m${m}b${i}`, inId = `${id}-in`, outId = `${id}-out`;
+        p.blocks[id] = { ...structuredClone(p.blocks[major]), id, parentId: major, key: `B${m}_${i}`, title: `箱${m}-${i}` };
+        p.ports[inId] = { id: inId, blockId: id, direction: "in", name: `材料${m}-${i}`, description: "", required: true, artifacts: [] };
+        p.ports[outId] = { id: outId, blockId: id, direction: "out", name: `成果${m}-${i}`, description: "", required: true, artifacts: [] };
+        if (prev) p.edges[`e${id}`] = { id: `e${id}`, from: { portId: prev, side: "outer" }, to: { portId: inId, side: "outer" }, kind: "sibling", auto: false };
+        prev = outId;
+      }
+      if (m < 4) { p.ports[`m${m}b0-out`].policy = { scope: ROOT_ID }; policyPorts.push(`m${m}b0-out`); }
+    }
+    const started = performance.now();
+    const blocks = Object.keys(p.blocks);
+    let waiting = 0;
+    for (const id of blocks) { policiesFor(p, id); if (waitingFor(p, id).length > 0) waiting++; }
+    const counts = policyPorts.map((id) => policyReceivers(p, id).length);
+    const s = summarize(p);
+    const ms = performance.now() - started;
+    expect(counts.every((n) => n > 400)).toBe(true);
+    expect(waiting).toBeGreaterThan(400);
+    expect(s.next.length).toBeGreaterThan(400);
+    expect(ms).toBeLessThan(1500);
   });
 });

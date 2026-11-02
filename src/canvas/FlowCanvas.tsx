@@ -8,7 +8,7 @@ import { readingColumns } from "../model/readingLayout";
 import { sharedWires } from "./sharedWires";
 import { Background, BackgroundVariant, PanOnScrollMode, MiniMap, ReactFlow, useNodesState, useReactFlow, useStore, type ReactFlowState, type Connection, type Edge as RFEdge, type NodeChange, type OnConnectEnd, type OnNodeDrag } from "@xyflow/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { policyReceivers, canConnectAcross, connectAcross, connectToBlock, isHiddenByCollapse, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, withIndex } from "../model/graph";
+import { policyReceivers, canConnectAcross, connectAcross, connectToBlock, isHiddenByCollapse, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, withViewIndex } from "../model/graph";
 import { blockSize, isExpanded } from "../model/size";
 import { ROOT_ID } from "../model/types";
 import { nextFreePosition } from "../model/autolayout";
@@ -105,8 +105,9 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
   // 今選んでいる入力 / 出力ノード (ノードを作り直すときに「選ばれているか」を引き継ぐ)
   const terminalSelRef = useRef<{ which: "in" | "out"; group: string | null } | null>(null);
   useEffect(() => {
-    const base = withIndex(project, () => buildNodes(project, { selectedBlockId: selection.blockId, selectedTerminal: terminalSelRef.current, readonly: !canEdit, matcher: matcher ?? undefined, meId, scope: viewScope, presentation: reading }));
-    setNodes(vertical ? verticalNodes(base, project, viewScope, verticalWrap) : base);
+    // 画面用の索引 (計画の版ごとに 1 回だけ作る) を引いて組み立てる
+    const base = withViewIndex(project, () => buildNodes(project, { selectedBlockId: selection.blockId, selectedTerminal: terminalSelRef.current, readonly: !canEdit, matcher: matcher ?? undefined, meId, scope: viewScope, presentation: reading }));
+    setNodes(vertical ? withViewIndex(project, () => verticalNodes(base, project, viewScope, verticalWrap)) : base);
   }, [project, selection.blockId, canEdit, matcher, meId, viewScope, setNodes, lang, reading, vertical, verticalWrap]);
   // 入力 / 出力ノードの選択は、Boxglow の選択 (selection.terminal) に合わせて「選ばれているか」だけを書き換える。
   // 図の部品の側に選択が残ると、Esc の後に同じノードを押しても選び直せない。ノードを作り直すと大きさを測り直す間に全体の倍率が計算し直され、表示がずれた
@@ -155,7 +156,7 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
 
   // ボックスにマウスを乗せたら、つながる線を強調する
   const [hovered, setHovered] = useState<string | null>(null);
-  const baseEdges = useMemo(() => withIndex(project, () => buildEdges(project, { selectedEdgeId: selection.edgeId, selectedBlockId: selection.blockId, scope: viewScope })), [project, selection.edgeId, selection.blockId, viewScope]);
+  const baseEdges = useMemo(() => withViewIndex(project, () => buildEdges(project, { selectedEdgeId: selection.edgeId, selectedBlockId: selection.blockId, scope: viewScope })), [project, selection.edgeId, selection.blockId, viewScope]);
 
   // ノードの絶対位置・大きさ・ハンドルの位置 (変わったときだけ経路を計算し直すため、文字列にして比べる)
   // 線の「つながり」だけの署名 (どの端からどの端へ、見えているか)。名前・選択・ホバー・ラベルが変わっても経路は同じなので、

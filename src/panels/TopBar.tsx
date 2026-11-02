@@ -3,11 +3,11 @@ import type React from "react";
  * 上の帯: ☰ (引き出し)、Home、プロジェクト名 (押すと設定)、保存の札、状況の札、表示モード、検索、追加、Auto Layout、Undo / Redo、メニュー、テーマ
  * 狭い幅 (760px 以下) では、追加・Auto Layout・Undo / Redo を ⋯ メニューの中へ移す
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TreeIcon } from "./TreeIcon";
 import { RestoreDialog, SaveHeldChip, SyncChip } from "./SyncPanel";
 import { AccountButton } from "./AccountMenu";
-import { addBlock, addProjectBlock, searchBlocks, summarize, projectBlocks } from "../model/graph";
+import { addBlock, addProjectBlock, searchBlocks, summarize, projectBlocks, withViewIndex } from "../model/graph";
 import { projectToMarkdown, scopeToMermaid } from "../model/export";
 import { ROOT_ID, type Project } from "../model/types";
 import { parentForNewBlock, useProjectStore } from "../store/useProjectStore";
@@ -226,7 +226,8 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   /** Input: なし。Output: 配置の編集モードと短い結果通知。ノートなどの編集可否とは区別する。 */
   const toggleMode = () => setEditMode(!editMode);
   const saveTitle = readonly ? t("閲覧専用") : ephemeral ? t("サンプルは保存されません。Save で自分の計画のコピーを残せます") : source === "file" ? t("このファイルに直接保存します。別の画面・CLI・AI も同じファイルを編集するなら、serve か VS Code 拡張で開いてください") : fileName ? (autoSave ? t("{file} に自動で保存します (Save で今すぐ書きます)", { file: fileName }) : t("{file} に保存します (自動保存はオフ: Save か Ctrl+S で書きます)", { file: fileName })) : t("このブラウザに自動で保存します (ファイルにするなら Save to file)");
-  const sum = summarize(project);
+  // 集計は計画が変わったときだけやり直す (帯は箱を選ぶたびに描き直されるため。箱が数百ある計画では 1 回 1 秒かかった)
+  const sum = useMemo(() => withViewIndex(project, () => summarize(project)), [project]);
   const busy = sum.working.length; // 作業中の件数 (詰まり・確認待ちは別の札で数える)
 
   // 帯は 2 つのまとまり: 左 (topbar-identity) = 引き出し・Home・計画名・保存の札、右 (topbar-tools) = 状況・モード・検索・追加・メニュー。

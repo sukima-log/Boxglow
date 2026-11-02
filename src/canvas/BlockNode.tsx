@@ -1,7 +1,7 @@
 import { ClaimMark, useClaimClock, visibleClaim } from "../panels/Claims";
 import { chosenOption, isSkipped, waitingBranches } from "../model/branch";
 import { unpreparedState } from "../model/readiness";
-import { workingNow, sentBackTo, policiesFor, isPolicyReady, changedPolicies, policyReceivers, policyScopeOf, isPlaceholderName, hasDraftOnly } from "../model/graph";
+import { workingNow, sentBackTo, policiesFor, isPolicyReady, changedPolicies, policyReceivers, policyScopeOf, isPlaceholderName, hasDraftOnly, withViewIndex } from "../model/graph";
 /**
  * ブロック (ボックス) のノード
  * 分類・題名・状態・入力・出力を縦に読むカード。親は子を包む領域として描く。
@@ -72,7 +72,8 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   const project = useShownProject()!;
   const claimNow=useClaimClock();
   const claimed=visibleClaim(project,blockId,claimNow);
-  const view = useMemo(() => {
+  // 表示用の値は画面用の索引 (計画の版ごとに 1 回だけ作る) を引いて求める。箱ごとに全部のポート・線を走査しない
+  const view = useMemo(() => withViewIndex(project, () => {
     const p = project;
     const b = p.blocks[blockId];
     const ins = isExpanded(p, blockId) ? portsOf(p, blockId, "in") : taskCardPorts(p, blockId, "in");
@@ -138,13 +139,13 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     , overdue: b ? isOverdue(b) : false
     , daysLeft: b ? daysToDue(b) : null
     };
-  }, [project, blockId, data.major]);
+  }), [project, blockId, data.major]);
 
-  const card = useMemo(() => taskCardLayout(project, blockId), [project, blockId]);
+  const card = useMemo(() => withViewIndex(project, () => taskCardLayout(project, blockId)), [project, blockId]);
   // 展開中のボックスの丸: 枠の内側でつながる中の箱の丸と同じ高さに置く (見出しの下に並べると、線が枠の上まで上がって戻る遠回りになる)。
   // タブで開いているボックスだけは、左右の入力/出力ノードの行とそろえるため、今までどおり見出しの下に並べる
   const alignRows = view.expanded && viewScope !== blockId;
-  const expandedRows = useMemo(() => alignRows ? expandedPortRows(project, blockId) : new Map<string, number>(), [alignRows, project, blockId]);
+  const expandedRows = useMemo(() => alignRows ? withViewIndex(project, () => expandedPortRows(project, blockId)) : new Map<string, number>(), [alignRows, project, blockId]);
   // 箱の枠線の太さ (px)。丸は枠線の内側を基準に置かれるので、その分を引いて「箱の外側の上端から」の位置にそろえる。
   // 枠線は普通の箱 1px・展開中の箱 2〜4px と違うため、引かないと中の箱の丸と親の枠の丸が 1〜2px ずれ、線に小さな段差が出た (利用者の指摘 2026-10-30)
   // 太さは index.css の値と同じ (普通の箱 .bg-block:not(.expanded) = 1px、合流 .kind-merge = 0、展開中 .expanded.depth-N = 4 / 3 / 3 / 2px)。

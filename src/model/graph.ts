@@ -297,14 +297,23 @@ export function createGitArtifact(title: string, git: { repo: string; path: stri
  * 索引は p.ports / p.blocks のオブジェクトの同一性で有効性を判定する (別の Project には使わない)。
  * 注意: 索引が有効な間に p.blocks / p.ports の中身を書き換えてはいけない (childrenOf は false にして無効にできる)
  */
-let index: { ports: Project["ports"]; portsByBlock: Map<string, Port[]>; blocks: Project["blocks"] | null; kidsByParent: Map<string, Block[]> } | null = null;
+type RefIndex = {
+  ports: Project["ports"]; portsByBlock: Map<string, Port[]>
+, blocks: Project["blocks"] | null; kidsByParent: Map<string, Block[]>
+  /** 線の索引 (画面用の索引だけが持つ。null なら incomingEdges / outgoingEdges は毎回走査する) */
+, edges: Project["edges"] | null; edgesTo: Map<string, Edge[]>; edgesFrom: Map<string, Edge[]>
+};
+let index: RefIndex | null = null;
+
+/** 線の索引の鍵 (ポートの id と面) */
+const endpointKey = (ep: Endpoint): string => `${ep.portId}\n${ep.side}`;
 
 /**
- * fn の間だけ p の索引を使う
- * Input : p = 参照する Project, fn = その間に行う処理, opts.children = false なら childrenOf は索引を使わない (ボックスを差し替える処理向け)
- * Output: fn の戻り値
+ * 参照の索引を作る (並びは Object.values の順のまま。索引なしで走査したときと同じ順に返すため)
+ * Input : p, opts.children = false なら子の索引を作らない, opts.edges = true なら線の索引も作る
+ * Output: RefIndex
  */
-export function withIndex<T>(p: Project, fn: () => T, opts: { children?: boolean } = {}): T {
+function buildIndex(p: Project, opts: { children?: boolean; edges?: boolean }): RefIndex {
   const portsByBlock = new Map<string, Port[]>();
   for (const q of Object.values(p.ports)) {
     const list = portsByBlock.get(q.blockId) ?? [];
@@ -320,8 +329,50 @@ export function withIndex<T>(p: Project, fn: () => T, opts: { children?: boolean
       kidsByParent.set(b.parentId, list);
     }
   }
+  const edgesTo = new Map<string, Edge[]>();
+  const edgesFrom = new Map<string, Edge[]>();
+  if (opts.edges) {
+    for (const e of Object.values(p.edges)) {
+      const to = endpointKey(e.to), from = endpointKey(e.from);
+      edgesTo.set(to, [...(edgesTo.get(to) ?? []), e]);
+      edgesFrom.set(from, [...(edgesFrom.get(from) ?? []), e]);
+    }
+  }
+  return { ports: p.ports, portsByBlock, blocks: opts.children !== false ? p.blocks : null, kidsByParent, edges: opts.edges ? p.edges : null, edgesTo, edgesFrom };
+}
+
+/**
+ * fn の間だけ p の索引を使う
+ * Input : p = 参照する Project, fn = その間に行う処理, opts.children = false なら childrenOf は索引を使わない (ボックスを差し替える処理向け)
+ * Output: fn の戻り値
+ */
+export function withIndex<T>(p: Project, fn: () => T, opts: { children?: boolean } = {}): T {
   const prev = index;
-  index = { ports: p.ports, portsByBlock, blocks: opts.children !== false ? p.blocks : null, kidsByParent };
+  index = buildIndex(p, { children: opts.children });
+  try {
+    return fn();
+  } finally {
+    index = prev;
+  }
+}
+
+/**
+ * 画面用の索引の置き場 (計画の版ごとに 1 回だけ作る。計画は変更のたびに新しいオブジェクトになる)
+ *   箱の部品は 1 つずつ portsOf などを呼ぶので、そのたびに全件を走査すると、箱が数百ある計画ではタブの切り替えに 0.6 秒ほどかかった (2026-11-02 計測)
+ */
+const VIEW_INDEX = new WeakMap<Project, RefIndex>();
+
+/**
+ * fn の間だけ p の画面用の索引 (ポート・子・線) を使う。索引は p ごとに覚えて使い回す
+ *   使ってよいのは、画面に渡った (もう書き換えない) 計画だけ。編集の途中の計画 (touch した q) には使わない (書き換えると索引が古くなる)。
+ *   fn の中で作った別の計画は、オブジェクトが違うので索引を使わずに走査する
+ * Input : p = 画面に渡った Project, fn = その間に行う処理 / Output: fn の戻り値
+ */
+export function withViewIndex<T>(p: Project, fn: () => T): T {
+  let ix = VIEW_INDEX.get(p);
+  if (!ix) { ix = buildIndex(p, { children: true, edges: true }); VIEW_INDEX.set(p, ix); }
+  const prev = index;
+  index = ix;
   try {
     return fn();
   } finally {
@@ -376,11 +427,13 @@ export const sameEndpoint = (a: Endpoint, b: Endpoint): boolean => a.portId === 
 
 /** 端点に入ってくる線 (to が一致する線) */
 export function incomingEdges(p: Project, ep: Endpoint): Edge[] {
+  if (index && index.edges === p.edges) return (index.edgesTo.get(endpointKey(ep)) ?? []).slice();
   return Object.values(p.edges).filter((e) => sameEndpoint(e.to, ep));
 }
 
 /** 端点から出ていく線 (from が一致する線) */
 export function outgoingEdges(p: Project, ep: Endpoint): Edge[] {
+  if (index && index.edges === p.edges) return (index.edgesFrom.get(endpointKey(ep)) ?? []).slice();
   return Object.values(p.edges).filter((e) => sameEndpoint(e.from, ep));
 }
 
@@ -1289,10 +1342,6 @@ export function policyScopeOf(p: Project, portId: string): string {
 }
 
 /**
- * この箱に届く方針 (範囲の中にあり、自分で外していないもの)。方針の箱そのものと、その中の箱には届かない
- * Input : p, blockId / Output: 方針の出力ポートの一覧 (持ち主の箱の題名順)
- */
-/**
  * 箱の上流 (入力の供給元をたどって行き着く箱と、それを含む箱)。方針の箱の上流には方針を届けない (届けると、お互いに待ち合って進めない)
  * Input : p, blockId / Output: 箱の id の集合 (自分は含まない)
  */
@@ -1315,26 +1364,71 @@ function upstreamOf(p: Project, blockId: string): Set<string> {
   return out;
 }
 
-export function policiesFor(p: Project, blockId: string): Port[] {
+/**
+ * 方針の計算の材料 (計画の中の方針の出力の一覧と、方針の箱ごとの上流)
+ *   policies = 方針の出力ポート (p.ports の並び順), upstream = 方針の箱の id → その上流の箱の集合 (必要になったときに求めて覚える)
+ */
+type PolicyTable = { policies: Port[]; upstream: Map<string, Set<string>> };
+
+/**
+ * 方針の計算の材料を作る
+ * Input : p = 計画 / Output: PolicyTable (上流はまだ空。policiesForIn が必要な分だけ埋める)
+ */
+function policyTableOf(p: Project): PolicyTable {
+  return { policies: Object.values(p.ports).filter((q) => !!q.policy && q.direction === "out"), upstream: new Map() };
+}
+
+/**
+ * この箱に届く方針を求める (policiesFor の本体。覚えた結果は使わない)
+ * Input : p, blockId, table = 方針の材料 (同じ計画の間は使い回してよい)
+ * Output: 方針の出力ポートの一覧 (持ち主の箱の題名順)
+ */
+function policiesForIn(p: Project, blockId: string, table: PolicyTable): Port[] {
   const b = p.blocks[blockId];
   if (!b || blockId === ROOT_ID) return [];
   const ancestors = new Set(ancestorsOf(p, blockId).map((a) => a.id));
   const out: Port[] = [];
-  const upstreamCache = new Map<string, Set<string>>();
-  for (const q of Object.values(p.ports)) {
-    if (!q.policy || q.direction !== "out") continue;
+  // 線で受けている供給元の出力 (方針と同じものが線でも届いていれば、方針からは外す)。初めて必要になったときに 1 回だけ求める
+  let wired: Set<string> | null = null;
+  for (const q of table.policies) {
     if (q.blockId === blockId || ancestors.has(q.blockId)) continue; // 自分の方針、または自分を含む箱の方針 (自分がそれを作る側)
     // 方針の箱の上流 (方針を決める材料を作る箱) には届けない
-    if (!upstreamCache.has(q.blockId)) upstreamCache.set(q.blockId, upstreamOf(p, q.blockId));
-    if (upstreamCache.get(q.blockId)!.has(blockId)) continue;
+    if (!table.upstream.has(q.blockId)) table.upstream.set(q.blockId, upstreamOf(p, q.blockId));
+    if (table.upstream.get(q.blockId)!.has(blockId)) continue;
     const scope = policyScopeOf(p, q.id);
     if (scope !== ROOT_ID && !ancestors.has(scope)) continue; // 範囲の外
     if (b.policyOptOut?.includes(q.id)) continue;
     // 線でも同じ方針を受けている箱では、方針から外す (入力として届くので二重にしない。線を優先)
-    if (portsOf(p, blockId, "in").some((i) => sourceOfInput(p, i.id)?.id === q.id)) continue;
+    wired ??= new Set(portsOf(p, blockId, "in").map((i) => sourceOfInput(p, i.id)?.id).filter((id): id is string => !!id));
+    if (wired.has(q.id)) continue;
     out.push(q);
   }
   return out.sort((x, y) => (p.blocks[x.blockId]?.title ?? "").localeCompare(p.blocks[y.blockId]?.title ?? "") || x.name.localeCompare(y.name));
+}
+
+/**
+ * 方針の計算結果の置き場 (計画は変更のたびに新しいオブジェクトになるので、同じ計画なら同じ結果を使い回す。branchState と同じ考え方)
+ *   画面は箱ごとに方針を求め、方針を配る箱は届く先の数も数える。毎回求め直すと、箱が数百ある計画ではタブの切り替えに数秒かかった (2026-11-02 計測)
+ *   注意: 作りかけの計画 (touch した q を書き換えている途中) では使わない。stampPolicies は policiesForIn を直接呼ぶ
+ */
+const POLICY_CACHE = new WeakMap<Project, { table: PolicyTable; byBlock: Map<string, Port[]>; receivers: Map<string, Block[]> | null }>();
+
+/** 計画の方針の置き場 (無ければ作る) */
+function policyCacheOf(p: Project) {
+  let c = POLICY_CACHE.get(p);
+  if (!c) { c = { table: policyTableOf(p), byBlock: new Map(), receivers: null }; POLICY_CACHE.set(p, c); }
+  return c;
+}
+
+/**
+ * この箱に届く方針 (範囲の中にあり、自分で外していないもの)。方針の箱そのものと、その中の箱には届かない
+ * Input : p, blockId / Output: 方針の出力ポートの一覧 (持ち主の箱の題名順。呼び出し側で並びを変えてよい写し)
+ */
+export function policiesFor(p: Project, blockId: string): Port[] {
+  const c = policyCacheOf(p);
+  let hit = c.byBlock.get(blockId);
+  if (!hit) { hit = policiesForIn(p, blockId, c.table); c.byBlock.set(blockId, hit); }
+  return hit.slice();
 }
 
 /** 方針が届いているか (供給元と同じ判定: 成果物があるか、持ち主が完了か) */
@@ -1385,7 +1479,17 @@ export function ackPolicy(p: Project, blockId: string, portId?: string): Project
  */
 export function policyReceivers(p: Project, portId: string): Block[] {
   if (!p.ports[portId]?.policy) return [];
-  return Object.values(p.blocks).filter((b) => b.id !== ROOT_ID && policiesFor(p, b.id).some((q) => q.id === portId));
+  // 全部の方針の届く先を 1 回でまとめて求めて覚える (方針の箱ごとに全部の箱を調べ直さない)。並びは p.blocks の順
+  const c = policyCacheOf(p);
+  if (!c.receivers) {
+    const receivers = new Map<string, Block[]>();
+    for (const b of Object.values(p.blocks)) {
+      if (b.id === ROOT_ID) continue;
+      for (const q of policiesFor(p, b.id)) receivers.set(q.id, [...(receivers.get(q.id) ?? []), b]);
+    }
+    c.receivers = receivers;
+  }
+  return (c.receivers.get(portId) ?? []).slice();
 }
 
 /**
@@ -1419,7 +1523,8 @@ export function setPolicyOptOut(p: Project, blockId: string, portId: string, ski
 
 /** 完了のときの方針の印を記録する (q を書き換える) */
 function stampPolicies(q: Project, blockId: string): void {
-  const ps = policiesFor(q, blockId);
+  // q は書き換えの途中なので、覚えた結果 (POLICY_CACHE) を使わずに求める
+  const ps = policiesForIn(q, blockId, policyTableOf(q));
   if (ps.length === 0) { delete q.blocks[blockId].policyStamps; return; }
   q.blocks[blockId].policyStamps = Object.fromEntries(ps.map((x) => [x.id, policyStamp(q, x.id)]));
 }
@@ -1994,9 +2099,12 @@ export function summarize(p: Project): Summary {
   const blocks = Object.values(p.blocks).filter((b) => b.id !== ROOT_ID && kindOf(b) !== "project" && !isSkipped(p, b.id) && !b.merge);
   const working = blocks.filter((b) => b.activity?.state === "working").map((b) => ({ block: b, actor: b.activity!.actor, note: b.activity!.note, since: b.activity!.since }));
   const blocked = blocks.filter((b) => b.activity?.state === "blocked" || b.activity?.state === "waiting_review").map((b) => ({ block: b, actor: b.activity!.actor, note: b.activity!.note }));
-  const leafBlack = blocks
-    .filter((b) => b.status === "black" && !b.activity && childrenOf(p, b.id).length === 0)
-    .sort((a, b) => Number(inFocus(p, b.id)) - Number(inFocus(p, a.id)) || Number(waitingFor(p, a.id).length > 0) - Number(waitingFor(p, b.id).length > 0)); // 着手できるものを先に
+  const candidates = blocks.filter((b) => b.status === "black" && !b.activity && childrenOf(p, b.id).length === 0);
+  // 並べ替えの鍵 (注目中か、待ちがあるか) は箱ごとに 1 回だけ求める。比較のたびに求めると、箱が数百ある計画で数秒かかった (2026-11-02 計測)
+  const focused = new Map(candidates.map((b) => [b.id, inFocus(p, b.id)]));
+  const waiting = new Map(candidates.map((b) => [b.id, waitingFor(p, b.id).length > 0]));
+  const leafBlack = candidates
+    .sort((a, b) => Number(focused.get(b.id)) - Number(focused.get(a.id)) || Number(waiting.get(a.id)) - Number(waiting.get(b.id))); // 着手できるものを先に
   return {
     total: blocks.length
   , white: blocks.filter((b) => b.status === "white").length

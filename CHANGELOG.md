@@ -12,6 +12,7 @@
   - `group <name> --rename / --description / --remove` changes or deletes an input group.
   - `plan --name / --description` shows or changes the plan's own name and description. This is not the top box's title.
   - `log <block>` without text lists the box's work-log entries with their ids, and `show` lists the latest five. `--edit <id>` rewrites an entry and `--remove <id>` deletes one; an agent can change only its own entries. Before, the CLI could only add entries and never showed them. MCP: `boxglow_log` gained `edit` and `remove`.
+- **Large plans respond faster.** On a plan with about 480 boxes, opening the file, switching tabs, selecting a box, typing in the search box and editing took 1 to 7 seconds; most of them now take under a second (the largest tab, about 2.5 seconds, is now mostly wire routing). The header's summary was recomputed on every selection and keystroke and asked each box's waiting reasons many times while sorting, every box recomputed which policies reach it, each box on the canvas scanned all ports and wires, and the reading layout copied the whole plan once per open box. These results are now computed once per change and looked up through an index. Nothing on the screen changes.
 
 ## 0.6.6 (2026-10-31)
 

@@ -8,7 +8,7 @@ import { candidateGroups } from "../model/workflow";
 import { lint } from "../model/lint";
 import { resumeSummary } from "../model/resume";
 import { useMemo, useState } from "react";
-import { answerDecision, editDecisionAnswer, summarize, candidatesOf, reopenDecision, ancestorsOf, kindOf, portsOf, isAcked, removeDecision } from "../model/graph";
+import { answerDecision, editDecisionAnswer, summarize, withViewIndex, candidatesOf, reopenDecision, ancestorsOf, kindOf, portsOf, isAcked, removeDecision } from "../model/graph";
 import { actorLabel, ACTIVITY_LABEL, agoText, shortTime } from "../model/report";
 import { ROOT_ID, type Project } from "../model/types";
 import { STATUS_LABEL } from "../model/status";
@@ -150,12 +150,13 @@ function BlockRef({ project, blockId, onJump }: { project: Project; blockId: str
 type ActivityTab = "resume" | "decisions" | "answered" | "working" | "claims" | "next" | "lint" | "log";
 
 export function Timeline({ project }: { project: Project }) {
-  useLang(); // 言語が変わったら描き直す
+  const lang = useLang(); // 言語が変わったら描き直す
   const select = useProjectStore((s) => s.select);
   const focusBlock = useProjectStore((s) => s.focusBlock);
-  const s = summarize(project);
+  // 集計と再開のまとめは、計画 (と言語・完了済みの表示) が変わったときだけやり直す。受け持ちの時計 (15 秒ごと) の描き直しでは計算しない
+  const s = useMemo(() => withViewIndex(project, () => summarize(project)), [project]);
   const [includeCompleted, setIncludeCompleted] = useState(false);
-  const resume = resumeSummary(project, { includeCompleted }); // 再開のまとめ (引き継ぎメモの一覧など。CLI の resume と同じモデル)
+  const resume = useMemo(() => withViewIndex(project, () => resumeSummary(project, { includeCompleted })), [project, includeCompleted, lang]); // 再開のまとめ (引き継ぎメモの一覧など。CLI の resume と同じモデル)
   const jump = (blockId: string) => {
     select({ blockId });
     focusBlock(blockId);
@@ -332,7 +333,8 @@ export function Timeline({ project }: { project: Project }) {
 
 /** Input: 計画、各組の最大件数、選択処理 / Output: 範囲別・準備状況別の候補。不足する入力も同じ一覧で読める。 */
 function NextCandidates({ project, limit, onJump }: { project: Project; limit: number; onJump: (id: string) => void }) {
-  const groups = candidateGroups(project, summarize(project).next);
+  const lang = useLang(); // 組の見出しと待ちの理由は言語で変わる
+  const groups = useMemo(() => withViewIndex(project, () => candidateGroups(project, summarize(project).next)), [project, lang]);
   return <section className="flex flex-col gap-2 next-candidates">
     {project.focusBlockId && <p className="text-[12px]">{t("今回の範囲: {title}", { title: project.blocks[project.focusBlockId]?.title ?? "" })}</p>}
     {!groups.length && <p className="text-[12px]">{t("なし")}</p>}

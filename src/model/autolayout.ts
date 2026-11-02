@@ -42,7 +42,9 @@ export function layoutScope(p: Project, scopeId: string, options: {
   presentation?: boolean;
   columns?: LayoutColumn[];
 } = {}): Project {
-  let q = structuredClone(p);
+  // 書き換えるのは箱の位置・入出力ノードの位置・入力グループの位置だけ。そこだけ新しくし、ポートと線は元の計画と共有する (元の計画は変えない)。
+  // 前は箱 1 つごとに計画全体を深く複製していて、ポートの入れ物が毎回別物になるため画面用の索引も効かず、箱が数百ある計画では閲覧の配置に 0.5 秒かかった (2026-11-02 計測)
+  let q: Project = { ...p, blocks: { ...p.blocks }, terminals: { ...p.terminals }, ...(p.inputGroups ? { inputGroups: p.inputGroups.map((g) => ({ ...g })) } : {}) };
   const kids = childrenOf(q, scopeId);
   if (kids.length === 0) return q;
   // 下の階層から先に
@@ -164,7 +166,7 @@ export function layoutScope(p: Project, scopeId: string, options: {
       const col = columns[j];
       let y = rowTop + (compact ? Math.round((rowHeight - col.height) / 16) * 8 : 0);
       options.columns?.push({ x, y: rowTop - COLUMN_LABEL_SPACE, width: col.width, ids: col.members.map(m => m.id), index: col.L });
-      col.members.forEach((m, i) => { q.blocks[m.id].position = { x, y }; y += col.sizes[i].height + verticalGap; });
+      col.members.forEach((m, i) => { q.blocks[m.id] = { ...q.blocks[m.id], position: { x, y } }; y += col.sizes[i].height + verticalGap; });
       x += col.width + (compact ? readingGap(col.L) : gapAfter(col.L));
     }
     maxBottom = Math.max(maxBottom, rowTop + rowHeight);

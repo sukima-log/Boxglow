@@ -14,7 +14,7 @@ import { useMemo } from "react";
 import { readingLayout } from "../model/readingLayout";
 import { create } from "zustand";
 import { BrowserSyncHost, isSyncEnabled } from "../sync/browser-host";
-import { ancestorsOf, createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizePortNames, resolveChangedOverlaps, resolveAllOverlaps, scopeFor, toJSON, wireNetTabs, withIndex } from "../model/graph";
+import { ancestorsOf, createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizePortNames, resolveChangedOverlaps, resolveAllOverlaps, scopeFor, toJSON, wireNetTabs, withIndex, withViewIndex } from "../model/graph";
 export { isInScope, majorBlocks } from "../model/graph";
 import { blockSize } from "../model/size";
 import { downloadText, safeFilename } from "../lib/download";
@@ -1669,7 +1669,8 @@ export function useShownProject(): Project | null {
     // 編集時の保存は変更対象だけを補正する)。畳んだボックスは畳んだ大きさで、開いたボックスは開いた大きさで計算する
     // 索引は ports だけ (ボックスは押し出しで差し替わるので childrenOf の索引は使わない)
     const base = shown;
-    const result = reading ? readingLayout(base, viewScope) : withIndex(base, () => resolveAllOverlaps(base, blockSize), { children: false });
+    // 閲覧の配置は箱の位置だけを差し替えるので、ポートと線は画面用の索引 (base の版ごとに 1 回だけ作る) を引ける
+    const result = reading ? withViewIndex(base, () => readingLayout(base, viewScope)) : withIndex(base, () => resolveAllOverlaps(base, blockSize), { children: false });
     shownCache.set(project, { collapsed: viewCollapsed, scope: viewScope, reading, lang, shown: result });
     return result;
   }, [project, viewCollapsed, viewScope, reading, lang]);
