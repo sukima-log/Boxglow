@@ -4,12 +4,12 @@
  * 丸をクリックして結線している最中は、図の上に案内とキャンセルのボタンも出す。
  */
 import { Panel, useReactFlow, useStore, useStoreApi } from "@xyflow/react";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { t, useLang } from "../i18n";
 import { layoutScope } from "../model/autolayout";
 import { layoutLikeView } from "../model/readingLayout";
 import { useProjectStore } from "../store/useProjectStore";
-import { childrenOf, descendantsOf, majorBlocks, removePort } from "../model/graph";
+import { childrenOf, descendantsOf, majorBlocks, removePort, withViewIndex } from "../model/graph";
 import { parseHandle } from "./layout";
 
 /**
@@ -55,7 +55,8 @@ export function CanvasTools({ snap, onSnap, showMap, onMap, fit, readFromTop }: 
   const project = useProjectStore((s) => s.project);
   // まとめて畳む対象: Top なら大項目 (1 階層だけ残す)、タブの中ならその階層の下にある子持ちのボックス全部 (開いているボックス自身は除く)。
   // 利用者の要望 2026-10-18: Top で全階層を見られるようにした代わりに、すぐ 1 階層に戻せるように
-  const foldTargets = project ? (scope ? descendantsOf(project, scope) : majorBlocks(project)).filter((b) => b.id !== scope && childrenOf(project, b.id).length > 0) : [];
+  // 計画とタブが変わったときだけ作り、画面用の索引で引く (描き直しのたびに全部の箱を子孫ごとに走査すると、箱が 1000 ある階層で 1.5 秒かかった。2026-11-02 計測)
+  const foldTargets = useMemo(() => project ? withViewIndex(project, () => (scope ? descendantsOf(project, scope) : majorBlocks(project)).filter((b) => b.id !== scope && childrenOf(project, b.id).length > 0)) : [], [project, scope]);
   const anyExpanded = foldTargets.some((b) => !(viewCollapsed[b.id] ?? b.collapsed));
   const toast = useProjectStore((s) => s.setToast);
   /** 結線の途中をやめる (ドラッグ中の線と、クリックで選んだ出力の両方を取り消す)。Input / Output: なし */

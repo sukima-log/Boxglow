@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { FlowCanvas } from "./canvas/FlowCanvas";
-import { addBlock, computeProgress, pendingDecisions, portsOf, removeBlock, removePort, disconnectWire } from "./model/graph";
+import { addBlock, computeProgress, pendingDecisions, portsOf, removeBlock, removePort, disconnectWire, withViewIndex } from "./model/graph";
 import { ROOT_ID } from "./model/types";
 import { majorBlocks, parentForNewBlock, useProjectStore, useShownProject } from "./store/useProjectStore";
 import { DEFAULT_SYNC_SERVER } from "../cli/sync/server-policy";
@@ -275,7 +275,8 @@ export function App() {
   const toggleDrawer = useCallback(() => setDrawerOpen((v) => !v), []);
   const openDrawer = useCallback(() => setDrawerOpen(true), []);
 
-  const prog = project ? computeProgress(project, ROOT_ID) : null;
+  // 全体の進捗は計画が変わったときだけ求める (描き直しのたびに全部の箱をたどらない)
+  const prog = useMemo(() => project ? withViewIndex(project, () => computeProgress(project, ROOT_ID)) : null, [project]);
   const fullUrl = useMemo(() => {
     const url = new URL(window.location.href);
     url.searchParams.delete("embed");

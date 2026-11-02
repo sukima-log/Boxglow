@@ -296,37 +296,46 @@ export function createGitArtifact(title: string, git: { repo: string; path: stri
  * Project を書き換えない処理 (画面の構築) の間だけ、withIndex で索引を作って引く。
  * 索引は p.ports / p.blocks のオブジェクトの同一性で有効性を判定する (別の Project には使わない)。
  * 注意: 索引が有効な間に p.blocks / p.ports の中身を書き換えてはいけない (childrenOf は false にして無効にできる)
+ * 索引は重ねて使える (編集時の重なり解消は、変更前と変更後の 2 つの計画を同時に引く)。内側 (後から入った) 索引から順に探す
  */
 type RefIndex = {
   ports: Project["ports"]; portsByBlock: Map<string, Port[]>
 , blocks: Project["blocks"] | null; kidsByParent: Map<string, Block[]>
-  /** 線の索引 (画面用の索引だけが持つ。null なら incomingEdges / outgoingEdges は毎回走査する) */
+  /**
+   * 子の id の索引 (位置だけを変える処理の間だけ持つ。null なら使わない)。
+   * その処理の間に作られる計画は ports を元と共有し、親子の組み立ては変わらないので、ports が同じ計画には id で子を引ける
+   */
+, kidIds: Map<string, string[]> | null
+  /** 線の索引 (null なら incomingEdges / outgoingEdges は毎回走査する) */
 , edges: Project["edges"] | null; edgesTo: Map<string, Edge[]>; edgesFrom: Map<string, Edge[]>
+  /** 計算結果の覚え場所 (画面用の索引 = もう書き換えない計画だけが持つ。null なら覚えない)。鍵は計算の名前 */
+, memo: Map<string, Map<string, unknown>> | null
 };
-let index: RefIndex | null = null;
+const indexes: RefIndex[] = [];
 
 /** 線の索引の鍵 (ポートの id と面) */
 const endpointKey = (ep: Endpoint): string => `${ep.portId}\n${ep.side}`;
 
 /**
  * 参照の索引を作る (並びは Object.values の順のまま。索引なしで走査したときと同じ順に返すため)
- * Input : p, opts.children = false なら子の索引を作らない, opts.edges = true なら線の索引も作る
+ * Input : p, opts.children = false なら子の索引を作らない, opts.edges = true なら線の索引も作る,
+ *         opts.kidIds = true なら子の id の索引も作る, opts.memo = true なら計算結果の覚え場所を持つ
  * Output: RefIndex
  */
-function buildIndex(p: Project, opts: { children?: boolean; edges?: boolean }): RefIndex {
+function buildIndex(p: Project, opts: { children?: boolean; edges?: boolean; kidIds?: boolean; memo?: boolean }): RefIndex {
   const portsByBlock = new Map<string, Port[]>();
   for (const q of Object.values(p.ports)) {
-    const list = portsByBlock.get(q.blockId) ?? [];
-    list.push(q);
-    portsByBlock.set(q.blockId, list);
+    const list = portsByBlock.get(q.blockId);
+    if (list) list.push(q); else portsByBlock.set(q.blockId, [q]);
   }
   const kidsByParent = new Map<string, Block[]>();
+  const kidIds = opts.kidIds ? new Map<string, string[]>() : null;
   if (opts.children !== false) {
     for (const b of Object.values(p.blocks)) {
       if (b.parentId === null) continue;
-      const list = kidsByParent.get(b.parentId) ?? [];
-      list.push(b);
-      kidsByParent.set(b.parentId, list);
+      const list = kidsByParent.get(b.parentId);
+      if (list) list.push(b); else kidsByParent.set(b.parentId, [b]);
+      if (kidIds) { const ids = kidIds.get(b.parentId); if (ids) ids.push(b.id); else kidIds.set(b.parentId, [b.id]); }
     }
   }
   const edgesTo = new Map<string, Edge[]>();
@@ -334,11 +343,24 @@ function buildIndex(p: Project, opts: { children?: boolean; edges?: boolean }): 
   if (opts.edges) {
     for (const e of Object.values(p.edges)) {
       const to = endpointKey(e.to), from = endpointKey(e.from);
-      edgesTo.set(to, [...(edgesTo.get(to) ?? []), e]);
-      edgesFrom.set(from, [...(edgesFrom.get(from) ?? []), e]);
+      const tl = edgesTo.get(to); if (tl) tl.push(e); else edgesTo.set(to, [e]);
+      const fl = edgesFrom.get(from); if (fl) fl.push(e); else edgesFrom.set(from, [e]);
     }
   }
-  return { ports: p.ports, portsByBlock, blocks: opts.children !== false ? p.blocks : null, kidsByParent, edges: opts.edges ? p.edges : null, edgesTo, edgesFrom };
+  return { ports: p.ports, portsByBlock, blocks: opts.children !== false ? p.blocks : null, kidsByParent, kidIds, edges: opts.edges ? p.edges : null, edgesTo, edgesFrom, memo: opts.memo ? new Map() : null };
+}
+
+/**
+ * fn の間だけ索引 ix を有効にする (入れ子にできる。抜けたら外側の索引に戻る)
+ * Input : ix = 索引, fn = その間に行う処理 / Output: fn の戻り値
+ */
+function usingIndex<T>(ix: RefIndex, fn: () => T): T {
+  indexes.push(ix);
+  try {
+    return fn();
+  } finally {
+    indexes.pop();
+  }
 }
 
 /**
@@ -347,13 +369,7 @@ function buildIndex(p: Project, opts: { children?: boolean; edges?: boolean }): 
  * Output: fn の戻り値
  */
 export function withIndex<T>(p: Project, fn: () => T, opts: { children?: boolean } = {}): T {
-  const prev = index;
-  index = buildIndex(p, { children: opts.children });
-  try {
-    return fn();
-  } finally {
-    index = prev;
-  }
+  return usingIndex(buildIndex(p, { children: opts.children }), fn);
 }
 
 /**
@@ -366,23 +382,51 @@ const VIEW_INDEX = new WeakMap<Project, RefIndex>();
  * fn の間だけ p の画面用の索引 (ポート・子・線) を使う。索引は p ごとに覚えて使い回す
  *   使ってよいのは、画面に渡った (もう書き換えない) 計画だけ。編集の途中の計画 (touch した q) には使わない (書き換えると索引が古くなる)。
  *   fn の中で作った別の計画は、オブジェクトが違うので索引を使わずに走査する
+ *   箱の大きさなど、計画だけで決まる計算の結果もこの索引に覚える (viewMemo)
  * Input : p = 画面に渡った Project, fn = その間に行う処理 / Output: fn の戻り値
  */
 export function withViewIndex<T>(p: Project, fn: () => T): T {
   let ix = VIEW_INDEX.get(p);
-  if (!ix) { ix = buildIndex(p, { children: true, edges: true }); VIEW_INDEX.set(p, ix); }
-  const prev = index;
-  index = ix;
-  try {
-    return fn();
-  } finally {
-    index = prev;
+  if (!ix) { ix = buildIndex(p, { children: true, edges: true, memo: true }); VIEW_INDEX.set(p, ix); }
+  return usingIndex(ix, fn);
+}
+
+/**
+ * 位置だけを変える処理 (重なりの解消・閲覧の配置) 向けの索引で fn を行う
+ *   その処理は箱のオブジェクトを差し替えて位置を変えるだけで、ポート・線・親子の組み立ては変えない。
+ *   そこで、途中で作られる計画 (ports と edges を p と共有するもの) にも、ポート・線・子 (id から今の箱を引く) の索引を使う。
+ *   箱の追加・削除・親の変更・ポートや線の変更をする処理には使わない (子の一覧が古くなる)
+ * Input : p = 元の計画 (書き換えない), fn = 位置だけを変える処理 / Output: fn の戻り値
+ */
+export function withMoveIndex<T>(p: Project, fn: () => T): T {
+  return usingIndex(buildIndex(p, { children: true, edges: true, kidIds: true }), fn);
+}
+
+/**
+ * 画面用の索引 (withViewIndex) の間だけ使える、計算結果の覚え場所
+ *   p が画面用の索引の計画そのもの (ポート・箱・線の入れ物が同じ) のときだけ返す。それ以外 (途中の計画、索引の外) は null
+ * Input : p, name = 計算の名前 (言語で変わる計算は言語も含める) / Output: Map (鍵は計算ごとに決める) か null
+ */
+export function viewMemo<T>(p: Project, name: string): Map<string, T> | null {
+  for (let i = indexes.length - 1; i >= 0; i--) {
+    const ix = indexes[i];
+    if (ix.memo && ix.ports === p.ports && ix.blocks === p.blocks && ix.edges === p.edges) {
+      let m = ix.memo.get(name);
+      if (!m) { m = new Map(); ix.memo.set(name, m); }
+      return m as Map<string, T>;
+    }
   }
+  return null;
 }
 
 /** ブロックの子ブロック一覧 */
 export function childrenOf(p: Project, blockId: string): Block[] {
-  if (index && index.blocks === p.blocks) return (index.kidsByParent.get(blockId) ?? []).slice();
+  for (let i = indexes.length - 1; i >= 0; i--) {
+    const ix = indexes[i];
+    if (ix.blocks === p.blocks) return (ix.kidsByParent.get(blockId) ?? []).slice();
+    // 位置だけを変える処理の途中の計画: 子の id は元と同じなので、今の計画の箱を引く (並びも元の Object.values の順のまま)
+    if (ix.kidIds && ix.ports === p.ports && ix.edges === p.edges) return (ix.kidIds.get(blockId) ?? []).map((id) => p.blocks[id]).filter((b): b is Block => !!b);
+  }
   return Object.values(p.blocks).filter((b) => b.parentId === blockId);
 }
 
@@ -415,8 +459,9 @@ export function ancestorsOf(p: Project, blockId: string): Block[] {
 
 /** ブロックのポート一覧 (direction を指定すればその向きだけ) */
 export function portsOf(p: Project, blockId: string, direction?: "in" | "out"): Port[] {
-  if (index && index.ports === p.ports) {
-    const list = index.portsByBlock.get(blockId) ?? [];
+  for (let i = indexes.length - 1; i >= 0; i--) {
+    if (indexes[i].ports !== p.ports) continue;
+    const list = indexes[i].portsByBlock.get(blockId) ?? [];
     return direction === undefined ? list.slice() : list.filter((q) => q.direction === direction);
   }
   return Object.values(p.ports).filter((q) => q.blockId === blockId && (direction === undefined || q.direction === direction));
@@ -427,13 +472,13 @@ export const sameEndpoint = (a: Endpoint, b: Endpoint): boolean => a.portId === 
 
 /** 端点に入ってくる線 (to が一致する線) */
 export function incomingEdges(p: Project, ep: Endpoint): Edge[] {
-  if (index && index.edges === p.edges) return (index.edgesTo.get(endpointKey(ep)) ?? []).slice();
+  for (let i = indexes.length - 1; i >= 0; i--) if (indexes[i].edges === p.edges) return (indexes[i].edgesTo.get(endpointKey(ep)) ?? []).slice();
   return Object.values(p.edges).filter((e) => sameEndpoint(e.to, ep));
 }
 
 /** 端点から出ていく線 (from が一致する線) */
 export function outgoingEdges(p: Project, ep: Endpoint): Edge[] {
-  if (index && index.edges === p.edges) return (index.edgesFrom.get(endpointKey(ep)) ?? []).slice();
+  for (let i = indexes.length - 1; i >= 0; i--) if (indexes[i].edges === p.edges) return (indexes[i].edgesFrom.get(endpointKey(ep)) ?? []).slice();
   return Object.values(p.edges).filter((e) => sameEndpoint(e.from, ep));
 }
 

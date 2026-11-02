@@ -4,8 +4,8 @@
  * 済なら誰が・いつ (根拠はヒント)、古いなら何が変わったか。人も「確認」で記録できる (根拠は入力欄)。
  * 記録は「評価したと申告し根拠を残した記録」で、妥当性の証明ではない (model/review.ts)
  */
-import { useState } from "react";
-import { childrenOf, updateBlock } from "../model/graph";
+import { useMemo, useState } from "react";
+import { childrenOf, updateBlock, withViewIndex } from "../model/graph";
 import { boxMaterial, changedText, makeRecord, reviewStatus, reviewable, splitMaterial, staleAdvice } from "../model/review";
 import type { Project } from "../model/types";
 import { useProjectStore } from "../store/useProjectStore";
@@ -17,17 +17,22 @@ import { t, useLang } from "../i18n";
  * Output: レビューの行 (対象外 = 最上位・プロジェクトのボックスなら null)
  */
 export function ReviewState({ project, blockId }: { project: Project; blockId: string }) {
-  useLang();
+  const lang = useLang();
   const readonly = useProjectStore((s) => s.readonly);
   const apply = useProjectStore((s) => s.apply);
   const [noteFor, setNoteFor] = useState<"split" | "box" | null>(null);
   const [note, setNote] = useState("");
-  if (!reviewable(project, blockId)) return null;
-  const b = project.blocks[blockId];
-  const rows = [
-    ...(childrenOf(project, blockId).length ? [{ kind: "split" as const, label: t("分解"), record: b.splitReview, current: splitMaterial(project, blockId) }] : [])
-  , { kind: "box" as const, label: t("着手準備"), record: b.boxReview, current: boxMaterial(project, blockId) }
-  ];
+  // 行 (分解・着手準備の記録と今の材料) は、計画・箱・言語が変わったときだけ作る。材料は計画全体の経路の札から作るので、
+  // 描き直し (根拠の入力など) のたびに作ると、箱が 1000 を超える計画で 0.5 秒かかった (2026-11-02 計測)。画面用の索引で引く
+  const rows = useMemo(() => {
+    if (!reviewable(project, blockId)) return null;
+    const b = project.blocks[blockId];
+    return withViewIndex(project, () => [
+      ...(childrenOf(project, blockId).length ? [{ kind: "split" as const, label: t("分解"), record: b.splitReview, current: splitMaterial(project, blockId) }] : [])
+    , { kind: "box" as const, label: t("着手準備"), record: b.boxReview, current: boxMaterial(project, blockId) }
+    ]);
+  }, [project, blockId, lang]);
+  if (!rows) return null;
   // 記録する (人の確認): 今の材料の署名で記録する
   const record = (kind: "split" | "box") => {
     const m = kind === "split" ? splitMaterial(project, blockId) : boxMaterial(project, blockId);

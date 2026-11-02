@@ -167,7 +167,7 @@ export function Timeline({ project }: { project: Project }) {
   const claimNow = useClaimClock();
   const claimRows = claimListOf(project, claimNow);
   // 検査 (lint) の結果 (計画全体)。計画が変わったときだけ計算し直す
-  const lintIssues = useMemo(() => lint(project), [project]);
+  const lintIssues = useMemo(() => withViewIndex(project, () => lint(project)), [project]);
   // タブと件数。最初に開くのは「人の対応が要る順」で中身のある最初のタブ (判断待ち → 回答済み → 作業中 → 次の候補 → ログ)
   const tabs: { id: ActivityTab; label: string; count: number | null; help: string }[] = [
     { id: "resume", label: "Resume", count: resume.handoffs.length, help: t("引き継ぎ・未確認の回答・次の候補") },

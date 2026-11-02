@@ -45,7 +45,7 @@ import SKILL_MD_JA from "../.claude/skills/boxglow/SKILL.md";
 import SKILL_MD_EN from "../.claude/skills/boxglow/SKILL.en.md";
 import { CATEGORIES, findCategory } from "../src/model/categories";
 import { projectToMarkdown } from "../src/model/export";
-import { blockSize } from "../src/model/size";
+import { resolveEditOverlaps, resolveShownOverlaps } from "../src/model/overlaps";
 import { mergeProjects } from "../src/model/merge";
 
 /**
@@ -59,7 +59,7 @@ function categoryKeyOf(text: string): string {
   return c.key;
 }
 import { dirname, join, resolve } from "node:path";
-import { addLogEntry, childrenOf, setNow, changedPolicies, ackPolicy, assignMembers, updateDecision, moveBlockToParent, reopenDecision, disconnectWire, wirePathBetween, connectAcross, ancestorsOf, editDecisionAnswer, removeMember, findMember, updateInputGroup, removeInputGroup, updateLogEntry, removeLogEntry, resolveChangedOverlaps, resolveAllOverlaps, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor, canRemovePort, inputsFedBy, removePort, removeDecision, sendBack, sendBackTargets, setPolicy, setPolicyOptOut } from "../src/model/graph";
+import { addLogEntry, childrenOf, setNow, changedPolicies, ackPolicy, assignMembers, updateDecision, moveBlockToParent, reopenDecision, disconnectWire, wirePathBetween, connectAcross, ancestorsOf, editDecisionAnswer, removeMember, findMember, updateInputGroup, removeInputGroup, updateLogEntry, removeLogEntry, setCategory, addBlock, addPort, addProjectBlock, answerDecision, askDecision, clearActivity, createArtifact, createGitArtifact, createProject, defaultTaskParent, extractTemplate, findBlock, finishBlock, fromJSON, instantiateTemplate, parseTemplate, portsOf, projectBlocks, searchBlocks, setActivity, setProgress, setSchedule, setStatus, splitBlock, toJSON, updateBlock, updatePort, validateConnection, addInputGroup, exportInputGroup, importInputGroup, inputGroupsOf, setInputGroup, removeBlock, connectToBlock, normalizePortNames, ackDecisions, isHumanActor, canRemovePort, inputsFedBy, removePort, removeDecision, sendBack, sendBackTargets, setPolicy, setPolicyOptOut } from "../src/model/graph";
 import { checkStart, checkDone, descriptionReminder, scopeEntries } from "../src/model/workflow";
 import type { WorkScope, WorkflowPolicy } from "../src/model/types";
 import type { Artifact } from "../src/model/types";
@@ -176,9 +176,10 @@ function save(path: string, p: Project): void {
   const warnings:string[]=[];
   const revision = planIO().commit(path, text, expected, { prepare: (current) => {
     // ロック取得・リビジョン照合後の原本と比較する。受け持ち検証には補正後の差分を渡す。
+    // 重なりの解消は索引と大きさの使い回しで速く求める (src/model/overlaps.ts。結果は同じ)
     const next = current
-      ? resolveChangedOverlaps(fromJSON(current), normalized, blockSize)
-      : resolveAllOverlaps(normalized, blockSize);
+      ? resolveEditOverlaps(fromJSON(current), normalized)
+      : resolveShownOverlaps(normalized);
     text = prepareClaimSave(current, toJSON(next) + "\n", claimRequest, warning => warnings.push(warning));
     return text;
   } });

@@ -14,9 +14,9 @@ import { useMemo } from "react";
 import { readingLayout } from "../model/readingLayout";
 import { create } from "zustand";
 import { BrowserSyncHost, isSyncEnabled } from "../sync/browser-host";
-import { ancestorsOf, createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizePortNames, resolveChangedOverlaps, resolveAllOverlaps, scopeFor, toJSON, wireNetTabs, withIndex, withViewIndex } from "../model/graph";
+import { ancestorsOf, createProject, defaultTaskParent, fromJSON, isInScope, majorOf, normalizePortNames, scopeFor, toJSON, wireNetTabs, withMoveIndex } from "../model/graph";
 export { isInScope, majorBlocks } from "../model/graph";
-import { blockSize } from "../model/size";
+import { resolveEditOverlaps, resolveShownOverlaps } from "../model/overlaps";
 import { downloadText, safeFilename } from "../lib/download";
 import { ensurePermission, readLocalFile, writeLocalFile, canSaveLocalFile, pickSaveFile } from "../lib/localfile";
 import { deletePlanTemplate, listPlanTemplates, savePlanTemplate, type PlanTemplate } from "../lib/templates";
@@ -1150,7 +1150,8 @@ export const useProjectStore = create<State>((set, get) => {
       if (next === project) return;
       // 線でつながる入出力の名前をそろえる。保存時は追加・移動・拡大した箱だけ補正し、既存の兄弟を動かさない (ドラッグ中は除く)
       next = normalizePortNames(next).project;
-      if (opts?.history !== false) next = resolveChangedOverlaps(project, next, blockSize);
+      // 重なりの解消は索引と大きさの使い回しで速く求める (model/overlaps.ts。結果は同じ)
+      if (opts?.history !== false) next = resolveEditOverlaps(project, next);
       const history = opts?.history ?? true;
       set({
         project: next
@@ -1667,10 +1668,10 @@ export function useShownProject(): Project | null {
     // ボックスの間隔は画面で保証する: ファイルの配置が詰まっていても (間隔を広げる前に保存した計画、外のツールが書いた位置など)、
     // 線の通路 (ボックスから 36px x 2) が無いと線がボックスを貫くしかなくなる。表示の時点で重なり・間隔を解消しておく (ファイルは変えない。
     // 編集時の保存は変更対象だけを補正する)。畳んだボックスは畳んだ大きさで、開いたボックスは開いた大きさで計算する
-    // 索引は ports だけ (ボックスは押し出しで差し替わるので childrenOf の索引は使わない)
+    // 位置だけを変える処理向けの索引 (押し出しで箱は差し替わるが、ポート・線・親子は変わらない) を引き、箱の大きさは同じ版の中で使い回す
     const base = shown;
     // 閲覧の配置は箱の位置だけを差し替えるので、ポートと線は画面用の索引 (base の版ごとに 1 回だけ作る) を引ける
-    const result = reading ? withViewIndex(base, () => readingLayout(base, viewScope)) : withIndex(base, () => resolveAllOverlaps(base, blockSize), { children: false });
+    const result = reading ? withMoveIndex(base, () => readingLayout(base, viewScope)) : resolveShownOverlaps(base);
     shownCache.set(project, { collapsed: viewCollapsed, scope: viewScope, reading, lang, shown: result });
     return result;
   }, [project, viewCollapsed, viewScope, reading, lang]);

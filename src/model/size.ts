@@ -3,9 +3,9 @@
  */
 import { categoryOf } from "./categories";
 import type { Project, Port } from "./types";
-import { missingRequiredInputs, childrenOf, portsOf, incomingEdges, outgoingEdges } from "./graph";
+import { missingRequiredInputs, childrenOf, portsOf, incomingEdges, outgoingEdges, viewMemo } from "./graph";
 import { ROOT_ID } from "./types";
-import { t } from "../i18n/core";
+import { getLang, t } from "../i18n/core";
 
 /** 畳んだブロックの幅 */
 export const BLOCK_W = 256;
@@ -116,9 +116,16 @@ const MERGE_ROW = 32;
  * 状態・活動・期日が変わっても、情報行の予約領域は維持する。
  */
 export function taskCardLayout(p: Project, blockId: string) {
-  const b = p.blocks[blockId];
-  const ins = taskCardPorts(p, blockId, "in");
-  const outs = taskCardPorts(p, blockId, "out");
+  return cardLayoutOf(p.blocks[blockId], taskCardPorts(p, blockId, "in"), taskCardPorts(p, blockId, "out"));
+}
+
+/**
+ * カードの寸法と各ポート行の位置を、渡した並びのポートから求める (taskCardLayout の本体)
+ *   幅は名前の最大、高さは行の高さの合計で決まるので、ins / outs の並びは幅・高さ・見出しの高さに効かない (行の位置だけが変わる)
+ * Input : b = 箱 (無ければ題名なしとして扱う), ins / outs = 入力 / 出力のポート (表示の並び)
+ * Output: taskCardLayout と同じ形
+ */
+function cardLayoutOf(b: Project["blocks"][string] | undefined, ins: Port[], outs: Port[]) {
   // 合流のボックス: OR ゲートのような小さな部品。入力は左の弧に等間隔 (1 本あたり 32px)、出力は右の先端 (高さの中央) に 1 つ
   if (b?.merge) {
     const height = Math.max(MERGE_MIN_H, ins.length * MERGE_ROW + 16);
@@ -148,6 +155,16 @@ export function taskCardLayout(p: Project, blockId: string) {
   return { width, height: cursor + 8, headerH, metaH, inputs, outputs };
 }
 
+/**
+ * 畳んだ (中を描かない) 箱の大きさだけを求める。taskCardLayout と同じ幅・高さ・見出しの高さになる
+ *   ポートを線の相手の上下の順に並べ替えない (並びは大きさに効かない。並べ替えは線を全部たどるので、全部の箱の大きさを求めるときに重かった)
+ * Input : p, blockId / Output: Size
+ */
+function cardSize(p: Project, blockId: string): Size {
+  const l = cardLayoutOf(p.blocks[blockId], portsOf(p, blockId, "in"), portsOf(p, blockId, "out"));
+  return { width: l.width, height: l.height, headerH: l.headerH };
+}
+
 /** ブロックが「展開中 (子を中に描く)」か */
 export function isExpanded(p: Project, blockId: string): boolean {
   const b = p.blocks[blockId];
@@ -160,7 +177,39 @@ export function isExpanded(p: Project, blockId: string): boolean {
  * Output: { width, height }
  */
 export function blockSize(p: Project, blockId: string): Size {
-  if (!isExpanded(p, blockId)) return taskCardLayout(p, blockId);
+  // 画面用の索引 (もう書き換えない計画) の間は、求めた大きさを覚えて使い回す。言語で文字の幅が変わるので言語ごとに覚える
+  const memo = viewMemo<Size>(p, `blockSize:${getLang()}`);
+  if (!memo) return blockSizeWith(p, blockId, blockSize);
+  let hit = memo.get(blockId);
+  if (!hit) { hit = blockSizeWith(p, blockId, blockSize); memo.set(blockId, hit); }
+  return hit;
+}
+
+/**
+ * 計画を書き換えない間だけ、求めた大きさを覚えて使い回す blockSize を作る (編集時の重なりの解消など、全部の箱の大きさを何度も求める処理向け)
+ *   計画のオブジェクトごとに覚える。位置だけを変える処理の途中で箱を動かしても、動かした箱自身の大きさは変わらない (大きさは中の箱の位置で決まる)
+ *   使い終わったら捨てる (呼ぶたびに新しく作る)
+ * Output: (p, blockId) => Size
+ */
+export function memoBlockSize(): (p: Project, blockId: string) => Size {
+  const memo = new WeakMap<Project, Map<string, Size>>();
+  const size = (p: Project, blockId: string): Size => {
+    let m = memo.get(p);
+    if (!m) { m = new Map(); memo.set(p, m); }
+    let hit = m.get(blockId);
+    if (!hit) { hit = blockSizeWith(p, blockId, size); m.set(blockId, hit); }
+    return hit;
+  };
+  return size;
+}
+
+/**
+ * ブロックの大きさを求める (blockSize の本体)
+ * Input : p, blockId, kidSize = 中の箱の大きさを求める関数 (覚えた結果を使い回すときは、それを渡す)
+ * Output: { width, height, headerH }
+ */
+function blockSizeWith(p: Project, blockId: string, kidSize: (p: Project, blockId: string) => Size): Size {
+  if (!isExpanded(p, blockId)) return cardSize(p, blockId);
   const b = p.blocks[blockId];
   const insP = portsOf(p, blockId, "in");
   const outsP = portsOf(p, blockId, "out");
@@ -201,7 +250,7 @@ export function blockSize(p: Project, blockId: string): Size {
   let right = 0;
   let bottom = 0;
   for (const c of kids) {
-    const s = blockSize(p, c.id);
+    const s = kidSize(p, c.id);
     right = Math.max(right, c.position.x + s.width);
     bottom = Math.max(bottom, c.position.y + s.height);
   }

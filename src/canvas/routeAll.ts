@@ -62,12 +62,22 @@ export function routeAll(nodes: NodeRect[], edges: EdgeSpec[], opts: { separate?
       obstaclesOf.set(scope, all);
     }
   }
+  // 線ごとの出どころの鍵と、階層ごとの線 (edges の並びのまま) は先に 1 回だけ作る。
+  // othersOf は 3 回の通しで線ごとに呼ばれるので、そのたびに全部の線をなめて鍵の文字列を作り直すと、
+  // 線が 1200 本ある階層で 1 秒ほどかかった (2026-11-02 計測)。比べる条件と並びは変えない
+  const keyOf = new Map(edges.map((e) => [e.id, sourceKey(e)]));
+  const edgesInScope = new Map<string, EdgeSpec[]>();
+  for (const e of edges) {
+    const scope = scopeOf.get(e.id)!;
+    const list = edgesInScope.get(scope);
+    if (list) list.push(e); else edgesInScope.set(scope, [e]);
+  }
   // 同じ階層のほかの線 (自分を除く) の経路。交差の少ない候補を選ぶために渡す
   const othersOf = (e: EdgeSpec): Point[][] => {
-    const scope = scopeOf.get(e.id);
+    const key = keyOf.get(e.id);
     const out: Point[][] = [];
-    for (const o of edges) {
-      if (o.id === e.id || sourceKey(o) === sourceKey(e) || scopeOf.get(o.id) !== scope) continue;
+    for (const o of edgesInScope.get(scopeOf.get(e.id)!) ?? []) {
+      if (o.id === e.id || keyOf.get(o.id) === key) continue;
       const p = paths.get(o.id);
       if (p) out.push(p);
     }
