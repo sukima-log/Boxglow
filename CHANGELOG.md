@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+_Changes after 0.6.7 go here._
+
+## 0.6.7 (2026-11-02)
+
+Goes with the VS Code extension 0.5.7. Update the CLI, `serve` and the extension together.
+
 - **Assign boxes from the CLI and MCP.** `npx boxglow set <block> --assignee <name>[,<name>]` replaces the assignees (`none` clears them), `--add-assignee` / `--remove-assignee` add or remove one, and a name that is not a member yet is added as one (MCP: `boxglow_set` with `assignee`, `addAssignee`, `removeAssignee`). `npx boxglow members` lists the members and how many open boxes each has. `status` shows the assignees' names ("(assignees: Codex)") and `show` has an "Assignees" line. Before, only the screen could assign, and agents worked around it. The agent instructions explain the difference between assignees and claims.
 - **The CLI and MCP can do the rest of what the screen does.**
   - `connect <title.output> <title.input>` now connects boxes on different levels, as the screen does: inputs and outputs are added on the boxes in between. Before, naming the input made it fail with "only ports on the same level can be connected".

@@ -11,6 +11,20 @@ Tasks are boxes with inputs and outputs; a box goes New (BlackBox: output decide
 - CLI for agents: `npx boxglow` (status / start / done / split / ask / answer ...)
 - License: MIT
 
+## What's new in 0.6.7
+
+- **Large plans respond faster**: on a plan with about 480 boxes, opening the file, switching tabs, selecting a box, typing in the search box and editing now mostly take under a second (they took 1 to 7 seconds).
+- **Assignees from the CLI and MCP**: `set <block> --assignee / --add-assignee / --remove-assignee`, and `members` lists the members with their open boxes.
+- **The CLI and MCP do the rest of what the screen does**: `connect` / `disconnect` across levels, correcting an answer with `answer --id`, `members --remove`, editing input groups (`group --rename / --description / --remove`), the plan's name and description (`plan`), and listing, editing or removing work-log entries (`log <block>`).
+
+Details: [CHANGELOG.md](CHANGELOG.md). Update the CLI, `serve` and the VS Code extension (0.5.7) together.
+
+### 日本語: 0.6.7 の要点
+
+- **大きな計画でも軽く動く**: 箱が約 480 個の計画で、開く・タブ切り替え・箱の選択・検索欄の入力・編集が 1〜7 秒かかっていたのを、ほとんど 1 秒未満にした。
+- **担当を CLI / MCP から決められる**: `set <block> --assignee / --add-assignee / --remove-assignee`。`members` でメンバーごとの担当の箱 (未完了) の数を一覧できる。
+- **画面でしかできなかった操作を CLI / MCP でも**: 階層をまたぐ `connect` / `disconnect`、`answer --id` での答えの書き直し、`members --remove`、入力グループの変更 (`group --rename / --description / --remove`)、計画の名前と説明 (`plan`)、作業記録の一覧・書き直し・削除 (`log <block>`)。
+
 ## What's new in 0.6.6
 
 - **More things open with a click**: the source's files on an input card, a policy's contents, sent-back deliverables, and file paths or URLs written in descriptions, verification, decision context, notes and send-back reasons. In Notes, plain paths such as `docs/design.md` are links too.
@@ -260,7 +274,7 @@ Writes become new versions on the server and reach the synced devices on their n
 
 ## VS Code extension
 
-Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.6 goes with boxglow 0.6.6).
+Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.7 goes with boxglow 0.6.7).
 
 `vscode/` holds the extension's source. It opens `boxglow.json` as the same diagram inside the editor (custom editor "Boxglow"; right-click the file or use the editor title button / command *Boxglow: Open boxglow.json as a diagram*). The diagram follows the file when the CLI or an agent writes it, edits in the diagram are written back, and light / dark follow the VS Code theme. Deliverables, materials and relative links in Notes (Ctrl / Cmd + click) that point to a file open in the editor beside the diagram. To build it yourself: `npm run build:vscode` (bundles the web app into `vscode/media/`), then `cd vscode && npm run package` (`.vsix`, install via *Extensions: Install from VSIX...*).
 

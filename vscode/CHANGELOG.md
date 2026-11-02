@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-_Changes after 0.5.6 go here._
+_Changes after 0.5.7 go here._
+
+## 0.5.7
+
+- Follows boxglow 0.6.7. Update together with the CLI and `serve`.
+- Large plans respond faster: on a plan with about 480 boxes, opening, switching tabs, selecting a box, searching and editing now mostly take under a second (they took 1 to 7 seconds). Nothing on the screen changes.
 
 ## 0.5.6
 
