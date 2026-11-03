@@ -2,8 +2,14 @@
 
 ## Unreleased
 
-- Zooming a large tab is lighter: each zoom step below 100% takes about 0.08 seconds instead of 0.25, and crossing the overview zoom about 0.2 seconds instead of 0.5. Nothing on the screen changes.
+_Changes after 0.5.8 go here._
+
+## 0.5.8
+
+- Follows boxglow 0.6.8. Update together with the CLI and `serve`.
 - Ctrl+F jumps to the search box. Picking a result while zoomed far out zooms to the whole box, and a new target button in the side panel zooms to the selected box on demand; a ring blinks around the box.
+- Very large plans are much faster: in a tab with about 1,000 boxes, selecting a box took 12 seconds and switching to Edit about 2.5 minutes; they now take about 0.4 and 2 seconds. On a plan with about 1,200 boxes every edit takes about half a second (5 to 6 seconds before). Nothing on the screen changes.
+- Zooming a large tab is lighter: each zoom step below 100% takes about 0.08 seconds instead of 0.25, and crossing the overview zoom about 0.2 seconds instead of 0.5. Nothing on the screen changes.
 
 ## 0.5.7
 

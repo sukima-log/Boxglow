@@ -11,6 +11,18 @@ Tasks are boxes with inputs and outputs; a box goes New (BlackBox: output decide
 - CLI for agents: `npx boxglow` (status / start / done / split / ask / answer ...)
 - License: MIT
 
+## What's new in 0.6.8
+
+- **Find a box and zoom to it**: Ctrl+F (Cmd+F on a Mac) jumps to the search box from anywhere. Picking a result while zoomed out too far to read titles zooms until the whole box fits, and the new target button next to the box's ID in the side panel does the same on demand. A ring blinks around the box.
+- **Very large plans are much faster**: in a tab with about 1,000 boxes, selecting a box took 12 seconds and switching to Edit about 2.5 minutes; they now take about 0.4 and 2 seconds. On a plan with about 1,200 boxes every edit takes about half a second (5 to 6 seconds before), and zooming is about three times lighter.
+
+Details: [CHANGELOG.md](CHANGELOG.md). Update the CLI, `serve` and the VS Code extension (0.5.8) together.
+
+### 日本語: 0.6.8 の要点
+
+- **箱を探して寄る**: Ctrl+F (Mac は Cmd+F) で、どこからでも検索欄へ移る。題名が読めないほど縮小しているときは、検索で選んだ箱全体が収まるまで寄る。右パネルの ID の横にある照準のボタンでも、選んだ箱へ寄る。寄った箱のまわりで輪が点滅する。
+- **とても大きな計画が速くなった**: 箱が約 1000 個のタブで、箱を選ぶのに 12 秒、Edit への切り替えに約 2.5 分かかっていたのを、約 0.4 秒と約 2 秒にした。箱が約 1200 個の計画で、編集 1 回が約 0.5 秒 (以前は 5〜6 秒) になり、倍率を変えたときの重さも約 3 分の 1 になった。
+
 ## What's new in 0.6.7
 
 - **Large plans respond faster**: on a plan with about 480 boxes, opening the file, switching tabs, selecting a box, typing in the search box and editing now mostly take under a second (they took 1 to 7 seconds).
@@ -274,7 +286,7 @@ Writes become new versions on the server and reach the synced devices on their n
 
 ## VS Code extension
 
-Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.7 goes with boxglow 0.6.7).
+Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.8 goes with boxglow 0.6.8).
 
 `vscode/` holds the extension's source. It opens `boxglow.json` as the same diagram inside the editor (custom editor "Boxglow"; right-click the file or use the editor title button / command *Boxglow: Open boxglow.json as a diagram*). The diagram follows the file when the CLI or an agent writes it, edits in the diagram are written back, and light / dark follow the VS Code theme. Deliverables, materials and relative links in Notes (Ctrl / Cmd + click) that point to a file open in the editor beside the diagram. To build it yourself: `npm run build:vscode` (bundles the web app into `vscode/media/`), then `cd vscode && npm run package` (`.vsix`, install via *Extensions: Install from VSIX...*).
 
