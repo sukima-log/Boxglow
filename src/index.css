@@ -1189,6 +1189,22 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .wire-state[data-ready="true"]::before { border-top: 4px solid var(--wire-ready); }
 .wire-reason { font-size: 12px; color: var(--text-muted); padding: 8px 0; }
 @media (prefers-reduced-motion: reduce) { .bg-block.just-glowed { animation: none; } }
+/* 検索・右パネルの注目ボタンで寄った箱: 枠のまわりに太い輪を出す。寄る動き (0.45 秒) の間は出したままにして
+   (どの箱へ寄っているかを目で追える)、着いたあと 2 回点滅させて消す。
+   輪の太さは縮小に合わせて太くする (--edge-k: 線の太さと同じ倍率。大きい箱を縮小して収めたときも見える)。
+   点滅は visibility の切り替えだけにする: 影を広げる動きにすると、箱が 1000 ある図では毎フレーム図全体を描き直し、
+   落ち着くまでが約 0.85 秒延びた (2026-11-03 計測)。切り替えだけなら描き直しは 4 回で済む */
+.bg-block__ping {
+  position: absolute; inset: -2px; border-radius: inherit; pointer-events: none;
+  box-shadow: 0 0 0 calc(8px * var(--edge-k, 1)) color-mix(in srgb, var(--primary) 60%, transparent);
+  animation: focus-blink 1.6s linear 0.45s 1 both;
+}
+@keyframes focus-blink {
+  0%, 50% { visibility: visible; }
+  25%, 75%, 100% { visibility: hidden; }
+}
+/* 動きを減らす設定では点滅させず、輪を出したままにする (2.4 秒後に消える) */
+@media (prefers-reduced-motion: reduce) { .bg-block__ping { animation: none; } }
 
 /* ---- 画面からの同期の印と欄 (SyncPanel) ---- */
 .sync-chip-wrap { position: relative; flex: none; }

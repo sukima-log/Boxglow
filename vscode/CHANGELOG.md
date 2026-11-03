@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-_Changes after 0.5.7 go here._
+- Ctrl+F jumps to the search box. Picking a result while zoomed far out zooms to the whole box, and a new target button in the side panel zooms to the selected box on demand; a ring blinks around the box.
 
 ## 0.5.7
 

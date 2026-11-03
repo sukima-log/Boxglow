@@ -46,6 +46,8 @@ export const app: Record<string, string> = {
 , "削除": "Delete"
 , "元に戻す / やり直す": "Undo / Redo"
 , "選択を解除": "Clear selection"
+, "箱を探す": "Find a box"
+, "(右パネルの照準のボタンで、その箱に寄る)": "(the target button in the side panel zooms to the box)"
 , "ボックスは「入力から出力を作るタスク」。出力を先に決め、大きなボックスは「分解する」で中にボックスを置く。供給元の無い入力は左端の入力まで自動で点線が伸びる。": "A box is a task that turns inputs into an output. Decide the output first; break big boxes down by putting boxes inside. Inputs with no source get a dotted line from the left edge automatically."
   // App: 埋め込み・フッタ
 , "Boxglow で開く": "Open in Boxglow"
@@ -62,6 +64,7 @@ export const app: Record<string, string> = {
 , "Edit モード: ドラッグで移動・結線・階層移動ができます。押すと View (閲覧) に": "Edit mode: drag to move, wire and re-parent. Click to switch to View"
 , "View モード: ドラッグでの編集は効きません。押すと Edit に": "View mode: dragging does not edit. Click to switch to Edit"
 , "Search  ID / 題名": "Search  ID / title"
+, "ID か題名で箱を探す (Ctrl+F または /)": "Find a box by ID or title (Ctrl+F or /)"
 , "見つかりません": "No matches"
 , "ブロックを追加 (N)。ボックスを選んでいればその中に、選んでいなければプロジェクトの中に": "Add a box (N): inside the selected box, or in the project if nothing is selected"
 , "Auto Layout: 依存関係で並べ直す (大項目は畳んだ前提)": "Auto Layout: arrange by dependencies (top-level boxes assumed collapsed)"

@@ -169,6 +169,17 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
     prevStatus.current = view.status;
   }, [view.status]);
 
+  // 検索や右パネルの注目ボタンで寄った箱 (focus.fit がある頼み) は、枠のまわりに太い輪を出して点滅させ、どの箱かを目で見つけやすくする (見た目は index.css の .bg-block__ping)。
+  // 古い頼み (タブを行き来して箱を描き直したときなど) では出さない。別のタブの箱は、タブを開いて箱を描くまで 2〜3 秒かかることがあるので、期限は 10 秒
+  const pingNonce = useProjectStore((s) => (s.focus?.fit && s.focus.blockId === blockId ? s.focus.nonce : 0));
+  const [ping, setPing] = useState(0);
+  useEffect(() => {
+    if (!pingNonce || Date.now() - pingNonce > 10000) return;
+    setPing(pingNonce);
+    const timer = setTimeout(() => setPing(0), 2400);
+    return () => clearTimeout(timer);
+  }, [pingNonce]);
+
   const toggleCollapsed = useProjectStore((s) => s.toggleCollapsed);
   const openTab = useProjectStore((s) => s.openTab);
   // ▸ で中を見る (そのボックスを開く) (ファイルに差分を出さない)
@@ -423,6 +434,8 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
             isConnectable={false} />;
         }));
       })}
+      {/* 寄ったあとの輪 (key を頼みごとに変えて、続けて押してもアニメーションを最初からやり直す) */}
+      {ping > 0 && <span key={ping} className="bg-block__ping" aria-hidden="true" />}
     </div>
   );
 });

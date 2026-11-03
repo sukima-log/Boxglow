@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { constrainVertical, availableCanvas } from "./useFitViewport";
+import { constrainVertical, availableCanvas, fitsWholeBox, READABLE_ZOOM } from "./useFitViewport";
 describe("availableCanvas", () => {
   const canvas = { x: 260, y: 64, width: 1000, height: 700 };
   it("does not subtract side-by-side panels twice", () => {
@@ -25,4 +25,20 @@ it("縦の移動候補を先頭/末尾で止め、繰り返しても同じ座標
  expect(constrainVertical(bottom,bounds,region,null)).toEqual(bottom);
  const fit={x:300,y:24,zoom:.2};
  expect(constrainVertical({x:-10,y:-999,zoom:.2},bounds,region,fit)).toEqual(fit);
+});
+
+describe("fitsWholeBox (箱へ寄せるときの寄せ方)", () => {
+  it("注目ボタン (box) は、今の倍率に関係なく箱全体が収まる位置へ寄る", () => {
+    expect(fitsWholeBox("box", 0.004)).toBe(true);
+    expect(fitsWholeBox("box", 1.5)).toBe(true);
+  });
+  it("検索 (readable) は、題名が読めない倍率のときだけ箱全体へ寄り、読めるなら倍率を保つ", () => {
+    expect(fitsWholeBox("readable", 0.004)).toBe(true);
+    expect(fitsWholeBox("readable", READABLE_ZOOM - 0.01)).toBe(true);
+    expect(fitsWholeBox("readable", READABLE_ZOOM)).toBe(false);
+    expect(fitsWholeBox("readable", 1)).toBe(false);
+  });
+  it("寄せ方の指定が無い (追加した直後・一覧から) ときは、今までどおり倍率を保つ", () => {
+    expect(fitsWholeBox(undefined, 0.004)).toBe(false);
+  });
 });

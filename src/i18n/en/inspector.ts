@@ -24,6 +24,8 @@ export const inspector: Record<string, string> = {
 , "「{name}」を部品として保存しました (☰ の「部品」から挿入)": "Saved \"{name}\" as a part (insert it from Parts in ☰)"
 , "短い ID (押すとコピー。検索や CLI で使えます)": "Short ID (click to copy; works in search and the CLI)"
 , "ID {key} をコピーしました": "Copied ID {key}"
+, "図でこの箱に寄る (箱全体が画面に収まる位置へ)": "Zoom to this box on the canvas (fit the whole box)"
+, "図でこの箱に寄る": "Zoom to this box"
 , "Title (何を作るか)": "Title (what to make)"
   // ブロック: タブの説明
 , "状態・進捗・活動・判断": "Status, progress, activity, decisions"

@@ -14,6 +14,7 @@ import { ReviewState } from "./ReviewState";
 import { ReadinessFields } from "./ReadinessFields";
 import { SendBackPanel } from "./SendBack";
 import { CloseButton } from "./CloseButton";
+import { TreeIcon } from "./TreeIcon";
 import { AcceptanceField, ConstraintsField, WorkScopePanel, WorkflowSettings } from "./WorkScope";
 import { descriptionReminder, freshnessText } from "../model/workflow";
 import { isAcked as decisionIsAcked } from "../model/graph";
@@ -151,6 +152,18 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
   const select = useProjectStore((s) => s.select);
   const setToast = useProjectStore((s) => s.setToast);
   const meId = useProjectStore((s) => s.meId);
+  const focusBlock = useProjectStore((s) => s.focusBlock);
+  const setDetailsOpen = useProjectStore((s) => s.setDetailsOpen);
+  /**
+   * 注目: 図でこの箱へ寄る (箱全体がきれいに収まる位置と倍率へ。倍率は箱の大きさで決まる)。
+   * 全体表示で箱が点にしか見えないときに、どこにある箱かを見せるため (利用者の要望 2026-11-03)。
+   * Input: なし / Output: なし (画面の移動を頼む)
+   * 幅 600px 以下ではこのパネルが図を全部覆うので、先にパネルを閉じて図を見せる (選択はそのまま。箱の上の「詳細」で開き直せる)
+   */
+  const focusHere = () => {
+    if (window.matchMedia("(max-width: 600px)").matches) setDetailsOpen(false);
+    focusBlock(blockId, { fit: "box" });
+  };
   const [aiOpen, setAiOpen] = useState(false);
   const [scopeEditing, setScopeEditing] = useState(false);
   const [showPrompt, setShowPrompt] = useState<"plan" | "decompose" | "review" | null>(null);
@@ -250,6 +263,8 @@ function BlockInspector({ project, blockId }: { project: Project; blockId: strin
           {isProject ? "Project" : chain.map((a) => (a.id === ROOT_ID ? "" : a.title)).filter(Boolean).join(" › ") || "Top"}
         </span>
         <button className="chip" style={{ fontFamily: "ui-monospace, monospace" }} title={t("短い ID (押すとコピー。検索や CLI で使えます)")} onClick={async () => { if (await copyText(b.key ?? "")) setToast(t("ID {key} をコピーしました", { key: b.key ?? "" })); }}>{b.key}</button>
+        {/* 注目: 図でこの箱へ寄る (閲覧だけの計画でも使える) */}
+        <button type="button" className="btn btn-ghost btn-sm inspector-focus" onClick={focusHere} title={t("図でこの箱に寄る (箱全体が画面に収まる位置へ)")} aria-label={t("図でこの箱に寄る")}><TreeIcon name="focus" /></button>
         {!readonly && (
           <div className="relative">
             <button className="btn btn-ghost btn-sm" onClick={() => setMenu(!menu)} title={t("その他")}>⋯</button>

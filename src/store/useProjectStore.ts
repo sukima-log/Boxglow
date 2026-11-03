@@ -29,6 +29,7 @@ import exampleText from "../../examples/logic-daw/boxglow.json?raw";
 import type { Endpoint, Project } from "../model/types";
 import type { AssigneeTarget } from "../model/assignments";
 import type { HostAction, SyncStatus } from "../sync/status";
+import type { FocusFit } from "../canvas/useFitViewport";
 import { deleteProject, listProjects, loadProject, saveProject, type ProjectMeta } from "../lib/storage";
 import { t, useLang } from "../i18n"; // 画面に出す文言 (toast など) の言語切替
 
@@ -242,9 +243,12 @@ interface State {
   /** Edit モード (ドラッグでの移動・結線・階層移動と Del キーが効く)。View なら閲覧と選択だけ。プロジェクトごとに記憶 */
   editMode: boolean;
   setEditMode: (on: boolean) => void;
-  /** キャンバスに「このブロックが見えるように寄せて」と頼む (追加直後など)。nonce で同じ id でも再度反応する */
-  focus: { blockId: string; nonce: number } | null;
-  focusBlock: (blockId: string, opts?: { scope?: boolean }) => void;
+  /**
+   * キャンバスに「このブロックが見えるように寄せて」と頼む (追加直後・一覧・検索・右パネルの注目ボタン)。nonce で同じ id でも再度反応する。
+   * fit は寄せ方 ("box" = 箱全体が収まる位置と倍率へ、"readable" = 題名が読めない倍率のときだけ "box" と同じ。省略 = はみ出しているときだけ中央へ)
+   */
+  focus: { blockId: string; nonce: number; fit?: FocusFit } | null;
+  focusBlock: (blockId: string, opts?: { scope?: boolean; fit?: FocusFit }) => void;
   saveState: "saved" | "saving" | "unsaved" | "none";
 
   /** 純粋関数で project を変更する。history=false なら履歴に積まない (ドラッグ中など) */
@@ -1139,7 +1143,7 @@ export const useProjectStore = create<State>((set, get) => {
           if (want !== viewScope) get().setViewScope(want);
         }
       }
-      set({ focus: { blockId, nonce: Date.now() } });
+      set({ focus: { blockId, nonce: Date.now(), ...(opts?.fit ? { fit: opts.fit } : {}) } });
     }
   , saveState: "none"
 

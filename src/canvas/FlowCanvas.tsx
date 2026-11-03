@@ -2,7 +2,7 @@
  * キャンバス: React Flow にプロジェクトを描き、ドラッグ・結線・選択を store に反映する
  */
 import { verticalNodes, routeVertical } from "./verticalLayout";
-import { useFitViewport } from "./useFitViewport";
+import { MAX_ZOOM, useFitViewport } from "./useFitViewport";
 import { edgeScale } from "./edgeScale";
 import { readingColumns } from "../model/readingLayout";
 import { sharedWires } from "./sharedWires";
@@ -108,37 +108,63 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
   const nodesNow = useRef(nodes);
   nodesNow.current = nodes;
   const rectsOf = useCallback((ids?: string[]) => modelRects(nodesNow.current, ids), []);
-  const { minZoom, fit, readFromTop, onMoveStart, onMoveEnd, centerOn } = useFitViewport(geometrySig, panelLayoutKey, dragging, vertical, selection.blockId, rectsOf);
-  // 一覧などから移ったブロックが見える領域 (パネルを除く) の外にあるときは、その中央へ寄せる (倍率は保つ)
-  useEffect(() => {
-    if (!focus) return;
-    const t = setTimeout(() => { centerOn(focus.blockId); }, 120);
-    return () => clearTimeout(t);
-  }, [focus, centerOn]);
+  const { minZoom, fit, readFromTop, onMoveStart, onMoveEnd, focusOn } = useFitViewport(geometrySig, panelLayoutKey, dragging, vertical, selection.blockId, rectsOf);
 
   // タブ (表示範囲) を切り替えたら、その範囲が収まるように全体表示する。
   // ノードが作り直されて大きさが測られる (nodesInitialized) のを待ってから fitView する (早すぎると古い大きさで計算して外れる)
   const scopeMounted = useRef(false);
   const pendingFit = useRef(false);
+
+  // 箱へ寄せる頼み (focusBlock: 一覧・検索・右パネルの注目ボタン・追加した直後)。寄せ方は focus.fit (useFitViewport の FocusFit)。
+  // タブの切り替えを伴うときは、切り替えの全体表示が済んでから寄せる (先に寄せると全体表示で上書きされ、箱が点のまま残るため)。
+  // 全体表示を見せてから箱へ寄るので、タブ全体のどこにある箱かも目で追える
+  const focusWaiting = useRef<typeof focus>(null);
+  const focusOnNow = useRef(focusOn);
+  focusOnNow.current = focusOn;
+  /**
+   * Input: なし (待っている頼みを読む) / Output: なし。全体表示の途中なら何もしない (全体表示の後にもう一度呼ばれる)
+   * 10 秒より古い頼みは捨てる (全体表示の動きを手で止めると完了の知らせが来ず、頼みが残る。後で別のタブを開いたときに急に寄らないように。
+   * 箱が 1000 あるタブは開くのに 2〜3 秒かかるので、それより十分長くとる)
+   */
+  const flushFocus = useCallback(() => {
+    const f = focusWaiting.current;
+    if (!f || pendingFit.current) return;
+    focusWaiting.current = null;
+    if (Date.now() - f.nonce > 10000) return;
+    focusOnNow.current(f.blockId, f.fit);
+  }, []);
+  useEffect(() => {
+    if (!focus) return;
+    focusWaiting.current = focus;
+    // 少し待つのは、選んだ箱の右パネルが開いて見える領域が決まってから寄せるため
+    const t = setTimeout(flushFocus, 120);
+    return () => clearTimeout(t);
+  }, [focus, flushFocus]);
+
+  /** タブの全体表示 (横は全体、縦は幅に合わせて先頭から)。済んだら、待っている寄せる頼みを行う */
+  const fitScope = useCallback(() => {
+    pendingFit.current = false;
+    if (vertical) { readFromTop(); flushFocus(); }
+    else fit(undefined, flushFocus);
+  }, [vertical, readFromTop, fit, flushFocus]);
   useEffect(() => {
     if (!scopeMounted.current) { scopeMounted.current = true; return; } // 初回は表示領域の計測後にFitする
     pendingFit.current = true;
     // CSS の最小寸法などで厳密一致しなくても、測れた実寸を使って表示を完了する。
     const fallback = setTimeout(() => {
       if (!pendingFit.current) return;
-      pendingFit.current = false;
-      vertical ? readFromTop() : fit();
+      fitScope();
     }, 600);
     return () => clearTimeout(fallback);
-  }, [viewScope, reading, vertical, verticalWrap, fit, readFromTop]);
+  }, [viewScope, reading, vertical, verticalWrap, fitScope]);
   useEffect(() => {
     if (!pendingFit.current) return;
     // 今の表示 (横 / 縦) のノードが組み立てられてから。位置と大きさは計画から求めるので、DOM を測り終えるのを待たない
     const ready = nodes.every((n) => n.hidden || !!n.data.vertical === vertical);
     if (!ready) return;
-    const t = setTimeout(() => { pendingFit.current = false; vertical ? readFromTop() : fit(); }, 30); // 動きは短め (タブの行き来を軽快に)
+    const t = setTimeout(fitScope, 30); // 動きは短め (タブの行き来を軽快に)
     return () => clearTimeout(t);
-  }, [nodes, rf, fit, readFromTop, vertical]);
+  }, [nodes, rf, fitScope, vertical]);
 
   // ボックスにマウスを乗せたら、つながる線を強調する
   const [hovered, setHovered] = useState<string | null>(null);
@@ -476,7 +502,7 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
       onMoveStart={onMoveStart}
       onMoveEnd={onMoveEnd}
       minZoom={minZoom}
-      maxZoom={2}
+      maxZoom={MAX_ZOOM}
       proOptions={{ hideAttribution: false }}
     >
       <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="var(--bg-grid)" />

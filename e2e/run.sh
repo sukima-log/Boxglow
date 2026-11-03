@@ -53,6 +53,8 @@ node e2e/zoom-fit.cjs
 node e2e/vertical.cjs
 node e2e/viewport-stability.cjs
 node e2e/viewport-review.cjs
+# 箱を探して寄る: Ctrl+F で検索欄へ、検索で選んだ箱へ寄る、右パネルの注目ボタン
+node e2e/focus.cjs
 node e2e/tree-sync-ui.cjs
 node e2e/category.cjs
 node e2e/branch.cjs

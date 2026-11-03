@@ -403,6 +403,7 @@ export function App() {
                 <tr><td>{t("削除")}</td><td><span className="kbd">Del</span></td></tr>
                 <tr><td>{t("元に戻す / やり直す")}</td><td><span className="kbd">Ctrl+Z</span> / <span className="kbd">Ctrl+Y</span></td></tr>
                 <tr><td>{t("選択を解除")}</td><td><span className="kbd">Esc</span></td></tr>
+                <tr><td>{t("箱を探す")}</td><td><span className="kbd">Ctrl+F</span> / <span className="kbd">/</span> {t("(右パネルの照準のボタンで、その箱に寄る)")}</td></tr>
               </tbody></table>
               <div className="text-[12px]" style={{ color: "var(--text-muted)" }}>
                 {t("ボックスは「入力から出力を作るタスク」。出力を先に決め、大きなボックスは「分解する」で中にボックスを置く。供給元の無い入力は左端の入力まで自動で点線が伸びる。")}

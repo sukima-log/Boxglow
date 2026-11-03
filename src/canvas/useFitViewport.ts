@@ -33,8 +33,25 @@ export function availableCanvas(canvas: Area, panels: Area[]): Area | null {
     ? { x: left - canvas.x, y: 0, width: right - left, height: canvas.height } : null;
 }
 const MIN_ZOOM = 0.001;
+/** 拡大の上限 (FlowCanvas の maxZoom と同じ値を使う) */
+export const MAX_ZOOM = 2;
 /** 題名が読める倍率の下限 (題名 20px × 0.45 = 9px)。最初に開いたときの表示は、これより縮めず左上 (始まり) から見せる (B158 の検証: 横に長い Top は幅に合わせると読めない)。Fit を押せば従来どおり全体 */
-const READABLE_ZOOM = 0.45;
+export const READABLE_ZOOM = 0.45;
+/**
+ * 箱へ寄せるときの寄せ方 (store の focusBlock から渡る)
+ * - "box": 箱全体がきれいに収まる位置と倍率へ寄る (右パネルの注目ボタン)。倍率は箱の大きさで決まる (100% に決め打ちしない)
+ * - "readable": 今の倍率では題名が読めない (READABLE_ZOOM 未満) ときだけ "box" と同じく寄る。読めるなら、はみ出しているときだけ中央へ寄せる (検索で選んだとき)
+ * - 省略: はみ出しているときだけ中央へ寄せる (倍率は保つ。追加した直後や一覧から移ったとき)
+ */
+export type FocusFit = "box" | "readable";
+/**
+ * focusBlock の寄せ方と今の倍率から、箱全体を収める寄せ方を使うかを決める
+ * Input : fit = 寄せ方 (省略可), zoom = 今の倍率
+ * Output: true = 箱全体が収まる位置と倍率へ寄る / false = はみ出しているときだけ中央へ寄せる (倍率は保つ)
+ */
+export function fitsWholeBox(fit: FocusFit | undefined, zoom: number): boolean {
+  return fit === "box" || (fit === "readable" && zoom < READABLE_ZOOM);
+}
 const different = (a: Viewport, b: Viewport) => Math.abs(a.x - b.x) > .5 || Math.abs(a.y - b.y) > .5 || Math.abs(a.zoom - b.zoom) > .00001;
 /**
  * 移動の候補を先に制限し、限界を越えたフレームを描かせない。
@@ -79,6 +96,8 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
     height: number;
   } | null>(null);
   const moveStartZoom = useRef<number | null>(null);
+  /** 箱全体へ寄る動き (focusOn) の途中か: 寄っている箱の id と、途中とみなす期限 (performance.now の値) */
+  const focusing = useRef<{ id: string; until: number } | null>(null);
   /**
    * 測定済みのノード (配置で決めた width / height だけのノードは含めない: 初回の表示は実寸がそろってから決める)。
    * ▸ で展開した直後は、まだ測っていないノードがここから外れて縮小の下限が高く決まり、測定が終わっても配置の印が変わらないので取り直されない。
@@ -102,12 +121,15 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
     if (!v) return;
     void rf.setViewport(v);
   }, [rf, readingTarget]);
-  /** Input: 対象 ID (省略時は全体)。Output: 使用可能領域へ収まる位置・倍率 */
-  const target = useCallback((ids?: string[]) => {
+  /**
+   * Input: 対象 ID (省略時は全体), maxZoom = 拡大の上限 (既定 1 = 100%。注目ボタンは MAX_ZOOM まで寄る)
+   * Output: 使用可能領域へ収まる位置・倍率 (対象のまわりに余白をとる)
+   */
+  const target = useCallback((ids?: string[], maxZoom = 1) => {
     const region = area.current;
     const bounds = boundsOfRects(sizedNodes(ids));
     if (!region || !bounds) return null;
-    const v = getViewportForBounds(bounds, region.width, region.height, MIN_ZOOM, 1, ids ? .3 : .12);
+    const v = getViewportForBounds(bounds, region.width, region.height, MIN_ZOOM, maxZoom, ids ? .3 : .12);
     return { x: v.x + region.x, y: v.y + region.y, zoom: v.zoom };
   }, [sizedNodes]);
 
@@ -143,24 +165,44 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
     void rf.setViewport({ x: region.x + region.width / 2 - cx * zoom, y: region.y + region.height / 2 - cy * zoom, zoom }, { duration: opts.duration ?? 240 });
     return true;
   }, [rf, insideRegion, sizedNodes]);
+  /**
+   * 箱へ寄せる (store の focusBlock から)。寄せ方は FocusFit を参照
+   * Input : id = ノード id, fit = 寄せ方 (省略可)
+   * Output: 動かしたら true
+   * 箱全体を収めるときは、見える領域 (左右のパネルを除いた部分) に余白をとって収まる倍率にする。
+   * 小さい箱は MAX_ZOOM まで拡大し、大きい箱 (中に箱を持つ組) は全体が入るまで縮小する。
+   * 動きの時間を少し長くとり、全体のどこからどこへ寄ったかを目で追えるようにする
+   */
+  const focusOn = useCallback((id: string, fit?: FocusFit) => {
+    if (!fitsWholeBox(fit, rf.getViewport().zoom)) return centerOn(id);
+    const v = target([id], MAX_ZOOM);
+    if (!v) return false;
+    // 寄る動きの間に見える領域が変わったら (選んだ箱の右パネルが開いた・閉じた)、updateBounds が新しい領域で寄り直す
+    focusing.current = { id, until: performance.now() + 700 };
+    void rf.setViewport(v, { duration: 450 });
+    return true;
+  }, [rf, target, centerOn]);
 
   /**
-   * Input: 対象 ID。Output: 明示的な全体表示を実行
+   * Input: 対象 ID (省略時は全体), after = 表示を合わせ終えたときに呼ぶ処理 (省略可。タブを切り替えた後に箱へ寄せるときに使う)
+   * Output: 明示的な全体表示を実行
    * 全体表示の倍率が今の縮小の下限より小さいときは、先に下限を下げてから表示を合わせる。
    * (タブの切り替えの途中、ボックスを一部しか測れていない瞬間に下限が高く決まると、
    *  そのままでは全体表示が下限に押し戻され、Fit を押しても 100% から動かなくなるため)
    */
-  const fit = useCallback((ids?: string[]) => {
+  const fit = useCallback((ids?: string[], after?: () => void) => {
     const v = target(ids);
-    if (!v) return;
+    if (!v) { after?.(); return; }
     if (!ids) { fitted.current = v; }
+    // 動きが終わってから after を呼ぶ (途中で別の移動に割り込まれたときは呼ばない)
+    const move = () => { void rf.setViewport(v, { duration: 150 }).then((done) => { if (done) after?.(); }); };
     if (v.zoom < minZoomNow.current) {
       setMinZoom(v.zoom);
       // 下限の変更が図に届いてから (次の描画の後に) 表示を合わせる
-      requestAnimationFrame(() => requestAnimationFrame(() => void rf.setViewport(v, { duration: 150 })));
+      requestAnimationFrame(() => requestAnimationFrame(move));
       return;
     }
-    void rf.setViewport(v, { duration: 150 });
+    move();
   }, [rf, target]);
   /**
   * 図と利用可能領域を計測して縮小下限を更新する。
@@ -201,6 +243,13 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
       }
       if (different(current, next))
         void rf.setViewport(next);
+    }
+    else if (focusing.current && performance.now() < focusing.current.until && prevArea && (prevArea.x !== nextArea.x || prevArea.width !== nextArea.width || prevArea.height !== nextArea.height)) {
+      // 箱全体へ寄る動きの途中で見える領域が変わった (検索で選んだ箱の右パネルが開いた、など): 新しい領域で同じ箱へ寄り直す。
+      // 下の「選んだ箱を中央へ寄せる」に任せると、動きの途中の倍率のまま止まってしまう
+      const v = target([focusing.current.id], MAX_ZOOM);
+      if (v) void rf.setViewport(v, { duration: 200 });
+      focusing.current.until = performance.now() + 400;
     }
     else if (selectedNow.current && prevArea && (prevArea.x !== nextArea.x || prevArea.width !== nextArea.width || prevArea.height !== nextArea.height) && sizedNodes([selectedNow.current]).length > 0) {
       // 箱を選んでパネルが開き、見える領域が変わった: 選んだ箱が隠れたりはみ出したりしていれば、見える領域の中央へ動きをつけて寄せる
@@ -325,5 +374,5 @@ export function useFitViewport(geometry: string, panelLayoutKey: string, draggin
         void rf.setViewport(fit);
     }
   }, [rf]);
-  return { minZoom, fit, readFromTop, onMoveStart, onMoveEnd, centerOn };
+  return { minZoom, fit, readFromTop, onMoveStart, onMoveEnd, focusOn };
 }

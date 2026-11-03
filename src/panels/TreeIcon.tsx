@@ -25,6 +25,8 @@ export function TreeIcon({ name }: { name: string }) {
     ops: "M12 3v3 M12 18v3 M3 12h3 M18 12h3 M5.5 5.5l2 2 M16.5 16.5l2 2 M5.5 18.5l2-2 M16.5 7.5l2-2 M17 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0",
     filter: "M3 4h18l-7 8v7l-4 2v-9z",
     close: "M6 6l12 12 M18 6 6 18",
+    // 照準 (右パネルの注目ボタン: 図でこの箱に寄る)
+    focus: "M12 2v4 M12 18v4 M2 12h4 M18 12h4 M18 12a6 6 0 1 1-12 0 6 6 0 0 1 12 0 M12 12h.01",
   };
   return (
     <svg

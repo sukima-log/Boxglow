@@ -97,15 +97,26 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
   const hits = query.trim() ? searchBlocks(project, query, 12) : [];
   const jump = (id: string) => {
     select({ blockId: id });
-    focusBlock(id);
+    // 題名が読めないほど縮小しているときは、選んだ箱全体が収まる位置まで寄る (全体表示のままだと箱が点にしか見えず、どこか分からない)
+    focusBlock(id, { fit: "readable" });
     setQuery("");
     setSearchOpen(false);
   };
-  // "/" で検索欄へ
+  // "/" と Ctrl+F (Mac は Cmd+F) で検索欄へ
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
       if (document.querySelector("dialog[open]")) return;
       const target = ev.target as HTMLElement | null;
+      // Ctrl+F は、ほかの入力欄で文字を打っている途中でも検索欄へ移る (ブラウザのページ内検索は出さない。
+      // 図の文字はページ内検索で見つけてもその箱へ移動しないため、検索欄のほうが役に立つ)。
+      // 入っている文字は全部選んだ状態にして、すぐ打ち直せるようにする。
+      // VS Code の webview も Ctrl+F をこのページに渡す (この拡張は VS Code の検索窓を使っていない)
+      if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && !ev.shiftKey && ev.key.toLowerCase() === "f" && !ev.isComposing) {
+        ev.preventDefault();
+        setSearchOpen(true);
+        setTimeout(() => { searchRef.current?.focus(); searchRef.current?.select(); }, 0);
+        return;
+      }
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
       if (ev.key === "/" && !ev.isComposing && !target?.isContentEditable && target?.tagName !== "SELECT") {
         ev.preventDefault();
@@ -306,7 +317,7 @@ export function TopBar({ project, onToggleDrawer, onToggleTree, treeOpen, onHelp
           </button>
         )}
         <div className="relative topbar-search">
-          <input aria-label={t("ブロックを検索")} ref={searchRef} className="input search-box" placeholder={t("Search  ID / 題名")} value={query}
+          <input aria-label={t("ブロックを検索")} ref={searchRef} className="input search-box" placeholder={t("Search  ID / 題名")} title={t("ID か題名で箱を探す (Ctrl+F または /)")} value={query}
             onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); }}
             onFocus={() => setSearchOpen(true)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing && hits[0]) jump(hits[0].id); if (e.key === "Escape") { setSearchOpen(false); setQuery(""); (e.target as HTMLInputElement).blur(); } }}
