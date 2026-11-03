@@ -26,8 +26,8 @@ const geometry=p=>p.evaluate(()=>window.boxglow.rf.getNodes().map(n=>[n.id,n.pos
     const before=await core(p,id);
     await p.evaluate(id=>window.boxglow.store.getState().select({edgeId:id}),id);await settle(p);
     const after=await core(p,id);
-    // 破線の長さは縮小したときの線の太さの倍率 (--edge-k) を掛けた長さ
-    const k=await p.evaluate(()=>Number(document.querySelector('.react-flow').style.getPropertyValue('--edge-k')||1));
+    // 破線の長さは縮小したときの線の太さの倍率 (--edge-k。FlowCanvas の EdgeScale が線の入れ物 .react-flow__edges に入れる) を掛けた長さ
+    const k=await p.evaluate(()=>Number(document.querySelector('.react-flow__edges').style.getPropertyValue('--edge-k')||1));
     const dashIs=(s,a,b)=>{const v=String(s).split(',').map(x=>parseFloat(x));return v.length===2&&Math.abs(v[0]-a*k)<0.06&&Math.abs(v[1]-b*k)<0.06;};
     const accent=await p.evaluate(()=>{const h=getComputedStyle(document.documentElement).getPropertyValue('--accent').trim().slice(1);return 'rgb('+[0,2,4].map(i=>parseInt(h.slice(i,i+2),16)).join(', ')+')';});
     check(`${theme} ${ready?'確定':'未確定'}: 選択経路はオレンジの動く破線`,after.stroke===accent&&after.arrow===accent&&after.junctionsMatch&&dashIs(after.dash,14,10)&&after.animation==='edge-flow');
@@ -57,7 +57,8 @@ const geometry=p=>p.evaluate(()=>window.boxglow.rf.getNodes().map(n=>[n.id,n.pos
    await p.evaluate(()=>window.boxglow.rf.zoomTo(.5));await settle(p);
    check(`${theme}: 俯瞰でもノードの寸法と位置は同じ`,JSON.stringify(normal)===JSON.stringify(await geometry(p)));
    check(`${theme}: 俯瞰でも入出力名と接続点を残す`,await p.evaluate(()=>{
-     const b=document.querySelector('.bg-block.is-overview:not(.expanded)');
+     // 俯瞰の印は図の根 (.react-flow の data-overview) に付く
+     const b=document.querySelector('.react-flow[data-overview] .bg-block:not(.expanded)');
      return getComputedStyle(b.querySelector('.bg-block__ports')).visibility==='visible'&&getComputedStyle(b.querySelector('.react-flow__handle')).visibility==='visible';
    }));
    await p.screenshot({path:path.join(out,`design-overview-${theme}.png`)});
@@ -66,7 +67,7 @@ const geometry=p=>p.evaluate(()=>window.boxglow.rf.getNodes().map(n=>[n.id,n.pos
    check(`${theme}: 俯瞰でも選ぶと入出力とIDを読める`,await p.locator('.bg-block.selected').evaluate(b=>getComputedStyle(b.querySelector('.bg-block__ports')).visibility==='visible'&&getComputedStyle(b.querySelector('.bg-block__key')).display!=='none'));
    await p.evaluate(()=>window.boxglow.store.getState().select({}));
    await p.locator('.mode-toggle').click();await settle(p);
-   check(`${theme}: 編集時は俯瞰倍率でも入出力を表示`,await p.locator('.bg-block.is-overview').count()===0);
+   check(`${theme}: 編集時は俯瞰倍率でも入出力を表示`,await p.locator('.react-flow[data-overview]').count()===0);
    check(`${theme}: 表示・選択・モード切替は計画データを変えない`,original===await p.evaluate(()=>JSON.stringify(window.boxglow.store.getState().project)));
    await p.locator('.mode-toggle').click();
    // activity が未設定の判断待ちも見落とさない。変更は検査用サンプル内のみ。

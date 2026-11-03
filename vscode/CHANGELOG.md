@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Zooming a large tab is lighter: each zoom step below 100% takes about 0.08 seconds instead of 0.25, and crossing the overview zoom about 0.2 seconds instead of 0.5. Nothing on the screen changes.
 - Ctrl+F jumps to the search box. Picking a result while zoomed far out zooms to the whole box, and a new target button in the side panel zooms to the selected box on demand; a ring blinks around the box.
 
 ## 0.5.7

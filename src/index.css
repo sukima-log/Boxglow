@@ -700,7 +700,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 /* ---------- React Flow の色 ---------- */
 
 .react-flow { background: var(--bg-paper); }
-/* 確定 = 緑の太い実線、未確定 = 琥珀の細い破線。線幅は画面上の太さで、縮小するほど太くする (--edge-k: 100% 以上で 1、最大 3 倍。FlowCanvas の EdgeScale が入れる)。
+/* 確定 = 緑の太い実線、未確定 = 琥珀の細い破線。線幅は画面上の太さで、縮小するほど太くする (--edge-k: 100% 以上で 1、最大 3 倍。FlowCanvas の EdgeScale が線の入れ物 .react-flow__edges に入れる。線の入れ物の外では使えない)。
    遠くから見ると線がほぼ見えなかった (利用者の指摘 2026-10-30)。破線の長さと隙間も同じ割合で伸ばし、点々に潰れないようにする */
 .react-flow__edge { --xy-edge-stroke-selected: var(--wire); }
 .react-flow__edge.edge-ready { --xy-edge-stroke-selected: var(--wire-ready); }
@@ -1176,13 +1176,15 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .bg-block__progress { height: 3px; bottom: 6px; box-shadow: none; background: color-mix(in srgb, currentColor 12%, transparent); }
 .bg-block__progress > span { background: var(--primary); }
 
-.bg-block.is-overview:not(.selected) .bg-block__progress,
-.bg-block.is-overview:not(.selected) .bg-block__actor-name,
-.bg-block.is-overview:not(.selected) .meta-chip.issue,
-.bg-block.is-overview:not(.selected) .meta-chip.muted { display: none; }
+/* 俯瞰 (倍率 0.65 未満の閲覧中。FlowCanvas の OverviewMark が図の根に data-overview を付ける): 選んでいない箱の細かな情報を隠す。
+   :where() で詳細度を以前の .bg-block.is-overview:not(.selected) と同じにそろえ、ほかの規則との優先関係を変えない */
+:where(.react-flow)[data-overview] .bg-block:not(.selected) .bg-block__progress,
+:where(.react-flow)[data-overview] .bg-block:not(.selected) .bg-block__actor-name,
+:where(.react-flow)[data-overview] .bg-block:not(.selected) .meta-chip.issue,
+:where(.react-flow)[data-overview] .bg-block:not(.selected) .meta-chip.muted { display: none; }
 
-.bg-block.is-overview:not(.selected) .bg-block__meta > .meta-chip { font-size: 13px; }
-.bg-block.is-overview:not(.selected) .bg-block__meta > .status-icon { width: 16px; height: 16px; }
+:where(.react-flow)[data-overview] .bg-block:not(.selected) .bg-block__meta > .meta-chip { font-size: 13px; }
+:where(.react-flow)[data-overview] .bg-block:not(.selected) .bg-block__meta > .status-icon { width: 16px; height: 16px; }
 .summary-chip .summary-decision { padding: 4px 8px; background: var(--attention-bg); color: var(--attention-text); border-radius: 6px; }
 .wire-state { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .wire-state::before { content: ""; width: 28px; border-top: 2px dashed var(--wire); }
@@ -1191,7 +1193,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 @media (prefers-reduced-motion: reduce) { .bg-block.just-glowed { animation: none; } }
 /* 検索・右パネルの注目ボタンで寄った箱: 枠のまわりに太い輪を出す。寄る動き (0.45 秒) の間は出したままにして
    (どの箱へ寄っているかを目で追える)、着いたあと 2 回点滅させて消す。
-   輪の太さは縮小に合わせて太くする (--edge-k: 線の太さと同じ倍率。大きい箱を縮小して収めたときも見える)。
+   輪の太さは縮小に合わせて太くする (--edge-k: 線の太さと同じ倍率。BlockNode の FocusRing が輪に入れる。大きい箱を縮小して収めたときも見える)。
    点滅は visibility の切り替えだけにする: 影を広げる動きにすると、箱が 1000 ある図では毎フレーム図全体を描き直し、
    落ち着くまでが約 0.85 秒延びた (2026-11-03 計測)。切り替えだけなら描き直しは 4 回で済む */
 .bg-block__ping {
@@ -1677,7 +1679,7 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
   font-weight: 600;
   letter-spacing: 0;
 }
-.bg-block.is-overview:not(.selected) .bg-block__head > .bg-block__cat {
+:where(.react-flow)[data-overview] .bg-block:not(.selected) .bg-block__head > .bg-block__cat {
   display: inline-flex;
 }
 /* タイトル直下へ移したカテゴリ欄で、狭い画面の判断質問を押し出さないよう高さを抑える。 */

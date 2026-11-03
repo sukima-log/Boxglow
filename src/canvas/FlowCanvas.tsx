@@ -7,7 +7,7 @@ import { edgeScale } from "./edgeScale";
 import { readingColumns } from "../model/readingLayout";
 import { sharedWires } from "./sharedWires";
 import { Background, BackgroundVariant, PanOnScrollMode, MiniMap, ReactFlow, useNodesState, useReactFlow, useStore, type ReactFlowState, type Connection, type Edge as RFEdge, type NodeChange, type OnConnectEnd, type OnNodeDrag } from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { policyReceivers, canConnectAcross, connectAcross, connectToBlock, isHiddenByCollapse, moveBlock, moveBlockToParent, moveInputGroup, moveTerminal, resolveOverlap, withViewIndex } from "../model/graph";
 import { blockSize, isExpanded } from "../model/size";
 import { ROOT_ID } from "../model/types";
@@ -36,11 +36,44 @@ interface Props {
   matcher: ((blockId: string) => boolean) | null;
 }
 
-/** 図の要素に線の太さの倍率 (CSS の --edge-k) を入れる部品。描画は無し (倍率が変わったときだけ動く小さな部品にして、図全体を描き直さない) */
+/**
+ * 線の入れ物 (.react-flow__edges) に線の太さの倍率 (CSS の --edge-k) を入れる部品。描画は無し (倍率が変わったときだけ動く小さな部品にして、図全体を描き直さない)
+ * 図の根に入れると、値が変わるたびに図の全要素 (箱が約 1000 のタブで約 3 万) のスタイルを計算し直し、1 回 0.15 秒ほどかかっていた (2026-11-03 計測)。
+ * この変数を使うのは線だけ (index.css) なので、線の入れ物に入れて計算し直す範囲を線に絞る。
+ * 入れ物は React Flow が図と一緒に作り、図がある間は作り直さない。見つからないときは今までどおり図の根に入れる。
+ * (寄った箱の輪も同じ倍率を使うが、線の入れ物の外にあるので BlockNode の FocusRing が自分で倍率を見る)
+ */
 function EdgeScale() {
   const k = useStore((s: ReactFlowState) => edgeScale(s.transform[2]));
   const dom = useStore((s: ReactFlowState) => s.domNode);
-  useEffect(() => { dom?.style.setProperty("--edge-k", String(k)); }, [dom, k]);
+  useEffect(() => {
+    const edges = dom?.querySelector<HTMLElement>(".react-flow__edges") ?? dom;
+    edges?.style.setProperty("--edge-k", String(k));
+  }, [dom, k]);
+  return null;
+}
+
+/** 俯瞰の倍率: これより縮小した閲覧中は、箱の細かな情報 (進捗の帯・担当者名・課題の札など) を隠し、残す札の文字を大きめにする (index.css の [data-overview]) */
+const OVERVIEW_ZOOM = 0.65;
+/**
+ * 図の根 (.react-flow) に俯瞰の印 data-overview を付け外しする部品。描画は無し。
+ * Input : editing = Edit モードで編集できるか (編集中は俯瞰の倍率でも入出力を全部見せるので印を付けない)
+ * Output: なし (DOM の属性を変える)
+ * 以前は箱ごとに倍率を見張っていて、0.65 をまたぐたびに全部の箱 (大きいタブで約 1000) を描き直していた (約 0.13 秒)。
+ * 根の印 1 つにすれば、箱は描き直さずに CSS だけで切り替わる。
+ * React が扱わない data 属性にするのは、React Flow が根の className を描き直しても消えないようにするため。
+ * 描く前 (layout effect) に付け外しして、切り替わりの 1 フレームだけ古い見た目が出ないようにする
+ */
+function OverviewMark({ editing }: { editing: boolean }) {
+  const far = useStore((s: ReactFlowState) => s.transform[2] < OVERVIEW_ZOOM);
+  const dom = useStore((s: ReactFlowState) => s.domNode);
+  useLayoutEffect(() => {
+    if (!dom) return;
+    if (far && !editing) dom.dataset.overview = "";
+    else delete dom.dataset.overview;
+  }, [dom, far, editing]);
+  // 図が消えるとき (別の画面へ移るとき) は印を外す
+  useLayoutEffect(() => () => { if (dom) delete dom.dataset.overview; }, [dom]);
   return null;
 }
 
@@ -515,6 +548,7 @@ export function FlowCanvas({ project, matcher, panelLayoutKey }: Props) {
         </div>
       )}
       <EdgeScale />
+      <OverviewMark editing={!readonly && editMode} />
       <CanvasTools readFromTop={readFromTop} fit={fit} snap={snap} onSnap={() => setSnap((v) => !v)} showMap={showMap} onMap={() => setShowMap((v) => !v)} />
       {showMap && <MiniMap
         position="bottom-right"

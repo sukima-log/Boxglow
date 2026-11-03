@@ -17,6 +17,7 @@ import { categoryOf } from "../model/categories";
 import { expandedPortRows, taskCardLayout, taskCardPorts } from "../model/size";
 import { readingColumns } from "../model/readingLayout";
 import { CategoryIcon } from "./CategoryIcon";
+import { edgeScale } from "./edgeScale";
 import { STATUS_LABEL } from "../model/status";
 import { t, useLang } from "../i18n";
 import { ROOT_ID } from "../model/types";
@@ -55,6 +56,17 @@ export function StatusIcon({ status }: { status: BlockStatus }) {
   );
 }
 
+/**
+ * 寄った箱のまわりの輪 (見た目と点滅は index.css の .bg-block__ping)
+ * Input : なし / Output: 輪の span
+ * 輪の太さは線と同じ倍率 (--edge-k: 縮小するほど太く) を使う。線の倍率は線の入れ物にだけ入れている (FlowCanvas の EdgeScale) ので、
+ * 輪が出ている間 (約 2 秒) だけ、この部品が自分で倍率を見張って入れる (図全体の箱は倍率を見張らない)
+ */
+function FocusRing() {
+  const k = useStore((s) => edgeScale(s.transform[2]));
+  return <span className="bg-block__ping" aria-hidden="true" style={{ "--edge-k": k } as React.CSSProperties} />;
+}
+
 export const BlockNode = memo(function BlockNode({ data, selected, width, height }: NodeProps<BlockRFNode>) {
   useLang(); // 言語が変わったら文言を描き直す
   const { blockId } = data;
@@ -62,7 +74,6 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   const headerH = data.headerH ?? 44;
   const select = useProjectStore((s) => s.select);
   const viewScope = useProjectStore((s) => s.viewScope);
-  const overviewZoom = useStore((s) => s.transform[2] < 0.65);
   const canEdit = useProjectStore((s) => !s.readonly && s.editMode);
   // 右の詳細パネルを開いているか。選んだ箱の上に「詳細」ボタンを出すのは、パネルが閉じているときだけ
   const detailsOpen = useProjectStore((s) => s.detailsOpen);
@@ -206,7 +217,6 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
   , `depth-${view.depth}`
   , view.expanded ? "expanded" : ""
   , selected ? "selected" : ""
-  , overviewZoom && !canEdit ? "is-overview" : ""
   , (view.expanded ? headerH > 60 : headerH > 88 + card.metaH) ? "has-wrapped-title" : ""
   , data.dimmed ? "dimmed" : ""
   , glow ? "just-glowed" : ""
@@ -435,7 +445,7 @@ export const BlockNode = memo(function BlockNode({ data, selected, width, height
         }));
       })}
       {/* 寄ったあとの輪 (key を頼みごとに変えて、続けて押してもアニメーションを最初からやり直す) */}
-      {ping > 0 && <span key={ping} className="bg-block__ping" aria-hidden="true" />}
+      {ping > 0 && <FocusRing key={ping} />}
     </div>
   );
 });
