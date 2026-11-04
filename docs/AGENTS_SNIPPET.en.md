@@ -109,7 +109,7 @@ Do not write descriptions for inputs (the description of the connected output is
 
 ### What runs automatically (hooks)
 
-`setup-agent` registers `boxglow hook` in the Claude Code / Codex hooks. After a session starts, resumes or is compacted, the plan's resume summary is injected into the context automatically. When you are about to finish a reply while a box started in this session has no handoff (done or checkpoint), you are told to record first and continue (a log entry is a progress note, not a handoff). Editing boxglow.json directly with Edit / Write / apply_patch is blocked (update it through the CLI or MCP). These are a safety net, not a substitute for the steps above: keep recording as instructed.
+`setup-agent` registers `boxglow hook` in the Claude Code / Codex hooks. After a session starts, resumes or is compacted, the plan's resume summary is injected into the context automatically. After a compaction, only the boxes in progress in this session are injected, with their work, handoff notes and the number of compactions (read the rest with `resume`). A `done` in a session that has been compacted suggests starting the next box in a new session, or handing `prompt <box>` to a subagent; a box that has gone through 3 compactions is told to split the remaining steps. When you are about to finish a reply while a box started in this session has no handoff (done or checkpoint), you are told to record first and continue (a log entry is a progress note, not a handoff). Editing boxglow.json directly with Edit / Write / apply_patch is blocked (update it through the CLI or MCP). These are a safety net, not a substitute for the steps above: keep recording as instructed.
 
 ### Context token and handoff
 

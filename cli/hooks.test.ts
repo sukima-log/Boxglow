@@ -1,9 +1,19 @@
 /**
  * エージェントの hooks (boxglow hook session-start / stop / pre-tool) の試験
  */
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { addBlock, createProject, defaultTaskParent, setActivity } from "../src/model/graph";
 import { editsPlanFile, parseHookInput, runHook, unrecordedWork } from "./hooks";
+import { compactionsOf } from "./compactions";
+
+// 圧縮の回数は、試験ごとに作業用の場所へ数える (利用者の設定フォルダを触らない)
+const tmp = mkdtempSync(join(tmpdir(), "boxglow-hooks-"));
+afterAll(() => rmSync(tmp, { recursive: true, force: true }));
+let serial = 0;
+const store = () => join(tmp, `compactions-${serial++}.json`);
 
 function plan() {
   let p = createProject("試験");
@@ -28,6 +38,48 @@ describe("session-start", () => {
     expect(r.stdout).toContain("Boxglow");
     expect(r.stdout).toContain("再開");
     expect(runHook("session-start", {}, null, "claude-code").stdout).toBe("");
+  });
+});
+
+describe("session-start: 圧縮の後", () => {
+  /** セッション s1 で「実装する」を作業中にした計画 (引き継ぎメモを付けるかどうか) */
+  function working(handoff?: string) {
+    const { p, id } = plan();
+    const started0 = setActivity(p, id, "codex", "working", "API を直す");
+    const started = { ...started0, blocks: { ...started0.blocks, [id]: { ...started0.blocks[id], activity: { ...started0.blocks[id].activity!, session: "s1" } } } };
+    return { id, p: handoff ? { ...started, handoffs: { [id]: { note: handoff, actor: "codex", at: new Date().toISOString() } } } : started };
+  }
+  it("このセッションで作業中の箱があれば、その箱の作業・引き継ぎ・圧縮の回数だけを入れ、全体の概要は入れない", () => {
+    const { p, id } = working("ログイン画面まで確認済み; 次は保存");
+    const path = store();
+    const r = runHook("session-start", { source: "compact", session_id: "s1" }, p, "codex", { compactions: path });
+    expect(r.stdout).toContain("圧縮の後の再開");
+    expect(r.stdout).toContain("このセッションの文脈の圧縮: 1 回目");
+    expect(r.stdout).toContain("実装する: API を直す");
+    expect(r.stdout).toContain("圧縮をまたいだ回数: 1");
+    expect(r.stdout).toContain("ログイン画面まで確認済み; 次は保存");
+    expect(r.stdout).not.toContain("## 次の候補");
+    expect(compactionsOf("s1", path)).toEqual({ session: 1, boxes: { [id]: 1 } });
+  });
+  it("引き継ぎメモが無ければ残し方を案内し、3 回またいだ箱には分けるよう案内する", () => {
+    const { p } = working();
+    const path = store();
+    const outs = [1, 2, 3].map(() => runHook("session-start", { source: "compact", session_id: "s1" }, p, "codex", { compactions: path }).stdout);
+    expect(outs[0]).toContain("引き継ぎメモがまだありません");
+    expect(outs[1]).not.toContain("1 つのセッションに収まっていません");
+    expect(outs[2]).toContain("圧縮を 3 回またいでいて、1 つのセッションに収まっていません");
+  });
+  it("作業中の箱が無い・別セッションの作業・開始や再開のときは、今までどおり全体の概要を入れる (圧縮のときだけ数える)", () => {
+    const { p } = working();
+    const path = store();
+    const other = runHook("session-start", { source: "compact", session_id: "s2" }, p, "codex", { compactions: path });
+    expect(other.stdout).toContain("## 次の候補");
+    expect(compactionsOf("s2", path).session).toBe(1);
+    const startup = runHook("session-start", { source: "startup", session_id: "s1" }, p, "codex", { compactions: path });
+    expect(startup.stdout).toContain("## 次の候補");
+    expect(compactionsOf("s1", path).session).toBe(0);
+    // 識別子の無い入力は数えない
+    expect(runHook("session-start", { source: "compact" }, p, "codex", { compactions: path }).stdout).toContain("## 次の候補");
   });
 });
 

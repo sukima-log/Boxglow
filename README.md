@@ -95,7 +95,7 @@ Details: [CHANGELOG.md](CHANGELOG.md). Update the CLI, `serve` and the VS Code e
 
 ## What's new in 0.6.2
 
-- **`setup-agent` sets up everything for Claude Code and Codex**: hooks (the plan's resume summary is injected when a session starts, resumes or is compacted; an agent about to finish with an unrecorded box is told to record first; direct edits of `boxglow.json` are blocked), MCP registration, a review subagent, and the context guard. `setup-agent --check` shows what is installed, when each hook last fired, and the one-time steps left to you (Codex: trust the project and approve the hooks in the terminal CLI).
+- **`setup-agent` sets up everything for Claude Code and Codex**: hooks (the plan's resume summary is injected when a session starts or resumes; after a compaction only the boxes in progress in that session, with their handoff notes and how many compactions they went through; an agent about to finish with an unrecorded box is told to record first; direct edits of `boxglow.json` are blocked), MCP registration, a review subagent, and the context guard. `setup-agent --check` shows what is installed, when each hook last fired, and the one-time steps left to you (Codex: trust the project and approve the hooks in the terminal CLI).
 - **Verification at done**: `boxglow done --checked "<checks run and results>" [--not-checked …] [--limits …]` stays on the box and shows in `show`, `context` and the Status tab.
 - **Sync you can stop**: "Stop syncing / Resume syncing" and "Disconnect this plan on this device"; a **Constraints** field under the outputs; a safer merge into `~/.codex/config.toml`; a usability pass (fewer steps on Home, clearer buttons and labels, a scrolling account menu).
 

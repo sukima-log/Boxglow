@@ -54,7 +54,7 @@ description: Boxglow (boxglow.json) で計画と進捗を人間と共有する�
 
 ## 自動で動く仕組み (hooks)
 
-`setup-agent` が Claude Code / Codex の hooks に `boxglow hook` を登録している。セッションの開始・再開・圧縮の後に計画の再開の概要 (resume) が文脈に入る。応答を終えるとき、このセッションで start した箱に引き継ぎ (done か checkpoint) が無ければ「記録してから終える」よう続行が指示される (log は進捗のメモで、引き継ぎの代わりにならない)。boxglow.json を直接書き換える操作 (Edit / Write / apply_patch) は止められる。これは忘れたときの保険で、上の手順どおりに自分で記録する。
+`setup-agent` が Claude Code / Codex の hooks に `boxglow hook` を登録している。セッションの開始・再開・圧縮の後に計画の再開の概要 (resume) が文脈に入る。圧縮の後は、このセッションで作業中の箱の作業・引き継ぎメモ・圧縮の回数だけが入る (全体は `resume` で読む)。圧縮を経たセッションで `done` すると、次の箱は新しいセッションか、`prompt <箱>` を渡したサブエージェントで始めるよう案内が出る。圧縮を 3 回またいだ箱には、残りを split で分けるよう案内が出る。応答を終えるとき、このセッションで start した箱に引き継ぎ (done か checkpoint) が無ければ「記録してから終える」よう続行が指示される (log は進捗のメモで、引き継ぎの代わりにならない)。boxglow.json を直接書き換える操作 (Edit / Write / apply_patch) は止められる。これは忘れたときの保険で、上の手順どおりに自分で記録する。
 分解や着手準備のレビューは、サブエージェント `boxglow-review` に任せられる (review-split / review-box の材料を読んで評価と根拠を返す。split-ok / box-ok の記録は、返ってきた根拠で親である自分が行う)。
 
 ## 確認トークンと引き継ぎ

@@ -66,6 +66,7 @@ import type { Artifact } from "../src/model/types";
 import { blockToPrompt } from "../src/model/export";
 import { blockReport, briefReport, logReport, statusReport, treeReport } from "../src/model/report";
 import { commandHelp } from "./help";
+import { BIG_BOX_COMPACTIONS, compactionsOf } from "./compactions";
 import { assignmentRows, type AssigneeTarget } from "../src/model/assignments";
 import { addBranch, addMerge, canConvertToBranch, convertToBranch, setInputAnyOf, addBranchOption, removeBranchOption } from "../src/model/branch";
 import { STATUS_LABEL } from "../src/model/status";
@@ -1677,6 +1678,8 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       const verification = checked || notChecked || limits ? { checked: checked ?? "", ...(notChecked ? { notChecked } : {}), ...(limits ? { limits } : {}), at: new Date().toISOString(), by: actor } : undefined;
       // 作成中の資料は完了で確定になる (出力に知らせる)
       const drafts = portsOf(p, b.id, "out").reduce((n, o) => n + o.artifacts.filter((a) => a.draft).length, 0);
+      // このセッションの文脈の圧縮の回数 (hook session-start が数える)。AI のときだけ、完了の後に区切りの案内に使う
+      const compacted = isHumanActor(actor) ? null : compactionsOf(sessionIdFromEnv());
       const r = finishBlock(p, b.id, actor, { artifacts, outputName: str(options.output), note: str(options.note), verification });
       if (r.error) throw new Error(r.error);
       // 今ここだったら消す (完了した)
@@ -1689,6 +1692,10 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       if (!verification && !isHumanActor(actor)) out(t("検査結果が付いていません。--checked \"<実行した検査と結果>\" (必要なら --not-checked / --limits) で残すと、人が後から確かめられます"));
       const reminder = descriptionReminder(r.project.blocks[b.id]);
       if (reminder) out(reminder);
+      // 区切りの案内: 圧縮を経たセッションのまま次の箱へ進むと、前の箱の文脈を運び続ける (1 回の呼び出しが重く、細部は要約に置き換わっている)。
+      // 次の箱は新しい文脈で始めるよう案内する。圧縮を何度もまたいだ箱には、同じくらいの大きさの箱を先に分けるよう案内する
+      if (compacted && compacted.session > 0) out(t("このセッションは文脈の圧縮を {count} 回経ています。次の箱は新しいセッションで boxglow resume から始めるか、boxglow prompt <箱> の出力をサブエージェントに渡して任せると、この会話の文脈を持ち越しません", { count: compacted.session }));
+      if (compacted && (compacted.boxes[b.id] ?? 0) >= BIG_BOX_COMPACTIONS) out(t("この箱は圧縮を {count} 回またぎました。同じくらいの大きさの箱は、着手の前に工程ごとに分けると (split)、1 つのセッションに収まります", { count: compacted.boxes[b.id] }));
       return;
     }
     case "artifact": {

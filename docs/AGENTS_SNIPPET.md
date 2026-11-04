@@ -109,7 +109,7 @@ boxglow.json はリポジトリ直下に置く (`npx boxglow init --name "<プ�
 
 ### 自動で動く仕組み (hooks)
 
-`setup-agent` は Claude Code / Codex の hooks に `boxglow hook` を登録する。セッションの開始・再開・圧縮の後には計画の再開の概要 (resume) が自動で文脈に入る。応答を終えるとき、このセッションで start した箱に引き継ぎ (done か checkpoint) が無ければ「記録してから終える」よう続行が指示される (log は進捗のメモで、引き継ぎの代わりにならない)。boxglow.json を Edit / Write / apply_patch で直接書き換える操作は止められる (CLI か MCP で更新する)。これらは指示の代わりではなく、忘れたときの保険なので、上の手順どおりに自分で記録する。
+`setup-agent` は Claude Code / Codex の hooks に `boxglow hook` を登録する。セッションの開始・再開・圧縮の後には計画の再開の概要 (resume) が自動で文脈に入る。圧縮の後は、このセッションで作業中の箱の作業・引き継ぎメモ・圧縮の回数だけが入る (全体は `resume` で読む)。圧縮を経たセッションで `done` すると、次の箱は新しいセッションか、`prompt <箱>` を渡したサブエージェントで始めるよう案内が出る。圧縮を 3 回またいだ箱には、残りを split で分けるよう案内が出る。応答を終えるとき、このセッションで start した箱に引き継ぎ (done か checkpoint) が無ければ「記録してから終える」よう続行が指示される (log は進捗のメモで、引き継ぎの代わりにならない)。boxglow.json を Edit / Write / apply_patch で直接書き換える操作は止められる (CLI か MCP で更新する)。これらは指示の代わりではなく、忘れたときの保険なので、上の手順どおりに自分で記録する。
 
 ### 確認トークンと引き継ぎ
 

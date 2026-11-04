@@ -425,4 +425,15 @@ export const cli: Record<string, string> = {
 , "(ほか {count} 箱は省きました。範囲を分けて指定してください)": "({count} more boxes left out. Split the range)"
 , "--depth は 1 以上の整数で指定してください": "--depth must be a whole number of 1 or more"
 , "範囲 {range} に当たる箱がありません": "No boxes in the range {range}"
+  // 文脈の圧縮の後の再開 (hook session-start の source = compact) と、done のときの区切りの案内
+, "圧縮の後の再開": "resuming after compaction"
+, "このセッションの文脈の圧縮: {count} 回目": "Context compactions in this session: {count}"
+, "このセッションで作業中の箱": "Boxes in progress in this session"
+, "圧縮をまたいだ回数: {count}": "Compactions while in progress: {count}"
+, "引き継ぎメモがまだありません。区切りで boxglow checkpoint <箱> --note \"分かったこと; 次にすること; 未解決のこと\" を残すと、次の圧縮や新しいセッションで調べ直さずに済みます": "No handoff note yet. At a good stopping point, leave one with boxglow checkpoint <box> --note \"what you found; what comes next; what is unresolved\" so the next compaction or session does not have to look it up again"
+, "届いた回答: {question} → {answer}": "Answer received: {question} → {answer}"
+, "この箱は圧縮を {count} 回またいでいて、1 つのセッションに収まっていません。引き継ぎメモを更新し、残りの工程を split で別の箱に分けると、次は短い文脈で始められます": "This box has gone through {count} compactions and does not fit in one session. Update its handoff note and split the remaining steps into separate boxes so the next one starts with a short context"
+, "判断待ち・次の候補・ほかの箱の引き継ぎは boxglow resume、箱の詳細は boxglow context <箱> --brief で読む。": "Read pending decisions, next candidates and other boxes' handoffs with boxglow resume, and a box's details with boxglow context <box> --brief."
+, "このセッションは文脈の圧縮を {count} 回経ています。次の箱は新しいセッションで boxglow resume から始めるか、boxglow prompt <箱> の出力をサブエージェントに渡して任せると、この会話の文脈を持ち越しません": "This session has been through {count} context compactions. Start the next box in a new session from boxglow resume, or hand the output of boxglow prompt <box> to a subagent, so this conversation's context is not carried over"
+, "この箱は圧縮を {count} 回またぎました。同じくらいの大きさの箱は、着手の前に工程ごとに分けると (split)、1 つのセッションに収まります": "This box went through {count} compactions. Split boxes of a similar size into steps before starting them (split) so each fits in one session"
 };

@@ -1,22 +1,22 @@
 /**
  * AI エージェントのフック (Claude Code / Codex の hooks から呼ばれる `boxglow hook <event>`)
  *   利用者が仕組みを知らなくても、setup-agent が hooks の設定を入れ、エージェントが自動で正しい手順を踏むようにする:
- *   - session-start: セッションの開始・再開・圧縮の後に、計画の再開の概要 (resume) を文脈として注入する
+ *   - session-start: セッションの開始・再開・圧縮の後に、計画の再開の概要 (resume) を文脈として注入する。
+ *     圧縮の後 (source = "compact") は回数を数え (cli/compactions.ts)、このセッションで作業中の箱があれば、その箱の続きに要るものだけを入れる
  *   - stop: エージェントが応答を終えるとき、このセッションで作業中にしたボックスに引き継ぎ (checkpoint / done) が無ければ、記録してから終わるよう続行を指示する
  *   - pre-tool: boxglow.json を直接編集する操作 (Edit / Write / apply_patch) を止め、CLI か MCP を使うよう伝える
  *   どのフックも、失敗したときはエージェントを止めない (出力なし・終了コード 0)。
  *   出力の形は Claude Code と Codex の両方で通る形にそろえる (Stop: { decision: "block", reason }、PreToolUse: decision + hookSpecificOutput.permissionDecision)
  */
-import { resumeReport } from "../src/model/resume";
+import { compactionReport, resumeReport } from "../src/model/resume";
 import type { Project } from "../src/model/types";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { configDir } from "./sync/state-store";
-import { createHash } from "node:crypto";
-
-/** セッションの識別子の印 (SHA-256 の先頭 8 文字)。Input: 識別子。Output: 印 (無ければ "") */
-export const sessionMark = (id: string | undefined): string => id ? createHash("sha256").update(id).digest("hex").slice(0, 8) : "";
+import { BIG_BOX_COMPACTIONS, compactionPath, recordCompaction } from "./compactions";
 import { t } from "../src/i18n/core";
+// セッションの識別子の印は、圧縮の回数と同じものを使う (今までの読み込み先を変えないよう、ここからも出す)
+export { sessionMark } from "./compactions";
 
 export type HookEvent = "session-start" | "stop" | "pre-tool";
 
@@ -121,11 +121,21 @@ export function editsPlanFile(toolName: string | undefined, toolInput: Record<st
 }
 
 /**
+ * このセッションで作業中の箱 (作業 (activity) に記録したセッションの識別子が一致し、作業中のもの)
+ * Input : p = 計画, session = フックの入力のセッションの識別子
+ * Output: 箱の id の並び
+ */
+export function workingInSession(p: Project, session: string): string[] {
+  return Object.values(p.blocks).filter((b) => b.status !== "white" && b.activity?.state === "working" && b.activity.session === session).map((b) => b.id);
+}
+
+/**
  * フックの本体
- * Input : event = どのフックか, input = stdin の JSON, p = 計画 (読めなければ null), actor = 記録者
+ * Input : event = どのフックか, input = stdin の JSON, p = 計画 (読めなければ null), actor = 記録者,
+ *         opts.compactions = 圧縮の回数の置き場所 (試験用。既定は設定フォルダ)
  * Output: HookOutput
  */
-export function runHook(event: HookEvent, input: HookInput, p: Project | null, actor: string): HookOutput {
+export function runHook(event: HookEvent, input: HookInput, p: Project | null, actor: string, opts: { compactions?: string } = {}): HookOutput {
   switch (event) {
     case "session-start": {
       if (!p) return { stdout: "", exitCode: 0 };
@@ -135,6 +145,14 @@ export function runHook(event: HookEvent, input: HookInput, p: Project | null, a
       // (先頭にも改行を付ける: 他のフックが末尾改行なしで書いていても壊さない。R30c-01)
       if (envFile && input.session_id && /^[A-Za-z0-9._-]+$/.test(input.session_id)) { try { appendFileSync(envFile, `\nexport BOXGLOW_SESSION_ID=${input.session_id}\n`); } catch { /* 渡せなくても、識別子が無い作業は止めないだけ */ } }
       const head = t("Boxglow: このリポジトリの計画 (boxglow.json) の再開の概要。作業の前に `npx boxglow context <ボックス>` を読み、記録は CLI か MCP で行う (ファイルを直接編集しない)。");
+      // 圧縮の後: 回数を数え、このセッションで作業中の箱があれば、その箱の続きに要るもの (作業の内容・引き継ぎ・届いた回答・回数) だけを入れる。
+      // 全体の概要は大きい計画で 10KB を超え、Codex は差し込みを約 2,500 トークンで切るので、最後にある引き継ぎが切れてしまうため
+      const session = input.session_id ?? input.thread_id ?? input["thread-id"];
+      if (input.source === "compact" && session) {
+        const mine = workingInSession(p, session);
+        const counts = recordCompaction(session, mine, opts.compactions ?? compactionPath());
+        if (mine.length > 0) return { stdout: head + "\n\n" + compactionReport(p, mine, counts, BIG_BOX_COMPACTIONS) + "\n", exitCode: 0 };
+      }
       return { stdout: head + "\n\n" + resumeReport(p) + "\n", exitCode: 0 };
     }
     case "stop": {

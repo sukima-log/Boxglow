@@ -2,7 +2,7 @@
  * 再開時は現在の状態を先に示し、完了済みの引き継ぎは履歴として扱う。
  * 一覧を読むことは回答の確認にも、作業の開始にもならない。
  */
-import { summarize } from "./graph";
+import { answeredUnacked, summarize } from "./graph";
 import { candidateGroups, descriptionReminder, freshnessText, noteFreshness } from "./workflow";
 import { lint, lintCounts } from "./lint";
 import type { Project } from "./types";
@@ -62,4 +62,32 @@ export function resumeReport(project: Project, options: { includeCompleted?: boo
     ...(s.lint.errors || s.lint.later || s.lint.reviews ? [t("検査: 必ず直す {errors} 件 / 着手の前に {later} 件 / 見直し候補 {reviews} 件 (boxglow lint で確認)", s.lint)] : []),
     "", s.instructions,
   ].join("\n");
+}
+
+/**
+ * 文脈が圧縮された直後に差し込む、短い再開の情報 (hook session-start の source = "compact")
+ * 全体の再開の概要 (resumeReport) は大きい計画で 10KB を超え、Codex は hooks が文脈に入れる文章を 1 回あたり約 2,500 トークンで切る。
+ * 概要の最後にある引き継ぎが切れないよう、圧縮の後は「このセッションで作業中の箱」の続きに要るものだけにする (全体は resume で読む)
+ * Input : project = 計画, blockIds = このセッションで作業中の箱の id, counts = 圧縮の回数 (session = このセッション、boxes = 箱ごと),
+ *         bigAfter = 箱が大きすぎると案内する回数 (この回数以上の圧縮をまたいだ箱)
+ * Output: Markdown (箱ごとに: 作業の内容・圧縮をまたいだ回数・引き継ぎメモ・届いた回答。大きすぎる箱には分け方の案内)
+ */
+export function compactionReport(project: Project, blockIds: string[], counts: { session: number; boxes: Record<string, number> }, bigAfter: number): string {
+  const answers = answeredUnacked(project);
+  const lines = ["# " + project.name + " — " + t("圧縮の後の再開"), t("このセッションの文脈の圧縮: {count} 回目", { count: counts.session }), "## " + t("このセッションで作業中の箱")];
+  for (const id of blockIds) {
+    const b = project.blocks[id];
+    if (!b) continue;
+    const crossed = counts.boxes[id] ?? 0;
+    lines.push(`- ${b.key ?? ""} ${b.title}${b.activity?.note ? ": " + b.activity.note : ""}`);
+    lines.push("  " + t("圧縮をまたいだ回数: {count}", { count: crossed }));
+    const handoff = project.handoffs?.[id];
+    // 引き継ぎメモは全文 (圧縮で失った細部を補うのに一番要る)。無ければ残し方を案内する
+    if (handoff?.note.trim()) lines.push("  " + t("引き継ぎ") + " (" + freshnessText(b, handoff.at) + "):", handoff.note);
+    else lines.push("  " + t("引き継ぎメモがまだありません。区切りで boxglow checkpoint <箱> --note \"分かったこと; 次にすること; 未解決のこと\" を残すと、次の圧縮や新しいセッションで調べ直さずに済みます"));
+    for (const a of answers.filter((x) => x.block.id === id)) lines.push("  " + t("届いた回答: {question} → {answer}", { question: a.decision.question, answer: a.decision.answer ?? "" }));
+    if (crossed >= bigAfter) lines.push("  " + t("この箱は圧縮を {count} 回またいでいて、1 つのセッションに収まっていません。引き継ぎメモを更新し、残りの工程を split で別の箱に分けると、次は短い文脈で始められます", { count: crossed }));
+  }
+  lines.push("", t("判断待ち・次の候補・ほかの箱の引き継ぎは boxglow resume、箱の詳細は boxglow context <箱> --brief で読む。"));
+  return lines.join("\n");
 }
