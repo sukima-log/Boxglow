@@ -67,23 +67,72 @@ export function shortTime(iso: string): string {
   return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** 階層を字下げした一覧にする (id 付き。AI が参照できるように) */
-function treeLines(p: Project, parentId: string, depth: number, lines: string[]): void {
+/**
+ * 箱 1 つを 1 行にする (status の階層・tree・show --brief で同じ形にする)
+ * Input : p = 計画, b = 箱, extra = 期日の後ろ (出力の前) に添える文字 (先頭に空白を含めて渡す。省略可)
+ * Output: "- [~] 40% B12 題名 [カテゴリ] (担当: …) 期日 … -> 出力名* <- 活動" (字下げなし)
+ */
+function blockLine(p: Project, b: Block, extra = ""): string {
+  const outs = portsOf(p, b.id, "out").map((o) => o.name + (o.artifacts.length > 0 ? "*" : "")).join(", ");
+  // 札・注記は呼ばれた時点の言語で出す (日本語のときの出力は変えない)
+  const act = b.activity ? `  <- ${actorLabel(b.activity.actor)} ${t(ACTIVITY_LABEL[b.activity.state])}${b.activity.note ? ": " + b.activity.note : ""}` : "";
+  const cat = categoryOf(b.category);
+  const tag = (cat ? ` [${t(cat.label)}]` : "") + (b.kind === "project" ? ` [${t("プロジェクト")}${b.repo ? ": " + b.repo : ""}]` : b.template ? ` [${t("テンプレート: {name}", { name: b.template.name })}]` : "") + (b.issue ? ` [${issueKeyOf(b.issue)}]` : "");
+  const pct = b.status === "white" ? "" : (() => { const v = effectiveProgress(p, b.id); return v > 0 ? ` ${v}%` : ""; })();
+  // 担当: いなければ (未担当)、いれば名前 (AI が status で担当を読み取れるように)
+  const names = b.assigneeIds.map((id) => p.members.find((m) => m.id === id)?.name).filter(Boolean);
+  const who = b.kind === "project" ? "" : names.length === 0 ? " " + t("(未担当)") : " " + t("(担当: {names})", { names: names.join(", ") });
+  const due = b.dueDate && b.status !== "white" ? ` ${t("期日 {date}", { date: b.dueDate })}${isOverdue(b) ? " " + t("(超過)") : ""}` : "";
+  return `- ${MARK[b.status]}${pct} ${b.key ?? ""} ${b.title}${tag}${who}${due}${extra} -> ${outs}${act}`;
+}
+
+/**
+ * 階層を字下げした一覧にする (id 付き。AI が参照できるように)
+ * Input : p = 計画, parentId = この箱の子から並べる, depth = 字下げの段, lines = 書き足す先, levels = 何段下まで並べるか (省略 = 全部)
+ * Output: なし (lines に 1 箱 1 行を足す。並びは画面の上から順)
+ */
+function treeLines(p: Project, parentId: string, depth: number, lines: string[], levels = Infinity): void {
   const kids = childrenOf(p, parentId).sort((a, b) => a.position.y - b.position.y || a.position.x - b.position.x);
   for (const b of kids) {
-    const outs = portsOf(p, b.id, "out").map((o) => o.name + (o.artifacts.length > 0 ? "*" : "")).join(", ");
-    // 札・注記は呼ばれた時点の言語で出す (日本語のときの出力は変えない)
-    const act = b.activity ? `  <- ${actorLabel(b.activity.actor)} ${t(ACTIVITY_LABEL[b.activity.state])}${b.activity.note ? ": " + b.activity.note : ""}` : "";
-    const cat = categoryOf(b.category);
-    const tag = (cat ? ` [${t(cat.label)}]` : "") + (b.kind === "project" ? ` [${t("プロジェクト")}${b.repo ? ": " + b.repo : ""}]` : b.template ? ` [${t("テンプレート: {name}", { name: b.template.name })}]` : "") + (b.issue ? ` [${issueKeyOf(b.issue)}]` : "");
-    const pct = b.status === "white" ? "" : (() => { const v = effectiveProgress(p, b.id); return v > 0 ? ` ${v}%` : ""; })();
-    // 担当: いなければ (未担当)、いれば名前 (AI が status で担当を読み取れるように)
-    const names = b.assigneeIds.map((id) => p.members.find((m) => m.id === id)?.name).filter(Boolean);
-    const who = b.kind === "project" ? "" : names.length === 0 ? " " + t("(未担当)") : " " + t("(担当: {names})", { names: names.join(", ") });
-    const due = b.dueDate && b.status !== "white" ? ` ${t("期日 {date}", { date: b.dueDate })}${isOverdue(b) ? " " + t("(超過)") : ""}` : "";
-    lines.push(`${"  ".repeat(depth)}- ${MARK[b.status]}${pct} ${b.key ?? ""} ${b.title}${tag}${who}${due} -> ${outs}${act}`);
-    treeLines(p, b.id, depth + 1, lines);
+    lines.push(`${"  ".repeat(depth)}${blockLine(p, b)}`);
+    if (levels > 1) treeLines(p, b.id, depth + 1, lines, levels - 1);
   }
+}
+
+/** 箱の下にある箱の数 (孫より下も含む) */
+function countBelow(p: Project, blockId: string): number {
+  return childrenOf(p, blockId).reduce((n, k) => n + 1 + countBelow(p, k.id), 0);
+}
+
+/**
+ * 箱の下の階層を、指定した深さまで 1 箱 1 行で出す (CLI の tree)
+ * 全体の status は大きい計画で 170KB を超える (箱 1200 の計画で計測) ので、構造だけを浅く見るときに使う
+ * Input : p = 計画, blockId = 起点 (ROOT_ID なら計画全体), levels = 何段下まで出すか (1 = 直下の子だけ)
+ * Output: 起点の行 (計画全体なら計画の名前) と、その下の字下げした行。深さで省いた箱があれば、その数と出し方を最後に添える
+ */
+export function treeReport(p: Project, blockId: string, levels: number): string {
+  const b = p.blocks[blockId];
+  const lines: string[] = [blockId === ROOT_ID || !b ? `# ${p.name}` : blockLine(p, b)];
+  treeLines(p, blockId, 1, lines, levels);
+  const hidden = countBelow(p, blockId) - (lines.length - 1);
+  if (hidden > 0) lines.push(t("(さらに下に {count} 箱あります。--depth を増やすか、tree <箱> で見られます)", { count: hidden }));
+  return lines.join("\n");
+}
+
+/**
+ * 指定した箱を 1 箱 1 行で出す (CLI の show --brief。たくさんの箱の状態を一度に確かめる)
+ * Input : p = 計画, ids = 箱の id の並び (この順に出す)
+ * Output: status の階層と同じ形の行に、親の ID と子の数を添えたもの (字下げなし)
+ */
+export function briefReport(p: Project, ids: string[]): string {
+  return ids.map((id) => {
+    const b = p.blocks[id];
+    if (!b) return "";
+    const parent = b.parentId && b.parentId !== ROOT_ID ? p.blocks[b.parentId] : undefined;
+    const kids = childrenOf(p, id).length;
+    const where = [parent ? t("親 {key}", { key: parent.key ?? parent.id }) : "", kids > 0 ? t("子 {count}", { count: kids }) : ""].filter(Boolean).join(" / ");
+    return blockLine(p, b, where ? ` (${where})` : "");
+  }).filter(Boolean).join("\n");
 }
 
 /**

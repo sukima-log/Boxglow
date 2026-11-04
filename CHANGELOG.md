@@ -4,6 +4,9 @@
 
 _Changes after 0.6.8 go here._
 
+- **Read many boxes in one call.** `show` takes several boxes and ranges (`show B433..B468 B121`), and `--brief` prints one line per box in the `status` tree format, with the parent's ID and the number of children. The new `tree [<block>] [--depth <n>]` prints the boxes below a box to a given depth (default: direct children; without a box, the whole plan). On a plan with about 1,200 boxes, 36 boxes take one 5.5 KB call, and the tree under a large box two levels deep is 4.7 KB, against 172 KB for the full `status`. Agents had been reading `boxglow.json` (over 3 MB) directly to list boxes; the agent instructions now point to these commands.
+- **`<command> --help` prints only that command.** `help <command>` does the same; `help` alone still prints everything. Each `--help` used to print the whole 24 KB help (about 1.5 KB now for `context`).
+
 ## 0.6.8 (2026-11-03)
 
 Goes with the VS Code extension 0.5.8. Update the CLI, `serve` and the extension together.

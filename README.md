@@ -222,7 +222,8 @@ MCP provides `boxglow_context`, `boxglow_checkpoint`, and `contextToken` on guar
 | `export --out docs/ROADMAP.md` / `export --format json` | Write the whole plan as Markdown (or JSON) |
 | `check` / `artifact` | Re-find deliverables after renames; attach a deliverable without finishing |
 | `merge <base> <ours> <theirs>` / `git-setup` | Box-level 3-way merge for Git (see below) |
-| `blocked`, `review`, `leave`, `show`, `list`, `log`, `layout`, `validate`, `prompt`, `group*` | See `npx boxglow help` |
+| `show B433..B468 --brief` / `tree <block> --depth 2` | Several boxes, one line each (status, assignees, outputs, parent, children) / the tree below a box to a given depth. Lighter than the full `status` or reading `boxglow.json` on a large plan |
+| `blocked`, `review`, `leave`, `show`, `list`, `log`, `layout`, `validate`, `prompt`, `group*` | See `npx boxglow help` (`npx boxglow <command> --help` prints only that command) |
 
 ### Codex setup
 

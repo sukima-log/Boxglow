@@ -13,6 +13,10 @@ export const report: Record<string, string> = {
   // --- status (statusReport) ---
 , "テンプレート: {name}": "Template: {name}"
 , "(未担当)": "(unassigned)"
+  // tree / show --brief
+, "(さらに下に {count} 箱あります。--depth を増やすか、tree <箱> で見られます)": "({count} more boxes further down. Raise --depth, or run tree <box> on one of them)"
+, "親 {key}": "parent {key}"
+, "子 {count}": "children {count}"
 , "(超過)": "(overdue)"
 , "完了 {white} / {total} ・ 進捗 {percent}% (BlackBox {black}, GrayBox {gray}, WhiteBox {white})": "Done {white} / {total} · progress {percent}% (BlackBox {black}, GrayBox {gray}, WhiteBox {white})"
 , "最終成果物: {names}": "Final deliverables: {names}"

@@ -9,6 +9,7 @@ Put boxglow.json at the repository root (`npx boxglow init --name "<project name
 
 `boxglow.json` is the source of truth for this repository's plan and progress. Humans watch this file on the Boxglow screen.
 Do not edit the file directly; always update it with `npx boxglow` commands (this keeps the wiring rules and the history intact).
+Do not read the file directly either (a large plan is several MB). Look at several boxes with `npx boxglow show B433..B468 --brief` (one line per box), at the tree with `npx boxglow tree <block> --depth 2`, and at a command's syntax with `npx boxglow <command> --help` (only that command).
 
 A block = "a task that turns inputs into an output (deliverable)". It is done (WhiteBox) once the output's deliverable is settled.
 Status: BlackBox (only the output is decided) → GrayBox (in progress) → WhiteBox (done).

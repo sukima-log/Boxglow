@@ -19,7 +19,7 @@ description: Boxglow (boxglow.json) で計画と進捗を人間と共有する�
 
 ## 手順
 
-1. `npx boxglow resume` (または `npx boxglow status --brief`) を読む。作業中のボックス、判断待ち、AI 未確認の回答、次の候補、未完了の引き継ぎメモを把握する。全階層が要るときは `npx boxglow status`
+1. `npx boxglow resume` (または `npx boxglow status --brief`) を読む。作業中のボックス、判断待ち、AI 未確認の回答、次の候補、未完了の引き継ぎメモを把握する。構造が要るときは `npx boxglow tree <block> --depth 2`、複数の箱は `npx boxglow show B433..B468 --brief` (全体の `status` と、ファイルを直接読むのは、大きい計画では数百 KB になるので避ける)
 2. 担当するボックスを決めたら `npx boxglow context <block>` を読む。出力の `readiness.state` が `ready` なら着手できる。`unprepared` (要具体化) なら `unprepared` の理由と `next` の次の一手に従って先に具体化する。`waiting` は必須の入力か分岐の答えを待っている
 3. 具体化や分解の前に `npx boxglow claim <block>` で受け持ちだけを取る (実行中にはならない。受け持ち制御が無効な計画では「取得不要」で正常終了する)。不足を埋める:
    出力の予定成果物 `npx boxglow port <block> --expect "<出力名>=file:src/x.ts"` (kind は file / dir / url / doc / note / decision / result。まだ無いファイルでよい)、完了条件 `npx boxglow scope <block> --acceptance "<完了と判断する条件>"`。

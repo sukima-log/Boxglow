@@ -19,7 +19,7 @@ Do not edit it directly; update it with `npx boxglow`.
 
 ## Steps
 
-1. Read `npx boxglow resume` (or `npx boxglow status --brief`). Take in the handoff notes, the answers not yet read by the AI, the pending decisions, the boxes in progress and the next candidates. Use `npx boxglow status` when you need the whole tree
+1. Read `npx boxglow resume` (or `npx boxglow status --brief`). Take in the handoff notes, the answers not yet read by the AI, the pending decisions, the boxes in progress and the next candidates. For the structure use `npx boxglow tree <block> --depth 2`, and for several boxes `npx boxglow show B433..B468 --brief` (avoid the full `status` and reading the file directly: on a large plan they are hundreds of KB)
 2. Once you have chosen a box, read `npx boxglow context <block>`. If `readiness.state` is `ready` you can start. `unprepared` (needs detail) means you add detail first, following the reasons in `unprepared` and the commands in `next`. `waiting` means a required input or a branch answer is missing
 3. Before adding detail or splitting, hold the box with `npx boxglow claim <block>` (it does not start the box; on a plan without claims it prints "not needed" and succeeds). Fill in what is missing:
    the output's planned deliverable `npx boxglow port <block> --expect "<output>=file:src/x.ts"` (kind: file / dir / url / doc / note / decision / result; the file need not exist yet) and the acceptance criteria `npx boxglow scope <block> --acceptance "<when it counts as done>"`.

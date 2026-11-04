@@ -420,4 +420,9 @@ export const cli: Record<string, string> = {
 , "記録を消しました: {id}": "Deleted entry: {id}"
 , "記録を直しました: {id}": "Updated entry: {id}"
 , "説明: {text}": "Description: {text}"
+  // help <コマンド> / show の複数指定 / tree
+, "(全部のコマンド: boxglow help)": "(All commands: boxglow help)"
+, "(ほか {count} 箱は省きました。範囲を分けて指定してください)": "({count} more boxes left out. Split the range)"
+, "--depth は 1 以上の整数で指定してください": "--depth must be a whole number of 1 or more"
+, "範囲 {range} に当たる箱がありません": "No boxes in the range {range}"
 };

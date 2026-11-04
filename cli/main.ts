@@ -64,7 +64,8 @@ import { checkStart, checkDone, descriptionReminder, scopeEntries } from "../src
 import type { WorkScope, WorkflowPolicy } from "../src/model/types";
 import type { Artifact } from "../src/model/types";
 import { blockToPrompt } from "../src/model/export";
-import { blockReport, logReport, statusReport } from "../src/model/report";
+import { blockReport, briefReport, logReport, statusReport, treeReport } from "../src/model/report";
+import { commandHelp } from "./help";
 import { assignmentRows, type AssigneeTarget } from "../src/model/assignments";
 import { addBranch, addMerge, canConvertToBranch, convertToBranch, setInputAnyOf, addBranchOption, removeBranchOption } from "../src/model/branch";
 import { STATUS_LABEL } from "../src/model/status";
@@ -284,6 +285,30 @@ function mustFind(p: Project, ref: string | undefined, what = "block") {
   return r.block;
 }
 
+/**
+ * 箱の指定の並びを id の並びにする (show で複数の箱をまとめて見るとき)
+ * Input : p = 計画, refs = 箱の指定 (短い ID・内部 id・題名、または短い ID の範囲 "B433..B468" / "B433..468")
+ * Output: 箱の id の並び (指定の順。範囲は番号の順で、無い番号は飛ばす。同じ箱は 1 回だけ)
+ * 範囲でない指定は mustFind と同じく、見つからない・1 つに決まらないときは止める
+ */
+function blockRefs(p: Project, refs: string[]): string[] {
+  if (refs.length === 0) mustFind(p, undefined);
+  const ids: string[] = [];
+  for (const ref of refs) {
+    const range = /^([A-Za-z]*)(\d+)\.\.(?:\1)?(\d+)$/.exec(ref.trim());
+    if (!range) { ids.push(mustFind(p, ref).id); continue; }
+    const [, prefix, from, to] = range;
+    const lo = Math.min(Number(from), Number(to)), hi = Math.max(Number(from), Number(to));
+    const hits = Object.values(p.blocks)
+      .map((b) => ({ b, m: b.key ? new RegExp(`^${prefix}(\\d+)$`, "i").exec(b.key) : null }))
+      .filter((x) => x.m && Number(x.m[1]) >= lo && Number(x.m[1]) <= hi)
+      .sort((a, c) => Number(a.m![1]) - Number(c.m![1]));
+    if (hits.length === 0) throw new Error(t("範囲 {range} に当たる箱がありません", { range: ref }));
+    ids.push(...hits.map((x) => x.b.id));
+  }
+  return [...new Set(ids)];
+}
+
 /** "題名.ポート名" を端点に解決する (connect 用)。親子関係は呼び出し側で面を決める */
 /**
  * "<題名>.<ポート名>" をボックスとポート名に分ける。題名やポート名にドットが含まれていてもよい
@@ -447,6 +472,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  blocked / review / leave / checkpoint は --context-token <context で得た contextToken> が要る (読んだ後に指示・回答・引き継ぎが変わっていたら拒否)。
                                                  人 (--actor human) には要求しない。AI が off にするときは --context-token が要る
   version [--json]                               boxglow の版と、保存の取り決めの版を出す (--version でも可)
+  help [<command>]                               ヘルプ。コマンドを付けると、そのコマンドの分だけ出す (<command> --help でも同じ)
   sync [--server <URL>] [--project <ID>] [--watch] [--actor human]  (試験中) 計画のファイルを同期サーバーとそろえる。初回は人が --actor human で結び付ける (--server で送り先を上書き)。止まったら理由と次の操作を表示
                                                  競合: --resolve <印> --block <内部ID>=local|remote (繰り返し可) / --settings local|remote
                                                  共通JSON: --choices-file <ファイル>。一括選択: --resolve <印> --prefer local|remote
@@ -470,7 +496,8 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
                                                  この計画を開いている Boxglow を止めてから、表示された印を付けて実行する。持ち主が動いているロックは解除できない
   status [--brief] [--json]                     全体の状況 (Markdown)。--brief は全階層を省略し、判断・回答・活動・次の候補を表示
   export [--format md|json] [--out <path>]       計画全体を Markdown (または JSON) に書き出す (ロードマップの文書化に)
-  show <block>                                   ブロックの詳細
+  show <block>... [--brief]                      ブロックの詳細。複数の箱と範囲 (B433..B468) をまとめて指定できる。--brief は 1 箱 1 行 (状態・担当・出力・親・子の数)
+  tree [<block>] [--depth <n>]                   箱の下の階層を n 段下まで 1 箱 1 行で出す (既定は直下の子だけ。箱を省くと計画全体)
   add <題名> [--parent <block>] [--out <出力名>] [--in <入力名>]... [--note <説明>] [--category <カテゴリ>]   (親を省略すると最初のプロジェクトのボックスの中)
                                                  カテゴリ: study 検討 / research 調査 / design 設計 / ui デザイン / build 実装 / verify 検証 / evaluate 評価 / improve 改善 / fix 課題解決 / docs 文書 / ops 運用 / other その他
   project <名前>                                 プロジェクトのボックスを最上位に足す (同じファイルで複数のプロジェクト) [--repo <パス>]  (複数リポジトリは boxglow.json を上のフォルダに置き、各リポジトリで BOXGLOW_FILE を指す)
@@ -580,6 +607,7 @@ Usage (npx boxglow <command> ...):
                                                  blocked / review / leave / checkpoint need --context-token <contextToken from context> (rejected if instructions, answers or handoff notes changed after reading).
                                                  People (--actor human) are not asked for it. An AI needs --context-token to turn it off
   version [--json]                               Print the boxglow version and the save-protocol version (--version also works)
+  help [<command>]                               Help. With a command, only that command's part (<command> --help does the same)
   sync [--server <URL>] [--project <ID>] [--watch] [--actor human]  (experimental) Bring the plan file in line with a sync server. A human binds with --actor human the first time (--server overrides the destination). When it stops, it prints why and what to do
                                                  Conflicts: --resolve <token> --block <internal-id>=local|remote (repeatable) / --settings local|remote
                                                  Shared JSON: --choices-file <file>. All groups: --resolve <token> --prefer local|remote
@@ -603,7 +631,8 @@ Usage (npx boxglow <command> ...):
                                                  stop every Boxglow that has this plan open, then run it with the token shown. A lock whose owner is running cannot be removed
   status [--brief] [--json]                     Overall status (Markdown). --brief omits the tree; keeps decisions, answers, activity and next actions
   export [--format md|json] [--out <path>]       Write the whole plan out as Markdown (or JSON) (for documenting the roadmap)
-  show <block>                                   Details of a block
+  show <block>... [--brief]                      Details of a block. Takes several boxes and ranges (B433..B468) at once. --brief prints one line per box (status, assignees, outputs, parent, number of children)
+  tree [<block>] [--depth <n>]                   One line per box for the levels below a box, n levels deep (default: direct children; without a box, the whole plan)
   add <title> [--parent <block>] [--out <output name>] [--in <input name>]... [--note <description>] [--category <category>]   (without a parent, goes inside the first project box)
                                                  Categories: study / research / design / ui / build / verify / evaluate / improve / fix / docs / ops / other
   project <name>                                 Add a project box at the top level (several projects in one file) [--repo <path>]  (for several repositories, put boxglow.json in a parent folder and point BOXGLOW_FILE at it from each repository)
@@ -700,7 +729,10 @@ function main(argv: string[]): void {
     if (!explicitLang(options)) {
       try { setLang(load(locateFile(str(options.file))).lang ?? "ja"); } catch { /* 計画が無くてもヘルプは出す */ }
     }
-    out((getLang() === "en" ? HELP_EN : HELP_JA).trim());
+    const help = (getLang() === "en" ? HELP_EN : HELP_JA).trim();
+    // help <コマンド> / <コマンド> --help は、そのコマンドの分だけ出す (全部は約 24KB。AI が書式を確かめるたびに全部を読まないように)
+    const target = cmd === "help" ? rest[0] : cmd;
+    out((target && commandHelp(help, target, t("(全部のコマンド: boxglow help)"))) || help);
     return;
   }
   const actor = actorOf(str(options.actor));
@@ -1085,7 +1117,22 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
       return;
     }
     case "show": {
-      out(blockReport(p, mustFind(p, rest[0]).id));
+      // 複数の箱と範囲 (B433..B468) をまとめて受ける。AI が計画のファイルを直接読んで一覧を作らずに済むように (2026-11-04 の計測で 41 回)
+      // --brief は 1 箱 1 行 (status の階層と同じ形に、親の ID と子の数を添える)。--brief の直後に書いた箱も取りこぼさない
+      const refs = [...list(options.brief).filter((v) => v !== "true"), ...rest];
+      const ids = blockRefs(p, refs);
+      const max = options.brief ? 200 : 20;
+      const shown = ids.slice(0, max);
+      out(options.brief ? briefReport(p, shown) : shown.map((id) => blockReport(p, id)).join("\n"));
+      if (ids.length > max) out(t("(ほか {count} 箱は省きました。範囲を分けて指定してください)", { count: ids.length - max }));
+      return;
+    }
+    case "tree": {
+      // 箱の下の階層を、指定した深さまで 1 箱 1 行で出す (既定は直下の子だけ。箱を省くと計画全体)
+      // 全体の status は大きい計画で 170KB を超えるので、構造を見るときはこちらを使う
+      const levels = options.depth === undefined ? 1 : Number(str(options.depth) ?? 1);
+      if (!Number.isInteger(levels) || levels < 1) throw new Error(t("--depth は 1 以上の整数で指定してください"));
+      out(treeReport(p, rest[0] ? mustFind(p, rest[0]).id : ROOT_ID, levels));
       return;
     }
     case "setup-agent": {
@@ -2139,7 +2186,8 @@ if (argv[0] === "mcp") {
   (async () => {
     setLang(explicitLang(options) ?? "ja");
     if (options.help) {
-      out((getLang() === "en" ? HELP_EN : HELP_JA).trim());
+      const help = (getLang() === "en" ? HELP_EN : HELP_JA).trim();
+      out(commandHelp(help, "sync", t("(全部のコマンド: boxglow help)")) ?? help);
       out(t("人の操作: 初回の結び付けや競合の選択は、人が --actor human または --actor human:名前 を明示して実行します。BOXGLOW_ACTORだけでは選択を許可しません。AIは人を名乗らず、比較を伝えて人の操作を待ってください。"));
       return;
     }

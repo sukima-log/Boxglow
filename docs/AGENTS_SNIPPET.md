@@ -9,6 +9,7 @@ boxglow.json はリポジトリ直下に置く (`npx boxglow init --name "<プ�
 
 このリポジトリの計画と進捗は `boxglow.json` が正本。人間は Boxglow の画面でこのファイルを見ている。
 ファイルを直接編集せず、必ず `npx boxglow` コマンドで更新すること (結線ルールと履歴が保たれる)。
+ファイルを直接読むこともしない (大きい計画は数 MB ある)。複数の箱は `npx boxglow show B433..B468 --brief` (1 箱 1 行)、階層は `npx boxglow tree <block> --depth 2`、書式は `npx boxglow <command> --help` (そのコマンドの分だけ出る) で確かめる。
 
 ブロック = 「入力から出力 (成果物) を作るタスク」。出力の成果物が確定したら完了 (WhiteBox)。
 状態: BlackBox (出力だけ決めた) → GrayBox (着手中) → WhiteBox (完了)。
