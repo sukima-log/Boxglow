@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-_Changes after 0.5.8 go here._
+_Changes after 0.5.9 go here._
+
+## 0.5.9
+
+- Follows boxglow 0.6.9. Update together with the CLI and `serve`. The changes are in the CLI and the agent hooks; the screen is the same.
 
 ## 0.5.8
 

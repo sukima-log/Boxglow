@@ -11,6 +11,18 @@ Tasks are boxes with inputs and outputs; a box goes New (BlackBox: output decide
 - CLI for agents: `npx boxglow` (status / start / done / split / ask / answer ...)
 - License: MIT
 
+## What's new in 0.6.9
+
+- **Long agent sessions stay lighter, in Claude Code and Codex alike**: after a context compaction, the hook injects only the boxes in progress in that session, with their handoff notes, instead of the whole resume summary (1.7 KB instead of 17 KB on a plan with about 1,200 boxes). A `done` in a compacted session suggests starting the next box in a new session or handing `prompt <box>` to a subagent, and a box that went through 3 compactions is told to split the remaining steps.
+- **Read many boxes in one call**: `show B433..B468 --brief` prints one line per box, and `tree <block> --depth 2` prints the tree below a box. `<command> --help` now prints only that command (about 1.5 KB instead of 24 KB).
+
+Details: [CHANGELOG.md](CHANGELOG.md). Update the CLI, `serve` and the VS Code extension (0.5.9) together.
+
+### 日本語: 0.6.9 の要点
+
+- **AI の長いセッションを軽く保つ (Claude Code / Codex 共通)**: 文脈の圧縮の後は、計画全体の再開の概要ではなく、そのセッションで作業中の箱と引き継ぎメモだけを渡す (箱が約 1200 個の計画で 17KB → 1.7KB)。圧縮を経たセッションで `done` すると、次の箱は新しいセッションか、`prompt <箱>` を渡したサブエージェントで始めるよう案内が出る。圧縮を 3 回またいだ箱には、残りの工程を分けるよう案内が出る。
+- **複数の箱を 1 回で読む**: `show B433..B468 --brief` は 1 箱 1 行、`tree <箱> --depth 2` は箱の下の階層を出す。`<コマンド> --help` はそのコマンドの分だけを出す (24KB → 約 1.5KB)。
+
 ## What's new in 0.6.8
 
 - **Find a box and zoom to it**: Ctrl+F (Cmd+F on a Mac) jumps to the search box from anywhere. Picking a result while zoomed out too far to read titles zooms until the whole box fits, and the new target button next to the box's ID in the side panel does the same on demand. A ring blinks around the box.
@@ -287,7 +299,7 @@ Writes become new versions on the server and reach the synced devices on their n
 
 ## VS Code extension
 
-Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.8 goes with boxglow 0.6.8).
+Install **Boxglow** from the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=sukima.boxglow-vscode): search for "Boxglow" in the Extensions view, or run `code --install-extension sukima.boxglow-vscode`. Keep the extension and the CLI on matching releases (extension 0.5.9 goes with boxglow 0.6.9).
 
 `vscode/` holds the extension's source. It opens `boxglow.json` as the same diagram inside the editor (custom editor "Boxglow"; right-click the file or use the editor title button / command *Boxglow: Open boxglow.json as a diagram*). The diagram follows the file when the CLI or an agent writes it, edits in the diagram are written back, and light / dark follow the VS Code theme. Deliverables, materials and relative links in Notes (Ctrl / Cmd + click) that point to a file open in the editor beside the diagram. To build it yourself: `npm run build:vscode` (bundles the web app into `vscode/media/`), then `cd vscode && npm run package` (`.vsix`, install via *Extensions: Install from VSIX...*).
 
