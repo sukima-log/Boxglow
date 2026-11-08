@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createProject, addBlock, defaultTaskParent, askDecision, answerDecision, ackDecisions, editDecisionAnswer } from "./graph";
-import { resumeSummary } from "./resume";
+import { createProject, addBlock, defaultTaskParent, askDecision, answerDecision, ackDecisions, editDecisionAnswer, setActivity } from "./graph";
+import { resumeReport, resumeSummary } from "./resume";
 
 describe("resume overview", () => {
   it("shows the current unread human answer without acknowledging it", () => {
@@ -25,5 +25,20 @@ describe("resume overview", () => {
     expect(resumeSummary(p).handoffs.map((h) => h.title)).toEqual(["B", "A"]);
     p.handoffs[b.blockId].note = " ";
     expect(resumeSummary(p).handoffs.map((h) => h.title)).toEqual(["A"]);
+  });
+  it("with a handoff limit, keeps every handoff of the boxes in progress and only the newest others (the screen shows all)", () => {
+    let p = createProject("resume");
+    const ids: string[] = [];
+    for (let i = 0; i < 8; i++) { const r = addBlock(p, { parentId: defaultTaskParent(p), title: `T${i}` }); p = r.project; ids.push(r.blockId); }
+    // T0 has the oldest note but is in progress, so it is always shown
+    p.handoffs = Object.fromEntries(ids.map((id, i) => [id, { note: `note ${i}`, actor: "codex", at: `2026-10-${String(10 + i).padStart(2, "0")}T00:00:00Z` }]));
+    p = setActivity(p, ids[0], "codex", "working", "doing");
+    expect(resumeSummary(p).handoffs).toHaveLength(8);
+    const limited = resumeSummary(p, { handoffLimit: 5 });
+    expect(limited.handoffs.map((h) => h.title)).toEqual(["T7", "T6", "T5", "T4", "T3", "T0"]);
+    expect(limited.omittedHandoffCount).toBe(2);
+    expect(resumeReport(p, { handoffLimit: 5 })).toContain("2");
+    expect(resumeReport(p, { handoffLimit: 5 })).toMatch(/resume --all/);
+    expect(resumeReport(p)).not.toMatch(/resume --all/);
   });
 });

@@ -8,8 +8,16 @@ import { lint, lintCounts } from "./lint";
 import type { Project } from "./types";
 import { t } from "../i18n/core";
 
-/** Input: 計画、完了済みメモの展開指定 / Output: 現況→候補→引き継ぎの読み取り専用データ。 */
-export function resumeSummary(project: Project, options: { includeCompleted?: boolean } = {}) {
+/** AI が読む resume (CLI・MCP・hooks) で、作業中・確認待ちでない箱の引き継ぎを何件まで出すか */
+export const RESUME_HANDOFF_LIMIT = 5;
+
+/**
+ * Input : 計画、完了済みメモの展開指定、handoffLimit = 作業中・確認待ちでない箱の引き継ぎを何件まで出すか (省略 = 全部。画面は全部を出す)
+ * Output: 現況→候補→引き継ぎの読み取り専用データ。omittedHandoffCount = 上限で省いた引き継ぎの数
+ * 上限を付けるのは AI が読む CLI の resume・MCP・hooks。引き継ぎは未完了の箱の分が全部たまるので、大きい計画では 60KB を超えた (2026-11-08、79 件)。
+ * 作業中・確認待ちの箱の引き継ぎは、件数に関係なく全部出す (続きに要るのはそれ)
+ */
+export function resumeSummary(project: Project, options: { includeCompleted?: boolean; handoffLimit?: number } = {}) {
   const s = summarize(project);
   const all = Object.entries(project.handoffs ?? {})
     .filter(([id, note]) => project.blocks[id] && note.note.trim())
@@ -20,6 +28,12 @@ export function resumeSummary(project: Project, options: { includeCompleted?: bo
     })
     .sort((a, b) => b.at.localeCompare(a.at) || a.blockId.localeCompare(b.blockId));
   const nextGroups = candidateGroups(project, s.next).map(g => ({ ...g, items: g.items.slice(0, 10) }));
+  const open = all.filter(h => h.status !== "white" || options.includeCompleted);
+  // 上限: 作業中・確認待ちの箱の分は全部、ほかは新しい順に handoffLimit 件まで (並びは新しい順のまま)
+  const activeIds = new Set([...s.working, ...s.blocked].map(x => x.block.id));
+  const others = open.filter(h => !activeIds.has(h.blockId));
+  const keep = options.handoffLimit === undefined ? null : new Set([...open.filter(h => activeIds.has(h.blockId)), ...others.slice(0, Math.max(0, options.handoffLimit))].map(h => h.blockId));
+  const shownHandoffs = keep ? open.filter(h => keep.has(h.blockId)) : open;
   return {
     project: project.name,
     focus: project.focusBlockId ? { blockId: project.focusBlockId, title: project.blocks[project.focusBlockId]?.title } : undefined,
@@ -29,7 +43,8 @@ export function resumeSummary(project: Project, options: { includeCompleted?: bo
     nextGroups,
     // 既存の利用側が next を参照していても読めるよう、平らな一覧も残す。
     next: nextGroups.flatMap(g => g.items),
-    handoffs: all.filter(h => h.status !== "white" || options.includeCompleted),
+    handoffs: shownHandoffs,
+    omittedHandoffCount: open.length - shownHandoffs.length,
     completedHandoffCount: all.filter(h => h.status === "white").length,
     descriptionReminders: Object.values(project.blocks).filter(b => descriptionReminder(b)).map(b => ({ blockId: b.id, key: b.key, title: b.title, message: descriptionReminder(b), writtenAt: b.descriptionUpdatedAt })),
     // 検査の件数 (必ず直す / 見直し候補)。中身は boxglow lint で読む
@@ -38,8 +53,8 @@ export function resumeSummary(project: Project, options: { includeCompleted?: bo
   };
 }
 
-/** Input: 計画、完了済みメモの展開指定 / Output: 現況を先頭に置いた Markdown。 */
-export function resumeReport(project: Project, options: { includeCompleted?: boolean } = {}): string {
+/** Input: 計画、完了済みメモの展開指定、handoffLimit (resumeSummary と同じ) / Output: 現況を先頭に置いた Markdown。 */
+export function resumeReport(project: Project, options: { includeCompleted?: boolean; handoffLimit?: number } = {}): string {
   const s = resumeSummary(project, options);
   return [
     "# " + s.project + " — " + t("再開"),
@@ -57,6 +72,7 @@ export function resumeReport(project: Project, options: { includeCompleted?: boo
       + (a.missingInputs.length ? " — " + t("必須の入力待ち: {names}", { names: a.missingInputs.join(", ") }) : ""))]),
     "## " + t("引き継ぎ（新しい順）"),
     ...s.handoffs.map(h => "- " + h.key + " " + h.title + " (" + h.actor + ", " + (h.status === "white" ? "Done" : h.status === "gray" ? "In Progress" : "New") + ")\n  " + h.freshnessText + "\n" + h.note),
+    ...(s.omittedHandoffCount ? [t("ほかの箱の引き継ぎ {n} 件は省きました。全部は resume --all、1 件は context <箱> で読めます。", { n: s.omittedHandoffCount })] : []),
     ...(!options.includeCompleted && s.completedHandoffCount ? [t("完了済みの引き継ぎ {n} 件。resume --include-completed で表示できます。", { n: s.completedHandoffCount })] : []),
     ...(s.descriptionReminders.length ? [t("説明の見直し候補: {names} (show で確認)", { names: s.descriptionReminders.map(x => x.key ?? x.title).join(", ") })] : []),
     ...(s.lint.errors || s.lint.later || s.lint.reviews ? [t("検査: 必ず直す {errors} 件 / 着手の前に {later} 件 / 見直し候補 {reviews} 件 (boxglow lint で確認)", s.lint)] : []),

@@ -31,7 +31,7 @@ import { bindingsOf } from "./sync/state-store";
 import { resolveToken } from "./sync/credentials";
 import { projectProblem } from "../src/model/validate-file";
 import { APP_VERSION, SAVE_PROTOCOL } from "../src/model/version";
-import { resumeSummary, resumeReport } from "../src/model/resume";
+import { RESUME_HANDOFF_LIMIT, resumeSummary, resumeReport } from "../src/model/resume";
 import { nextSteps, readiness, reasonText } from "../src/model/readiness";
 import { lint, lintCounts } from "../src/model/lint";
 import { boxMaterial, changedText, makeRecord, reviewStatus, reviewable, splitMaterial, staleAdvice } from "../src/model/review";
@@ -457,7 +457,7 @@ boxglow CLI: AI エージェント (Claude Code / Codex など) と人がリポ�
   focus/groupなど計画設定: context root → claim root で取得 (start root でも取れるが実行中にはしない claim を使う)、終了は leave root。
   自動で引き上げる入力は元のボックスの範囲。他者の実行ID・受領証を借りない。
   checkpoint は延長、done/leave は解放。同じ共有ファイルの協調制御。別端末の同期は排他しない。
-  resume [--json] [--include-completed]           現況・着手できる候補・入力待ちを表示。完了済みの引き継ぎは件数のみ (指定で展開)
+  resume [--json] [--include-completed] [--all]   現況・着手できる候補・入力待ちを表示。引き継ぎは作業中・確認待ちの箱の分と新しい 5 件 (--all で全部)。完了済みの引き継ぎは件数のみ (指定で展開)
   scope <block> [--goal <本文>] [--non-goals <本文>] [--constraints <本文>] [--acceptance <本文>] [--consult <本文>]
                                                  今回達成すること / 対象外 / 制約 (性能・品質・サイズ・寸法・消費電力など、出力を作るうえで守る条件) / 完了条件 / 相談条件。省略は表示、none で項目を消す
   focus [<block>|none]                           今回優先するボックスとその配下を指定 (候補内で着手可・入力待ちを区別)。省略は表示
@@ -592,7 +592,7 @@ Usage (npx boxglow <command> ...):
   Plan settings (focus/group): context root → claim root (start root also works; claim does not mark it in progress); release with leave root.
   Promoted inputs use the original box scope. Never borrow another instance ID or receipt.
   checkpoint renews; done/leave releases. Coordination for one shared file, not a distributed lease.
-  resume [--json] [--include-completed]           Current work, ready/waiting candidates, then handoffs; completed notes are counted unless requested
+  resume [--json] [--include-completed] [--all]   Current work, ready/waiting candidates, then handoffs (all of the boxes in progress or waiting, and the 5 newest others; --all for every one); completed notes are counted unless requested
   scope <block> [--goal <text>] [--non-goals <text>] [--constraints <text>] [--acceptance <text>] [--consult <text>]
                                                  Goal / non-goals / constraints (performance, quality, size, dimensions, power: what the output must respect) / acceptance / consult. No flags reads; none clears a field
   focus [<block>|none]                           Prioritize this box and descendants, separating ready/waiting within each scope. No argument reads
@@ -1101,7 +1101,9 @@ function runCommand(cmd: string, rest: string[], options: ReturnType<typeof pars
     }
     case "resume": {
       // 再開用の概要 (読むだけ。回答を確認済みにはしない)
-      out(options.json ? JSON.stringify({...resumeSummary(p, { includeCompleted: !!options["include-completed"] }),...(claimsEnabled(p)?{claimSummary:claimSummary(p,claimRequest.identity)}:{})}, null, 2) : resumeReport(p, { includeCompleted: !!options["include-completed"] }) + (claimsEnabled(p) ? "\n"+JSON.stringify(claimSummary(p,claimRequest.identity),null,2):""));
+      // 引き継ぎは、作業中・確認待ちの箱の分は全部、ほかは新しい順に RESUME_HANDOFF_LIMIT 件まで (--all で全部)
+      const resumeOptions = { includeCompleted: !!options["include-completed"], ...(options.all ? {} : { handoffLimit: RESUME_HANDOFF_LIMIT }) };
+      out(options.json ? JSON.stringify({...resumeSummary(p, resumeOptions),...(claimsEnabled(p)?{claimSummary:claimSummary(p,claimRequest.identity)}:{})}, null, 2) : resumeReport(p, resumeOptions) + (claimsEnabled(p) ? "\n"+JSON.stringify(claimSummary(p,claimRequest.identity),null,2):""));
       return;
     }
     case "status": {

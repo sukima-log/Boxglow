@@ -8,7 +8,7 @@
  *   どのフックも、失敗したときはエージェントを止めない (出力なし・終了コード 0)。
  *   出力の形は Claude Code と Codex の両方で通る形にそろえる (Stop: { decision: "block", reason }、PreToolUse: decision + hookSpecificOutput.permissionDecision)
  */
-import { compactionReport, resumeReport } from "../src/model/resume";
+import { RESUME_HANDOFF_LIMIT, compactionReport, resumeReport } from "../src/model/resume";
 import type { Project } from "../src/model/types";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -153,7 +153,7 @@ export function runHook(event: HookEvent, input: HookInput, p: Project | null, a
         const counts = recordCompaction(session, mine, opts.compactions ?? compactionPath());
         if (mine.length > 0) return { stdout: head + "\n\n" + compactionReport(p, mine, counts, BIG_BOX_COMPACTIONS) + "\n", exitCode: 0 };
       }
-      return { stdout: head + "\n\n" + resumeReport(p) + "\n", exitCode: 0 };
+      return { stdout: head + "\n\n" + resumeReport(p, { handoffLimit: RESUME_HANDOFF_LIMIT }) + "\n", exitCode: 0 };
     }
     case "stop": {
       // 2 回目 (続行の指示の後) は止めない (無限ループを防ぐ)

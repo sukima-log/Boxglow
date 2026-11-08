@@ -436,4 +436,5 @@ export const cli: Record<string, string> = {
 , "判断待ち・次の候補・ほかの箱の引き継ぎは boxglow resume、箱の詳細は boxglow context <箱> --brief で読む。": "Read pending decisions, next candidates and other boxes' handoffs with boxglow resume, and a box's details with boxglow context <box> --brief."
 , "このセッションは文脈の圧縮を {count} 回経ています。次の箱は新しいセッションで boxglow resume から始めるか、boxglow prompt <箱> の出力をサブエージェントに渡して任せると、この会話の文脈を持ち越しません": "This session has been through {count} context compactions. Start the next box in a new session from boxglow resume, or hand the output of boxglow prompt <box> to a subagent, so this conversation's context is not carried over"
 , "この箱は圧縮を {count} 回またぎました。同じくらいの大きさの箱は、着手の前に工程ごとに分けると (split)、1 つのセッションに収まります": "This box went through {count} compactions. Split boxes of a similar size into steps before starting them (split) so each fits in one session"
+, "ほかの箱の引き継ぎ {n} 件は省きました。全部は resume --all、1 件は context <箱> で読めます。": "{n} handoffs of other boxes left out. Read them all with resume --all, or one with context <box>."
 };

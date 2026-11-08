@@ -50,7 +50,7 @@ export function registerTools(server: McpServer, run: Run): void {
   const block = z.string().describe(t("ボックスの B 番号 (B12) か題名"));
 
   server.registerTool("boxglow_status", { description: t("計画の今の状況: 判断待ち・作業中・次の候補・階層の一覧 (セッションの最初に読む)"), inputSchema: { brief: z.boolean().optional().describe(t("階層の一覧を省く (判断・活動・次の候補は残す)")) }, annotations: { readOnlyHint: true } }, async ({ brief }) => safe(run, brief ? ["status", "--brief"] : ["status"]));
-  server.registerTool("boxglow_resume", { description: t("再開の概要: 現況・準備状況別の候補・未完了の引き継ぎ。完了した引き継ぎは指定した場合だけ読む"), inputSchema: { includeCompleted: z.boolean().optional() }, annotations: { readOnlyHint: true } }, async ({ includeCompleted }) => safe(run, ["resume", "--json", ...(includeCompleted ? ["--include-completed"] : [])]));
+  server.registerTool("boxglow_resume", { description: t("再開の概要: 現況・準備状況別の候補・未完了の引き継ぎ (作業中・確認待ちの箱の分と新しい 5 件。all で全部)。完了した引き継ぎは指定した場合だけ読む"), inputSchema: { includeCompleted: z.boolean().optional(), all: z.boolean().optional() }, annotations: { readOnlyHint: true } }, async ({ includeCompleted, all }) => safe(run, ["resume", "--json", ...(includeCompleted ? ["--include-completed"] : []), ...(all ? ["--all"] : [])]));
   server.registerTool("boxglow_scope", {
     description: t("今回達成すること・対象外・制約・完了条件・相談条件。省略は表示、none で項目を消す"),
     inputSchema: { block, contextToken: z.string().optional(), goal: z.string().optional(), nonGoals: z.string().optional(), constraints: z.string().optional(), acceptance: z.string().optional(), consult: z.string().optional() },

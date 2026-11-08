@@ -4,6 +4,8 @@
 
 _Changes after 0.6.9 go here._
 
+- **`resume` stays short as handoff notes pile up.** It printed the handoff note of every unfinished box; on a plan with about 1,300 boxes and 79 notes that was 61 KB, read again by the agent after each compaction. `resume` (and MCP `boxglow_resume`, and the session-start hook) now prints every note of the boxes in progress or waiting plus the 5 newest others, and says how many were left out (24 KB on the same plan). `resume --all` prints them all. The Resume tab on the screen still shows every note.
+
 ## 0.6.9 (2026-11-07)
 
 Goes with the VS Code extension 0.5.9. Update the CLI, `serve` and the extension together.

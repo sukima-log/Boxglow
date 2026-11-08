@@ -2,7 +2,7 @@
 export const workflow: Record<string, string> = {
   "完了済みです。focus で次の対象を選ぶか、focus none で解除してください": "It is done. Pick the next target with focus, or clear it with focus none",
   "未着手のボックス: 着手できる / 入力待ち": "Unstarted boxes: ready / waiting for inputs",
-  "再開の概要: 現況・準備状況別の候補・未完了の引き継ぎ。完了した引き継ぎは指定した場合だけ読む": "Resume: current work, candidates by readiness, and unfinished handoffs. Include completed handoffs only when requested.",
+  "再開の概要: 現況・準備状況別の候補・未完了の引き継ぎ (作業中・確認待ちの箱の分と新しい 5 件。all で全部)。完了した引き継ぎは指定した場合だけ読む": "Resume: current work, candidates by readiness and handoffs for unfinished boxes (all of the boxes in progress or waiting, and the 5 newest others; all for every one). Completed handoffs only when asked",
   "今回達成すること": "Goal for this work",
   "今回は扱わないこと": "Outside this scope",
   "制約 (性能・品質・サイズ・寸法・消費電力など)": "Constraints (performance, quality, size, dimensions, power, ...)",
