@@ -11,6 +11,10 @@ Tasks are boxes with inputs and outputs; a box goes New (BlackBox: output decide
 - CLI for agents: `npx boxglow` (status / start / done / split / ask / answer ...)
 - License: MIT
 
+![Boxglow at a glance: Claude Code and Codex log their work through MCP and hooks; the whole plan as a diagram shows what is done, where the AI is right now and what comes next; you answer only the decisions that need you; the plan is one boxglow.json file that works with Git, VS Code and the browser](docs/overview/overview.en.png)
+
+日本語の解説 (この図の日本語版): [Boxglow | AI エージェントの作業と計画を見える化するタスク管理ツール](https://www.sukimalog.com/archives/42393453.html)
+
 ## What's new in 0.6.9
 
 - **Long agent sessions stay lighter, in Claude Code and Codex alike**: after a context compaction, the hook injects only the boxes in progress in that session, with their handoff notes, instead of the whole resume summary (1.7 KB instead of 17 KB on a plan with about 1,200 boxes). A `done` in a compacted session suggests starting the next box in a new session or handing `prompt <box>` to a subagent, and a box that went through 3 compactions is told to split the remaining steps.

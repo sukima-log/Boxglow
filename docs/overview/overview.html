@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="{{lang}}">
+<head>
+<meta charset="utf-8">
+<title>{{page01}}</title>
+<!--
+  Boxglow の全体像 (スライド 1 枚のポンチ絵) のひな形。README・boxglow.app の Home・ブログ記事・SNS で使う。
+  文言は {{キー}} で、日本語と英語は strings.json にある。書き出しは scripts/render-overview.mjs
+  (Windows の Chrome で 1280x720 を 2 倍の密度で撮り、docs/overview/overview.{ja,en}.png と public/overview/overview.{ja,en}.webp を作る)。
+
+  伝えること (2026-11-09 にユーザーと決めた):
+    - 見出し: AI に任せた開発の「いま」が、ひと目でわかる
+    - 補足: 人と AI が 1 枚の計画図を共有して進めるタスク管理
+    - 良いところを番号付きの 4 つにし、1 枚の絵の中の場所に割り当てる
+        01 左 (AI の側)  : Claude Code・Codex と連携 (setup-agent・MCP・続きから・圧縮後の読込・受け持ち・要具体化)
+        02 真ん中 (フロー図) : AI の現在地が一目でわかる (網の目状のフロー図と AI の現在地。具体的な作業名は書かない)
+        03 右 (人の側)   : 人の判断を AI に届ける (質問・AI 未確認・確認トークン・図の上で直す)
+        04 下 (土台)     : Git・VS Code・ブラウザ対応 (上の段 = ブラウザ・VS Code 拡張・スマホ、下の段 = Git・自動マージ・成果物は手元)
+    - 有料版と「MIT で無料」は載せない
+    - 区画の題は標語にせず、何の機能かをそのまま言う。例の中身 (質問の内容・作業名) は具体的に書かない
+
+  ぱっと見で良いところが見つかるようにする約束:
+    - 目に入る順: 見出し → 光る「AI の現在地」→ 番号 01〜04 の題 → 図記号と短い題 → 1 行の注
+    - 項目は「中身を示す小さなポンチ絵 + 見出しのような短い題 (例: 計画を Git 管理) + 1 行の注」。説明の文は書かない
+      絵は図記号ではなく、その項目で起きることを描く (例: 17KB と 1.7KB の棒、古い紙に × → 新しい紙に ✓)
+    - 効く数字は大きく青緑で: 導入はコマンド 1 つ (17KB → 1.7KB のような条件付きの数字は図に出さない)
+    - 区画どうしの関係は矢印ではなく、題の下の 1 行 (誰が何をするか) で書く
+
+  見た目の約束:
+    - 背景は暗い紺。光らせるのは「AI の現在地」の 1 か所だけ
+    - 画面の中の色は実際のダークモードに合わせる: 完了 = 明るい白、作業中 = 青緑、未着手 = 暗い灰、
+      線は緑の実線 (届いた) / 黄の破線 (まだ)、人の判断 = オレンジ
+    - 画面の外の説明は、青緑と白・灰の文字だけ。余白は 8px 単位、区画の間は 20px (左右は 40px)
+    - 割り付け: 左右の区画 300px・真ん中 560px・区画の高さ 448px・下の帯 100px (情報を足した後に、読みやすさのため見直した)
+    - 文字の段: 見出し 42px / 番号 14px (青緑の札) / 区画の題 20px (見出しの部分に薄い青緑の帯) / 項目の題 16px (下の帯は 15px) / 注 11.5px / 画面の中 9〜13px
+-->
+<style>
+  :root {
+    --ink: #eef3f7;        /* 主な文字 */
+    --sub: #a9b8c6;        /* 説明の文字 */
+    --dim: #8fa1b2;        /* 注 (控えめな文字) */
+    --teal: #4fe0cc;       /* 強調の青緑 (Boxglow の色) */
+    --panel: #0e1b28;      /* 区画の塗り */
+    --panel-line: #22384c; /* 区画の枠 */
+  }
+  /* 図の外側は目印の色 (マゼンタ)。書き出しのときに、ここで切り落とす */
+  html { background: #ff00ff; }
+  body { margin: 0; }
+  .slide {
+    position: relative;
+    width: 1280px;
+    height: 720px;
+    overflow: hidden;
+    color: var(--ink);
+    background: radial-gradient(1100px 680px at 52% 42%, #143049 0%, #0c1a27 58%, #08111a 100%);
+    font-family: "BIZ UDPGothic", "Noto Sans JP", Meiryo, sans-serif;
+    /* 日本語は文節で改行する */
+    word-break: auto-phrase;
+    line-break: strict;
+  }
+  svg text { font-family: "BIZ UDPGothic", "Noto Sans JP", Meiryo, sans-serif; }
+  .mono, svg .mono { font-family: Consolas, "Cascadia Mono", monospace; }
+  .nw { white-space: nowrap; }
+
+  /* ===== 見出し ===== */
+  .head {
+    position: absolute;
+    left: 40px;
+    top: 22px;
+  }
+  .head h1 {
+    margin: 0;
+    font-size: 42px;
+    line-height: 52px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  .head h1 em {
+    font-style: normal;
+    color: var(--teal);
+    text-shadow: 0 0 18px rgba(79, 224, 204, 0.55);
+  }
+  .head p {
+    margin: 6px 0 0;
+    font-size: 19px;
+    line-height: 26px;
+    color: var(--sub);
+  }
+
+  /* ===== 隅の名前 ===== */
+  .brand {
+    position: absolute;
+    right: 40px;
+    /* 見出しの塊 (22〜106px) の縦の中心に合わせる (印の高さ 48px) */
+    top: 40px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand b { display: block; font-size: 24px; line-height: 28px; }
+  .brand span { display: block; font-size: 14px; line-height: 20px; color: #7f91a3; }
+
+  /* ===== 良いところの題 (番号 + 題 + 誰が何をするか) ===== */
+  .zh {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  /* 番号: 小さな青緑の札 (番号は控えめに、札の形で区画の印だと分かるようにする) */
+  .zh .no {
+    flex: none;
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 16px;
+    line-height: 26px;
+    font-weight: 700;
+    color: #0d1117;
+    background: var(--teal);
+    border-radius: 7px;
+    padding: 0 8px;
+    margin-top: 0;
+  }
+  .zh h2 {
+    margin: 0;
+    font-size: 20px;
+    line-height: 26px;
+    white-space: nowrap;
+    font-weight: 700;
+  }
+  /* 題の下の 1 行 (誰が何をするか)。番号の左端から全幅で置く */
+  .hd .who {
+    margin: 3px 0 0;
+    font-size: 13.5px;
+    line-height: 19px;
+    color: #b4c3d1;
+  }
+
+  /* ===== 区画 (左・右) ===== */
+  .zone {
+    position: absolute;
+    top: 124px;
+    width: 300px;
+    height: 448px;
+    box-sizing: border-box;
+    padding: 12px 16px 16px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 14px;
+    display: flex;
+    flex-direction: column;
+  }
+  .zone.left { left: 40px; }
+  .zone.right { left: 940px; }
+  /* 項目の並び (区画の高さいっぱいに均等に並べる) */
+  .items {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    margin-top: 12px;
+  }
+  /* 項目 1 つ: 図記号 + 短い題 + 1 行の注 */
+  .it {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  /* 項目の中身を示す小さなポンチ絵 (図記号ではなく、その項目で起きることを描く) */
+  .pg { flex: none; width: 58px; height: 37px; }
+  .pg svg { display: block; width: 58px; height: 37px; }
+  /* 右の区画の質問のカードの直下の題 (カードがそのまま絵になる) */
+  .ask2 { margin-top: 14px; }
+  .ask2 svg { display: block; }
+  .cardlb { margin-top: 8px; }
+  .cardlb b { display: block; font-size: 16px; line-height: 21px; font-weight: 700; }
+  .cardlb > span { display: block; font-size: 12px; line-height: 16px; color: var(--dim); }
+  .ic {
+    flex: none;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: rgba(79, 224, 204, 0.13);
+    color: var(--teal);
+    display: grid;
+    place-items: center;
+  }
+  .it .lb {
+    display: block;
+    font-size: 16px;
+    line-height: 21px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .it .cp {
+    display: block;
+    font-size: 12px;
+    line-height: 15px;
+    color: var(--dim);
+    white-space: nowrap;
+  }
+  /* 題の中の具体的な事実 (数・開発者が見てすぐ分かる名前) だけを、青緑・太字・少し大きく強調する */
+  .hl { font-size: 1.15em; font-weight: 700; color: var(--teal); }
+  /* 目を引く数字 */
+  .big {
+    font-family: Consolas, "Cascadia Mono", monospace;
+    font-size: 23px;
+    font-weight: 700;
+    color: var(--teal);
+    vertical-align: -1px;
+  }
+
+  /* 右の区画の質問のカード (実際の画面の部品を小さくしたもの) */
+  .ask {
+    margin-top: 14px;
+    padding: 9px 10px 10px;
+    background: #2d333b;
+    border: 1.2px solid #f0883e;
+    border-radius: 8px;
+  }
+  .ask .t1 { display: flex; justify-content: space-between; font-size: 11.5px; line-height: 16px; }
+  .ask .t1 b { color: #ffb27a; }
+  .ask .t1 span { color: #8b98a5; font-size: 10.5px; }
+  .ask .q { margin-top: 3px; font-size: 13.5px; line-height: 19px; font-weight: 700; color: #e6edf3; }
+  .ask .pre { font-size: 10.5px; line-height: 15px; color: #a9b8c6; }
+  .ask .opts { display: flex; gap: 6px; margin-top: 6px; }
+  .ask .opts span {
+    padding: 2px 9px;
+    border: 1px solid #8b98a5;
+    border-radius: 11px;
+    font-size: 10.5px;
+    line-height: 15px;
+    color: #e6edf3;
+    white-space: nowrap;
+  }
+
+  /* ===== 真ん中の題 ===== */
+  .ct {
+    position: absolute;
+    left: 360px;
+    top: 137px;
+    width: 560px;
+  }
+
+  /* ===== 02 の地図の面 ===== */
+  .window {
+    position: absolute;
+    left: 360px;
+    top: 196px;
+    /* 主役の図: 影に加えて、うっすら青緑の光 */
+    filter: drop-shadow(0 12px 28px rgba(0, 0, 0, 0.55)) drop-shadow(0 0 14px rgba(79, 224, 204, 0.16));
+  }
+
+  /* ===== 土台 (下の帯) ===== */
+  .band {
+    position: absolute;
+    left: 40px;
+    top: 592px;
+    width: 1200px;
+    height: 100px;
+    box-sizing: border-box;
+    padding: 10px 20px;
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: 14px;
+    display: grid;
+    grid-template-columns: 240px 84px repeat(3, 1fr);
+    grid-template-rows: auto auto;
+    column-gap: 16px;
+    row-gap: 8px;
+    align-items: center;
+  }
+  .band .hd { grid-row: 1 / span 2; }
+  .band .it .lb { font-size: 15px; line-height: 20px; }
+  .band .it { gap: 10px; }
+  .band .pg { width: 48px; height: 30px; }
+  .band .pg svg { width: 48px; height: 30px; }
+  /* 区画の見出しの部分に、うっすら青緑の帯を敷く (題の文字を大きくしなくても、見出しだと分かるようにする) */
+  .zone .hd { margin: -12px -16px 0; padding: 9px 16px 8px; background: rgba(79, 224, 204, 0.08); border-bottom: 1px solid rgba(79, 224, 204, 0.28); border-radius: 13px 13px 0 0; }
+  .band .hd { margin: -10px 0 -10px -20px; padding: 10px 16px 10px 20px; align-self: stretch; display: flex; flex-direction: column; justify-content: center; background: rgba(79, 224, 204, 0.08); border-right: 1px solid rgba(79, 224, 204, 0.28); border-radius: 13px 0 0 13px; }
+  /* 02: ほかと同じ区画にし、見出しの帯の下にフロー図を収める。主役なので枠を青緑寄りにし、うっすら光らせる */
+  .zone.center {
+    left: 360px;
+    width: 560px;
+    padding: 12px 16px 0;
+    overflow: hidden;
+    border-color: #2f6b73;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45), 0 0 16px rgba(79, 224, 204, 0.16);
+  }
+  .zone.center .board { display: block; margin: 0 -16px; }
+  /* 01 の小見出し (始める / 続ける / 守る)。細い線で区切る */
+  .grp { display: flex; align-items: center; gap: 8px; font-size: 11px; line-height: 14px; font-weight: 700; color: #7f91a3; letter-spacing: 0.08em; }
+  .grp::after { content: ""; flex: 1; height: 1px; background: rgba(255, 255, 255, 0.10); }
+  .grp + .it { margin-top: -2px; }
+  .it .cp .mono { font-size: 11px; }
+  /* 04 の段の小さな見出し (開く場所 / データの管理) */
+  .rowlb { font-size: 11px; line-height: 14px; font-weight: 700; color: #7f91a3; letter-spacing: 0.08em; white-space: nowrap; text-align: right; }
+  /* 02 の凡例 (区画の下に 1 行。中央にそろえる) */
+  .zone.center .legend { position: absolute; left: 0; right: 0; bottom: 30px; display: flex; justify-content: center; gap: 10px; font-size: 11.5px; line-height: 14px; color: #a9b8c6; }
+  .legend span { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .legend i { flex: none; display: inline-block; box-sizing: border-box; font-style: normal; }
+  .legend .sw { width: 15px; height: 11px; border-radius: 3px; }
+  .legend .sw.done { background: #eef3f7; }
+  .legend .sw.work { background: #2ad4bd; }
+  .legend .sw.new { background: #2a3644; border: 1.2px solid #3d4a59; }
+  .legend .sw.q { background: #2a3644; border: 1.5px solid #f0883e; color: #f0883e; font-size: 9px; font-weight: 700; line-height: 8px; text-align: center; }
+  .legend svg { flex: none; display: block; }
+  .legend .ln { width: 18px; border-top: 2.4px solid #3fb950; }
+  .legend .ln.wait { border-top: 2.4px dashed #d29922; }
+  /* 英語: 欧文の読みやすい書体にする (日本語の文字が混じったときは BIZ UDPゴシック) */
+  html[lang="en"] .slide, html[lang="en"] svg text { font-family: "Segoe UI", "BIZ UDPGothic", sans-serif; }
+  html[lang="en"] .grp, html[lang="en"] .rowlb { letter-spacing: 0.1em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div class="slide" id="sheet">
+
+  <!-- ===== 見出し ===== -->
+  <div class="head">
+    <h1>{{head01}}</h1>
+    <p>{{head02}}</p>
+  </div>
+
+  <!-- ===== 隅の名前 (画像だけが広まっても分かるように) ===== -->
+  <div class="brand">
+    <!-- 印: 黒 (中身の分からない箱) → 灰 → 光る白 (成果物ができた箱) の 3 つの箱 -->
+    <svg width="44" height="44" viewBox="0 0 64 64" aria-hidden="true">
+      <defs><filter id="glowLogo" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3.5"/></filter></defs>
+      <rect x="2" y="36" width="26" height="26" rx="6" fill="#10161d" stroke="#c9d4de" stroke-width="3"/>
+      <rect x="19" y="19" width="26" height="26" rx="6" fill="#7b8794" stroke="#c9d4de" stroke-width="3"/>
+      <rect x="33" y="1" width="30" height="30" rx="8" fill="#4fe8d4" filter="url(#glowLogo)"/>
+      <rect x="36" y="4" width="24" height="24" rx="6" fill="#ffffff" stroke="#c9d4de" stroke-width="3"/>
+    </svg>
+    <div>
+      <b>Boxglow</b>
+      <span class="mono">boxglow.app</span>
+    </div>
+  </div>
+
+  <!-- ===== 左: AI の側 (01: AI に任せても崩れない。Claude Code / Codex との連携) ===== -->
+  <section class="zone left">
+    <div class="hd">
+      <div class="zh">
+        <span class="no">01</span>
+        <h2>{{title01}}</h2>
+      </div>
+      <p class="who nw">{{who01}}</p>
+    </div>
+    <div class="items">
+      <div class="grp">{{group01}}</div>
+      <div class="it">
+        <div class="pg"><svg width="60" height="38" viewBox="0 0 60 38" aria-hidden="true"><rect x="2" y="9" width="40" height="26" rx="4" fill="#132636" stroke="#c9d6e2" stroke-width="2"/><path d="M9 18 l5 4 -5 4" fill="none" stroke="#eef3f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M18 27 h12" stroke="#eef3f7" stroke-width="2" stroke-linecap="round"/><circle cx="48" cy="11" r="9.5" fill="#c9d6e2" stroke="#0e1b28" stroke-width="2"/><text x="48" y="15.6" font-size="13" font-weight="700" text-anchor="middle" fill="#0d1117" class="mono">1</text></svg></div>
+        <div><span class="lb">{{item01}}</span><span class="cp">{{note01}}</span></div>
+      </div>
+      <div class="it">
+        <div class="pg"><svg width="60" height="38" viewBox="0 0 60 38" aria-hidden="true"><rect x="2" y="12" width="16" height="13" rx="3.5" fill="none" stroke="#c9d6e2" stroke-width="2"/><circle cx="7.5" cy="18.5" r="1.5" fill="#c9d6e2"/><circle cx="12.5" cy="18.5" r="1.5" fill="#c9d6e2"/><path d="M10 12 v-3.5" stroke="#c9d6e2" stroke-width="1.8" stroke-linecap="round"/><path d="M18 18.5 H23" stroke="#eef3f7" stroke-width="2"/><rect x="23" y="12.5" width="11" height="12" rx="2.5" fill="#eef3f7"/><path d="M34 15.5 h4.5 M34 21.5 h4.5" stroke="#eef3f7" stroke-width="2.2" stroke-linecap="round"/><rect x="40.5" y="8" width="17.5" height="21" rx="3.5" fill="#132636" stroke="#c9d6e2" stroke-width="2"/><path d="M45 15.5 h3 M45 21.5 h3" stroke="#c9d6e2" stroke-width="2" stroke-linecap="round"/></svg></div>
+        <div><span class="lb">{{item02}}</span><span class="cp">{{note02}}</span></div>
+      </div>
+      <div class="grp">{{group02}}</div>
+      <div class="it">
+        <div class="pg"><svg width="60" height="38" viewBox="0 0 60 38" aria-hidden="true"><rect x="2" y="8" width="20" height="24" rx="3" fill="none" stroke="#5f7387" stroke-width="2"/><path d="M6.5 15h11M6.5 20h8M6.5 25h10" stroke="#5f7387" stroke-width="1.8" stroke-linecap="round"/><path d="M15 5.5 v8 l2.5 -2 2.5 2 v-8 z" fill="#c9d6e2"/><path d="M25.5 20 h8" stroke="#c9d6e2" stroke-width="2" stroke-linecap="round"/><path d="M30.5 16.5 l3.5 3.5 -3.5 3.5" fill="none" stroke="#c9d6e2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="37" y="8" width="21" height="24" rx="3" fill="#132636" stroke="#c9d6e2" stroke-width="2"/><path d="M44 14 L52.5 20 L44 26 Z" fill="#c9d6e2"/></svg></div>
+        <div><span class="lb">{{item03}}</span><span class="cp">{{note03}}</span></div>
+      </div>
+      <div class="it">
+        <div class="pg"><svg width="60" height="38" viewBox="0 0 60 38" aria-hidden="true"><rect x="2" y="3" width="56" height="9" rx="2.5" fill="#5f7387"/><path d="M30 14.5 V22" stroke="#c9d6e2" stroke-width="2" stroke-linecap="round"/><path d="M26.5 19 L30 23 L33.5 19" fill="none" stroke="#c9d6e2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="6" y="26" width="11" height="9" rx="2" fill="#c9d6e2"/><rect x="24.5" y="26" width="11" height="9" rx="2" fill="#c9d6e2"/><rect x="43" y="26" width="11" height="9" rx="2" fill="#c9d6e2"/></svg></div>
+        <div><span class="lb">{{item04}}</span><span class="cp">{{note04}}</span></div>
+      </div>
+      <div class="grp">{{group03}}</div>
+      <div class="it">
+        <div class="pg"><svg width="60" height="38" viewBox="0 0 60 38" aria-hidden="true"><rect x="4" y="5" width="24" height="28" rx="3" fill="none" stroke="#c9d6e2" stroke-width="2"/><path d="M9 12 h14 M9 17.5 h11 M9 23 h8" stroke="#c9d6e2" stroke-width="1.6" stroke-linecap="round"/><path d="M35 26 h16 l-2.5 -3.5 v-6 a5.5 5.5 0 0 0 -11 0 v6 z" fill="#ff7b72"/><circle cx="43" cy="28.6" r="2.2" fill="#ff7b72"/><path d="M53.5 9 q3 4 0 8 M32.5 9 q-3 4 0 8" fill="none" stroke="#ff7b72" stroke-width="1.6" stroke-linecap="round"/></svg></div>
+        <div><span class="lb">{{item05}}</span><span class="cp">{{note05}}</span></div>
+      </div>
+      <div class="it">
+        <div class="pg"><svg width="60" height="38" viewBox="0 0 60 38" aria-hidden="true"><rect x="2" y="14" width="13" height="11" rx="3" fill="none" stroke="#c9d6e2" stroke-width="2"/><circle cx="6.5" cy="19.5" r="1.4" fill="#c9d6e2"/><circle cx="10.5" cy="19.5" r="1.4" fill="#c9d6e2"/><path d="M8.5 14 v-3" stroke="#c9d6e2" stroke-width="1.8" stroke-linecap="round"/><path d="M15 19.5 H21" stroke="#c9d6e2" stroke-width="2"/><rect x="21" y="9" width="17" height="21" rx="3" fill="#2ad4bd"/><rect x="25.5" y="19" width="8" height="6.5" rx="1.2" fill="#0d1117"/><path d="M27 19 v-2 a2.5 2.5 0 0 1 5 0 v2" fill="none" stroke="#0d1117" stroke-width="1.6"/><path d="M41.5 12 V27" stroke="#ff7b72" stroke-width="2.6" stroke-linecap="round"/><path d="M45 19.5 H43.5" stroke="#8fa1b2" stroke-width="2"/><rect x="45" y="14" width="13" height="11" rx="3" fill="none" stroke="#8fa1b2" stroke-width="2"/><circle cx="49.5" cy="19.5" r="1.4" fill="#8fa1b2"/><circle cx="53.5" cy="19.5" r="1.4" fill="#8fa1b2"/><path d="M51.5 14 v-3" stroke="#8fa1b2" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+        <div><span class="lb">{{item06}}</span><span class="cp">{{note06}}</span></div>
+      </div>
+      <div class="it">
+        <div class="pg"><svg width="60" height="38" viewBox="0 0 60 38" aria-hidden="true"><rect x="6" y="4" width="30" height="28" rx="4" fill="none" stroke="#8fa1b2" stroke-width="2" stroke-dasharray="4 3"/><text x="21" y="24" font-size="17" font-weight="700" text-anchor="middle" fill="#8fa1b2">?</text><path d="M44 14 L55 34 H33 Z" fill="#ff7b72" stroke="#0e1b28" stroke-width="1.5" stroke-linejoin="round"/><path d="M44 20.5 v7" stroke="#0e1b28" stroke-width="2.2" stroke-linecap="round"/><circle cx="44" cy="30.6" r="1.3" fill="#0e1b28"/></svg></div>
+        <div><span class="lb">{{item07}}</span><span class="cp">{{note07}}</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 真ん中: 02 AI の現在地がひと目でわかる (ほかと同じ「区画 + 見出しの帯 + 中身」。中身は計画全体のフロー図) ===== -->
+  <section class="zone center">
+    <div class="hd">
+      <div class="zh">
+        <span class="no">02</span>
+        <h2>{{title02}}</h2>
+      </div>
+      <p class="who">{{who02}}</p>
+    </div>
+    <!-- フロー図 (網の目状。具体的な作業名は書かない)。枠と角の丸みは区画が持つ -->
+    <svg class="board" width="558" height="381" viewBox="0 0 558 381" aria-hidden="true">
+      <defs>
+        <pattern id="dots" width="16" height="16" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1" fill="#ffffff" fill-opacity="0.06"/></pattern>
+        <filter id="glow" x="-40%" y="-60%" width="180%" height="220%"><feGaussianBlur stdDeviation="7"/></filter>
+        <marker id="ahG" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#3fb950"/></marker>
+        <marker id="ahA" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4.2" markerHeight="4.2" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#d29922"/></marker>
+      </defs>
+      <rect x="0" y="0" width="558" height="381" fill="url(#dots)"/>
+      <!-- 中身を 26px 下げて、上下の余白をそろえる -->
+      <g transform="translate(0 26)">
+        <!-- 上の列: ここまで完了 (成果物・検査結果つき) / (AI はいまここ) / これから -->
+        <g font-size="14" font-weight="700" text-anchor="middle">
+          <path d="M19 46 V40 H211 V46" fill="none" stroke="#eef3f7" stroke-width="1.6" stroke-linejoin="round"/>
+          <text x="115.0" y="31" fill="#eef3f7">{{svg01}}</text>
+          <path d="M347 46 V40 H539 V46" fill="none" stroke="#8fa1b2" stroke-width="1.6" stroke-linejoin="round"/>
+          <text x="443.0" y="31" fill="#8fa1b2">{{svg02}}</text>
+        </g>
+        <text x="115.0" y="62" font-size="11" fill="#a9b8c6" text-anchor="middle">{{svg03}}</text>
+
+        <!-- 線 (網の目のフロー) -->
+        <path d="M59 156.0 C77.5 156.0 77.5 92.0 96 92.0" fill="none" stroke="#3fb950" stroke-width="2.2" marker-end="url(#ahG)"/><path d="M59 156.0 C77.5 156.0 77.5 220.0 96 220.0" fill="none" stroke="#3fb950" stroke-width="2.2" marker-end="url(#ahG)"/><path d="M139 92.0 C157.5 92.0 157.5 92.0 176 92.0" fill="none" stroke="#3fb950" stroke-width="2.2" marker-end="url(#ahG)"/><path d="M139 92.0 C157.5 92.0 157.5 156.0 176 156.0" fill="none" stroke="#3fb950" stroke-width="2.2" marker-end="url(#ahG)"/><path d="M139 220.0 C157.5 220.0 157.5 156.0 176 156.0" fill="none" stroke="#3fb950" stroke-width="2.2" marker-end="url(#ahG)"/><path d="M219 92.0 C237.5 92.0 237.5 92.0 256 92.0" fill="none" stroke="#3fb950" stroke-width="2.2" marker-end="url(#ahG)"/><path d="M219 156.0 C237.5 156.0 237.5 92.0 256 92.0" fill="none" stroke="#3fb950" stroke-width="2.2" marker-end="url(#ahG)"/><path d="M219 156.0 C237.5 156.0 237.5 220.0 256 220.0" fill="none" stroke="#3fb950" stroke-width="2.2" marker-end="url(#ahG)"/><path d="M139 220.0 C197.5 220.0 197.5 220.0 256 220.0" fill="none" stroke="#3fb950" stroke-width="2.2" marker-end="url(#ahG)"/><path d="M299 92.0 C317.5 92.0 317.5 92.0 336 92.0" fill="none" stroke="#d29922" stroke-width="2.2" stroke-dasharray="5 3.5" marker-end="url(#ahA)"/><path d="M299 92.0 C317.5 92.0 317.5 156.0 336 156.0" fill="none" stroke="#d29922" stroke-width="2.2" stroke-dasharray="5 3.5" marker-end="url(#ahA)"/><path d="M299 220.0 C317.5 220.0 317.5 156.0 336 156.0" fill="none" stroke="#d29922" stroke-width="2.2" stroke-dasharray="5 3.5" marker-end="url(#ahA)"/><path d="M299 220.0 C357.5 220.0 357.5 220.0 416 220.0" fill="none" stroke="#d29922" stroke-width="2.2" stroke-dasharray="5 3.5" marker-end="url(#ahA)"/><path d="M379 92.0 C397.5 92.0 397.5 156.0 416 156.0" fill="none" stroke="#d29922" stroke-width="2.2" stroke-dasharray="5 3.5" marker-end="url(#ahA)"/><path d="M379 156.0 C397.5 156.0 397.5 156.0 416 156.0" fill="none" stroke="#d29922" stroke-width="2.2" stroke-dasharray="5 3.5" marker-end="url(#ahA)"/><path d="M459 156.0 C479.0 156.0 479.0 156.0 499.0 156.0" fill="none" stroke="#d29922" stroke-width="2.2" stroke-dasharray="5 3.5" marker-end="url(#ahA)"/><path d="M459 220.0 C479.0 220.0 479.0 156.0 499.0 156.0" fill="none" stroke="#d29922" stroke-width="2.2" stroke-dasharray="5 3.5" marker-end="url(#ahA)"/>
+
+        <!-- 現在地の光 (箱の下に敷く) -->
+        <rect x="255" y="75.0" width="48" height="34" rx="9" fill="#4fe8d4" opacity="0.9" filter="url(#glow)"/>
+
+        <!-- 箱 -->
+        <rect x="19" y="143.0" width="40" height="26" rx="6" fill="#eef3f7"/><path d="M26.0 149.5 h6 l3 3 v10 h-9 z" fill="#ffffff" stroke="#57606a" stroke-width="1.3" stroke-linejoin="round"/><path d="M32.0 149.5 v3 h3" fill="none" stroke="#57606a" stroke-width="1.1"/><path d="M28.0 157.0 h5 M28.0 159.5 h4" stroke="#8c959f" stroke-width="1"/><path d="M40.0 156.0 l3 3 6.5 -6.5" fill="none" stroke="#1a7f37" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="99" y="79.0" width="40" height="26" rx="6" fill="#eef3f7"/><path d="M106.0 85.5 h6 l3 3 v10 h-9 z" fill="#ffffff" stroke="#57606a" stroke-width="1.3" stroke-linejoin="round"/><path d="M112.0 85.5 v3 h3" fill="none" stroke="#57606a" stroke-width="1.1"/><path d="M108.0 93.0 h5 M108.0 95.5 h4" stroke="#8c959f" stroke-width="1"/><path d="M120.0 92.0 l3 3 6.5 -6.5" fill="none" stroke="#1a7f37" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="99" y="207.0" width="40" height="26" rx="6" fill="#eef3f7"/><path d="M106.0 213.5 h6 l3 3 v10 h-9 z" fill="#ffffff" stroke="#57606a" stroke-width="1.3" stroke-linejoin="round"/><path d="M112.0 213.5 v3 h3" fill="none" stroke="#57606a" stroke-width="1.1"/><path d="M108.0 221.0 h5 M108.0 223.5 h4" stroke="#8c959f" stroke-width="1"/><path d="M120.0 220.0 l3 3 6.5 -6.5" fill="none" stroke="#1a7f37" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="179" y="79.0" width="40" height="26" rx="6" fill="#eef3f7"/><path d="M186.0 85.5 h6 l3 3 v10 h-9 z" fill="#ffffff" stroke="#57606a" stroke-width="1.3" stroke-linejoin="round"/><path d="M192.0 85.5 v3 h3" fill="none" stroke="#57606a" stroke-width="1.1"/><path d="M188.0 93.0 h5 M188.0 95.5 h4" stroke="#8c959f" stroke-width="1"/><path d="M200.0 92.0 l3 3 6.5 -6.5" fill="none" stroke="#1a7f37" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="179" y="143.0" width="40" height="26" rx="6" fill="#eef3f7"/><path d="M186.0 149.5 h6 l3 3 v10 h-9 z" fill="#ffffff" stroke="#57606a" stroke-width="1.3" stroke-linejoin="round"/><path d="M192.0 149.5 v3 h3" fill="none" stroke="#57606a" stroke-width="1.1"/><path d="M188.0 157.0 h5 M188.0 159.5 h4" stroke="#8c959f" stroke-width="1"/><path d="M200.0 156.0 l3 3 6.5 -6.5" fill="none" stroke="#1a7f37" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><rect x="259" y="79.0" width="40" height="26" rx="6" fill="#2ad4bd"/><rect x="272.0" y="89.0" width="14" height="10" rx="3" fill="none" stroke="#0b3b37" stroke-width="1.7"/><circle cx="276.0" cy="94.0" r="1.3" fill="#0b3b37"/><circle cx="282.0" cy="94.0" r="1.3" fill="#0b3b37"/><path d="M279.0 89.0 v-3" stroke="#0b3b37" stroke-width="1.5" stroke-linecap="round"/><rect x="259" y="207.0" width="40" height="26" rx="6" fill="#2ad4bd"/><rect x="272.0" y="217.0" width="14" height="10" rx="3" fill="none" stroke="#0b3b37" stroke-width="1.7"/><circle cx="276.0" cy="222.0" r="1.3" fill="#0b3b37"/><circle cx="282.0" cy="222.0" r="1.3" fill="#0b3b37"/><path d="M279.0 217.0 v-3" stroke="#0b3b37" stroke-width="1.5" stroke-linecap="round"/><rect x="339" y="79.0" width="40" height="26" rx="6" fill="#2a3644" stroke="#3d4a59" stroke-width="1.3"/><rect x="339" y="143.0" width="40" height="26" rx="6" fill="#22303e" stroke="#8fa1b2" stroke-width="1.4"/><rect x="344.5" y="152.5" width="7" height="7" rx="1.2" fill="#3d4a59" stroke="#a9b8c6" stroke-width="0.8"/><rect x="355.5" y="152.5" width="7" height="7" rx="1.2" fill="#3d4a59" stroke="#a9b8c6" stroke-width="0.8"/><rect x="366.5" y="152.5" width="7" height="7" rx="1.2" fill="#3d4a59" stroke="#a9b8c6" stroke-width="0.8"/><path d="M351.5 156.0 h4 M362.5 156.0 h4" stroke="#a9b8c6" stroke-width="0.8"/><rect x="419" y="143.0" width="40" height="26" rx="6" fill="#2a3644" stroke="#f0883e" stroke-width="2"/><text x="439.0" y="162.0" font-size="17" font-weight="700" fill="#f0883e" text-anchor="middle">?</text><rect x="419" y="207.0" width="40" height="26" rx="6" fill="#2a3644" stroke="#3d4a59" stroke-width="1.3"/><circle cx="519.0" cy="156.0" r="17" fill="#16293b" stroke="#8fa1b2" stroke-width="1.8"/><path d="M514.0 165.0 V147.0" stroke="#eef3f7" stroke-width="2" stroke-linecap="round"/><path d="M514.0 147.0 H526.0 L522.5 151.0 L526.0 155.0 H514.0 Z" fill="#eef3f7"/><text x="519.0" y="188.0" font-size="11" fill="#8fa1b2" text-anchor="middle">{{svg04}}</text>
+        <rect x="259" y="79.0" width="40" height="26" rx="6" fill="none" stroke="#d6fff9" stroke-width="1.8"/>
+
+        <!-- もう一方の作業中の AI の名前 -->
+        <path d="M257.0 239.0 a4.5 4.5 0 0 1 4.5 4.5 c0 3.4 -4.5 7.5 -4.5 7.5 s-4.5 -4.1 -4.5 -7.5 a4.5 4.5 0 0 1 4.5 -4.5 z" fill="#4fe0cc"/><circle cx="257.0" cy="243.5" r="1.6" fill="#0f2132"/><text x="284.0" y="250.0" font-size="11.5" font-weight="700" fill="#4fe0cc" text-anchor="middle">Codex</text>
+
+        <!-- 現在地の札 (Claude Code) -->
+        <rect x="218.0" y="6" width="122" height="46" rx="8" fill="#4fe8d4" opacity="0.6" filter="url(#glow)"/>
+        <rect x="218.0" y="6" width="122" height="46" rx="8" fill="#4fe8d4"/>
+        <path d="M272.0 51.5 L279.0 75.0 L286.0 51.5 Z" fill="#4fe8d4"/>
+        <path d="M232.0 18 a6 6 0 0 1 6 6 c0 4.5 -6 10 -6 10 s-6 -5.5 -6 -10 a6 6 0 0 1 6 -6 z" fill="#0d1117"/>
+        <circle cx="232.0" cy="24" r="2.2" fill="#4fe8d4"/>
+        <text x="244.0" y="26" font-size="14.5" font-weight="700" fill="#0d1117">{{svg05}}</text>
+        <text x="244.0" y="43" font-size="11.5" font-weight="700" fill="#0b4a44">Claude Code</text>
+
+        <!-- 全体の進み具合の帯 -->
+        <text x="19" y="272" font-size="12" fill="#a9b8c6">{{svg06}}</text>
+        <text x="539" y="272" font-size="12.5" font-weight="700" fill="#eef3f7" text-anchor="end">{{svg07}}</text>
+        <rect x="19" y="280" width="520" height="10" rx="5" fill="#2a3644"/>
+        <rect x="250.4" y="280" width="99.5" height="10" fill="#2ad4bd"/>
+        <rect x="19" y="280" width="236.4" height="10" rx="5" fill="#eef3f7"/>
+      </g>
+    </svg>
+    <!-- 凡例 (図の印の意味。HTML の 1 行で並べるので、文言の長さが変わっても幅が合う) -->
+    <div class="legend"><span><i class="sw done"></i>{{svg08}}</span><span><i class="sw work"></i>{{svg09}}</span><span><i class="sw new"></i>{{svg10}}</span><span><i class="sw q">?</i>{{svg11}}</span><span><svg width="15" height="11" viewBox="0 0 15 11" aria-hidden="true"><rect x="0.6" y="0.6" width="13.8" height="9.8" rx="2.5" fill="#22303e" stroke="#8fa1b2" stroke-width="1.2"/><rect x="3" y="3.7" width="3.5" height="3.5" fill="#a9b8c6"/><rect x="8.5" y="3.7" width="3.5" height="3.5" fill="#a9b8c6"/></svg>{{svg12}}</span><span><i class="ln"></i>{{svg13}}</span><span><i class="ln wait"></i>{{svg14}}</span></div>
+  </section>
+
+  <!-- ===== 右: 人の側 (03: 判断だけ人がすればいい。人と AI で計画を共有) ===== -->
+  <section class="zone right">
+    <div class="hd">
+      <div class="zh">
+        <span class="no">03</span>
+        <h2>{{title03}}</h2>
+      </div>
+      <p class="who nw">{{who03}}</p>
+    </div>
+    <!-- AI が吹き出しで「A と B、どちらにしますか？」と聞き、人が案 A を押す絵 (具体的な中身は書かない) -->
+    <div class="ask2"><svg width="268" height="108" viewBox="0 0 248 100" preserveAspectRatio="xMinYMid meet" aria-hidden="true"><circle cx="20" cy="28" r="18" fill="#4fe0cc" fill-opacity="0.14"/><rect x="11" y="22" width="18" height="13" rx="3.5" fill="none" stroke="#4fe0cc" stroke-width="2"/><circle cx="16.5" cy="28.5" r="1.6" fill="#4fe0cc"/><circle cx="23.5" cy="28.5" r="1.6" fill="#4fe0cc"/><path d="M20 22 v-4" stroke="#4fe0cc" stroke-width="1.8" stroke-linecap="round"/><rect x="46" y="4" width="198" height="56" rx="10" fill="#2d333b" stroke="#f0883e" stroke-width="1.4"/><path d="M46.7 22 L38 29 L46.7 36" fill="#2d333b" stroke="#f0883e" stroke-width="1.4" stroke-linejoin="round"/><path d="M47.4 23 V35" stroke="#2d333b" stroke-width="2"/><text x="58" y="27" font-size="13" font-weight="700" fill="#e6edf3">{{svg15}}</text><text x="58" y="47" font-size="11" fill="#a9b8c6">{{svg16}}</text><rect x="58" y="70" width="62" height="24" rx="12" fill="#2ad4bd"/><text x="89" y="86.5" font-size="12" font-weight="700" fill="#0d1117" text-anchor="middle">{{svg17}}</text><rect x="128" y="70" width="62" height="24" rx="12" fill="none" stroke="#8b98a5" stroke-width="1.2"/><text x="159" y="86.5" font-size="12" fill="#e6edf3" text-anchor="middle">{{svg18}}</text><path d="M118 87 L118 103 L122 99 L125 105 L128 103.5 L125 97.8 L130 97.8 Z" fill="#eef3f7" stroke="#0e1b28" stroke-width="1.2" stroke-linejoin="round"/><circle cx="226" cy="82" r="16" fill="#4fe0cc" fill-opacity="0.14"/><circle cx="226" cy="77" r="4.5" fill="none" stroke="#eef3f7" stroke-width="1.8"/><path d="M217.5 92 a8.5 7.5 0 0 1 17 0" fill="none" stroke="#eef3f7" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+    <div class="cardlb"><b>{{item18}}</b><span>{{note18}}</span></div>
+    <div class="items">
+      <div class="it">
+        <div class="pg"><svg width="60" height="38" viewBox="0 0 60 38" aria-hidden="true"><path d="M5 5 h32 a4 4 0 0 1 4 4 v12 a4 4 0 0 1 -4 4 h-21 l-6 5 v-5 h-5 a4 4 0 0 1 -4 -4 v-12 a4 4 0 0 1 4 -4 z" fill="#132636" stroke="#eef3f7" stroke-width="1.8" stroke-linejoin="round"/><path d="M8 12 h22 M8 18 h14" stroke="#8fa1b2" stroke-width="2" stroke-linecap="round"/><path d="M37 26 l4.5 4.5 8.5 -9" fill="none" stroke="#c9d6e2" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M46 30.5 l9 -9" fill="none" stroke="#c9d6e2" stroke-width="2.4" stroke-linecap="round"/></svg></div>
+        <div><span class="lb">{{item08}}</span><span class="cp">{{note08}}</span></div>
+      </div>
+      <div class="it">
+        <div class="pg"><svg width="60" height="38" viewBox="0 0 60 38" aria-hidden="true"><rect x="22" y="8" width="16" height="22" rx="2.5" fill="#132636" stroke="#c9d6e2" stroke-width="1.8"/><path d="M25.5 14 h9 M25.5 19 h9 M25.5 24 h6" stroke="#c9d6e2" stroke-width="1.4" stroke-linecap="round"/><path d="M9 21 A21 15 0 0 1 36 4.6" fill="none" stroke="#c9d6e2" stroke-width="2" stroke-linecap="round"/><path d="M31.5 2.6 L36.5 4.6 L32.6 8.4" fill="none" stroke="#c9d6e2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M51 17 A21 15 0 0 1 24 33.4" fill="none" stroke="#c9d6e2" stroke-width="2" stroke-linecap="round"/><path d="M28.5 35.4 L23.5 33.4 L27.4 29.6" fill="none" stroke="#c9d6e2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div><span class="lb">{{item09}}</span><span class="cp">{{note09}}</span></div>
+      </div>
+      <div class="it">
+        <div class="pg"><svg width="60" height="38" viewBox="0 0 60 38" aria-hidden="true"><rect x="2" y="4" width="30" height="13" rx="6.5" fill="#2ad4bd"/><text x="17" y="13.8" font-size="9" font-weight="700" fill="#0d1117" text-anchor="middle">{{svg19}}</text><rect x="2" y="21" width="30" height="13" rx="6.5" fill="none" stroke="#8fa1b2" stroke-width="1.3" stroke-dasharray="2.5 2"/><text x="17" y="30.8" font-size="9" fill="#a9b8c6" text-anchor="middle">{{svg20}}</text><path d="M32 10.5 H42 M32 27.5 H42" stroke="#8fa1b2" stroke-width="1.4"/><rect x="42" y="5" width="16" height="28" rx="2.5" fill="#132636" stroke="#c9d6e2" stroke-width="1.8"/><path d="M45.5 12 h9 M45.5 18 h9 M45.5 24 h6" stroke="#c9d6e2" stroke-width="1.4" stroke-linecap="round"/></svg></div>
+        <div><span class="lb">{{item10}}</span><span class="cp">{{note10}}</span></div>
+      </div>
+      <div class="it">
+        <div class="pg"><svg width="60" height="38" viewBox="0 0 60 38" aria-hidden="true"><rect x="2" y="4" width="24" height="16" rx="3" fill="none" stroke="#5f7387" stroke-width="1.8" stroke-dasharray="3 2.5"/><path d="M14 20 Q15 26 21 26" fill="none" stroke="#8fa1b2" stroke-width="1.6" stroke-dasharray="2.5 2"/><rect x="22" y="15" width="26" height="17" rx="3" fill="#132636" stroke="#c9d6e2" stroke-width="2"/><path d="M42 21 L42 34.5 L45.2 31.3 L47.8 36.5 L50.4 35.3 L47.8 30.3 L52 30.3 Z" fill="#eef3f7" stroke="#0e1b28" stroke-width="1.2" stroke-linejoin="round"/></svg></div>
+        <div><span class="lb">{{item11}}</span><span class="cp">{{note11}}</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 下: 土台 (04: Git・VS Code・ブラウザ対応。上の段 = 開く場所、下の段 = 管理) ===== -->
+  <section class="band">
+    <div class="hd">
+      <div class="zh">
+        <span class="no">04</span>
+        <h2>{{title04}}</h2>
+      </div>
+      <p class="who nw">{{who04}}</p>
+    </div>
+    <div class="rowlb">{{row01}}</div>
+    <div class="it">
+      <div class="pg"><svg width="60" height="38" viewBox="0 0 60 38" aria-hidden="true"><rect x="2" y="3" width="56" height="32" rx="3.5" fill="#1c2128" stroke="#8fa1b2" stroke-width="1.5"/><path d="M2.75 10 h54.5" stroke="#8fa1b2" stroke-width="1.2"/><circle cx="7.5" cy="6.6" r="1.3" fill="#ff5f57"/><circle cx="11.5" cy="6.6" r="1.3" fill="#febc2e"/><circle cx="15.5" cy="6.6" r="1.3" fill="#28c840"/><rect x="20" y="4.6" width="34" height="4" rx="2" fill="#2b3138"/><rect x="9" y="18" width="11" height="9" rx="1.5" fill="#eef3f7"/><rect x="25" y="18" width="11" height="9" rx="1.5" fill="#2ad4bd"/><rect x="41" y="18" width="11" height="9" rx="1.5" fill="#3a4654" stroke="#8fa1b2" stroke-width="1"/><path d="M20 22.5 h5" stroke="#3fb950" stroke-width="1.6"/><path d="M36 22.5 h5" stroke="#d29922" stroke-width="1.6" stroke-dasharray="2 1.5"/></svg></div>
+      <div><span class="lb">{{item12}}</span><span class="cp">{{note12}}</span></div>
+    </div>
+    <div class="it">
+      <div class="pg"><svg width="56" height="36" viewBox="0 0 60 38" aria-hidden="true"><rect x="2" y="3" width="56" height="32" rx="3.5" fill="#1c2128" stroke="#8fa1b2" stroke-width="1.5"/><path d="M2.75 9.5 h54.5" stroke="#8fa1b2" stroke-width="1.2"/><rect x="2.75" y="10" width="6" height="24.25" fill="#2b3138"/><rect x="13" y="17" width="11" height="9" rx="1.5" fill="#eef3f7"/><rect x="29" y="17" width="11" height="9" rx="1.5" fill="#2ad4bd"/><rect x="45" y="17" width="10" height="9" rx="1.5" fill="#3a4654" stroke="#8fa1b2" stroke-width="1"/><path d="M24 21.5 h5" stroke="#3fb950" stroke-width="1.6"/><path d="M40 21.5 h5" stroke="#d29922" stroke-width="1.6" stroke-dasharray="2 1.5"/><path d="M42 3 h4.8 a2.4 2.4 0 0 1 4.8 0 h4.8 v4.8 a2.4 2.4 0 0 1 0 4.8 v4.8 h-14.4 z" fill="#4fe0cc" stroke="#0e1b28" stroke-width="1.3" stroke-linejoin="round"/></svg></div>
+      <div><span class="lb">{{item13}}</span><span class="cp">{{note13}}</span></div>
+    </div>
+    <div class="it">
+      <div class="pg"><svg width="60" height="38" viewBox="0 0 60 38" aria-hidden="true"><rect x="20" y="1.5" width="20" height="35" rx="4" fill="#1c2128" stroke="#8fa1b2" stroke-width="1.5"/><path d="M27 4.5 h6" stroke="#8fa1b2" stroke-width="1.2" stroke-linecap="round"/><rect x="25" y="8" width="10" height="6" rx="1.2" fill="#eef3f7"/><path d="M30 14 v3" stroke="#3fb950" stroke-width="1.4"/><rect x="25" y="17" width="10" height="6" rx="1.2" fill="#2ad4bd"/><path d="M30 23 v3" stroke="#d29922" stroke-width="1.4" stroke-dasharray="1.5 1"/><rect x="25" y="26" width="10" height="6" rx="1.2" fill="#2a3644" stroke="#f0883e" stroke-width="1.2"/><circle cx="45" cy="29" r="3.2" fill="none" stroke="#eef3f7" stroke-width="1.3"/><circle cx="45" cy="29" r="1" fill="#eef3f7"/></svg></div>
+      <div><span class="lb">{{item14}}</span><span class="cp">{{note14}}</span></div>
+    </div>
+    <div class="rowlb">{{row02}}</div>
+    <div class="it">
+      <div class="pg"><svg width="56" height="36" viewBox="0 0 60 38" aria-hidden="true"><rect x="2" y="4" width="56" height="30" rx="4" fill="#132636" stroke="#5f7387" stroke-width="1.5"/><rect x="6" y="9" width="48" height="9" rx="2" fill="#f85149" fill-opacity="0.28"/><path d="M9 13.5 h5" stroke="#ff7b72" stroke-width="2" stroke-linecap="round"/><path d="M18 13.5 h26" stroke="#ff7b72" stroke-opacity="0.6" stroke-width="2" stroke-linecap="round"/><rect x="6" y="21" width="48" height="9" rx="2" fill="#3fb950" fill-opacity="0.28"/><path d="M9 25.5 h5 M11.5 23 v5" stroke="#56d364" stroke-width="2" stroke-linecap="round"/><path d="M18 25.5 h30" stroke="#56d364" stroke-opacity="0.6" stroke-width="2" stroke-linecap="round"/></svg></div>
+      <div><span class="lb">{{item15}}</span><span class="cp">{{note15}}</span></div>
+    </div>
+    <div class="it">
+      <div class="pg"><svg width="56" height="36" viewBox="0 0 60 38" aria-hidden="true"><rect x="2" y="3" width="15" height="12" rx="2.5" fill="#c9d6e2"/><rect x="2" y="23" width="15" height="12" rx="2.5" fill="#eef3f7"/><path d="M17 9 C28 9 27 19 37 19 M17 29 C28 29 27 19 37 19" fill="none" stroke="#8fa1b2" stroke-width="2"/><rect x="37" y="10" width="21" height="18" rx="3" fill="#132636" stroke="#3fb950" stroke-width="2"/><path d="M42 19 l3.5 3.5 7 -7" fill="none" stroke="#56d364" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+      <div><span class="lb">{{item16}}</span><span class="cp">{{note16}}</span></div>
+    </div>
+    <div class="it">
+      <div class="pg"><svg width="56" height="36" viewBox="0 0 60 38" aria-hidden="true"><path d="M2 12 a2 2 0 0 1 2 -2 h6 l2.5 3 h13.5 a2 2 0 0 1 2 2 v15 a2 2 0 0 1 -2 2 h-22 a2 2 0 0 1 -2 -2 z" fill="#132636" stroke="#c9d6e2" stroke-width="2" stroke-linejoin="round"/><path d="M9 21.5 l3 3 6.5 -6.5" fill="none" stroke="#c9d6e2" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M37.5 28 h15 a5 5 0 0 0 0.5 -10 a7 7 0 0 0 -13.5 -1.5 a5.5 5.5 0 0 0 -2 11.5 z" fill="none" stroke="#8fa1b2" stroke-width="2" stroke-linejoin="round"/><path d="M40 14 l13 14 M53 14 l-13 14" stroke="#ff7b72" stroke-width="2.6" stroke-linecap="round"/></svg></div>
+      <div><span class="lb">{{item17}}</span><span class="cp">{{note17}}</span></div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

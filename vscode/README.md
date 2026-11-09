@@ -4,6 +4,10 @@
 
 Boxglow keeps a project plan in one file, `boxglow.json`: tasks are boxes with inputs and outputs, nested without limit. AI agents (Claude Code, Codex, ...) update the file through a CLI or MCP as they start, finish, or need a decision. This extension opens that file as a live diagram inside VS Code.
 
+![Boxglow at a glance: Claude Code and Codex log their work through MCP and hooks; the whole plan as a diagram shows what is done, where the AI is right now and what comes next; you answer only the decisions that need you; the plan is one boxglow.json file that works with Git, VS Code and the browser](https://raw.githubusercontent.com/sukima-log/Boxglow/main/docs/overview/overview.en.png)
+
+日本語の解説: [Boxglow | AI エージェントの作業と計画を見える化するタスク管理ツール](https://www.sukimalog.com/archives/42393453.html)
+
 ![The whole plan: four major boxes in dependency order (Stage 1 to 4), wires show what feeds what](https://raw.githubusercontent.com/sukima-log/Boxglow/main/vscode/images/overview.png)
 
 ## How a plan is laid out

@@ -1,0 +1,290 @@
+{
+  "page01": {
+    "ja": "Boxglow の全体像",
+    "en": "Boxglow at a glance"
+  },
+  "head01": {
+    "ja": "AI に任せた開発の<em>「いま」</em>が、ひと目でわかる",
+    "en": "See what your AI is doing <em>right now</em>"
+  },
+  "head02": {
+    "ja": "人と AI が 1 枚の計画図を共有して進めるタスク管理",
+    "en": "A task manager where people and AI agents share one plan diagram"
+  },
+  "title01": {
+    "ja": "AI エージェント連携",
+    "en": "AI agent integration"
+  },
+  "title02": {
+    "ja": "計画全体と AI の現在地",
+    "en": "The whole plan and where AI is"
+  },
+  "title03": {
+    "ja": "人の判断を AI に届ける",
+    "en": "You make the calls"
+  },
+  "title04": {
+    "ja": "Git と VS Code、<br>ブラウザに対応",
+    "en": "Git, VS Code<br>and browsers"
+  },
+  "who01": {
+    "ja": "Claude Code / Codex が自動で記録",
+    "en": "Claude Code / Codex log their work"
+  },
+  "who02": {
+    "ja": "箱の出力を、次の箱の入力へ線でつなぐ",
+    "en": "Each box's output wires into the next box's input"
+  },
+  "who03": {
+    "ja": "判断が要る所だけ、人が答える",
+    "en": "You answer only where it matters"
+  },
+  "who04": {
+    "ja": "計画は <span class=\"mono\">boxglow.json</span> 1 ファイル",
+    "en": "The plan is one <span class=\"mono\">boxglow.json</span> file"
+  },
+  "group01": {
+    "ja": "始める",
+    "en": "Set up"
+  },
+  "group02": {
+    "ja": "続ける",
+    "en": "Continue"
+  },
+  "group03": {
+    "ja": "守る",
+    "en": "Guard"
+  },
+  "row01": {
+    "ja": "開く場所",
+    "en": "Open in"
+  },
+  "row02": {
+    "ja": "データの管理",
+    "en": "Your data"
+  },
+  "item01": {
+    "ja": "設定はコマンド <span class=\"big\">1</span> つ",
+    "en": "Setup in <span class=\"big\">1</span> command"
+  },
+  "item02": {
+    "ja": "<span class=\"hl\">MCP</span> に対応",
+    "en": "<span class=\"hl\">MCP</span> support"
+  },
+  "item03": {
+    "ja": "前回の続きから再開",
+    "en": "Resume next session"
+  },
+  "item04": {
+    "ja": "セッションを節約",
+    "en": "Leaner sessions"
+  },
+  "item05": {
+    "ja": "記録忘れを知らせる",
+    "en": "Reminds AI to log"
+  },
+  "item06": {
+    "ja": "AI 同士の衝突を防ぐ",
+    "en": "No clashing agents"
+  },
+  "item07": {
+    "ja": "見切り発車に警告",
+    "en": "Warns on vague starts"
+  },
+  "item08": {
+    "ja": "回答の既読を確認",
+    "en": "Answer read receipts"
+  },
+  "item09": {
+    "ja": "判断を変えたら読み直し",
+    "en": "Changes get reread"
+  },
+  "item10": {
+    "ja": "選ばなかった案も記録",
+    "en": "Unchosen options kept"
+  },
+  "item11": {
+    "ja": "人が図で計画を修正",
+    "en": "Edit on the diagram"
+  },
+  "item12": {
+    "ja": "ブラウザで開く",
+    "en": "Open in a browser"
+  },
+  "item13": {
+    "ja": "<span class=\"hl\">VS Code</span> 拡張で表示",
+    "en": "<span class=\"hl\">VS Code</span> extension"
+  },
+  "item14": {
+    "ja": "スマホでも確認",
+    "en": "Check from your phone"
+  },
+  "item15": {
+    "ja": "計画を <span class=\"hl\">Git</span> 管理",
+    "en": "Plan versioned in <span class=\"hl\">Git</span>"
+  },
+  "item16": {
+    "ja": "箱単位で自動マージ",
+    "en": "Box-level auto merge"
+  },
+  "item17": {
+    "ja": "成果物は手元で管理",
+    "en": "Deliverables stay local"
+  },
+  "note01": {
+    "ja": "<span class=\"mono\">setup-agent</span> で MCP・hooks まで",
+    "en": "<span class=\"mono\">setup-agent</span> adds MCP and hooks"
+  },
+  "note02": {
+    "ja": "AI がツールで計画を操作",
+    "en": "Agents edit the plan as tools"
+  },
+  "note03": {
+    "ja": "hooks で引き継ぎを自動で読む",
+    "en": "Hooks load handoff notes"
+  },
+  "note04": {
+    "ja": "必要な箱と要点だけ読む",
+    "en": "Reads only the boxes it needs"
+  },
+  "note05": {
+    "ja": "終える前に hooks が記録を促す",
+    "en": "Hooks prompt before ending"
+  },
+  "note06": {
+    "ja": "受け持ちを有効にした計画で",
+    "en": "When claims are enabled"
+  },
+  "note07": {
+    "ja": "完了条件の無い箱を知らせる",
+    "en": "Flags missing done criteria"
+  },
+  "note08": {
+    "ja": "AI が読んだか分かる",
+    "en": "Know when the AI has read it"
+  },
+  "note09": {
+    "ja": "古い内容のまま記録させない",
+    "en": "No logging on stale context"
+  },
+  "note10": {
+    "ja": "後から判断の経緯を見直せる",
+    "en": "Trace why a choice was made"
+  },
+  "note11": {
+    "ja": "箱の内容や線を編集",
+    "en": "Edit boxes and wires"
+  },
+  "note12": {
+    "ja": "boxglow.app・サインイン不要",
+    "en": "boxglow.app, no sign-in"
+  },
+  "note13": {
+    "ja": "エディタ内で図を編集",
+    "en": "View and edit in the editor"
+  },
+  "note14": {
+    "ja": "ホーム画面に追加して回答",
+    "en": "Answer from the home screen"
+  },
+  "note15": {
+    "ja": "差分がそのまま読める",
+    "en": "Readable diffs"
+  },
+  "note16": {
+    "ja": "別の箱の変更は衝突しない",
+    "en": "Other boxes never conflict"
+  },
+  "note17": {
+    "ja": "アップロードせずパスで記録",
+    "en": "Paths recorded, never uploaded"
+  },
+  "item18": {
+    "ja": "AI が選択肢つきで質問",
+    "en": "AI asks with options"
+  },
+  "note18": {
+    "ja": "人は選んで押すだけ",
+    "en": "Just pick and click"
+  },
+  "svg01": {
+    "ja": "ここまで完了",
+    "en": "Done so far"
+  },
+  "svg02": {
+    "ja": "これから",
+    "en": "Up next"
+  },
+  "svg03": {
+    "ja": "成果物つき",
+    "en": "with deliverables"
+  },
+  "svg04": {
+    "ja": "完成",
+    "en": "Goal"
+  },
+  "svg05": {
+    "ja": "AI はいまここ",
+    "en": "AI is here"
+  },
+  "svg06": {
+    "ja": "全体の進み具合",
+    "en": "Overall progress"
+  },
+  "svg07": {
+    "ja": "完了 5 / 11 箱",
+    "en": "5 / 11 boxes done"
+  },
+  "svg08": {
+    "ja": "完了",
+    "en": "Done"
+  },
+  "svg09": {
+    "ja": "作業中",
+    "en": "Working"
+  },
+  "svg10": {
+    "ja": "未着手",
+    "en": "New"
+  },
+  "svg11": {
+    "ja": "判断待ち",
+    "en": "Decision"
+  },
+  "svg12": {
+    "ja": "入れ子",
+    "en": "Nested"
+  },
+  "svg13": {
+    "ja": "入力がそろった",
+    "en": "Input ready"
+  },
+  "svg14": {
+    "ja": "入力待ち",
+    "en": "Waiting"
+  },
+  "svg15": {
+    "ja": "A と B、どちらにしますか？",
+    "en": "A or B, which one?"
+  },
+  "svg16": {
+    "ja": "前提: ……",
+    "en": "Assumption: …"
+  },
+  "svg17": {
+    "ja": "案 A",
+    "en": "Option A"
+  },
+  "svg18": {
+    "ja": "案 B",
+    "en": "Option B"
+  },
+  "svg19": {
+    "ja": "案 A",
+    "en": "A"
+  },
+  "svg20": {
+    "ja": "案 B",
+    "en": "B"
+  }
+}

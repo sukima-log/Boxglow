@@ -4,6 +4,7 @@
 
 _Changes after 0.6.9 go here._
 
+- **Boxglow at a glance.** A one-slide overview of what Boxglow does (agent integration, the whole plan with where the AI is right now, the decisions left to you, Git / VS Code / browser). It is at the top of the README and the Marketplace page, and the new "Boxglow at a glance" button on Home opens it in the screen's language. The source is `docs/overview/` (a template and the Japanese / English strings); `node scripts/render-overview.mjs` renders `docs/overview/overview.{ja,en}.png` and `public/overview/overview.{ja,en}.webp` and reports text that overflows its panel.
 - **`resume` stays short as handoff notes pile up.** It printed the handoff note of every unfinished box; on a plan with about 1,300 boxes and 79 notes that was 61 KB, read again by the agent after each compaction. `resume` (and MCP `boxglow_resume`, and the session-start hook) now prints every note of the boxes in progress or waiting plus the 5 newest others, and says how many were left out (24 KB on the same plan). `resume --all` prints them all. The Resume tab on the screen still shows every note.
 
 ## 0.6.9 (2026-11-07)

@@ -15,6 +15,7 @@ import { canOpenLocalFile, lastLocalFile, pickLocalFile } from "../lib/localfile
 import { getLang, setLang, t, useLang } from "../i18n";
 import { SyncStartup } from "./SyncStartup";
 import { ConfirmButton } from "./parts";
+import { OverviewDialog } from "./OverviewDialog";
 
 /**
  * Home 画面
@@ -60,6 +61,8 @@ export function HomeDialog() {
   const [last, setLast] = useState<FileSystemFileHandle | null>(null);
   // 「自分の計画で始める」の引き出しを利用者が開閉した結果 (null = まだ触っていない → 下の hasOwn に従う)
   const [ownOpen, setOwnOpen] = useState<boolean | null>(null);
+  // Boxglow の全体像 (スライド 1 枚の図) を開いているか。初めて来た人が、触る前にしくみを 1 枚でつかめるようにする
+  const [overviewOpen, setOverviewOpen] = useState(false);
   // このブラウザに保存済みの計画がある、または前回開いたファイルを覚えている (= 初回ではない)
 
   // 開いたときに、保存済みの計画の一覧と、前回開いたファイル (Reopen 用) を読む
@@ -100,6 +103,7 @@ export function HomeDialog() {
 
   return (
     <div className="modal-backdrop">
+      {overviewOpen && <OverviewDialog onClose={() => setOverviewOpen(false)} />}
       <div className="card modal home-dialog">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -168,6 +172,7 @@ export function HomeDialog() {
           <h2>{t("AI と進める仕事に、見通しを。")}</h2>
           <p>{t("何ができた？ 何を決めれば進める？ ボックスと線で、次の一歩が見えてきます。")}</p>
           <button className="btn btn-primary" onClick={openSample}>{t("サンプルを試す")}</button>
+          <button className="btn" onClick={() => setOverviewOpen(true)}>{t("しくみを 1 枚で見る")}</button>
         </section>
         {/* 自分の計画を開く・作る操作の引き出し。上: 既にあるファイルを開く、下: 新しい計画を作る。
             最初から開いて見せる (閉じていると、ファイルを開くまでに 1 手増える。使いやすさの見直し 2026-10-18)。
