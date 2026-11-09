@@ -1111,8 +1111,11 @@ input[type="range"], input[type="checkbox"] { accent-color: var(--primary); }
 .home-welcome p { margin: 12px 0 24px; max-width: 460px; color: var(--text-muted); }
 .home-welcome > .btn { padding: 12px 24px; font-weight: 700; }
 .home-welcome > .btn + .btn { margin-left: 8px; }
-/* Boxglow の全体像のダイアログ: 図を画面の幅いっぱいまで大きく見せる (図は 16:9) */
-.overview-dialog { width: min(1280px, 100%); padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+/* Boxglow の全体像のダイアログ: 図を画面の幅いっぱいまで大きく見せる (図は 16:9)
+   幅は 3 つのうち一番狭いもの: 最大 1280px / 画面の幅 / 画面の高さから決めた幅。
+   3 つ目は、ダイアログの高さの上限 (.modal の 90vh) から図以外の高さ (見出し・案内・余白で約 100px) を引き、
+   16:9 の図の幅に直して左右の余白 (32px) を足したもの。高さの低い横長の画面 (1280x800 など) でも、スクロールせずに図の全体が見える */
+.overview-dialog { width: min(1280px, 100%, calc((90vh - 100px) * 16 / 9 + 32px)); padding: 12px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
 .overview-image { display: block; width: 100%; height: auto; border-radius: 8px; background: #0c1a27; }
 .overview-hint { margin: 0; font-size: 12px; color: var(--text-muted); }
 .home-disclosure { border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); padding: 16px 0; }
