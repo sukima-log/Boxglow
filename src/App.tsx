@@ -152,6 +152,10 @@ export function App() {
     } else if (params.get("demo") === "daw") {
       openExample(); // 大きな計画を試すための 3 階層の例
     } else if (article || params.get("demo") === "1") {
+      // 記事に埋め込んだ体験版: PC の記事の枠 (幅 700px 前後) は「幅 900px 未満は縦の流れ」の既定に当たり、
+      // Project の箱が 1 つ大きく映るだけになる。記事では工程順の横の図を見せたいので、600px 以上なら横にする。
+      // スマホの記事 (600px 未満) では、横に長い図は幅に合わせると読めないので、既定どおり縦のまま
+      if (article && window.innerWidth >= 600) useProjectStore.getState().setFlowDirection("horizontal");
       openSample();
       if (article) {
         // 記事ではボックスと分岐が読める範囲から始める。Top へはいつでも戻れる。

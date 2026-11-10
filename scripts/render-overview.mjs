@@ -8,6 +8,7 @@
  *
  * 撮影には Chrome を使う (日本語の書体 BIZ UDPゴシックと英語の書体 Segoe UI がある Windows の Chrome を想定)。
  * 撮る前に、開いたページで各区画の文字の右端と下端を測り、区画からはみ出した文言があれば知らせる。
+ * 右上の名前の下に、図が説明している版 (package.json の version) を入れる。版を上げたら書き出し直す。
  *
  * 使い方: node scripts/render-overview.mjs [ja|en]   (言語を省くと両方)
  *   Chrome の場所は環境変数 CHROME で変えられる (既定: WSL から見た Windows の Chrome)
@@ -57,14 +58,18 @@ function chrome(args) {
   return execFileSync(CHROME, ["--headless=new", "--disable-gpu", "--hide-scrollbars", ...args], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 120000, stdio: ["ignore", "pipe", "pipe"] });
 }
 
+// 図に添える版 (この図が説明している Boxglow の版)。package.json の version をそのまま使うので、版を上げて書き出し直せば変わる
+const VERSION = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")).version;
+
 /**
  * ひな形に文言を差し込む
  * Input : template = ひな形の HTML, strings = { キー: { ja, en } }, lang = "ja" | "en"
- * Output: その言語の HTML (キーが表に無い・訳が無いときは止める)
+ * Output: その言語の HTML (キーが表に無い・訳が無いときは止める。{{lang}} は言語、{{version}} は package.json の版)
  */
 function fill(template, strings, lang) {
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
     if (key === "lang") return lang;
+    if (key === "version") return VERSION;
     const s = strings[key]?.[lang];
     if (!s) throw new Error(`strings.json に ${key} の ${lang} がありません`);
     return s;

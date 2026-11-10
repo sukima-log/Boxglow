@@ -319,7 +319,9 @@
     <p>{{head02}}</p>
   </div>
 
-  <!-- ===== 隅の名前 (画像だけが広まっても分かるように) ===== -->
+  <!-- ===== 隅の名前 (画像だけが広まっても分かるように) =====
+       2 行目に、この図が説明している版を添える ({{version}} は書き出すときに package.json の version を入れる。
+       機能が変わったら図も変わるので、どの版の図かを画像だけで分かるようにする) -->
   <div class="brand">
     <!-- 印: 黒 (中身の分からない箱) → 灰 → 光る白 (成果物ができた箱) の 3 つの箱 -->
     <svg width="44" height="44" viewBox="0 0 64 64" aria-hidden="true">
@@ -331,7 +333,7 @@
     </svg>
     <div>
       <b>Boxglow</b>
-      <span class="mono">boxglow.app</span>
+      <span class="mono">boxglow.app · v{{version}}</span>
     </div>
   </div>
 
